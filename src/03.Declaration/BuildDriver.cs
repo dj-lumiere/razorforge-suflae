@@ -394,6 +394,13 @@ public sealed class BuildDriver
                 continue;
             }
 
+            // File-granularity conditional compilation: skip a `.rf` sibling whose leading
+            // `#@target(...)` directive doesn't match the build target (RazorForge-only).
+            if (!Compiler.Targeting.TargetGate.ShouldCompile(filePath: fullCandidate))
+            {
+                continue;
+            }
+
             // Read just the `module` declaration (cheap line scan, no full parse) so a broken or
             // unrelated sibling is neither fully parsed nor pulled in — only same-module files are
             // handed to ProcessFile, which is the one place that reports their parse/SA errors.
@@ -679,6 +686,12 @@ public sealed class BuildDriver
                      searchOption: SearchOption.AllDirectories)
                  .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
+            // File-granularity conditional compilation: skip files gated out for this target.
+            if (!Compiler.Targeting.TargetGate.ShouldCompile(filePath: filePath))
+            {
+                continue;
+            }
+
             Program? ast = ParseAstOnly(filePath: filePath);
             if (ast is null)
             {
@@ -722,6 +735,12 @@ public sealed class BuildDriver
                              searchOption: SearchOption.AllDirectories)
                          .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
                 {
+                    // File-granularity conditional compilation: skip files gated out for this target.
+                    if (!Compiler.Targeting.TargetGate.ShouldCompile(filePath: filePath))
+                    {
+                        continue;
+                    }
+
                     Program? ast = ParseAstOnly(filePath: filePath);
                     if (ast is null)
                     {

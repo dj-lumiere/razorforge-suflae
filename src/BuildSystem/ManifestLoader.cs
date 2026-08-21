@@ -310,6 +310,11 @@ public static class ManifestLoader
                         comparisonType: StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                // File-granularity conditional compilation: skip a `.rf` file whose leading
+                // `#@target(...)` directive doesn't match the build target (RazorForge-only).
+                if (!Compiler.Targeting.TargetGate.ShouldCompile(filePath: filePath))
+                    continue;
+
                 string? moduleName = ExtractModuleName(filePath: filePath);
                 if (moduleName == null)
                 {
