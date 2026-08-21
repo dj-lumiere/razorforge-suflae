@@ -1,0 +1,47 @@
+module Tests/Stdlib/ExpandVisibilityLayoutApi
+import IO/Console
+import BuilderService
+
+# Exercises the comptime member-reflection surfaces the other expand fixtures skip:
+#   * `openmemvarof(T)` vs `allmemvarof(T)` — the visibility filter. A `secret` member is present in
+#     allmemvarof but filtered from openmemvarof; crucially `orderof(m)` is the ORIGINAL declaration
+#     ordinal (computed before the filter), so the open list shows a gap (0, 2) where the secret field
+#     (1) was removed.
+#   * `placeof(m)` / `sizeof(m)` — the repr-C byte offset and byte size of each member, folded per field
+#     at monomorphization. Fixed-width members make the layout identical on every platform.
+
+record Guarded
+  a: S64
+  secret b: S64
+  c: S64
+
+routine all_names[T]() -> Text
+  var out = ""
+  expand m in allmemvarof(T)
+    out = out + nameof(m) + "@" + orderof(m).represent() + " "
+  return out
+
+routine open_names[T]() -> Text
+  var out = ""
+  expand m in openmemvarof(T)
+    out = out + nameof(m) + "@" + orderof(m).represent() + " "
+  return out
+
+# repr-C layout with natural alignment: U8 @0, S64 @8 (8-aligned), U16 @16 (2-aligned).
+record Layout
+  a: U8
+  b: S64
+  c: U16
+
+routine layout[T]() -> Text
+  var out = ""
+  expand m in allmemvarof(T)
+    out = out + nameof(m) + ":place=" + placeof(m).represent() + ",size=" + sizeof(m).represent() + " "
+  return out
+
+routine start()
+  show("all: " + all_names[Guarded]())
+  show("open: " + open_names[Guarded]())
+  show("layout: " + layout[Layout]())
+  show("DONE")
+  return

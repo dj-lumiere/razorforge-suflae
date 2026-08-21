@@ -1,0 +1,4 @@
+all: a@0 b@1 c@2
+open: a@0 c@2
+layout: a:place=0,size=1 b:place=8,size=8 c:place=16,size=2
+DONE

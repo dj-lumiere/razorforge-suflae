@@ -1,0 +1,19 @@
+module Tests/Stdlib/ExpandEmptyRecordApi
+import IO/Console
+
+# Edge case: `expand m in allmemvarof(T)` over a zero-field record unrolls to ZERO iterations, so the
+# loop body is elided entirely and only the surrounding statements remain.
+
+record Empty
+  pass
+
+routine dump_fields[T]() -> Text
+  var out = "["
+  expand m in allmemvarof(T)
+    out = out + nameof(m) + " "
+  return out + "]"
+
+routine start()
+  show("empty: " + dump_fields[Empty]())
+  show("DONE")
+  return
