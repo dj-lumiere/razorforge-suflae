@@ -77,30 +77,19 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// All wrapper types that transparently forward to their inner type.
+    /// All wrapper types that transparently forward to their inner type. Single source of truth is
+    /// <see cref="Compiler.Resolution.RuntimeContract.WrapperTypes"/> — do NOT re-list the members here
+    /// (a local copy silently drifts when a wrapper is added/renamed).
     /// </summary>
-    private static readonly HashSet<string> WrapperTypes =
-    [
-        ViewingWrapperName,    // Read-only single-threaded token
-        ModifyingWrapperName,  // Exclusive write single-threaded token
-        InspectingWrapperName, // Read-only multi-threaded token
-        ClaimingWrapperName,   // Exclusive write multi-threaded token
-        Compiler.Resolution.RuntimeContract.Shared,    // Reference-counted multi-threaded handle
-        Compiler.Resolution.RuntimeContract.Watched,   // Weak reference multi-threaded handle
-        Compiler.Resolution.RuntimeContract.Retained,  // Reference-counted handle
-        Compiler.Resolution.RuntimeContract.Tracked,   // Weak reference handle
-        Compiler.Resolution.RuntimeContract.Hijacked,  // Unmanaged raw pointer handle
-        Compiler.Resolution.RuntimeContract.Roamed,    // Biased-RC handle; forwards inner under a lock
-    ];
+    private static readonly IReadOnlySet<string> WrapperTypes =
+        Compiler.Resolution.RuntimeContract.WrapperTypes;
 
     /// <summary>
-    /// Read-only wrapper types that can only access @readonly memberRoutines.
+    /// Read-only wrapper types that can only access @readonly memberRoutines. Single source of truth is
+    /// <see cref="Compiler.Resolution.RuntimeContract.ReadOnlyWrapperTypes"/>.
     /// </summary>
-    private static readonly HashSet<string> ReadOnlyWrapperTypes =
-    [
-        ViewingWrapperName, // Read-only single-threaded token
-        InspectingWrapperName // Read-only multi-threaded token
-    ];
+    private static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
+        Compiler.Resolution.RuntimeContract.ReadOnlyWrapperTypes;
 
     /// <summary>
     /// Checks if a type is a wrapper type (Viewing, Modifying, Shared, etc.).

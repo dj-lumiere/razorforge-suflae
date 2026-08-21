@@ -947,9 +947,11 @@ public partial class LlvmCodeGenerator
 
     #region RC Record Cleanup
 
-    /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
-    private static readonly HashSet<string> RcWrapperBaseNames =
-        [Resolution.RuntimeContract.Retained, Resolution.RuntimeContract.Tracked, Resolution.RuntimeContract.Shared, Resolution.RuntimeContract.Watched, Resolution.RuntimeContract.Roamed];
+    /// <summary>RC wrapper base names that require copy/release on var binding. Single source of truth is
+    /// <see cref="Resolution.RuntimeContract.RcWrapperBaseNames"/> — no local member list (this file's
+    /// line ~1050 already references the contract set directly; keep them one and the same).</summary>
+    private static readonly IReadOnlySet<string> RcWrapperBaseNames =
+        Resolution.RuntimeContract.RcWrapperBaseNames;
 
     // NOTE: the per-RC-field retain-on-copy (formerly EmitRcRecordRetain) is now an explicit AST call
     // inserted by RcRetainLoweringPass (Phase 8) — codegen no longer bumps refcounts itself. The
