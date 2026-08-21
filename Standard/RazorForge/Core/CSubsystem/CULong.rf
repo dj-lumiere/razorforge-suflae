@@ -1,0 +1,45 @@
+module Core
+
+### Platform-neutral basic API for {CULong}. The width-specific representation and the `U64` widen/narrow
+### conversions live in the `@target`-gated `CULong_windows` / `CULong_unix` siblings; these members build on
+### the widen conversion (total on both data models), so they are shared and load on every target.
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CULong.eq(you: CULong) -> Bool
+  return U64(from: me) == U64(from: you)
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine CULong.cmp(you: CULong) -> ComparisonSign
+  return U64(from: me) <=> U64(from: you)
+
+### Returns the display form of this C `unsigned long`, rendered as its unsigned decimal value.
+### :returns: The resulting `Text` value.
+@readonly
+routine CULong.represent() -> Text
+  return U64(from: me).represent()
+
+### Returns the diagnostic form of this C `unsigned long`.
+### :returns: The resulting `Text` value.
+@readonly
+routine CULong.diagnose() -> Text
+  return "CULong(" + U64(from: me).represent() + ")"
+
+### Returns a hash of this value.
+### :returns: The resulting `U64` value.
+@readonly
+routine CULong.fast_hash() -> U64
+  return U64(from: me).fast_hash()
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+@readonly
+routine CULong.hash(k0: U64, k1: U64) -> U64
+  return U64(from: me).hash(k0: k0, k1: k1)
