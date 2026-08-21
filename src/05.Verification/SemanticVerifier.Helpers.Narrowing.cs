@@ -307,6 +307,40 @@ public sealed partial class SemanticVerifier
                                       whenStmt.Clauses.All(predicate: c =>
                                           StatementAlwaysTerminates(statement: c.Body)),
             DangerStatement danger => StatementAlwaysTerminates(statement: danger.Body),
+            // An unconditional `loop` has a fall-through edge ONLY through a `break` that targets it.
+            // With no such break, control leaves the loop only via `return`/`throw`/`absent`, so a
+            // routine whose control reaches the loop always terminates through it. This does NOT prove
+            // the loop halts (undecidable, deliberately not attempted) — it observes the absence of a
+            // normal-exit edge, which IS decidable. `while` is excluded: its condition may be false on
+            // entry, so it can fall through without ever running the body.
+            LoopStatement loopStmt => !LoopBodyCanBreakOut(statement: loopStmt.Body),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// True when <paramref name="statement"/> contains a <c>break</c> that targets the *enclosing*
+    /// loop — i.e. a break not nested inside another loop. Used by
+    /// <see cref="StatementAlwaysTerminates"/> to decide whether an unconditional <c>loop</c> has a
+    /// fall-through edge. Nested loops (<c>loop</c>/<c>while</c>/<c>each</c>) are boundaries: a break
+    /// inside them belongs to that inner loop, so we do not descend into them. RazorForge breaks are
+    /// unlabeled, so a break always targets the nearest enclosing loop.
+    /// </summary>
+    private bool LoopBodyCanBreakOut(Statement statement)
+    {
+        return statement switch
+        {
+            BreakStatement => true,
+            BlockStatement block => block.Statements.Any(predicate: LoopBodyCanBreakOut),
+            IfStatement ifStmt =>
+                LoopBodyCanBreakOut(statement: ifStmt.ThenStatement) ||
+                (ifStmt.ElseStatement is not null &&
+                 LoopBodyCanBreakOut(statement: ifStmt.ElseStatement)),
+            WhenStatement whenStmt =>
+                whenStmt.Clauses.Any(predicate: c => LoopBodyCanBreakOut(statement: c.Body)),
+            DangerStatement danger => LoopBodyCanBreakOut(statement: danger.Body),
+            // Nested loops swallow their own breaks — do not descend.
+            LoopStatement or WhileStatement or EachStatement => false,
             _ => false
         };
     }
