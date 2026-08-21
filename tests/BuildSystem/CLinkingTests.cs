@@ -95,6 +95,20 @@ public sealed class CLinkingTests
         Assert.Equal(expected: "", actual: NativeToolchain.BuildUserLibraryArgs(cLibraries: [], libraryPaths: []));
     }
 
+    [Fact]
+    public void ExtractLinkNames_ParsesSingleAndMultiple()
+    {
+        Assert.Equal(expected: new[] { "SDL2" }, actual: Program.ExtractLinkNames(annotation: "link(\"SDL2\")"));
+        Assert.Equal(expected: new[] { "a", "b" }, actual: Program.ExtractLinkNames(annotation: "link(\"a\", \"b\")"));
+    }
+
+    [Fact]
+    public void ExtractLinkNames_NonLinkAnnotation_IsEmpty()
+    {
+        Assert.Empty(collection: Program.ExtractLinkNames(annotation: "readonly"));
+        Assert.Empty(collection: Program.ExtractLinkNames(annotation: "llvm(\"i32\")"));
+    }
+
     private static string CreateTempProject(Dictionary<string, string> files)
     {
         string root = Path.Combine(path1: Path.GetTempPath(),

@@ -812,10 +812,15 @@ internal partial class Program
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
+        out IReadOnlyList<string> discoveredLinkLibraries,
         string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug,
         bool dumpAst = false, bool saTiming = false, bool requireStartRoutine = true,
         bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
     {
+        // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
+        // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
+        // AST is available; stays empty on the early-error paths below.
+        discoveredLinkLibraries = [];
         if (!File.Exists(path: entryFile))
         {
             Console.WriteLine(value: $"Error: File '{entryFile}' not found.");
@@ -926,6 +931,11 @@ internal partial class Program
                     orderedFiles.Add(item: (unit.Ast, unit.FilePath));
                 }
             }
+
+            // Collect `@link("...")` C-library directives from the compiled files' declarations (only
+            // files that passed the `@target` gate are in orderedFiles, so this is per-target correct).
+            discoveredLinkLibraries = CollectLinkLibraries(
+                programs: orderedFiles.Select(selector: f => f.Program));
 
             // Phase 2: Semantic analysis (multi-file)
             if (showBuildStages)
@@ -1240,6 +1250,59 @@ internal partial class Program
     /// sets <paramref name="exeFile"/> to the produced executable path. Shared by the <c>buildexe</c>
     /// verb (stop here) and <c>buildandrun</c> (run it next) so the slow optimize+link is identical.
     /// </summary>
+    /// <summary>
+    /// Gathers C-library names declared in source via <c>@link("SDL2")</c> annotations on <c>C::</c>
+    /// externs (or routines) across the compiled programs. De-duplicated, order-preserving. The caller
+    /// passes only files that survived the <c>@target</c> gate, so the result is per-target correct.
+    /// </summary>
+    private static IReadOnlyList<string> CollectLinkLibraries(IEnumerable<SyntaxTree.Program> programs)
+    {
+        var libs = new List<string>();
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        void Scan(List<string>? annotations)
+        {
+            if (annotations == null) return;
+            foreach (string ann in annotations)
+            foreach (string name in ExtractLinkNames(annotation: ann))
+                if (seen.Add(item: name)) libs.Add(item: name);
+        }
+
+        void Visit(ISyntaxTreeNode node)
+        {
+            switch (node)
+            {
+                case RoutineDeclaration r: Scan(annotations: r.Annotations); break;
+                case ExternalDeclaration e: Scan(annotations: e.Annotations); break;
+                case ExternalBlockDeclaration b:
+                    foreach (Declaration d in b.Declarations) Visit(node: d);
+                    break;
+            }
+        }
+
+        foreach (SyntaxTree.Program prog in programs)
+        foreach (ISyntaxTreeNode decl in prog.Declarations)
+            Visit(node: decl);
+
+        return libs;
+    }
+
+    /// <summary>Extracts the quoted library names from a <c>link("a", "b")</c> annotation string; yields
+    /// nothing for any other annotation.</summary>
+    internal static IEnumerable<string> ExtractLinkNames(string annotation)
+    {
+        string a = annotation.Trim();
+        if (!a.StartsWith(value: "link(", comparisonType: StringComparison.Ordinal)
+            || !a.EndsWith(value: ")", comparisonType: StringComparison.Ordinal))
+            yield break;
+
+        foreach (string part in a["link(".Length..^1].Split(separator: ','))
+        {
+            string name = part.Trim().Trim('"');
+            if (name.Length > 0) yield return name;
+        }
+    }
+
     private static int BuildExecutable(string entryFile, out string exeFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true, bool showBuildStages = false,
@@ -1252,9 +1315,11 @@ internal partial class Program
         exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
         NativeToolchain.CleanBuildAndRunOutputs(llFile: llFile, optFile: optFile, exeFile: exeFile);
 
-        // Build first (to a temp .ll file)
+        // Build first (to a temp .ll file). BuildMultiFile also reports any `@link(...)` C libraries
+        // declared in the compiled source.
         int buildResult = BuildMultiFile(entryFile: entryFile,
             outputFile: llFile,
+            discoveredLinkLibraries: out IReadOnlyList<string> discoveredLinks,
             projectRoot: projectRoot,
             buildMode: buildMode,
             dumpAst: dumpAst,
@@ -1265,6 +1330,15 @@ internal partial class Program
         if (buildResult != 0)
         {
             return buildResult;
+        }
+
+        // Merge manifest [target] c_libraries with source `@link(...)` directives (manifest first),
+        // de-duplicated, for the link step.
+        var allCLibraries = new List<string>();
+        if (cLibraries != null) allCLibraries.AddRange(collection: cLibraries);
+        foreach (string lib in discoveredLinks)
+        {
+            if (!allCLibraries.Contains(item: lib)) allCLibraries.Add(item: lib);
         }
 
         string exeDir;
@@ -1315,7 +1389,7 @@ internal partial class Program
 
         int linkResult = NativeToolchain.LinkExecutable(optFile: optFile, exeFile: exeFile,
             runtimeLibDir: runtimeLibDir, buildMode: buildMode,
-            cLibraries: cLibraries, libraryPaths: libraryPaths);
+            cLibraries: allCLibraries, libraryPaths: libraryPaths);
         if (linkResult != 0)
         {
             return linkResult;
