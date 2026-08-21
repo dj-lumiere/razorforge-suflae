@@ -253,6 +253,18 @@ public partial class Parser
             while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
         }
 
+        // A leading `@target(...)` build directive (file-granularity conditional compilation) precedes
+        // `module`. It is read PRE-PARSE by the build's file gate to decide whether to compile this file
+        // at all; by the time the parser sees it the file is already selected, so here it is consumed and
+        // discarded (its effect happened earlier). Keeping it a real `@`-annotation — not a comment — is
+        // what gives it editor highlighting.
+        if (Check(type: TokenType.At) && PeekToken(offset: 1).Type == TokenType.Identifier
+            && PeekToken(offset: 1).Text == "target")
+        {
+            ParseAnnotations();
+            while (Match(type: TokenType.Newline)) { } // NOSONAR S108
+        }
+
         // ═══════════════════════════════════════════════════════════════════════════
         // FILE-LEVEL DECLARATIONS (must appear at top of file)
         // ═══════════════════════════════════════════════════════════════════════════

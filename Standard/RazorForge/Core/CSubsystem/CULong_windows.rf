@@ -1,4 +1,4 @@
-#@target(os: "windows")
+@target(os: "windows")
 module Core
 
 ### C `unsigned long` under the LLP64 data model (Windows): 32-bit unsigned. The Unix (LP64, 64-bit)

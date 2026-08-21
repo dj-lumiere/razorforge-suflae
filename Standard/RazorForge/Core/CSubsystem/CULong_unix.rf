@@ -1,4 +1,4 @@
-#@target(os: "linux", "macos")
+@target(os: "linux", "macos")
 module Core
 
 ### C `unsigned long` under the LP64 data model (Linux, macOS): 64-bit unsigned. The Windows (LLP64,

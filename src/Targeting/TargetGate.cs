@@ -7,25 +7,27 @@ namespace Compiler.Targeting;
 
 /// <summary>
 /// File-granularity conditional compilation for RazorForge. A <c>.rf</c> file may carry a leading
-/// <c>#@target(...)</c> comment directive; when its conditions do not match the build target, the
-/// file is EXCLUDED from the compile set before it is ever parsed.
+/// <c>@target(...)</c> annotation; when its conditions do not match the build target, the file is
+/// EXCLUDED from the compile set before it is ever parsed.
 ///
-/// <para>The directive is a Go-style build constraint: it lives inside an ordinary <c>#</c> comment,
-/// so the tokenizer/parser never see it — only the build's file enumeration reads it. This keeps
-/// conditional compilation at FILE granularity (a whole file is in or out), which avoids an in-file
-/// preprocessor — those read badly in an indentation-based language, where <c>#if</c> blocks fight the
-/// significant whitespace. Platform-specific code is split into separate files
-/// (<c>foo_windows.rf</c> / <c>foo_linux.rf</c>) each guarded by its own directive.</para>
+/// <para>This gate reads the <c>@target(...)</c> annotation PRE-PARSE, straight from the file's leading
+/// lines — the decision to compile a file must happen before parsing it. In a file that IS selected the
+/// parser sees the same <c>@target(...)</c> as a real annotation (consumed and discarded before
+/// <c>module</c>); keeping it a genuine <c>@</c>-annotation rather than a comment is what gives it editor
+/// highlighting. FILE granularity (a whole file is in or out) avoids an in-file preprocessor — those
+/// read badly in an indentation-based language, where <c>#if</c> blocks fight the significant
+/// whitespace. Platform-specific code is split into separate files (<c>foo_windows.rf</c> /
+/// <c>foo_linux.rf</c>) each guarded by its own directive.</para>
 ///
 /// <para>RazorForge-only: <c>.sf</c> files are never gated (Suflae targets a REPL, not AOT
-/// cross-builds). The directive must appear in the leading comment block, BEFORE any real code
-/// (before <c>module</c>) — the enumerator stops scanning at the first non-comment line.</para>
+/// cross-builds). The directive must appear BEFORE any real code (before <c>module</c>) — the scan
+/// skips leading blank/comment lines and stops at the first real line.</para>
 ///
-/// <para>Syntax: <c>#@target(os: "windows")</c>, <c>#@target(os: "linux", arch: "arm64")</c>. Keys:
-/// <c>os</c> (windows/linux/macos), <c>arch</c> (x64|x86_64, arm64|aarch64). Every named key must
-/// match (AND); unknown keys are ignored for forward compatibility. The match is against a
-/// <see cref="TargetConfig"/> — the host today, an explicit cross-target once cross-compilation
-/// selects one.</para>
+/// <para>Syntax: <c>@target(os: "windows")</c>, <c>@target(os: "linux", "macos")</c>,
+/// <c>@target(os: "windows", arch: "arm64")</c>. Keys: <c>os</c> (windows/linux/macos), <c>arch</c>
+/// (x64|x86_64, arm64|aarch64). Keys are AND-ed; comma-separated values within a key are OR-ed; unknown
+/// keys are ignored for forward compatibility. The match is against a <see cref="TargetConfig"/> — the
+/// host today, an explicit cross-target once cross-compilation selects one.</para>
 /// </summary>
 public static class TargetGate
 {
@@ -56,16 +58,10 @@ public static class TargetGate
         {
             string line = raw.Trim();
             if (line.Length == 0) continue;               // blank line
-            if (line.StartsWith(value: "###")) continue;  // doc comment — keep scanning the header
-            if (line.StartsWith(value: "#"))
-            {
-                string body = line[1..].TrimStart();
-                if (body.StartsWith(value: "@target(") && body.EndsWith(value: ")"))
-                    return body["@target(".Length..^1];
-                continue;                                  // ordinary comment — keep scanning
-            }
-
-            return null; // first real line (e.g. `module`) — the directive must precede it
+            if (line.StartsWith(value: "#")) continue;    // comment / doc comment — keep scanning header
+            if (line.StartsWith(value: "@target(") && line.EndsWith(value: ")"))
+                return line["@target(".Length..^1];
+            return null; // first real line (e.g. `module`) — the `@target` directive must precede it
         }
 
         return null;

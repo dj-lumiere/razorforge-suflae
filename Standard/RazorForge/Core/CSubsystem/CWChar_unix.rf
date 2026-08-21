@@ -1,4 +1,4 @@
-#@target(os: "linux", "macos")
+@target(os: "linux", "macos")
 module Core
 
 ### C `wchar_t` on Unix (Linux, macOS): 32-bit. The Windows width (16-bit) lives in the

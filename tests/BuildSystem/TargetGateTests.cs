@@ -6,7 +6,7 @@ namespace RazorForge.Tests.BuildSystem;
 
 /// <summary>
 /// Tests for <see cref="TargetGate"/> — file-granularity conditional compilation driven by a leading
-/// <c>#@target(...)</c> comment directive. A concrete non-host <see cref="TargetConfig"/> is passed so
+/// <c>@target(...)</c> comment directive. A concrete non-host <see cref="TargetConfig"/> is passed so
 /// the assertions are deterministic regardless of the machine running the tests.
 /// </summary>
 public sealed class TargetGateTests
@@ -27,7 +27,7 @@ public sealed class TargetGateTests
     public void NonRfFile_NeverGated()
     {
         // A `.sf` file is Suflae — never subject to conditional compilation, even with a directive.
-        string f = WriteTemp(name: "x.sf", body: "#@target(os: \"windows\")\nmodule M\n");
+        string f = WriteTemp(name: "x.sf", body: "@target(os: \"windows\")\nmodule M\n");
         try { Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "linux", arch: "x86_64"))); }
         finally { File.Delete(path: f); }
     }
@@ -35,7 +35,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MatchingOs_Compiles_NonMatchingExcluded()
     {
-        string f = WriteTemp(name: "win.rf", body: "#@target(os: \"windows\")\nmodule M\n");
+        string f = WriteTemp(name: "win.rf", body: "@target(os: \"windows\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "windows", arch: "x86_64")));
@@ -47,7 +47,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MultiValueOs_MatchesAny()
     {
-        string f = WriteTemp(name: "unix.rf", body: "#@target(os: \"linux\", \"macos\")\nmodule M\n");
+        string f = WriteTemp(name: "unix.rf", body: "@target(os: \"linux\", \"macos\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "linux", arch: "x86_64")));
@@ -61,7 +61,7 @@ public sealed class TargetGateTests
     public void ArchAlias_NormalizesToLlvmName()
     {
         // Directive uses the ergonomic `arm64`; TargetConfig carries the LLVM `aarch64`.
-        string f = WriteTemp(name: "arm.rf", body: "#@target(arch: \"arm64\")\nmodule M\n");
+        string f = WriteTemp(name: "arm.rf", body: "@target(arch: \"arm64\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "linux", arch: "aarch64")));
@@ -73,7 +73,7 @@ public sealed class TargetGateTests
     [Fact]
     public void MultipleKeys_AreAnded()
     {
-        string f = WriteTemp(name: "wa.rf", body: "#@target(os: \"windows\", arch: \"x64\")\nmodule M\n");
+        string f = WriteTemp(name: "wa.rf", body: "@target(os: \"windows\", arch: \"x64\")\nmodule M\n");
         try
         {
             Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "windows", arch: "x86_64")));
@@ -87,7 +87,7 @@ public sealed class TargetGateTests
     {
         // The directive must precede real code (leading comment block). Here it follows `module`, so it
         // is a plain comment and the file compiles unconditionally.
-        string f = WriteTemp(name: "late.rf", body: "module M\n#@target(os: \"windows\")\nroutine start()\n  return\n");
+        string f = WriteTemp(name: "late.rf", body: "module M\n@target(os: \"windows\")\nroutine start()\n  return\n");
         try { Assert.True(condition: TargetGate.ShouldCompile(filePath: f, target: Target(os: "linux", arch: "x86_64"))); }
         finally { File.Delete(path: f); }
     }
