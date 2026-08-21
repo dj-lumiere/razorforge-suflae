@@ -1424,7 +1424,7 @@ public sealed partial class TypeRegistry
         TypeInfo? routineSerialValue = LookupType(name: "SerialValue");
         if (routineSerialValue != null)
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "serialize")
+            RegisterRoutine(routine: new RoutineInfo(name: RuntimeContract.Serialize)
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1469,7 +1469,7 @@ public sealed partial class TypeRegistry
         TypeInfo? textType = LookupType(name: "Text");
         if (textType != null)
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "represent")
+            RegisterRoutine(routine: new RoutineInfo(name: RuntimeContract.Display.Represent)
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1482,7 +1482,7 @@ public sealed partial class TypeRegistry
                 IsSynthesized = true
             });
 
-            RegisterRoutine(routine: new RoutineInfo(name: "diagnose")
+            RegisterRoutine(routine: new RoutineInfo(name: RuntimeContract.Display.Diagnose)
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
@@ -1562,9 +1562,9 @@ public sealed partial class TypeRegistry
         if (serialValueType != null &&
             elementTypes.All(predicate: et =>
                 et is not GenericParameterTypeInfo &&
-                (et is RoutineTypeInfo || LookupMemberRoutine(type: et, memberRoutineName: "serialize") != null)))
+                (et is RoutineTypeInfo || LookupMemberRoutine(type: et, memberRoutineName: RuntimeContract.Serialize) != null)))
         {
-            RegisterRoutine(routine: new RoutineInfo(name: "serialize")
+            RegisterRoutine(routine: new RoutineInfo(name: RuntimeContract.Serialize)
             {
                 Kind = RoutineKind.MemberRoutine,
                 OwnerType = newType,
