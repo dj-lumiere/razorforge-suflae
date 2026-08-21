@@ -1041,7 +1041,6 @@ routine SortedSet[T].eq(you: Accessing[SortedSet[T]]) -> Bool
 ### :returns: The `SerialValue.List` of each element's serialized form.
 @[readonly, override]
 routine SortedSet[T].serialize() -> SerialValue
-needs T obeys Serializable
   var __sv = List[SerialValue]()
   each __x in me
     __sv.add_last(value: __x.serialize())

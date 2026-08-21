@@ -508,7 +508,6 @@ needs V obeys Equatable
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
 @[readonly, override]
 routine Dict[K, V].serialize() -> SerialValue
-needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
   each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())

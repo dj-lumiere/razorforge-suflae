@@ -442,7 +442,6 @@ dangerous routine Set[T].destroy()
 ### :returns: The `SerialValue.List` of each element's serialized form.
 @[readonly, override]
 routine Set[T].serialize() -> SerialValue
-needs T obeys Serializable
   var __sv = List[SerialValue]()
   each __x in me
     __sv.add_last(value: __x.serialize())

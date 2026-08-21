@@ -453,7 +453,6 @@ needs T obeys Copyable
 ### :returns: The `SerialValue.List` holding each element's serialized form.
 @[readonly, override]
 routine List[T].serialize() -> SerialValue
-needs T obeys Serializable
   var result = List[SerialValue]()
   var i = 0u64
   while i < me.count

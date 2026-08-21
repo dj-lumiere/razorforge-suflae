@@ -3,7 +3,7 @@ module Core
 ### Represents the protocol implemented by closed choice types.
 ### `ChoiceType` gives enum-like types a shared reflection and conversion
 ### surface, including stable case enumeration and integral identities.
-protocol ChoiceType obeys Diagnosable, FastHashable, Hashable
+protocol ChoiceType obeys FastHashable, Hashable
   ### Converts a choice case to its signed integral representation.
   ### The numeric value follows the case definition order or explicit case
   ### values established by the choice declaration.

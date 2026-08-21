@@ -41,11 +41,13 @@ public class MarkerConformanceTests
     [Fact]
     public void Analyze_Record_HasTransitiveProtocols()
     {
-        // RecordType always obeys Diagnosable (→ Representable). Equatable/Comparable/Hashable are NOT
-        // universal — they are conferred by the `needs P everywhere` structural gate on each protocol:
-        // a record auto-obeys P iff EVERY member obeys P, and the auto-derived `eq`/`cmp`/`hash` supply a
-        // real body (so there is no bodyless-promise LINKERR). `Point{x: S32, y: S32}` — S32 obeys
-        // Ordered (→ Equatable, Comparable) and Hashable — so Point auto-conforms all three.
+        // represent/diagnose/serialize are UNIVERSAL built-in operations (every value has them) — no
+        // longer opt-in protocols, so a record does NOT "obey Representable/Diagnosable/Serializable"
+        // (those protocols were removed). Equatable/Comparable/Hashable ARE still opt-in, conferred by
+        // the `needs P everywhere` structural gate: a record auto-obeys P iff EVERY member obeys P, and
+        // the auto-derived `eq`/`cmp`/`hash` supply a real body (no bodyless-promise LINKERR).
+        // `Point{x: S32, y: S32}` — S32 obeys Ordered (→ Equatable, Comparable) and Hashable — so Point
+        // auto-conforms all three.
         string source = """
                         record Point
                           x: S32
@@ -57,8 +59,6 @@ public class MarkerConformanceTests
 
         var record = (RecordTypeInfo)result.Registry.LookupType(name: "Point")!;
 
-        Assert.Contains(collection: record.ImplementedProtocols,
-            filter: p => p.Name == "Diagnosable");
         // Equatable/Comparable/Hashable ARE conferred via `needs P everywhere` (all members are S32,
         // which obeys them) — the auto-derive gives each a real body.
         Assert.Contains(collection: record.ImplementedProtocols,
