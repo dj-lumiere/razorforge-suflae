@@ -1,0 +1,32 @@
+module Tests/CycleCollector/DeepCycle
+import IO/Console
+
+# Stack-overflow regression for the cycle collector's traversal passes. Builds a single ring of 200_000
+# nodes (a cycle only refcounting can't reclaim) and collects it: under the OLD RECURSIVE mark/scan/
+# collect passes a 200k-deep traversal overflows the call stack; the explicit-worklist passes reclaim it
+# iteratively. The reclaimed count is deterministic (`reclaimed=200000`), so the test asserts it exactly.
+
+entity Node
+  next: Roamed[Node]
+  id: S64
+
+routine build_ring(n: S64)
+  danger
+    var head = Roamed(from: Node(next: roamed_none(), id: 0_s64))
+    var prev = head.share()
+    var i = 1_s64
+    while i < n
+      var node = Roamed(from: Node(next: roamed_none(), id: i))
+      prev.raw_inner().next = node.share()
+      prev = node.share()
+      i = i + 1_s64
+    prev.raw_inner().next = head.share()
+  return
+
+routine start()
+  var n = 200000_s64
+  build_ring(n: n)
+  var reclaimed = cyclic_collect()
+  show(f"reclaimed={reclaimed}")
+  show("DONE")
+  return

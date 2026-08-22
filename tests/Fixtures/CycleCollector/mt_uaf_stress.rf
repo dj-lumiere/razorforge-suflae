@@ -1,0 +1,62 @@
+module Tests/CycleCollector/MtUafStress
+import IO/Console
+
+# Multithreaded stop-the-world regression for the cycle collector's UAF fix (RoamController's rwlock STW).
+# MUTATOR threads churn LOCAL Roamed rings (each build+drop feeds the GLOBAL candidate buffer); COLLECTOR
+# threads concurrently drain it with cyclic_collect(). A controller built on one OS thread is trial-deleted
+# on ANOTHER — a data race on its non-atomic count/state UNLESS the collector's EXCLUSIVE lock and the
+# mutator's SHARED lock mutually exclude them. A clean finish (`DONE - no UAF`, exit 0) = the lock holds;
+# a re-introduced UAF would crash or hang. Reclaim counts are non-deterministic (genuine interleaving), so
+# the test asserts completion, not an exact count. Counts kept modest so the suite stays fast while still
+# hammering the concurrent collect-vs-mutate path tens of thousands of times.
+
+entity Node
+  next: Roamed[Node]
+  id: S64
+
+routine build_ring(n: S64)
+  danger
+    var head = Roamed(from: Node(next: roamed_none(), id: 0_s64))
+    var prev = head.share()
+    var i = 1_s64
+    while i < n
+      var node = Roamed(from: Node(next: roamed_none(), id: i))
+      prev.raw_inner().next = node.share()
+      prev = node.share()
+      i = i + 1_s64
+    prev.raw_inner().next = head.share()
+  return
+
+threaded routine mutator(rounds: S64, ring_size: S64) -> S64
+  var i = 0_s64
+  while i < rounds
+    build_ring(n: ring_size)
+    i = i + 1_s64
+  return i
+
+threaded routine collector(rounds: S64) -> S64
+  var total = 0_u64
+  var i = 0_s64
+  while i < rounds
+    total = total + cyclic_collect()
+    i = i + 1_s64
+  return S64(from: total)
+
+routine start()
+  var kids = List[Agent[S64]]()
+  var m = 0_s64
+  while m < 4_s64
+    kids.add_last(value: mutator(rounds: 700_s64, ring_size: 40_s64))
+    m = m + 1_s64
+  var c = 0_s64
+  while c < 4_s64
+    kids.add_last(value: collector(rounds: 8000_s64))
+    c = c + 1_s64
+  var results = kids.gather!()
+  var total = 0_s64
+  var k = 0_u64
+  while k < results.count()
+    total = total + results[k]
+    k = k + 1_u64
+  show(f"DONE - no UAF (mutator+collector work units={total})")
+  return
