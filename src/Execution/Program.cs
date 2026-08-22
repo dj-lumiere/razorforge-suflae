@@ -27,6 +27,38 @@ internal partial class Program
     private const string SuflaeLanguageName = "Suflae";
     private const string RazorForgeLanguageName = "RazorForge";
 
+    /// <summary>Suflae's own version line. Suflae versions separately from RazorForge (the shared
+    /// compiler binary carries the RazorForge <c>&lt;Version&gt;</c>); bump this on a Suflae release.</summary>
+    private const string SuflaeVersion = "0.1.0";
+
+    /// <summary>True when the binary was invoked under a Suflae alias (<c>suflae</c>/<c>sf</c>)
+    /// rather than <c>razorforge</c>/<c>rf</c>. Selects Suflae branding (version/usage) and makes
+    /// Suflae the DEFAULT language when a source's extension does not decide it. The <c>.rf</c>/
+    /// <c>.sf</c> extension always wins over this default. The package ships <c>suflae</c>/<c>sf</c>
+    /// as copies of the apphost so the invoked name survives in <see cref="Environment.ProcessPath"/>.</summary>
+    private static readonly bool InvokedAsSuflae = DetectSuflaeInvocation();
+
+    /// <summary>Detects a Suflae-alias invocation from the executing binary's file name.</summary>
+    private static bool DetectSuflaeInvocation()
+    {
+        try
+        {
+            string? proc = Environment.ProcessPath;
+            if (proc is null)
+            {
+                return false;
+            }
+
+            string name = Path.GetFileNameWithoutExtension(path: proc)
+                              .ToLowerInvariant();
+            return name is "suflae" or "sf";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Entry point for the RazorForge builder CLI.
     /// Dispatches to the appropriate command handler based on the first argument.
@@ -178,7 +210,7 @@ internal partial class Program
                 string lang = args.Length >= 2
                     ? args[1]
                        .ToLowerInvariant()
-                    : "rf";
+                    : (InvokedAsSuflae ? "sf" : "rf");
                 Language stdlibLang = lang is "sf" or "suflae"
                     ? Language.Suflae
                     : Language.RazorForge;
@@ -376,38 +408,51 @@ internal partial class Program
     /// </summary>
     private static void PrintUsage()
     {
-        Console.WriteLine(value: $"RazorForge Builder {GetVersionString()}");
+        // The command name the user typed (the shipped `suflae`/`sf` aliases are copies of the
+        // apphost), so examples echo how the tool was actually invoked.
+        string tool = InvokedAsSuflae ? "suflae" : "razorforge";
+        string header = InvokedAsSuflae
+            ? $"{SuflaeLanguageName} v{SuflaeVersion}"
+            : $"{RazorForgeLanguageName} Builder {GetVersionString()}";
+
+        Console.WriteLine(value: header);
         Console.WriteLine();
         Console.WriteLine(value: "Usage:");
         Console.WriteLine(
             value:
-            "  RazorForge <source-file>                        - Parse file and show AST summary");
+            $"  {tool} <source-file>                        - Parse file and show AST summary");
         Console.WriteLine(
             value:
-            "  RazorForge parse <source-file>                  - Parse file and show AST summary");
+            $"  {tool} parse <source-file>                  - Parse file and show AST summary");
         Console.WriteLine(
             value:
-            "  RazorForge tokenize <source-file>               - Tokenize file and show tokens");
+            $"  {tool} tokenize <source-file>               - Tokenize file and show tokens");
         Console.WriteLine(
             value:
-            "  RazorForge codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
+            $"  {tool} codegen <source-file> [out.ll]       - Generate LLVM IR (single file)");
         Console.WriteLine(
-            value: "  RazorForge build [entry-file]                   - Build a native executable (host OS, no run)");
+            value: $"  {tool} build [entry-file]                   - Build a native executable (host OS, no run)");
         Console.WriteLine(
-            value: "  RazorForge buildandrun [entry-file]             - Build and execute");
-        Console.WriteLine(
-            value:
-            "  RazorForge check [entry-file]                   - Type-check only (no codegen)");
+            value: $"  {tool} buildandrun [entry-file]             - Build and execute");
         Console.WriteLine(
             value:
-            "  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
+            $"  {tool} check [entry-file]                   - Type-check only (no codegen)");
         Console.WriteLine(
-            value: "  RazorForge help                                 - Show this help");
+            value:
+            $"  {tool} validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
         Console.WriteLine(
-            value: "  RazorForge version                              - Show compiler version");
+            value: $"  {tool} help                                 - Show this help");
+        Console.WriteLine(
+            value: $"  {tool} version                              - Show compiler version");
         Console.WriteLine();
         Console.WriteLine(
             value: "  <source-file>: .rf file for RazorForge or .sf file for Suflae");
+        if (InvokedAsSuflae)
+        {
+            Console.WriteLine(
+                value: "  Invoked as suflae: a source with no .rf/.sf extension defaults to Suflae.");
+        }
+
         Console.WriteLine(
             value: "  If no entry file is given, searches for razorforge.toml in the current");
         Console.WriteLine(value: "  directory and parent directories.");
@@ -418,10 +463,17 @@ internal partial class Program
             value: "  [target] section (executable, library, mode, show-build-stages, ...).");
     }
 
-    /// <summary>Prints the compiler version (from assembly metadata) to standard output.</summary>
+    /// <summary>Prints the compiler version to standard output. Under a Suflae invocation this
+    /// reports Suflae's own version line; otherwise the RazorForge assembly version.</summary>
     private static void PrintVersion()
     {
-        Console.WriteLine(value: $"RazorForge {GetVersionString()}");
+        if (InvokedAsSuflae)
+        {
+            Console.WriteLine(value: $"{SuflaeLanguageName} v{SuflaeVersion}");
+            return;
+        }
+
+        Console.WriteLine(value: $"{RazorForgeLanguageName} {GetVersionString()}");
     }
 
     /// <summary>
@@ -452,6 +504,24 @@ internal partial class Program
         return path.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Decides whether a source file should be compiled as Suflae. The <c>.sf</c>/<c>.rf</c>
+    /// extension is authoritative; only when neither decides (extension-less entry) does the
+    /// invocation default (<see cref="InvokedAsSuflae"/>) break the tie.</summary>
+    private static bool IsSuflaeSource(string path)
+    {
+        if (IsSuflaeFile(path: path))
+        {
+            return true;
+        }
+
+        if (path.EndsWith(value: ".rf", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return InvokedAsSuflae;
+    }
+
     /// <summary>
     /// Tokenizes the given source file and prints each token with its position and text to standard output.
     /// Returns 0 on success or 1 if the file is not found or tokenization fails.
@@ -465,7 +535,7 @@ internal partial class Program
         }
 
         string code = File.ReadAllText(path: sourceFile);
-        bool isSuflae = IsSuflaeFile(path: sourceFile);
+        bool isSuflae = IsSuflaeSource(path: sourceFile);
 
         Console.WriteLine(
             value: $"Tokenizing {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
@@ -513,7 +583,7 @@ internal partial class Program
         }
 
         string code = File.ReadAllText(path: sourceFile);
-        bool isSuflae = IsSuflaeFile(path: sourceFile);
+        bool isSuflae = IsSuflaeSource(path: sourceFile);
 
         Console.WriteLine(
             value: $"Parsing {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
@@ -683,7 +753,7 @@ internal partial class Program
         }
 
         string code = File.ReadAllText(path: sourceFile);
-        bool isSuflae = IsSuflaeFile(path: sourceFile);
+        bool isSuflae = IsSuflaeSource(path: sourceFile);
 
         Console.WriteLine(
             value: $"Building {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
@@ -827,7 +897,7 @@ internal partial class Program
             return 1;
         }
 
-        bool isSuflae = IsSuflaeFile(path: entryFile);
+        bool isSuflae = IsSuflaeSource(path: entryFile);
         Language language = isSuflae
             ? Language.Suflae
             : Language.RazorForge;
@@ -1109,7 +1179,7 @@ internal partial class Program
             return 1;
         }
 
-        bool isSuflae = IsSuflaeFile(path: entryFile);
+        bool isSuflae = IsSuflaeSource(path: entryFile);
         Language language = isSuflae
             ? Language.Suflae
             : Language.RazorForge;

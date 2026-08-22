@@ -65,6 +65,12 @@ Copy-Item LICENSE, README.md $Out
 # is deliberately not shipped to avoid colliding with Foundry's `forge`.
 Copy-Item "$Out\RazorForge.exe" "$Out\rf.exe"
 
+# Suflae aliases — copies of the apphost (the binary keys its Suflae branding + default
+# language off its own invoked name). The stub launches RazorForge.dll by name from its
+# own directory, so the renamed copies still run the same compiler.
+Copy-Item "$Out\RazorForge.exe" "$Out\suflae.exe"
+Copy-Item "$Out\RazorForge.exe" "$Out\sf.exe"
+
 Write-Host '=== bundle self-contained LLVM toolchain (llvm-mingw + opt) ==='
 # llvm-mingw gives a fully redistributable clang + ld.lld + mingw CRT/import libs,
 # so produced executables link without Visual Studio or the Windows SDK. The

@@ -17,7 +17,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'       # RazorForge release  (e.g. v0.4.0)
+      - 'sf-v*'    # Suflae release      (e.g. sf-v0.1.0) — same compiler artifacts, SF branding
 
 permissions:
   contents: write
@@ -121,12 +122,17 @@ jobs:
           export CXXFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
           ./build.sh
 
+      - name: Resolve version and release branding
+        run: bash scripts/resolve-release.sh
+
       - name: Package linux-x64
         run: |
           chmod +x scripts/package.sh
-          # Derive the version from the tag (strip leading 'v') so the artifact
-          # name always matches the release even if the csproj lags behind.
-          VERSION="${GITHUB_REF_NAME#v}" scripts/package.sh
+          # PKG_VERSION is the tag version for a RazorForge tag, and the csproj
+          # compiler version for a Suflae tag (an sf tag ships the same compiler,
+          # so its artifacts are named for the compiler, not the sf-v0.1.0 tag —
+          # which would otherwise collide with the existing v0.1.0 release name).
+          VERSION="$PKG_VERSION" scripts/package.sh
           # Per-platform checksum names: all jobs attach to the same release,
           # and identical filenames would collide.
           mv dist/checksums.txt dist/checksums-linux-x64.txt
@@ -134,7 +140,8 @@ jobs:
       - name: Create GitHub release with artifacts
         uses: softprops/action-gh-release@v2
         with:
-          body_path: scripts/package-assets/RELEASE_NOTES.md
+          name: ${{ env.RELEASE_NAME }}
+          body_path: ${{ env.RELEASE_NOTES }}
           prerelease: true
           files: |
             dist/*.tar.gz
@@ -236,11 +243,15 @@ jobs:
           git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv
           exit 0
 
+      - name: Resolve version and release branding
+        shell: bash
+        run: bash scripts/resolve-release.sh
+
       - name: Package win-x64
         shell: pwsh
         run: |
-          # package.ps1 honors $env:VERSION; derive it from the tag like the Linux job.
-          $env:VERSION = $env:GITHUB_REF_NAME -replace '^v', ''
+          # package.ps1 honors $env:VERSION; PKG_VERSION is resolved for both tag families.
+          $env:VERSION = $env:PKG_VERSION
           pwsh -NoProfile -File scripts/package.ps1
           if ($LASTEXITCODE -ne 0) { throw "package.ps1 failed ($LASTEXITCODE)" }
           Move-Item dist/checksums.txt dist/checksums-win-x64.txt
@@ -248,6 +259,8 @@ jobs:
       - name: Attach win-x64 artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ env.RELEASE_NAME }}
+          body_path: ${{ env.RELEASE_NOTES }}
           prerelease: true
           files: |
             dist/*.zip
@@ -317,15 +330,20 @@ jobs:
           export CXX=clang++
           ./build.sh
 
+      - name: Resolve version and release branding
+        run: bash scripts/resolve-release.sh
+
       - name: Package osx-arm64
         run: |
           chmod +x scripts/package.sh
-          VERSION="${GITHUB_REF_NAME#v}" scripts/package.sh
+          VERSION="$PKG_VERSION" scripts/package.sh
           mv dist/checksums.txt dist/checksums-osx-arm64.txt
 
       - name: Attach osx-arm64 artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ env.RELEASE_NAME }}
+          body_path: ${{ env.RELEASE_NOTES }}
           prerelease: true
           files: |
             dist/*.tar.gz
