@@ -673,10 +673,6 @@ routine D32!(from_text: Text) -> D32
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of the raw decimal32 encoding.
-routine D32.fast_hash() -> U64
-  return __hash_u128(v: LLVM::zero_extend[U32, U128](me.to_bits()))
-
 # ============================================================================
 # Byte Representation
 # ============================================================================

@@ -703,11 +703,6 @@ routine U128!(from_text: Text) -> U128
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this 128-bit value.
-### :returns: A `U64` hash combining both 64-bit halves of the value.
-routine U128.fast_hash() -> U64
-  return __hash_u128(v: me)
-
 ### Returns a SipHash-2-4 keyed hash of this 128-bit value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

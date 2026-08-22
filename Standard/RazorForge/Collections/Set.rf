@@ -21,7 +21,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### **When to use**
 ### - You are storing data derived from untrusted input (e.g. tokens, user-supplied strings, request IDs).
 ### - You need membership testing with a security guarantee against hash-flooding.
-### - Use {FastSet[T]} instead when the element space is fully trusted and throughput matters more.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -32,7 +31,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
-### :see: {FastSet[T]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Dict[K, V]} for the dictionary counterpart.
 entity Set[T] obeys Iterable[T], Container
 needs T obeys Hashable, Equatable

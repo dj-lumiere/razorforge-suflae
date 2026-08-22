@@ -30,7 +30,7 @@ Each fixture passes iff its captured stdout matches the snapshot exactly (traili
 
 ## Authoring a fixture
 
-- **Deterministic output only.** For Set/FastSet/Dict/FastDict (non-deterministic iteration order), probe via:
+- **Deterministic output only.** For Set/Dict (non-deterministic iteration order), probe via:
   - `size`, `contains(...)`, `get(...)` — order-independent.
   - Collect into a `List`, `.sort()`, then print.
   - Sorted variants (SortedSet/SortedDict) iterate in order — direct printing is safe.
@@ -41,7 +41,7 @@ Each fixture passes iff its captured stdout matches the snapshot exactly (traili
 ## Inventory
 
 Covered today (see `*.rf` files in this directory):
-- Containers: `list`, `set`, `dict`, `deque`, `tuple`, `bitlist`, `sorted_list`, `sorted_set`, `sorted_dict`, `fast_set`, `fast_dict`, `array`, `bitarray`
+- Containers: `list`, `set`, `dict`, `deque`, `tuple`, `bitlist`, `sorted_list`, `sorted_set`, `sorted_dict`, `array`, `bitarray`
 - Carriers: `maybe`, `maybe_entity` (auto-wrap to `Owned`), `result`, `crashable`
 - Memory wrappers: `owned`, `retained`, `viewed_grasped`
 - Primitives: `bool`, `text`, `bytes`

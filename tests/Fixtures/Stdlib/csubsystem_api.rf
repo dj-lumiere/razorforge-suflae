@@ -28,7 +28,7 @@ routine start()
   var lc = CLong(from: 250s64)
   show(f"CLong repr={la} diag={la.diagnose()}")
   show(f"CLong eq={la.eq(you: lb)} ne={la.eq(you: lc)} cmp_lt={la.cmp(you: lc)} cmp_eq={la.cmp(you: lb)}")
-  show(f"CLong hash_eq={la.fast_hash() == lb.fast_hash()}")
+  show(f"CLong hash_eq={la.hash(k0: 0u64, k1: 0u64) == lb.hash(k0: 0u64, k1: 0u64)}")
 
   # ----- CULong -----
   var ua = CULong(from: 4000u64)
@@ -36,7 +36,7 @@ routine start()
   var uc = CULong(from: 9000u64)
   show(f"CULong repr={ua} diag={ua.diagnose()}")
   show(f"CULong eq={ua.eq(you: ub)} cmp_lt={ua.cmp(you: uc)} cmp_gt={uc.cmp(you: ua)}")
-  show(f"CULong hash_eq={ua.fast_hash() == ub.fast_hash()}")
+  show(f"CULong hash_eq={ua.hash(k0: 0u64, k1: 0u64) == ub.hash(k0: 0u64, k1: 0u64)}")
 
   # ----- CWChar (BMP: 'A'=65, euro sign U+20AC=8364) -----
   var wa = CWChar(from: 65u32)

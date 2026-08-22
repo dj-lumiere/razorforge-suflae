@@ -114,13 +114,6 @@ routine Vector2D.represent() -> Text
 routine Vector2D.diagnose() -> Text
   return "Vector2D" + me.represent()
 
-### Returns an xxHash64-based hash of this vector.
-### :returns: A `U64` hash combining both components.
-routine Vector2D.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.x.fast_hash())
-  acc = __hash_round(acc: acc, h: me.y.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this vector.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
@@ -232,14 +225,6 @@ routine Vector3D.represent() -> Text
 routine Vector3D.diagnose() -> Text
   return "Vector3D" + me.represent()
 
-### Returns an xxHash64-based hash of this vector.
-### :returns: A `U64` hash combining all three components.
-routine Vector3D.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.x.fast_hash())
-  acc = __hash_round(acc: acc, h: me.y.fast_hash())
-  acc = __hash_round(acc: acc, h: me.z.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this vector.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
@@ -348,15 +333,6 @@ routine Vector4D.represent() -> Text
 ### :returns: The resulting `Text` value.
 routine Vector4D.diagnose() -> Text
   return "Vector4D" + me.represent()
-
-### Returns an xxHash64-based hash of this vector.
-### :returns: A `U64` hash combining all four components.
-routine Vector4D.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.x.fast_hash())
-  acc = __hash_round(acc: acc, h: me.y.fast_hash())
-  acc = __hash_round(acc: acc, h: me.z.fast_hash())
-  acc = __hash_round(acc: acc, h: me.w.fast_hash())
-  return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this vector.
 ### :param k0: The first 64-bit key word.

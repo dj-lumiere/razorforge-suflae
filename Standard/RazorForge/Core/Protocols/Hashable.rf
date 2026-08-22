@@ -3,8 +3,7 @@ module Core
 ### Represents the protocol for keyed, attack-resistant hashing.
 ### `Hashable` is the default hashing protocol used by `Set` and `Dict`. Its keyed
 ### form (SipHash-2-4 semantics) makes the probe sequence unpredictable to external
-### attackers, so it is safe to use with untrusted input. For trusted keys where
-### every cycle matters, use `FastHashable` and `FastSet`/`FastDict` instead.
+### attackers, so it is safe to use with untrusted input.
 ### `needs Hashable everywhere` auto-confers Hashable on any member-bearing type all of whose
 ### members are themselves Hashable — the structural gate that drives the auto-derived `hash`.
 protocol Hashable

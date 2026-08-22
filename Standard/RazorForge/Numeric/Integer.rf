@@ -12,7 +12,7 @@ module Numerics
 ### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
+record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
   ### Stores the native big-integer handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller (null for transient stack values is not
@@ -515,13 +515,6 @@ routine Integer.represent_radix(radix: S32) -> Text
 # ============================================================================
 # Hashing
 # ============================================================================
-
-### Returns an xxHash64-based hash of this value.
-### Hashes the canonical base-10 representation, so equal integers hash equally.
-### :returns: The 64-bit hash.
-@readonly
-routine Integer.fast_hash() -> U64
-  return me.represent_radix(radix: 10_s32).fast_hash()
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Hashes the canonical base-10 representation under the supplied key pair.

@@ -209,15 +209,6 @@ routine Q32.diagnose() -> Text
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this quaternion.
-### :returns: A `U64` hash combining all four components.
-routine Q32.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.w.fast_hash())
-  acc = __hash_round(acc: acc, h: me.x.fast_hash())
-  acc = __hash_round(acc: acc, h: me.y.fast_hash())
-  acc = __hash_round(acc: acc, h: me.z.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this quaternion.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

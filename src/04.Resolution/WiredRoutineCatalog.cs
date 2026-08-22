@@ -67,7 +67,7 @@ public enum WiredKind
     Display,
     /// <summary>Cycle-collector visit hook (cyclic_visit) — universal no-op, Roamed overrides.</summary>
     CycleTrace,
-    /// <summary>Hash computation (hash, fast_hash).</summary>
+    /// <summary>Hash computation (hash).</summary>
     Hash,
     /// <summary>Value copy (store).</summary>
     Copy,
@@ -161,7 +161,6 @@ public static class WiredRoutineCatalog
         // uniformly. `Roamed[T].cyclic_visit` (hand-written) overrides it to report the controller.
         new() { Name = "cyclic_visit", Kind = WiredKind.CycleTrace, Views = Cap | Known | Seed, Protocols = ["CycleTraceable"] },
         new() { Name = "hash",      Kind = WiredKind.Hash,    Views = Cap | Known | Seed, Protocols = ["Hashable"] },
-        new() { Name = "fast_hash", Kind = WiredKind.Hash,    Views = Cap,                Protocols = ["FastHashable"] },
 
         // ---- Comparison (cmp family shares the cmp body; ne shares eq) ----
         new() { Name = "eq",  Kind = WiredKind.Comparison, Views = Cap | Known | Proto | Seed, Protocols = ["Equatable"] },
@@ -388,7 +387,7 @@ public static class WiredRoutineCatalog
         new(comparer: StringComparer.Ordinal)
         {
             ["eq"] = ("Equatable", "eq"), ["ne"] = ("Equatable", "eq"), ["hash"] = ("Hashable", "hash"),
-            ["fast_hash"] = ("FastHashable", "fast_hash"), ["cmp"] = ("Comparable", "cmp"),
+            ["cmp"] = ("Comparable", "cmp"),
             ["lt"] = ("Comparable", "cmp"), ["le"] = ("Comparable", "cmp"), ["gt"] = ("Comparable", "cmp"),
             ["ge"] = ("Comparable", "cmp"), ["contains"] = ("Container", "contains"),
             ["notcontains"] = ("Container", "contains"), ["getitem"] = ("Indexable", "getitem"),

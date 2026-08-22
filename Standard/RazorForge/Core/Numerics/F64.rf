@@ -594,11 +594,6 @@ routine F64!(from_text: Text) -> F64
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
-### :returns: A `U64` hash of the 64-bit float encoding.
-routine F64.fast_hash() -> U64
-  return __hash_leaf(v: LLVM::reinterpret_bits[F64, U64](me))
-
 # ============================================================================
 # Byte Representation
 # ============================================================================

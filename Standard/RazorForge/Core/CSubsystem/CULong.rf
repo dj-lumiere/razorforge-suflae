@@ -30,12 +30,6 @@ routine CULong.represent() -> Text
 routine CULong.diagnose() -> Text
   return "CULong(" + U64(from: me).represent() + ")"
 
-### Returns a hash of this value.
-### :returns: The resulting `U64` value.
-@readonly
-routine CULong.fast_hash() -> U64
-  return U64(from: me).fast_hash()
-
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

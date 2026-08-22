@@ -407,13 +407,6 @@ routine Duration.diagnose() -> Text
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this duration.
-### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Duration.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.fast_hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this duration.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

@@ -20,13 +20,6 @@ common routine SecureHashKey.random() -> SecureHashKey
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this key.
-### :returns: A `U64` hash combining both 64-bit key words.
-routine SecureHashKey.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: me.k0))
-  acc = __hash_round(acc: acc, h: __hash_leaf(v: me.k1))
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this key.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

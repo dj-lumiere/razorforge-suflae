@@ -148,7 +148,7 @@ public abstract class TypeInfo
 
     /// <summary>
     /// Returns the substring inside the outermost <c>[...]</c> of a type/routine name STRING
-    /// (e.g. "Accessing[FastSet[T]]" → "FastSet[T]", "Dict[K, V]" → "K, V"), or <c>null</c> when the
+    /// (e.g. "Accessing[SortedSet[T]]" → "SortedSet[T]", "Dict[K, V]" → "K, V"), or <c>null</c> when the
     /// name carries no non-empty bracket suffix. Companion to <see cref="StripTypeArgs"/> for raw
     /// name/registry-key strings that have no live <see cref="TypeInfo"/> to read
     /// <see cref="TypeArguments"/> from — never re-implement the <c>IndexOf('[')</c> /

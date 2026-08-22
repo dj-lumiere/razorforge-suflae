@@ -21,17 +21,6 @@ record RoutineRecord
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this routine record.
-### :returns: A `U64` hash combining all identifier fields.
-routine RoutineRecord.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.file_id.fast_hash())
-  acc = __hash_round(acc: acc, h: me.routine_id.fast_hash())
-  acc = __hash_round(acc: acc, h: me.module_id.fast_hash())
-  acc = __hash_round(acc: acc, h: me.type_id.fast_hash())
-  acc = __hash_round(acc: acc, h: me.line_no.fast_hash())
-  acc = __hash_round(acc: acc, h: me.column_no.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this routine record.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

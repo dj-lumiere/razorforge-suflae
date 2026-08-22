@@ -735,11 +735,6 @@ routine S256!(from_text: Text) -> S256
 # Hashing
 # ============================================================================
 
-### Returns a hash of this 256-bit value by folding its two 128-bit halves.
-### :returns: A `U64` hash combining the high and low 128-bit halves of the bit pattern.
-routine S256.fast_hash() -> U64
-  return LLVM::reinterpret_bits[S256, U256](me).fast_hash()
-
 ### Returns a SipHash-2-4 keyed hash of this 256-bit value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

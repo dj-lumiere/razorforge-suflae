@@ -15,7 +15,7 @@ import BuilderService
 ### frees the buffer + controller. When `ctrl` is null (`hijacked_none[...]()`),
 ### the value represents an empty or static-literal string and `store`/`destroy`
 ### are no-ops.
-record Text obeys Assignable, Copyable, Addable, Ordered, FastHashable, Hashable, TextRepeatable, Iterable[Character], Container
+record Text obeys Assignable, Copyable, Addable, Ordered, Hashable, TextRepeatable, Iterable[Character], Container
   ### Stores the character buffer.
   secret data: Hijacked[Character]
   ### Stores the number of characters in the buffer.
@@ -286,16 +286,6 @@ routine Text.cmp(other: Text) -> ComparisonSign
   if me.count > other_count
     return ComparisonSign.ME_LARGE
   return ComparisonSign.SAME
-
-### Returns an xxHash64 hash of this value.
-### Hashing combines character code points using the xxHash64 round function.
-### :returns: The resulting `U64` hash value.
-@readonly
-routine Text.fast_hash() -> U64
-  var h = __hash_leaf(v: me.count)
-  each i in 0u64 til me.count
-    h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))
-  return __hash_finalize(h)
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Each code point is folded into the keyed hash so equal texts under the same

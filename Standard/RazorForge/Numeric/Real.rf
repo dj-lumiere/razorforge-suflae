@@ -9,7 +9,7 @@ module Numerics
 ### the transcendentals round to a generous default working precision under
 ### round-to-nearest-ties-to-even.
 ### :see: {Integer}, {Decimal}
-record Real obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
+record Real obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable
   ### The native libbf handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count cell (or null) governing the shared handle lifetime.
@@ -658,9 +658,3 @@ routine Real.represent() -> Text
 @readonly
 routine Real.hash(k0: U64, k1: U64) -> U64
   return me.represent().hash(k0: k0, k1: k1)
-
-### Fast (non-cryptographic) hash of the canonical representation.
-### :returns: The resulting `U64` value.
-@readonly
-routine Real.fast_hash() -> U64
-  return me.represent().fast_hash()

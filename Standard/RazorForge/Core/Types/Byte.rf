@@ -160,12 +160,6 @@ routine Byte.diagnose() -> Text
 # Hashing
 # ============================================================================
 
-### Returns a hash of this value.
-### :returns: The resulting `U64` value.
-@readonly
-routine Byte.fast_hash() -> U64
-  return __hash_leaf(v: LLVM::zero_extend[Byte, U64](me))
-
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

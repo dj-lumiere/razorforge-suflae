@@ -852,13 +852,6 @@ routine U256!(from_text: Text) -> U256
 # Hashing
 # ============================================================================
 
-### Returns a hash of this 256-bit value by folding its two 128-bit halves.
-### :returns: A `U64` hash combining the high and low 128-bit halves.
-routine U256.fast_hash() -> U64
-  var lo = __hash_u128(v: me.low128())
-  var hi = __hash_u128(v: me.high128())
-  return lo ^ hi
-
 ### Returns a SipHash-2-4 keyed hash of this 256-bit value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

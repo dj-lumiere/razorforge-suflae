@@ -335,13 +335,6 @@ routine Moment.diagnose() -> Text
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this moment.
-### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Moment.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.fast_hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.fast_hash())
-  return __hash_finalize(h: acc)
-
 ### Returns a SipHash-2-4 keyed hash of this moment.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

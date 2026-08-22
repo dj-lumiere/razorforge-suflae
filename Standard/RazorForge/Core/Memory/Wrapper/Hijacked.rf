@@ -212,11 +212,6 @@ routine Hijacked[T].eq(you: Hijacked[T]) -> Bool
 routine Hijacked[T].cmp(you: Hijacked[T]) -> ComparisonSign
   return me.address().cmp(you: you.address())
 
-### Returns an xxHash64 hash of this pointer's address.
-### :returns: An xxHash64 hash of this pointer's address.
-routine Hijacked[T].fast_hash() -> U64
-  return __hash_leaf(v: U64(me.address()))
-
 ### Returns a SipHash-2-4 keyed hash of this pointer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

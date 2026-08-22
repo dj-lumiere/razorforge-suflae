@@ -636,11 +636,6 @@ routine U64!(from_text: Text) -> U64
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value.
-### :returns: The 64-bit hash.
-routine U64.fast_hash() -> U64
-  return __hash_leaf(v: me)
-
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

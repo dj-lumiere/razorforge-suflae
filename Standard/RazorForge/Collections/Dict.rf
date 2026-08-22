@@ -21,7 +21,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### **When to use**
 ### - You are storing data derived from untrusted input (e.g. HTTP headers, user IDs, file names).
 ### - You need the same insert/lookup/remove interface as {Dict[K, V]} with a security guarantee.
-### - Use {FastDict[K, V]} instead when the key space is fully trusted and throughput matters more.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -33,7 +32,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ###
 ### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
 ### :typeparam V: The value type associated with each key.
-### :see: {FastDict[K, V]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Set[T]} for the set counterpart.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container, Copyable
 needs K obeys Hashable, Equatable

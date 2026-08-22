@@ -1,6 +1,6 @@
 module Core
 
-### Key-based read and write access for map types (Dict, FastDict, SortedDict).
+### Key-based read and write access for map types (Dict, SortedDict).
 ### Both `[]` read and `[]` write are failable: the key must already exist for either to succeed.
 ### To insert a new key-value pair, use the `put(key:, value:)` method instead.
 protocol KeyFindable

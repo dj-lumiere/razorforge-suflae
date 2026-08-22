@@ -675,11 +675,6 @@ routine U8!(from_text: Text) -> U8
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value.
-### :returns: A `U64` hash of the 8-bit value.
-routine U8.fast_hash() -> U64
-  return __hash_leaf(v: LLVM::zero_extend[U8, U64](me))
-
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.

@@ -826,12 +826,6 @@ routine List[U16].decode_as_utf16() -> Text
 # Hashing for BytesUtf8View / BytesUtf8Emittable
 # ============================================================================
 
-### Returns an xxHash64 hash of the underlying byte buffer's address.
-### :returns: A `U64` hash of this view.
-routine BytesUtf8View.fast_hash() -> U64
-  danger
-    return __hash_leaf(v: U64(me.data.address()))
-
 ### Returns a SipHash-2-4 keyed hash of the underlying byte buffer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
@@ -839,14 +833,6 @@ routine BytesUtf8View.fast_hash() -> U64
 routine BytesUtf8View.hash(k0: U64, k1: U64) -> U64
   danger
     return __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1)
-
-### Returns an xxHash64 hash of this iterator's buffer address and current index.
-### :returns: A `U64` hash combining the buffer address and the current index.
-routine BytesUtf8Emittable.fast_hash() -> U64
-  danger
-    var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.data.address())))
-    acc = __hash_round(acc: acc, h: me.index.fast_hash())
-    return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this iterator.
 ### :param k0: The first 64-bit key word.

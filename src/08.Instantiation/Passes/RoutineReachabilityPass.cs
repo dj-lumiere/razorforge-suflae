@@ -1176,10 +1176,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // first-registered one and misses the no-arg variant when callers use it.
         int argCount = cre.MemberVariables.Count;
         // Use the call's named-argument labels to disambiguate sibling overloads. Without
-        // this, all 1-arg `create` overloads (capacity: U64 / from: Set / from: FastSet /
+        // this, all 1-arg `create` overloads (capacity: U64 / from: Set /
         // from: SortedList / from: SortedSet) get enqueued for any `List[T](x)` call —
-        // FastSet's overload then drags FastSet.iter etc. into the live set on programs
-        // that never reference FastSet, producing LINKERR across the playground.
+        // an unrelated overload then drags its `.iter` etc. into the live set on programs
+        // that never reference that type, producing LINKERR across the playground.
         var argLabels = cre.MemberVariables.Select(static mv => mv.Name).ToList();
         bool MatchesLabels(RoutineInfo m)
         {
@@ -1233,7 +1233,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
         // Return only the label-matched overload. The previous LookupMemberRoutine fallback returned
         // the first-registered create by name regardless of param shape — that pulled in
-        // `List[T].create(from: FastSet[T])` (first 1-arg overload) for any field-init
+        // `List[T].create(from: Set[T])` (first 1-arg overload) for any field-init
         // CreatorExpression like `List[T](data:..., count:..., capacity:...)` that has no
         // matching create overload at all. Such field-init creators are emitted inline by
         // codegen and don't need a routine seeded.
@@ -1874,10 +1874,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 _liveOwnerTypes.Add(item: concreteOwner);
                 // Disambiguate overloads by parameter signature. LookupMemberRoutine's first-match heuristic
                 // picks the wrong overload when multiple share name + count + failability — e.g.
-                // List[T] has five 1-arg non-failable `create` overloads (create(capacity: U64),
-                // create(from: FastSet[T]), etc.). Match on substituted parameter type names so
+                // List[T] has several 1-arg non-failable `create` overloads (create(capacity: U64),
+                // create(from: Set[T]), etc.). Match on substituted parameter type names so
                 // `List[T].create#U64` substitutes to `List[S64].create(capacity: U64)` instead of
-                // dragging FastSet.iter into the live set.
+                // dragging an unrelated overload's `.iter` into the live set.
                 RoutineInfo? resolved = LookupMemberRoutineMatchingParamTypes(
                     owner: concreteOwner, memberRoutineName: routine.Name,
                     inputRoutine: routine, typeSubs: typeSubs)

@@ -384,7 +384,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <list type="bullet">
     ///   <item>derived <c>lt/le/gt/ge</c> → owner <c>cmp</c> + <c>ComparisonSign.eq/ne</c></item>
     ///   <item><c>ne</c> → owner <c>eq</c>; <c>notcontains</c> → owner <c>contains</c></item>
-    ///   <item>composite <c>destroy/store/hash/fast_hash/eq/cmp</c> → the same wired verb on
+    ///   <item>composite <c>destroy/store/hash/eq/cmp</c> → the same wired verb on
     ///         each field/element type (recursing to a fixed point)</item>
     /// </list>
     /// This mirrors <c>RoutineReachabilityPass.ExpandSyntheticSiblings</c> + its synthesized-body
@@ -456,7 +456,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (ctx.Registry.LookupMemberRoutine(type: owner, memberRoutineName: "contains") is { } contains)
                     yield return contains;
                 break;
-            case "destroy" or "assign" or "hash" or "fast_hash" or "eq":
+            case "destroy" or "assign" or "hash" or "eq":
                 foreach (RoutineInfo fc in MemberVariableWiredCallees(owner: owner, verb: routine.Name))
                     yield return fc;
                 break;
@@ -1578,10 +1578,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (namesMatch)
                 {
                     // Param names alone don't disambiguate same-name-different-type overloads
-                    // (e.g. `create(from: Set[T])` vs `create(from: FastSet[T])`). When type
+                    // (e.g. `create(from: Set[T])` vs `create(from: SortedSet[T])`). When type
                     // names are supplied, require those to match too. Without this gate the
                     // first-declared overload wins by source order, and Set's body ends up
-                    // mounted under FastSet's mangled signature (LINKERR on iter mismatch).
+                    // mounted under SortedSet's mangled signature (LINKERR on iter mismatch).
                     if (expectedParamTypeNames != null &&
                         decl.Parameters.Count == expectedParamTypeNames.Count)
                     {
@@ -1593,13 +1593,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             string? actual = decl.Parameters[i].Type?.Name;
                             if (actual == null) continue;
                             // Compare by base name (strip [T]/[K,V]) so `Set[T]` matches `Set`
-                            // and `FastSet[T]` matches `FastSet` regardless of generic-arg form.
+                            // and `SortedSet[T]` matches `SortedSet` regardless of generic-arg form.
                             // Also unwrap a borrow/reference wrapper on the resolved side: a param
-                            // declared `from: Accessing[FastSet[T]]` carries Type.Name "FastSet" in
+                            // declared `from: Accessing[SortedSet[T]]` carries Type.Name "SortedSet" in
                             // the AST (the wrapper is a modifier), but the resolved RoutineInfo keeps
-                            // the full "Accessing[FastSet[T]]". Without unwrapping, the right overload
+                            // the full "Accessing[SortedSet[T]]". Without unwrapping, the right overload
                             // is rejected and FindInStdlib falls back to an arbitrary same-arity one
-                            // (e.g. List's `capacity:U64` body mounted under the FastSet creator).
+                            // (e.g. List's `capacity:U64` body mounted under the SortedSet creator).
                             string expectedBase = MatchableBaseName(expected);
                             string actualBase = MatchableBaseName(actual);
                             if (expectedBase != actualBase)
@@ -1629,8 +1629,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private static string StripGenericSuffix(string typeName) => TypeInfo.StripTypeArgs(name: typeName);
 
     /// <summary>Borrow/reference wrapper type names. A parameter declared with one of these
-    /// (e.g. <c>from: Accessing[FastSet[T]]</c>) reaches the AST as the bare inner type
-    /// (<c>FastSet</c>), while the resolved <see cref="RoutineInfo"/> keeps the full wrapper —
+    /// (e.g. <c>from: Accessing[SortedSet[T]]</c>) reaches the AST as the bare inner type
+    /// (<c>SortedSet</c>), while the resolved <see cref="RoutineInfo"/> keeps the full wrapper —
     /// so overload disambiguation must compare the inner type, not the wrapper.</summary>
     private static readonly HashSet<string> BorrowWrapperNames = new(StringComparer.Ordinal)
     {
@@ -1639,8 +1639,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading
-    /// borrow/reference wrapper to its inner type (recursively), so <c>Accessing[FastSet[T]]</c>
-    /// and the AST's bare <c>FastSet</c> compare equal.</summary>
+    /// borrow/reference wrapper to its inner type (recursively), so <c>Accessing[SortedSet[T]]</c>
+    /// and the AST's bare <c>SortedSet</c> compare equal.</summary>
     private static string MatchableBaseName(string typeName)
     {
         string baseName = StripGenericSuffix(typeName);
