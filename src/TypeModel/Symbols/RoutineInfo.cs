@@ -217,16 +217,21 @@ public sealed class RoutineInfo
     /// </summary>
     public List<TypeSymbol> ThrowableTypes { get; set; } = [];
 
-    /// <summary>The declared mutation category for this routine (from source annotation).</summary>
+    /// <summary>The declared mutation category for this routine (from source annotation). Defaults to
+    /// <c>Writable</c> — the same "no annotation" default the resolvers apply (SignatureResolver /
+    /// TypeBodyResolver): a routine mutates unless marked <c>@readonly</c>, and <c>@reshaping</c> is a
+    /// STRONGER claim that must be explicit. (A <c>Reshaping</c> default was a latent bug: any construction
+    /// or copy path that forgot to set the category silently made the routine look maximally-mutating,
+    /// e.g. tripping the RF-S625 reshaping-during-iteration ban on a plainly <c>@readonly</c> call.)</summary>
     public MutationCategory DeclaredMutation { get; init; } =
-        MutationCategory.Reshaping;
+        MutationCategory.Writable;
 
     /// <summary>
     /// The inferred/final mutation category for this routine.
     /// Initially set to declared value, then updated by mutation inference.
     /// </summary>
     public MutationCategory MutationCategory { get; set; } =
-        MutationCategory.Reshaping;
+        MutationCategory.Writable;
 
     /// <summary>Generic type parameters, if any.</summary>
     public List<string>? GenericParameters { get; init; }
@@ -300,6 +305,13 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Inspecting).</summary>
     public bool IsReadOnly =>
         Annotations.Contains(value: "readonly") || MutationCategory == MutationCategory.Readonly;
+
+    /// <summary>Whether this routine RESHAPES its receiver (a container mutator that can invalidate an
+    /// in-progress iteration — drives the RF-S625 reshaping-during-iteration ban). The <c>@reshaping</c>
+    /// annotation is the authoritative marker (container authors put it on mutators); the category is a
+    /// fallback, and is NOT trusted alone because some registration paths leave it at the default.</summary>
+    public bool IsReshaping =>
+        Annotations.Contains(value: "reshaping") || MutationCategory == MutationCategory.Reshaping;
 
     /// <summary>
     /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.

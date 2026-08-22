@@ -1316,9 +1316,12 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // Preset enforcement: cannot call mutating memberRoutines on preset variables
+                    // Preset enforcement: cannot call mutating memberRoutines on preset variables. Uses
+                    // IsReadOnly (annotation OR category) not a bare category check — a member routine
+                    // whose registration left MutationCategory at the default would otherwise look
+                    // mutating and spuriously reject a plainly-@readonly call (e.g. list.count()).
                     if (member.Object is IdentifierExpression letTarget &&
-                        memberRoutine.MutationCategory != MutationCategory.Readonly)
+                        !memberRoutine.IsReadOnly)
                     {
                         VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
                         if (targetVar is { IsModifiable: false })
@@ -1480,10 +1483,12 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #22: Reject reshaping operations on collection being iterated
+                    // #22: Reject reshaping operations on the collection being iterated (RF-S625). Keyed on
+                    // the @reshaping marker (via IsReshaping) — the definitional signal, and robust to
+                    // member-routine registration paths that leave MutationCategory at its default.
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&
-                        memberRoutine.MutationCategory == MutationCategory.Reshaping)
+                        memberRoutine.IsReshaping)
                     {
                         ReportError(code: SemanticDiagnosticCode.ReshapingDuringIteration,
                             message:
