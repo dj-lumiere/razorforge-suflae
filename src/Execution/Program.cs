@@ -24,6 +24,7 @@ namespace Builder;
 internal partial class Program
 {
     private const string BuildCommand = "build";
+    private const string BuildAndRunCommand = "buildandrun";
     private const string SuflaeLanguageName = "Suflae";
     private const string RazorForgeLanguageName = "RazorForge";
 
@@ -97,8 +98,24 @@ internal partial class Program
 
         if (!isCommand)
         {
-            // Default behavior: parse the file
-            return ParseFile(sourceFile: args[0]);
+            // A bare source file RUNS (build + execute) when it is a Suflae script — either the `.sf`
+            // extension or invocation under the `suflae`/`sf` alias — so `suflae hello.sf` behaves like
+            // `python hello.py`. A bare `.rf` under `razorforge` keeps the dev default of parse-and-dump
+            // (use the explicit `parse`/`tokenize`/`codegen` verbs to inspect an .sf without running it).
+            if (InvokedAsSuflae || IsSuflaeFile(path: args[0]))
+            {
+                var forwarded = new string[args.Length + 1];
+                forwarded[0] = BuildAndRunCommand;
+                Array.Copy(sourceArray: args, sourceIndex: 0, destinationArray: forwarded,
+                    destinationIndex: 1, length: args.Length);
+                args = forwarded;
+                command = BuildAndRunCommand;
+            }
+            else
+            {
+                // Default behavior: parse the file
+                return ParseFile(sourceFile: args[0]);
+            }
         }
 
         switch (command)
@@ -419,8 +436,9 @@ internal partial class Program
         Console.WriteLine();
         Console.WriteLine(value: "Usage:");
         Console.WriteLine(
-            value:
-            $"  {tool} <source-file>                        - Parse file and show AST summary");
+            value: InvokedAsSuflae
+                ? $"  {tool} <source-file>                        - Build and run the script"
+                : $"  {tool} <source-file>                        - Parse file and show AST summary (a bare .sf runs)");
         Console.WriteLine(
             value:
             $"  {tool} parse <source-file>                  - Parse file and show AST summary");
