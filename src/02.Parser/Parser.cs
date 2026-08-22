@@ -196,7 +196,93 @@ public partial class Parser
             }
         }
 
+        if (_language == Language.Suflae)
+        {
+            declarations = WrapScriptStatementsIntoStart(nodes: declarations);
+        }
+
         return new Program(Declarations: declarations, Location: GetLocation());
+    }
+
+    /// <summary>
+    /// Suflae "script mode": a file whose top level has loose STATEMENTS (an expression, `each`/`while`/
+    /// `if`, an assignment, …) needs no explicit entry point — those statements, together with any top-level
+    /// runtime <c>var</c> declarations, become the body of an implicit <c>routine start()</c> (in source
+    /// order; a trailing <c>return</c> is added). Hoistable declarations (module/import/type/routine/preset/
+    /// define) stay as siblings and hoist as usual. A no-op for a normal module file (no loose statements).
+    /// An explicit <c>start</c> alongside top-level statements is a conflict.
+    /// </summary>
+    private List<ISyntaxTreeNode> WrapScriptStatementsIntoStart(List<ISyntaxTreeNode> nodes)
+    {
+        // Trigger only on a loose top-level STATEMENT — a pure module file (declarations only) is untouched.
+        bool hasLooseStatement = false;
+        foreach (ISyntaxTreeNode n in nodes)
+        {
+            if (n is Statement)
+            {
+                hasLooseStatement = true;
+                break;
+            }
+        }
+
+        if (!hasLooseStatement)
+        {
+            return nodes;
+        }
+
+        // Collect the executable top-level nodes (statements + runtime var decls) in source order.
+        var body = new List<Statement>();
+        var kept = new List<ISyntaxTreeNode>();
+        SourceLocation startLoc = GetLocation();
+        bool locSet = false;
+        RoutineDeclaration? explicitStart = null;
+        foreach (ISyntaxTreeNode n in nodes)
+        {
+            switch (n)
+            {
+                case Statement s:
+                    if (!locSet) { startLoc = s.Location; locSet = true; }
+                    body.Add(item: s);
+                    break;
+                case VariableDeclaration vd:
+                    if (!locSet) { startLoc = vd.Location; locSet = true; }
+                    body.Add(item: new DeclarationStatement(Declaration: vd, Location: vd.Location));
+                    break;
+                default:
+                    if (n is RoutineDeclaration { Name: "start" } rd) { explicitStart = rd; }
+                    kept.Add(item: n);
+                    break;
+            }
+        }
+
+        if (explicitStart != null)
+        {
+            // Report a clean diagnostic (matching the per-statement error path) rather than throwing out of
+            // the parser; keep the explicit start so the Program stays well-formed and downstream is safe.
+            var ex = new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message:
+                "A Suflae file cannot mix top-level statements with an explicit `routine start()`. " +
+                "Either move the top-level statements into start(), or remove the explicit start().",
+                fileName: FileName, line: startLoc.Line, column: startLoc.Column, language: _language);
+            _errors.Add(item: ex.Message);
+            DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
+            return kept;
+        }
+
+        if (body.Count == 0 || body[^1] is not ReturnStatement)
+        {
+            body.Add(item: new ReturnStatement(Value: null, Location: startLoc));
+        }
+
+        kept.Add(item: new RoutineDeclaration(
+            Name: "start",
+            Parameters: [],
+            ReturnType: null,
+            Body: new BlockStatement(Statements: body, Location: startLoc),
+            Visibility: VisibilityModifier.Open,
+            Annotations: [],
+            Location: startLoc));
+        return kept;
     }
 
     /// <summary>
