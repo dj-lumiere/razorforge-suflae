@@ -93,9 +93,7 @@ internal sealed class SignatureResolver
         RoutineDeclaration routine = pending.Declaration;
 
         MutationCategory declaredModification =
-            routine.Annotations.Contains(item: "readonly") ? MutationCategory.Readonly :
-            routine.Annotations.Contains(item: "reshaping") ? MutationCategory.Reshaping :
-            MutationCategory.Writable;
+            MutationCategoryExtensions.FromAnnotations(annotations: routine.Annotations);
 
         // Phase 4 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
         // with new objects that carry resolved member variables. pending.OwnerType was captured

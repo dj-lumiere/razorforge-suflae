@@ -457,20 +457,10 @@ internal sealed class TypeBodyResolver
                 ? _typeResolver.ResolveProtocolType(typeExpr: sig.ReturnType)
                 : null;
 
-            // Extract mutation category from attributes
-            // @readonly -> Readonly, @reshaping -> Reshaping, default/no annotation -> Writable
-            MutationCategory modification = MutationCategory.Writable; // Default
-            if (sig.Annotations != null)
-            {
-                if (sig.Annotations.Contains(item: "readonly"))
-                {
-                    modification = MutationCategory.Readonly;
-                }
-                else if (sig.Annotations.Contains(item: "reshaping"))
-                {
-                    modification = MutationCategory.Reshaping;
-                }
-            }
+            // Extract mutation category from attributes (@readonly/@reshaping), via the one shared
+            // derivation so this path can't drift from SignatureResolver / StdlibLoader.
+            MutationCategory modification =
+                MutationCategoryExtensions.FromAnnotations(annotations: sig.Annotations);
 
             // Extract generation kind from annotations
             ProtocolRoutineKind generationKind = ProtocolRoutineKind.None;

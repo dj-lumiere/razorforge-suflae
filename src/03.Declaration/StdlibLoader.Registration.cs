@@ -772,6 +772,15 @@ public sealed partial class StdlibLoader
             GenericConstraints = routine.GenericConstraints,
             AsyncStatus = routine.Async,
             Annotations = routine.Annotations,
+            // NOTE: StdlibLoader is a PARALLEL routine-registration path to SignatureResolver and does NOT
+            // derive MutationCategory/DeclaredMutation from @readonly/@reshaping here — so a stdlib member
+            // routine keeps the RoutineInfo default category. Category consumers therefore key on the
+            // reliably-preserved Annotations (IsReadOnly / IsReshaping), not the bare category. Applying the
+            // shared FromAnnotations derivation here is the proper root fix, BUT it makes the emitted
+            // `readonly`-param attribute of @readonly stdlib methods correct on the generic yet leaves
+            // monomorphized @llvm-type instances (e.g. Hijacked[Byte].assign) diverging between the cold and
+            // warm/snapshot codegen paths (WarmCodegenAst_MatchesCold) — a separate daemon-path asymmetry to
+            // resolve first. See [[stdlib-mutation-category-registration]].
             IsDangerous = routine.IsDangerous,
             Storage = routine.Storage
         };
