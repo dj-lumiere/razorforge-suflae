@@ -26,10 +26,14 @@ namespace Compiler.Postprocessing.Passes;
 /// return the handle and only mutate the shared controller, so a trailing side-effecting statement is
 /// exact-parity with the old codegen.</para>
 ///
-/// <para>The RELEASE side stays in codegen (reassignment-overwrite is not a scope exit). Scope-exit
-/// teardown is already AST-lowered by <c>ScopeTeardownLoweringPass</c>. Reachability already seeds the
-/// copy verbs for every live RC wrapper via <c>ImplicitCallContract.ForLiveType</c>, so the targets
-/// are live/monomorphized. Runs right after <see cref="RecordCopyLoweringPass"/>.</para>
+/// <para>The RELEASE side of a <c>Roamed[T]</c> entity-field reassignment is ALSO lowered here now
+/// (snapshot the old handle before the store, <c>.destroy()</c> it after the retain-new bump — see
+/// <c>ReassignRelease</c>), replacing the codegen emit that used to live in
+/// <c>EmitEntityMemberVariableWrite</c>. (Scope-exit teardown is AST-lowered by
+/// <c>ScopeTeardownLoweringPass</c>; the release-old for a plain RC-wrapper LOCAL reassignment still
+/// lives in codegen.) Reachability already seeds the copy/destroy verbs for every live RC wrapper via
+/// <c>ImplicitCallContract.ForLiveType</c>, so the targets are live/monomorphized. Runs right after
+/// <see cref="RecordCopyLoweringPass"/>.</para>
 ///
 /// <para><b>Bump-count parity is refcount-critical</b> (an extra bump leaks, a missing one
 /// double-frees): exactly one verb call per RC field per record copy, and exactly one <c>roam</c> per
@@ -115,11 +119,59 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         foreach (Statement stmt in block.Statements)
         {
             RecurseInto(stmt);
+            // A Roamed[T] entity-field reassignment overwrites a handle that owns a strong reference:
+            // snapshot the OLD value BEFORE the store, release it AFTER the retain-new bump. Retain
+            // (the RHS `.share()`) before release keeps a self-assignment from freeing mid-swap.
+            (Statement? preRelease, Statement? postRelease) = ReassignRelease(stmt: stmt);
+            if (preRelease is not null) rewritten.Add(item: preRelease);
             rewritten.Add(item: stmt);
             rewritten.AddRange(collection: CollectBumps(stmt));
+            if (postRelease is not null) rewritten.Add(item: postRelease);
         }
         block.Statements.Clear();
         block.Statements.AddRange(collection: rewritten);
+    }
+
+    // ---- Reassignment release-old (moved out of codegen: EmitEntityMemberVariableWrite's
+    // `isRoamedField` release). destroy() is null-safe (no-op on a none handle) and funnels to
+    // RoamController.unhold — the single RC-release chokepoint the cycle-collector lock cooperates
+    // with, so keeping it an AST call (not a codegen emit) is also what lets that lock cover
+    // field-write releases. -----------------------------------------------------------------------
+
+    private int _reoldCounter;
+
+    private (Statement? Pre, Statement? Post) ReassignRelease(Statement stmt) => stmt switch
+    {
+        AssignmentStatement a => ReassignReleaseTarget(target: a.Target),
+        ExpressionStatement { Expression: BinaryExpression { Operator: BinaryOperator.Assign } b }
+            => ReassignReleaseTarget(target: b.Left),
+        _ => (null, null)
+    };
+
+    // Only a Roamed[T] ENTITY-FIELD write owns a strong reference that the overwrite must drop. (A
+    // Roamed LOCAL reassignment's release-old still lives in codegen; a var-decl has no old value.)
+    private (Statement? Pre, Statement? Post) ReassignReleaseTarget(Expression target)
+    {
+        if (target is not MemberExpression
+            || target.ResolvedType is not RecordTypeInfo rec
+            || LlvmCodeGenerator.GetGenericBaseNameStatic(type: rec) != RuntimeContract.Roamed)
+        {
+            return (null, null);
+        }
+
+        RoutineInfo? destroy = Registry.LookupMemberRoutine(type: rec, memberRoutineName: "destroy");
+        if (destroy is null) return (null, null);
+
+        string name = $"__rc_reold_{_reoldCounter++}";
+        var snapshot = new DeclarationStatement(
+            Declaration: new VariableDeclaration(Name: name, Type: null, Initializer: target,
+                Visibility: VisibilityModifier.Secret, Location: target.Location),
+            Location: target.Location);
+        var oldRef = new IdentifierExpression(Name: name, Location: target.Location)
+        {
+            ResolvedType = rec
+        };
+        return (snapshot, MakeBumpStatement(receiver: oldRef, receiverType: rec, copy: destroy));
     }
 
     // Gathers the copy-verb bump statements a binding statement's OWN store needs, inserted AFTER it.

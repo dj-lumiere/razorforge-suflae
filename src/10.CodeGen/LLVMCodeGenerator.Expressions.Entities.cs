@@ -1014,31 +1014,14 @@ public partial class LlvmCodeGenerator
             line:
             $"  {memberVariablePtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {memberVariableIndex}");
 
-        // Roamed[T] field reassignment uses COPY semantics (biased RC — aliasing is free): drop the
-        // old strong ref and take a fresh one on the new value. Unlike the strict wrappers
-        // (Retained/Tracked, which forbid implicit copy so a reassignment MOVES a fresh handle in),
-        // `me.roamed_field = x` must release the overwritten handle and retain the incoming one so the
-        // field owns its own reference — otherwise the count is off by one and teardown double-frees.
-        // Both helpers are null-safe (none handle / no old value). This is the reassignment path only;
-        // initial construction stores fields directly and never reaches here.
-        // Both a NON-NULL (`x: E`) and an OPTIONAL (`x: E?`) entity field are a bare `Roamed[E]` in
-        // Suflae — the optional one just permits a null handle (roamed_none). Reassignment drops the old
-        // strong ref and takes a fresh one; the helpers are null-safe so a null (none) handle is a no-op.
-        bool isRoamedField = memberVariable.Type is RecordTypeInfo roamedField
-            && GetGenericBaseName(type: roamedField) == Resolution.RuntimeContract.Roamed;
-        if (isRoamedField)
-        {
-            EmitRetainedVarRelease(sb: sb, llvmAddr: memberVariablePtr,
-                recordType: (RecordTypeInfo)memberVariable.Type);
-        }
-
-        // Store the value
+        // Roamed[T] field reassignment uses COPY semantics (biased RC — aliasing is free): the field
+        // must drop its old strong ref and take a fresh one on the new value, or the count is off by
+        // one and teardown double-frees. BOTH sides are now explicit AST calls, NOT codegen emits:
+        // the retain-new `.share()` on the RHS, and the release-old (snapshot-then-`.destroy()`)
+        // inserted by RcRetainLoweringPass. So this method just emits the raw store — the RC balance
+        // lives in the AST, keeping codegen out of refcount business (and letting the cycle-collector
+        // lock cover field-write releases through the single RoamController.unhold chokepoint).
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
-
-        // NOTE: the retain-new `roam()` on the stored handle is now an explicit AST call inserted by
-        // RcRetainLoweringPass (Phase 8). The release-old above stays in codegen (reassignment-
-        // overwrite is not a scope exit). `isRoamedField` still gates the release side.
-        _ = isRoamedField;
     }
 
     /// <summary>

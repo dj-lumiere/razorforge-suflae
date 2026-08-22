@@ -430,6 +430,23 @@ static rf_cyclic_buffer g_cc_roots = {0};
 static rf_cyclic_buffer g_cc_scratch = {0};
 static rf_cyclic_buffer g_cc_reap = {0};
 
+// Concurrency (Stage 2): the synchronous trial-deletion collector is correct only with no concurrent
+// mutation, so a collection pass STOPS THE WORLD via g_cc_rwlock — mutators (RoamController hold/unhold)
+// take it SHARED (parallel with each other), a pass takes it EXCLUSIVE. g_cc_roots_lock (used EXCLUSIVE
+// only, i.e. as a plain mutex) guards the roots buffer against concurrent mutator appends, since two
+// SHARED holders CAN run at once. rf_in_collector marks the thread running a pass: it already holds the
+// EXCLUSIVE lock, so its OWN finalizer releases (cyclic_free -> entity destroy -> unhold) must skip the
+// shared acquire (re-taking it would self-deadlock) and the roots mutex (no mutator runs under EXCLUSIVE).
+static rf_rwlock g_cc_rwlock = RF_RWLOCK_INIT;
+static rf_rwlock g_cc_roots_lock = RF_RWLOCK_INIT;
+static _Thread_local int rf_in_collector = 0;
+
+// Mutator stop-the-world cooperation. RoamController.hold/unhold bracket their count/state mutation in
+// these, so a collection pass (EXCLUSIVE) never observes a half-updated controller. A no-op on the
+// collector's own thread, which already holds the world EXCLUSIVE.
+void rf_cyclic_lock_shared(void)   { if (!rf_in_collector) rf_rwlock_lock_shared(&g_cc_rwlock); }
+void rf_cyclic_unlock_shared(void) { if (!rf_in_collector) rf_rwlock_unlock_shared(&g_cc_rwlock); }
+
 static void rf_cyclic_buffer_push(rf_cyclic_buffer* buf, void* item)
 {
     if (buf->count == buf->capacity) {
@@ -451,7 +468,11 @@ static void rf_cyclic_buffer_push(rf_cyclic_buffer* buf, void* item)
 // flag before calling here.
 void rf_cyclic_add_candidate(void* obj)
 {
+    // Under the SHARED stop-the-world lock two mutators can append at once — the buffer push needs its
+    // own mutex. The collector (EXCLUSIVE, rf_in_collector) has no concurrent mutator, so it skips it.
+    if (!rf_in_collector) rf_rwlock_lock_exclusive(&g_cc_roots_lock);
     rf_cyclic_buffer_push(&g_cc_roots, obj);
+    if (!rf_in_collector) rf_rwlock_unlock_exclusive(&g_cc_roots_lock);
 }
 
 // roots-buffer accessors — the RF CollectCycles pass walks the candidate set through these.
@@ -485,13 +506,17 @@ void rf_cyclic_roots_remove_front(uint64_t n)
 // releases, so any removal here happens outside that index walk.
 void rf_cyclic_roots_remove(void* ptr)
 {
+    // Mutator eager-free path (a buffered candidate reaching count 0); guard the buffer like
+    // add_candidate. The collector never calls this (its removals go through roots_remove_front).
+    if (!rf_in_collector) rf_rwlock_lock_exclusive(&g_cc_roots_lock);
     for (uint64_t i = 0; i < g_cc_roots.count; i++) {
         if (g_cc_roots.items[i] == ptr) {
             g_cc_roots.items[i] = g_cc_roots.items[g_cc_roots.count - 1];
             g_cc_roots.count--;
-            return;
+            break;
         }
     }
+    if (!rf_in_collector) rf_rwlock_unlock_exclusive(&g_cc_roots_lock);
 }
 
 // scratch protocol — get one controller's children:
@@ -542,10 +567,23 @@ static uint64_t rf_cyclic_get_threshold(void)
 // already in progress. The RF side (RoamController.mark_cycle_candidate) polls this after buffering.
 int rf_cyclic_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cyclic_get_threshold(); }
 
-// Bracket a collection pass so a nested candidate report cannot re-trigger one (CycleCollector.cc_collect
-// calls these around the three passes).
-void rf_cyclic_enter_collect(void) { g_cc_collecting = 1; }
-void rf_cyclic_exit_collect(void) { g_cc_collecting = 0; }
+// Bracket a collection pass (CycleCollector.cyclic_collect calls these around the whole pass, including
+// the free/finalizer phase). Two jobs: (1) STOP THE WORLD — take g_cc_rwlock EXCLUSIVE so no mutator's
+// refcount op races trial deletion (and so concurrent collectors serialize on it); (2) mark this thread
+// rf_in_collector so its own finalizer releases skip the shared lock they already hold exclusively.
+// g_cc_collecting stays as the re-entry guard for the (now RF-side removed) threshold auto-trigger.
+void rf_cyclic_enter_collect(void)
+{
+    rf_rwlock_lock_exclusive(&g_cc_rwlock);
+    rf_in_collector = 1;
+    g_cc_collecting = 1;
+}
+void rf_cyclic_exit_collect(void)
+{
+    g_cc_collecting = 0;
+    rf_in_collector = 0;
+    rf_rwlock_unlock_exclusive(&g_cc_rwlock);
+}
 
 // An RF routine reference stored in a CPtr is a CLOSURE VALUE: a heap box whose first word is the
 // vthunk pointer `void(*)(void* closure, <args>)`, followed by any captured variables. The hooks the

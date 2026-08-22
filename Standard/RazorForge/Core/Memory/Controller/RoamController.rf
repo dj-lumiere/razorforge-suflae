@@ -89,25 +89,33 @@ dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
 # Biased reference counting — branches on mode: non-atomic (LOCAL) vs atomic (ESCAPED).
 # ============================================================================
 
-### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED.
+### Adds an alias. Non-atomic in LOCAL mode (fast), atomic once ESCAPED. The count mutation is bracketed
+### in the collector's SHARED stop-the-world lock so a concurrent cycle-collection pass (which trial-
+### deletes counts non-atomically) can never race it. On the collector's own thread the lock is a no-op.
 routine RoamController[T].hold()
   danger
+    C::rf_cyclic_lock_shared()
     if me.escaped.load() == 1_u8
       discard LLVM::atomic_add[U64](ptr: me.count.hijack(), value: 1_u64)
     else
       me.count = me.count + 1
+    C::rf_cyclic_unlock_shared()
   return
 
 ### Drops an alias. At zero the managed entity is destroyed immediately (deterministic teardown).
 ### A decrement that does NOT reach zero registers the object as a cycle-collection candidate.
+### The whole decrement — count drop, the buffered/eager-free branch, and the candidate report — runs
+### under the collector's SHARED stop-the-world lock, so a collection pass can neither race the count nor
+### free a controller it is mid-traversal over. `mark_cycle_candidate` and the eager free run WITHIN this
+### bracket (no nested acquire). On the collector's own thread (a finalizer release) the lock is a no-op.
 routine RoamController[T].unhold()
   danger
+    C::rf_cyclic_lock_shared()
     if me.escaped.load() == 1_u8
       var previous = LLVM::atomic_sub[U64](ptr: me.count.hijack(), value: 1_u64)
       if previous == 1_u64
         # Dead at zero — free eagerly (deterministic teardown). If it was a buffered cycle candidate,
-        # first drop its roots entry so the collector never dereferences this freed controller. (Reading
-        # `buffered` on the escaped path is racy in principle; safe under Stage-1 single-thread collection.)
+        # first drop its roots entry so the collector never dereferences this freed controller.
         if me.buffered
           C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
@@ -123,6 +131,7 @@ routine RoamController[T].unhold()
         me.destroy()
       else
         me.mark_cycle_candidate()
+    C::rf_cyclic_unlock_shared()
   return
 
 ### Reports this object to the cycle collector as a possible cycle root. The SOLE collector entry
@@ -138,9 +147,10 @@ dangerous routine RoamController[T].mark_cycle_candidate()
   me.buffered = true
   me.state = RoamState.SUSPECTED
   C::rf_cyclic_add_candidate(obj: me.hijack().get_address())
-  # Auto-collect once the candidate set crosses the threshold (guarded against re-entry).
-  if C::rf_cyclic_should_collect()
-    cyclic_collect()
+  # NO inline auto-collect: this runs under `unhold`'s SHARED stop-the-world lock, and a collection pass
+  # takes the same lock EXCLUSIVE — triggering one here would deadlock (shared cannot upgrade to
+  # exclusive). Collection is driven explicitly (`cyclic_collect()`) at a safe point; the threshold hook
+  # (`rf_cyclic_should_collect`) is retained for a future safepoint-driven trigger outside any bracket.
   return
 
 # ============================================================================
@@ -219,43 +229,37 @@ routine RoamController[T].strong_count() -> U64
 ### Flips to ESCAPED (idempotent). Runs on the owner BEFORE the handle is published to another
 ### thread (the compiler inserts it at the escape site, pre-spawn), so no concurrent access races
 ### the flip. After this, `count` is atomic and the reentrant lock is live.
+### Escape is a GRAPH property, not per-object: everything reachable through this object's lock is
+### reachable by the crossing task too, so it must escape as well (a one-object flip would leave a LOCAL
+### child — non-atomic count, no lock — that both the owner and the crossing task then touch, a data race).
+### Transitive escape walks the `Roamed` children via the per-type trace hook. ITERATIVE (explicit worklist,
+### NOT recursion) — a deep Roamed graph would otherwise overflow the call stack. The escaped-check prunes
+### already-escaped nodes, so cyclic graphs terminate and repeated promotion is amortized. Children are
+### viewed through `RoamController[T]` purely for the fields touched here (`escaped`/`holder_task`/`depth`/
+### `trace_hook`/`data`, all at a T-INDEPENDENT offset) — reusing `T` on a differently-typed child is a
+### sound reinterpretation. A type with no `Roamed` fields (`trace_hook` = `cptr_none()`) owns no edge.
 dangerous routine RoamController[T].promote()
   if me.escaped.load() == 1_u8
     return
-  me.holder_task.store(desired: 0_u64)
-  me.depth = 0_u64
-  me.escaped.store(desired: 1_u8)
-  # Escape is a GRAPH property, not a per-object one: everything reachable through this object's lock is
-  # reachable by the other task too, so it must escape as well. A one-object flip would leave a LOCAL
-  # child (non-atomic count, no lock) that both the owner and the crossing task then touch — a data race.
-  # So walk the `Roamed` children through the per-type trace hook and promote each. The escaped-check at
-  # the top prunes already-escaped nodes, so cyclic graphs terminate and repeated promotion is amortized.
-  me.promote_reachable()
-  return
-
-### Promotes every `Roamed` child of this controller (transitively, via `promote`). Children are viewed
-### through `RoamController[T]` purely for the fields `promote` touches — `escaped` / `holder_task` /
-### `depth` / `trace_hook` / `data` all sit at a T-INDEPENDENT offset — so reusing `T` on a child of a
-### different type is a sound reinterpretation (no `RoamErased` needed). A type with no `Roamed` fields
-### (`trace_hook` = `cptr_none()`) cannot own an edge and is skipped.
-dangerous routine RoamController[T].promote_reachable()
-  if me.trace_hook.is_none()
-    return
-  # Snapshot THIS node's child controllers before recursing — tracing fills a shared native scratch that
-  # a nested promote would clobber (same discipline as the collector's `cyclic_children`).
-  var kids = List[Address]()
-  C::rf_cyclic_scratch_reset()
-  C::rf_cyclic_trace_into_scratch(trace_hook: me.trace_hook.get_address(), controller: me.data.get_address())
-  var n = C::rf_cyclic_scratch_count()
-  var i = 0_u64
-  while i < n
-    kids.add_last(value: C::rf_cyclic_scratch_at(i: i))
-    i = i + 1_u64
-  var j = 0_u64
-  while j < kids.count()
-    var child = Hijacked[RoamController[T]](kids.get_raw(index: j)).as_entity()
-    child.promote()
-    j = j + 1_u64
+  var work = List[Address]()
+  work.add_last(value: me.hijack().get_address())
+  while not work.is_empty()
+    var addr = work.remove_last!()
+    var node = Hijacked[RoamController[T]](addr).as_entity()
+    if node.escaped.load() == 0_u8
+      node.holder_task.store(desired: 0_u64)
+      node.depth = 0_u64
+      node.escaped.store(desired: 1_u8)
+      # Trace THIS node's children into the shared native scratch, then drain immediately into the
+      # worklist before the next iteration's trace clobbers it (same discipline as `cyclic_children`).
+      if not node.trace_hook.is_none()
+        C::rf_cyclic_scratch_reset()
+        C::rf_cyclic_trace_into_scratch(trace_hook: node.trace_hook.get_address(), controller: node.data.get_address())
+        var n = C::rf_cyclic_scratch_count()
+        var i = 0_u64
+        while i < n
+          work.add_last(value: C::rf_cyclic_scratch_at(i: i))
+          i = i + 1_u64
   return
 
 ### Whether this object has escaped. Drives `Roamed`'s access-lock wrapping.

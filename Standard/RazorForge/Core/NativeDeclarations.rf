@@ -125,6 +125,16 @@ dangerous routine C::rf_cyclic_should_collect() -> Bool
 dangerous routine C::rf_cyclic_enter_collect()
 ### Marks the collection pass finished.
 dangerous routine C::rf_cyclic_exit_collect()
+### Takes the collector's SHARED stop-the-world lock around a mutator refcount op (a no-op on the
+### collector's own thread, which already holds it EXCLUSIVE). RoamController.hold/unhold bracket with these.
+dangerous routine C::rf_cyclic_lock_shared()
+### Releases the SHARED stop-the-world lock — the `rf_cyclic_lock_shared` counterpart.
+dangerous routine C::rf_cyclic_unlock_shared()
+
+### The runtime's monotonic nanosecond clock (the one the scheduler's timers use) — a steady counter
+### for measuring elapsed intervals (unaffected by wall-clock adjustments; not an absolute time). Safe:
+### a pure read, so no `dangerous`. :returns: nanoseconds since an unspecified fixed origin.
+routine C::rf_monotonic_now_ns() -> U64
 
 # ============================================================================
 # Stackful coroutine substrate (v0.2.0 — single coroutine, no scheduler).

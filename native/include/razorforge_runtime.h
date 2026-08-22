@@ -147,6 +147,10 @@ void rf_cyclic_invoke_free(void* free_hook, void* controller);          // free 
 int rf_cyclic_should_collect(void);
 void rf_cyclic_enter_collect(void);
 void rf_cyclic_exit_collect(void);
+// Stop-the-world cooperation: mutators (RoamController hold/unhold) bracket their count/state mutation in
+// the shared lock; enter/exit_collect above take it EXCLUSIVE. See coro_runtime.c for the full protocol.
+void rf_cyclic_lock_shared(void);
+void rf_cyclic_unlock_shared(void);
 
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);

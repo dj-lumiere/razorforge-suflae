@@ -45,6 +45,9 @@ routine cyclic_children(addr: Address) -> List[Address]
 ### MarkScanning: paint the node scanning and trial-decrement each child's count (subtracting the cycle's
 ### internal references), recursing into children not yet scanning.
 ### :param addr: The controller address.
+### Iterative (explicit worklist, NOT recursion — a deep object graph would overflow the call stack).
+### Each EDGE trial-decrements its child once; each NODE is set SCANNING and has its out-edges walked
+### once. Popping order does not affect the result (every reachable node is painted SCANNING regardless).
 routine cyclic_mark_scanning(addr: Address)
   var already = false
   danger
@@ -55,62 +58,86 @@ routine cyclic_mark_scanning(addr: Address)
       c.cyclic_set_state(c: RoamState.SCANNING)
   if already
     return
-  var kids = cyclic_children(addr: addr)
-  var i = 0_u64
-  while i < kids.count()
-    var kid = kids.get_raw(index: i)
-    danger
-      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
-      kc.cyclic_dec()
-    cyclic_mark_scanning(addr: kid)
-    i = i + 1_u64
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var kids = cyclic_children(addr: a)
+    var i = 0_u64
+    while i < kids.count()
+      var kid = kids.get_raw(index: i)
+      var descend = false
+      danger
+        var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+        kc.cyclic_dec()
+        if not (kc.cyclic_state() is SCANNING)
+          kc.cyclic_set_state(c: RoamState.SCANNING)
+          descend = true
+      if descend
+        work.add_last(value: kid)
+      i = i + 1_u64
   return
 
 ### Scan: a scanning node with a surviving external reference (count > 0 after trial deletion) is live —
 ### repaint it and its subgraph live (ScanLive). Otherwise it is provisionally garbage — paint it
 ### garbage and scan its children.
 ### :param addr: The controller address.
+### Iterative (explicit worklist). A SCANNING node with a surviving external reference is live (hand it
+### to `cyclic_scan_live`, itself iterative); otherwise it is provisional garbage — paint it and push its
+### children to scan. Already-processed (non-SCANNING) nodes popped from the worklist are skipped.
 routine cyclic_scan(addr: Address)
-  var live = false
-  var garbage = false
-  danger
-    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if c.cyclic_state() is SCANNING
-      if c.cyclic_count() > 0_u64
-        live = true
-      else
-        c.cyclic_set_state(c: RoamState.GARBAGE)
-        garbage = true
-  if live
-    cyclic_scan_live(addr: addr)
-  elseif garbage
-    var kids = cyclic_children(addr: addr)
-    var i = 0_u64
-    while i < kids.count()
-      cyclic_scan(addr: kids.get_raw(index: i))
-      i = i + 1_u64
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var live = false
+    var garbage = false
+    danger
+      var c = Hijacked[RoamController[RoamErased]](a).as_entity()
+      if c.cyclic_state() is SCANNING
+        if c.cyclic_count() > 0_u64
+          live = true
+        else
+          c.cyclic_set_state(c: RoamState.GARBAGE)
+          garbage = true
+    if live
+      cyclic_scan_live(addr: a)
+    elseif garbage
+      var kids = cyclic_children(addr: a)
+      var i = 0_u64
+      while i < kids.count()
+        work.add_last(value: kids.get_raw(index: i))
+        i = i + 1_u64
   return
 
 ### ScanLive: undo a MarkScanning subtree that turned out to be live — repaint live and restore each
 ### child's trial-decremented count, recursing into children not yet live.
 ### :param addr: The controller address.
+### Iterative (explicit worklist). Undo a MarkScanning subtree that turned out live: repaint LIVE and
+### restore each child's trial-decremented count. Each EDGE re-increments its child once; each NODE is
+### repainted LIVE and walked once.
 routine cyclic_scan_live(addr: Address)
   danger
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
     c.cyclic_set_state(c: RoamState.LIVE)
-  var kids = cyclic_children(addr: addr)
-  var i = 0_u64
-  while i < kids.count()
-    var kid = kids.get_raw(index: i)
-    var recurse = false
-    danger
-      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
-      kc.cyclic_inc()
-      if not (kc.cyclic_state() is LIVE)
-        recurse = true
-    if recurse
-      cyclic_scan_live(addr: kid)
-    i = i + 1_u64
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var kids = cyclic_children(addr: a)
+    var i = 0_u64
+    while i < kids.count()
+      var kid = kids.get_raw(index: i)
+      var descend = false
+      danger
+        var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+        kc.cyclic_inc()
+        if not (kc.cyclic_state() is LIVE)
+          kc.cyclic_set_state(c: RoamState.LIVE)
+          descend = true
+      if descend
+        work.add_last(value: kid)
+      i = i + 1_u64
   return
 
 ### CollectGarbage: gather the garbage (garbage) subgraph onto the native reap buffer, repainting live to
@@ -118,21 +145,29 @@ routine cyclic_scan_live(addr: Address)
 ### the roots/child lists holding dangling pointers. (The reap buffer, not an RF list, because an RF
 ### list parameter is consuming — it cannot serve as a recursion accumulator.)
 ### :param addr: The controller address.
+### Iterative (explicit worklist). Gather the garbage subgraph onto the reap buffer, repainting LIVE to
+### prevent re-entry. Freeing is DEFERRED to after the whole traversal (see `cyclic_collect`), so the reap
+### ORDER is irrelevant — pushing a node before its children (pre-order) reaps the same set as the old
+### post-order recursion.
 routine cyclic_collect_garbage(addr: Address)
-  var take = false
-  danger
-    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if (c.cyclic_state() is GARBAGE) and (not c.cyclic_buffered())
-      c.cyclic_set_state(c: RoamState.LIVE)
-      take = true
-  if take
-    var kids = cyclic_children(addr: addr)
-    var i = 0_u64
-    while i < kids.count()
-      cyclic_collect_garbage(addr: kids.get_raw(index: i))
-      i = i + 1_u64
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var take = false
     danger
-      C::rf_cyclic_reap_push(ctrl: addr)
+      var c = Hijacked[RoamController[RoamErased]](a).as_entity()
+      if (c.cyclic_state() is GARBAGE) and (not c.cyclic_buffered())
+        c.cyclic_set_state(c: RoamState.LIVE)
+        take = true
+    if take
+      danger
+        C::rf_cyclic_reap_push(ctrl: a)
+      var kids = cyclic_children(addr: a)
+      var i = 0_u64
+      while i < kids.count()
+        work.add_last(value: kids.get_raw(index: i))
+        i = i + 1_u64
   return
 
 ### Reaps a controller: runs the entity-based free hook (`roam_free_impl`: tears down the entity's
