@@ -1158,11 +1158,16 @@ public partial class LlvmCodeGenerator
             return string.Empty;
         }
 
-        return routine.OwnerType switch
-        {
-            WrapperTypeInfo => "readonly",
-            _ => string.Empty
-        };
+        // A @readonly method on a wrapper has a pointer `me` it does not write — mark it `readonly`.
+        // Recognise BOTH representations of a wrapper owner: the generic is a WrapperTypeInfo, but a
+        // MONOMORPHIZED wrapper is a RecordTypeInfo (e.g. Hijacked[Byte]) matched by its base name in
+        // RuntimeContract.WrapperTypes. The two must emit the SAME attr or the cold vs warm/snapshot
+        // codegen paths diverge (the monomorph reaches codegen in one path, the generic in the other) —
+        // WarmCodegenAst_MatchesCold.
+        bool isWrapperOwner = routine.OwnerType is WrapperTypeInfo
+            || (GetGenericBaseNameStatic(type: routine.OwnerType) is { } ownerBase
+                && Resolution.RuntimeContract.WrapperTypes.Contains(item: ownerBase));
+        return isWrapperOwner ? "readonly" : string.Empty;
     }
 
     private static string GetExplicitParameterAttributes(TypeInfo? type) =>
