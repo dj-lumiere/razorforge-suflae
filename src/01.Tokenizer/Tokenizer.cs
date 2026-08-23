@@ -220,6 +220,9 @@ public partial class Tokenizer
 
             // Associated types
             [key: "relates"] = TokenType.Relates,
+
+            // Concurrency (SF has cooperative coroutines; `threaded` stays RF-only)
+            [key: "suspended"] = TokenType.Suspended,
         };
 
         // RF-only keywords
@@ -229,12 +232,10 @@ public partial class Tokenizer
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "steal"] = TokenType.Steal;
             _keywords[key: "threaded"] = TokenType.Threaded;
-            _keywords[key: "suspended"] = TokenType.Suspended;
             // Comptime reflection is RF's model (monomorph unroll). Suflae's reflection is the
             // runtime ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via
-            // wholesale Core reuse, so it never needs the `expand`/`memvarof` keywords itself.
+            // wholesale Core reuse, so it never needs the `expand`/`allmemvarof` keywords itself.
             _keywords[key: "expand"] = TokenType.Expand;
-            _keywords[key: "memvarof"] = TokenType.MemVarOf;
             _keywords[key: "openmemvarof"] = TokenType.OpenMemVarOf;
             _keywords[key: "allmemvarof"] = TokenType.AllMemVarOf;
             _keywords[key: "branchof"] = TokenType.BranchOf;

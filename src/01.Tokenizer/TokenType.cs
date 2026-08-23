@@ -245,7 +245,7 @@ public enum TokenType
     /// <summary>
     /// Entity declaration keyword.
     /// Reference type for complex, dynamically-sized objects with identity semantics.
-    /// Uses theatrical memory model (.view(), .grasp(), .share(), steal).
+    /// Accessed through the memory model (.view(), .modify(), .share(), steal).
     /// </summary>
     Entity,
 
@@ -308,7 +308,7 @@ public enum TokenType
     /// Late-init modifier on var declarations: `lateinit var x: T`.
     /// Eager allocation, late initialization: the binding's storage is allocated
     /// (entities get a real zeroed heap block, create not run) so the value is
-    /// immediately valid/borrowable; reading before assignment yields meaningless
+    /// immediately valid/accessible; reading before assignment yields meaningless
     /// (zeroed) values. Definite-assignment analysis is deferred to a later version.
     /// </summary>
     LateInit,
@@ -395,12 +395,8 @@ public enum TokenType
     /// <summary>Each loop keyword</summary>
     Each,
 
-    /// <summary>Comptime member-expansion loop keyword (`expand m in memvarof(T)`)</summary>
+    /// <summary>Comptime member-expansion loop keyword (`expand m in allmemvarof(T)`)</summary>
     Expand,
-
-    /// <summary>Comptime member-variable reflection source keyword (`memvarof(T)`) — LEGACY, superseded
-    /// by <see cref="OpenMemVarOf"/> / <see cref="AllMemVarOf"/>. Kept during the parallel-add migration.</summary>
-    MemVarOf,
 
     /// <summary>Comptime member-variable reflection source keyword (`openmemvarof(T)`) — OPEN ∪ POSTED
     /// (publicly-readable) members only.</summary>
@@ -480,11 +476,11 @@ public enum TokenType
     /// Ownership transfer keyword (RazorForge only).
     /// Transfers ownership and invalidates the source (becomes deadref).
     /// Used for: single entity transfer (steal node), container push (list.push(steal node)),
-    /// and consuming iteration (for item in steal list).
+    /// and consuming iteration (each item in steal list).
     /// </summary>
     Steal,
 
-    /// <summary>In keyword for iteration and containment (for i in list, x in set)</summary>
+    /// <summary>In keyword for iteration and containment (each i in list, x in set)</summary>
     In,
 
     /// <summary>Not in keyword - negated containment check (x notin set)</summary>
@@ -493,13 +489,13 @@ public enum TokenType
     /// <summary>Is not keyword - negated type/pattern check (x isnot Type)</summary>
     IsNot,
 
-    /// <summary>To keyword for ascending Range (for i in 1 to 10)</summary>
+    /// <summary>To keyword for ascending Range (each i in 1 to 10)</summary>
     To,
 
-    /// <summary>Til keyword for exclusive range end (for i in 0 til 10 means [0, 10))</summary>
+    /// <summary>Til keyword for exclusive range end (each i in 0 til 10 means [0, 10))</summary>
     Til,
 
-    /// <summary>By keyword for Range step size (for i in 1 to 10 by 2)</summary>
+    /// <summary>By keyword for Range step size (each i in 1 to 10 by 2)</summary>
     By,
 
     /// <summary>

@@ -84,7 +84,7 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses a decl-position <c>expand m in memvarof(T)</c> inside a record/entity body: an indented
+    /// Parses a decl-position <c>expand m in allmemvarof(T)</c> inside a record/entity body: an indented
     /// block of member-variable column templates (<c>[secret] ${namesplice}: Type</c>) materialized once
     /// per member of the concrete source type at instantiation. See <see cref="ExpandMemberDeclaration"/>.
     /// </summary>
@@ -95,12 +95,12 @@ public partial class Parser
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand directive");
         // A decl-position expand lays a column per member and always covers EVERY field, so it accepts
-        // `allmemvarof(T)` (canonical) or legacy `memvarof(T)` — both yield all members. `openmemvarof`
-        // (a public-only filter) has no decl-position use case and would need visibility threading.
-        if (!Match(TokenType.AllMemVarOf, TokenType.MemVarOf))
+        // `allmemvarof(T)` (which yields all members). `openmemvarof` (a public-only filter) has no
+        // decl-position use case and would need visibility threading.
+        if (!Match(TokenType.AllMemVarOf))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
-                message: "A decl-position expand only supports 'allmemvarof(T)' (or legacy 'memvarof(T)').");
+                message: "A decl-position expand only supports 'allmemvarof(T)'.");
         }
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'allmemvarof'");
         TypeExpression sourceType = ParseType();

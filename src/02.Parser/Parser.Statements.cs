@@ -251,7 +251,7 @@ public partial class Parser
 
     /// <summary>
     /// Parses a compile-time member-expansion loop.
-    /// Syntax (Phase 1): <c>expand m in memvarof(T)</c> followed by an indented body.
+    /// Syntax (Phase 1): <c>expand m in allmemvarof(T)</c> followed by an indented body.
     /// Unlike <c>each</c> there is no <c>else</c> clause — the loop is unrolled at monomorphization.
     /// </summary>
     /// <returns>An <see cref="ExpandStatement"/> AST node.</returns>
@@ -262,8 +262,9 @@ public partial class Parser
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand loop");
 
-        // Statement-position expand sources: `memvarof(T)` (record/entity/tuple fields) or `caseof(T)`
-        // (choice/flags cases). (`branchof(T)` is parsed separately — it only appears inside a `when`.)
+        // Statement-position expand sources: `openmemvarof(T)`/`allmemvarof(T)` (record/entity/tuple
+        // fields) or `caseof(T)` (choice/flags cases). (`branchof(T)` is parsed separately — it only
+        // appears inside a `when`.)
         ExpandSourceKind sourceKind;
         string sourceName;
         if (Match(type: TokenType.CaseOf))
@@ -283,11 +284,11 @@ public partial class Parser
         }
         else
         {
-            Consume(type: TokenType.MemVarOf,
+            Consume(type: TokenType.OpenMemVarOf,
                 errorMessage:
-                "Expected 'openmemvarof', 'allmemvarof', 'memvarof' or 'caseof' after 'in' in expand loop");
-            sourceKind = ExpandSourceKind.MemberVariables;
-            sourceName = "memvarof";
+                "Expected 'openmemvarof', 'allmemvarof' or 'caseof' after 'in' in expand loop");
+            sourceKind = ExpandSourceKind.OpenMemberVariables;
+            sourceName = "openmemvarof";
         }
 
         Consume(type: TokenType.LeftParen, errorMessage: $"Expected '(' after '{sourceName}'");

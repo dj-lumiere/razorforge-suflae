@@ -459,11 +459,6 @@ public record EachStatement(
 /// <summary>The comptime source an <see cref="ExpandStatement"/> iterates over.</summary>
 public enum ExpandSourceKind
 {
-    /// <summary><c>memvarof(T)</c> — the member variables (fields) of a record, declaration order.
-    /// LEGACY (pre-2026-08-17 surface); superseded by <see cref="OpenMemberVariables"/> /
-    /// <see cref="AllMemberVariables"/>. Kept during the parallel-add migration.</summary>
-    MemberVariables,
-
     /// <summary><c>openmemvarof(T)</c> — the OPEN ∪ POSTED (publicly readable) member variables,
     /// declaration order. Filters out <c>secret</c> fields. Use for public serialization.</summary>
     OpenMemberVariables,
@@ -483,14 +478,14 @@ public enum ExpandSourceKind
 }
 
 /// <summary>
-/// Compile-time member-expansion loop: <c>expand m in memvarof(T)</c>. Unlike the runtime
+/// Compile-time member-expansion loop: <c>expand m in allmemvarof(T)</c>. Unlike the runtime
 /// <see cref="EachStatement"/>, this never survives to codegen — it is UNROLLED at monomorphization
 /// (once per member of the concrete <c>T</c>) by the generic AST rewriter, with the handle
 /// projections (<c>m.name</c>, <c>m.id</c>) folded to literals and <c>x.${m.name}</c> splices
 /// rewritten to real member accesses.
 /// </summary>
 /// <param name="HandleName">The per-part handle identifier (e.g. <c>m</c>).</param>
-/// <param name="SourceType">The type inside <c>memvarof(...)</c> (a generic param before monomorph).</param>
+/// <param name="SourceType">The type inside <c>allmemvarof(...)</c> (a generic param before monomorph).</param>
 /// <param name="SourceKind">Which reflection source is iterated (Phase 1: MemberVariables only).</param>
 /// <param name="Body">The loop body, cloned per part at monomorphization.</param>
 /// <param name="Location">Source location information.</param>

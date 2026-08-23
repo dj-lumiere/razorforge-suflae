@@ -40,7 +40,7 @@
         {
           "comment": "Access and routine modifiers",
           "name": "keyword.modifier.razorforge",
-          "match": "\\b(secret|posted|external|dangerous|suspended|threaded)\\b"
+          "match": "\\b(secret|posted|dangerous|suspended|threaded)\\b"
         },
         {
           "comment": "Control flow",
@@ -48,9 +48,14 @@
           "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard|pierce)\\b"
         },
         {
-          "comment": "Compile-time reflection sources (expand m in memvarof(T)/branchof(T)/caseof(T))",
+          "comment": "Compile-time reflection SOURCE keywords (reserved; expand h in openmemvarof(T)/allmemvarof(T)/branchof(T)/caseof(T))",
+          "name": "keyword.control.razorforge",
+          "match": "\\b(openmemvarof|allmemvarof|branchof|caseof)\\b"
+        },
+        {
+          "comment": "Compile-time reflection metadata accessors — contextual builtins, NOT reserved keywords (nameof(m)/typeof(m)/valueof(c)/…)",
           "name": "support.function.builtin.razorforge",
-          "match": "\\b(openmemvarof|allmemvarof|branchof|caseof|nameof|orderof|placeof|sizeof|typeof|typeidof|valueof|visibilityof)\\b"
+          "match": "\\b(nameof|orderof|placeof|sizeof|typeof|typeidof|valueof|visibilityof)\\b"
         },
         {
           "comment": "Type and pattern operations",

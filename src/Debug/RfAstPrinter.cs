@@ -857,7 +857,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
     /// <inheritdoc/>
     public string VisitExpandMemberDeclaration(ExpandMemberDeclaration node) =>
-        $"{I}expand {node.HandleName} in memvarof({node.SourceType.Accept(this)})  #{node.Templates.Count} columns";
+        $"{I}expand {node.HandleName} in allmemvarof({node.SourceType.Accept(this)})  #{node.Templates.Count} columns";
 
 
     /// <inheritdoc/>
@@ -1003,10 +1003,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitExpandStatement(ExpandStatement node)
     {
         // Comptime unroll loop — never survives to codegen (unrolled at monomorphization), but a
-        // generic definition still carries it. Round-trips as `expand h in memvarof(T)`.
+        // generic definition still carries it. Round-trips as `expand h in openmemvarof(T)`.
         string source = node.SourceKind switch
         {
-            ExpandSourceKind.MemberVariables => "memvarof",
             ExpandSourceKind.OpenMemberVariables => "openmemvarof",
             ExpandSourceKind.AllMemberVariables => "allmemvarof",
             ExpandSourceKind.Arms => "branchof",
