@@ -18,6 +18,10 @@
  * failure instead of returning NULL/0 that would crash or silently mis-spawn downstream. */
 extern void __rf_throw(const char* error_type, const char* message);
 
+/* Unconditional free of a task control block (defined below); forward-declared because the worker
+ * thread's self-reap hook in rf_threaded_task_main calls it before its definition. */
+static void rf_task_free_internal(struct rf_task* task);
+
 /* Stable identifier for the calling OS thread. The exact value is opaque — only equality across
  * calls on the same thread matters (lock re-entrancy detection). */
 uint64_t rf_current_thread_id(void)
@@ -63,6 +67,16 @@ struct rf_task
 
     rf_Bool cancel_requested;
     rf_Bool result_consumed;
+
+    /* Threaded-task self-reap rendezvous (task_runtime "lifetime inversion"): a THREADED task is
+     * freed by the LAST of two parties — the worker thread (sets worker_exited as its final act) and
+     * the single consuming retrieve! (sets consumer_released when done reading, or on a deadline
+     * give-up). Whichever finds the other's flag already set frees the task, once, guarded by reaped.
+     * Agent HANDLE copies never touch these (their destroy is a no-op), so N copies never double-free.
+     * All three are read/written only under coro_lock. */
+    rf_Bool worker_exited;
+    rf_Bool consumer_released;
+    rf_Bool reaped;
 
     void* execution_backend;
     void* wait_backend;
@@ -389,6 +403,24 @@ static void* rf_threaded_task_main(void* raw)
         g_current_task = NULL;
     }
 
+    /* Worker side of the self-reap rendezvous, run as the worker's FINAL act — strictly AFTER the
+     * entry (which called rf_task_complete_* → rf_task_signal_completion, so the completion broadcast
+     * and its backend-lock critical section are already finished). If the consumer already released,
+     * the worker is the last toucher and frees the task here; otherwise it marks worker_exited and the
+     * consuming retrieve! frees it. Under coro_lock, guarded by reaped so exactly one party frees. */
+    {
+        rf_task* t = start_data->task;
+        if (t != NULL)
+        {
+            rf_mutex_lock(&t->coro_lock);
+            t->worker_exited = true;
+            rf_Bool reap = t->consumer_released && !t->reaped;
+            if (reap) t->reaped = true;
+            rf_mutex_unlock(&t->coro_lock);
+            if (reap) rf_task_free_internal(t);
+        }
+    }
+
     free(start_data);
 
 #ifdef _WIN32
@@ -461,12 +493,25 @@ rf_task* rf_task_create(rf_task_kind kind)
     return task;
 }
 
-void rf_task_destroy(rf_task* task)
+/* Unconditional free of the task control block. Internal — reached either directly (a SUSPENDED /
+ * coroutine-backed task has no worker thread to coordinate with, so the consuming side frees it) or
+ * as the winner of the threaded self-reap rendezvous (rf_task_release / the worker-exit hook). */
+static void rf_task_free_internal(rf_task* task)
 {
     rf_task_node* node;
     rf_task_node* next;
 
     if (task == NULL) return;
+
+    // Free a boxed result the consumer never took (a deadline give-up, or a race loser that finished
+    // but was never read). rf_task_result_payload nulls the slot on a real read, so a consumed value is
+    // already gone here → this frees ONLY the un-taken payload, no double-free. (The error payload is
+    // owned by the throw path, not freed here.)
+    if (task->completion.value_payload != NULL)
+    {
+        free(task->completion.value_payload);
+        task->completion.value_payload = NULL;
+    }
 
     node = task->dependents_head;
     while (node != NULL)
@@ -479,6 +524,35 @@ void rf_task_destroy(rf_task* task)
     rf_thread_backend_destroy((rf_thread_backend*)task->wait_backend);
     rf_mutex_destroy(&task->coro_lock);
     free(task);
+}
+
+void rf_task_destroy(rf_task* task)
+{
+    rf_task_free_internal(task);
+}
+
+/* Consumer side of the threaded-task self-reap rendezvous. Called EXACTLY ONCE by the single
+ * consuming retrieve! (after reading the value, or on a deadline give-up) — never by an Agent handle
+ * copy's destroy, which is a no-op — so there is no double-free even when `waitfor` aliased the
+ * handle. Frees the task iff the worker thread has already exited; otherwise the worker frees it as
+ * its final act. A SUSPENDED (coroutine-backed) task has no worker thread, so it is freed directly. */
+void rf_task_release(rf_task* task)
+{
+    if (task == NULL) return;
+
+    if (task->kind != RF_TASK_THREADED)
+    {
+        rf_task_free_internal(task);
+        return;
+    }
+
+    rf_mutex_lock(&task->coro_lock);
+    task->consumer_released = true;
+    rf_Bool reap = task->worker_exited && !task->reaped;
+    if (reap) task->reaped = true;
+    rf_mutex_unlock(&task->coro_lock);
+
+    if (reap) rf_task_free_internal(task);
 }
 
 rf_U64 rf_task_id(rf_task* task)
@@ -508,7 +582,14 @@ rf_task_completion_kind rf_task_completion_kind_get(rf_task* task)
 void* rf_task_result_payload(rf_task* task)
 {
     if (task == NULL) return NULL;
-    return task->completion.value_payload;
+    // TRANSFERS ownership of the boxed result to the caller: the consumer (retrieve!/race!) reads it,
+    // copies the value out, and rf_invalidate()s it. Nulling the slot means a later teardown
+    // (rf_task_free_internal) will NOT re-free it — while an UN-read payload (a deadline give-up, or a
+    // race loser that finished but was never read) is still owned by the task and gets freed there,
+    // so it does not leak.
+    void* payload = task->completion.value_payload;
+    task->completion.value_payload = NULL;
+    return payload;
 }
 
 void* rf_task_error_payload(rf_task* task)

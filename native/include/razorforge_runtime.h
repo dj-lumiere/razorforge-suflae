@@ -107,6 +107,7 @@ const char* rf_task_completion_name(rf_task_completion_kind kind);
 
 rf_task* rf_task_create(rf_task_kind kind);
 void rf_task_destroy(rf_task* task);
+void rf_task_release(rf_task* task);
 
 uint64_t rf_task_id(rf_task* task);
 

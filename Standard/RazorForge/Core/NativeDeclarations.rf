@@ -73,6 +73,10 @@ dangerous routine C::rf_task_result_payload(task: Address) -> Address
 dangerous routine C::rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
 dangerous routine C::rf_task_destroy(task: Address)
+### Consumer side of the threaded-task self-reap rendezvous: called once by the driving `retrieve!`
+### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
+### else the worker frees it. An Agent handle copy's `destroy` never calls this — so no double-free.
+dangerous routine C::rf_task_release(task: Address)
 ### Opaque, stable identifier for the calling OS thread (lock re-entrancy detection). Safe: takes
 ### no pointers and only reads the OS thread id. :returns: a per-thread id, equal across calls on
 ### the same thread.

@@ -260,6 +260,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 Enqueue(routine: info, decl: decl, typeSubs: new Dictionary<string, TypeInfo>());
             }
         }
+
+        SeedRuntimeSentinels();
+    }
+
+    /// <summary>
+    /// Force-seeds runtime sentinel primitives that the compiler/runtime rely on but that reach the live
+    /// set only TRANSITIVELY through another routine's body — so a substituted multi-level generic call
+    /// chain can drop them and over-prune a routine codegen still emits. <c>cptr_none()</c> is the CPtr
+    /// null sentinel: it is called from <c>CPtr.is_none</c>, wired as the default RoamController trace/free
+    /// hook, and passed as coroutine <c>userdata</c>. It was reached only via <c>Agent.destroy</c>'s
+    /// <c>me.coro.is_none()</c> (always concretely seeded by ScopeTeardownLoweringPass); routing that
+    /// <c>is_none</c> through a generic member chain (e.g. <c>List[Agent[V]].race! → Agent[V].reap →
+    /// CPtr.is_none → cptr_none</c>) dropped the seed. It is a tiny always-defined leaf, so seeding it
+    /// unconditionally is free and removes the fragility.
+    /// </summary>
+    private void SeedRuntimeSentinels()
+    {
+        if (ctx.Registry.LookupRoutineByName(name: "cptr_none") is { } cptrNone)
+            EnqueueCallee(callee: cptrNone);
     }
 
     private void Enqueue(RoutineInfo routine, RoutineDeclaration decl,
