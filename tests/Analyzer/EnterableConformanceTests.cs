@@ -128,7 +128,7 @@ public class EnterableConformanceTests
 
                         routine start()
                           var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                          peek(s.inspect())
+                          peek(s.consult())
                           return
                         """;
 
@@ -150,7 +150,7 @@ public class EnterableConformanceTests
 
                         routine start()
                           var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                          using s.inspect() as v
+                          using s.consult() as v
                             show(f"{v.value}")
                           return
                         """;
@@ -171,7 +171,7 @@ public class EnterableConformanceTests
 
                         routine start()
                           var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                          var v = s.inspect()
+                          var v = s.consult()
                           return
                         """;
 
@@ -183,7 +183,7 @@ public class EnterableConformanceTests
 
     #endregion
 
-    #region Resources are using-CAPABLE, not using-required (only claim/inspect are required)
+    #region Resources are using-CAPABLE, not using-required (only amend/consult are required)
 
     /// <summary>A `using` target must OBEY Enterable, not merely define $enter/$exit by name.</summary>
     [Fact]

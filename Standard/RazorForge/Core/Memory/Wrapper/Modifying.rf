@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Represents temporary unmanaged mutable access to an entity.
-### `Modifying[T]` is the non-Assignable access type used for explicit low-level manipulation outside the borrow-safe wrappers.
+### `Modifying[T]` is the non-Assignable access type used for explicit low-level manipulation outside the scoped-access wrappers.
 ### :typeparam T: The entity type being accessed.
 ### :see: {Viewing[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
@@ -14,7 +14,7 @@ record Modifying[T] obeys Controlling[T], Enterable
 ### :returns: The resulting `Modifying[T]` value.
 ### :note: Entity-only. Records are value-typed — `me` would be a by-value copy, so mutating
 ###        through the returned `Modifying[T]` would write to a stack temporary rather than the
-###        caller's storage. Use `entity` for borrowed mutation.
+###        caller's storage. Use `entity` for scoped mutation.
 routine T.modify() -> Modifying[T]
 needs T is EntityType
   danger

@@ -13,9 +13,9 @@ using TypeSymbol = TypeInfo;
 public sealed partial class SemanticVerifier
 {
     private const string ModifyingWrapperName = Compiler.Resolution.RuntimeContract.Modifying;
-    private const string ClaimingWrapperName = Compiler.Resolution.RuntimeContract.Claiming;
+    private const string AmendingWrapperName = Compiler.Resolution.RuntimeContract.Amending;
     private const string ViewingWrapperName = Compiler.Resolution.RuntimeContract.Viewing;
-    private const string InspectingWrapperName = Compiler.Resolution.RuntimeContract.Inspecting;
+    private const string ConsultingWrapperName = Compiler.Resolution.RuntimeContract.Consulting;
     private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
 
     private bool IsNestedModifying(Expression source)
@@ -55,9 +55,9 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks if a type is a Claiming&lt;T&gt; token type.
     /// </summary>
-    private static bool IsClaimingType(TypeSymbol type)
+    private static bool IsAmendingType(TypeSymbol type)
     {
-        return type.Name == ClaimingWrapperName || type.Name.StartsWith(value: ClaimingWrapperName + "[");
+        return type.Name == AmendingWrapperName || type.Name.StartsWith(value: AmendingWrapperName + "[");
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a wrapper type is read-only (Viewing, Inspecting).
+    /// Checks if a wrapper type is read-only (Viewing, Consulting).
     /// </summary>
     /// <param name="type">The wrapper type to check.</param>
     /// <returns>True if the wrapper is read-only.</returns>
@@ -161,7 +161,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Validates that a memberRoutine can be called through a read-only wrapper.
-    /// Read-only wrappers (Viewing, Inspecting) can only call @readonly memberRoutines.
+    /// Read-only wrappers (Viewing, Consulting) can only call @readonly memberRoutines.
     /// </summary>
     /// <param name="wrapperType">The wrapper type being used.</param>
     /// <param name="member routine">The memberRoutine being called.</param>
@@ -194,8 +194,8 @@ public sealed partial class SemanticVerifier
     [
         ViewingWrapperName, // Read-only single-threaded token
         ModifyingWrapperName, // Mutable (non-exclusive) single-threaded token
-        InspectingWrapperName, // Read-only multi-threaded token
-        ClaimingWrapperName // Exclusive write multi-threaded token
+        ConsultingWrapperName, // Read-only multi-threaded token
+        AmendingWrapperName // Exclusive write multi-threaded token
     ];
 
     /// <summary>
@@ -205,7 +205,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =
     [
-        ClaimingWrapperName // Cannot pass same Claiming token twice
+        AmendingWrapperName // Cannot pass same Claiming token twice
     ];
 
     /// <summary>
@@ -223,8 +223,8 @@ public sealed partial class SemanticVerifier
             [Compiler.Resolution.RuntimeContract.Watched] = "a.share()",
             [ViewingWrapperName] = ScopedNoEscapeHint,
             [ModifyingWrapperName] = ScopedNoEscapeHint,
-            [InspectingWrapperName] = ScopedNoEscapeHint,
-            [ClaimingWrapperName] = ScopedNoEscapeHint,
+            [ConsultingWrapperName] = ScopedNoEscapeHint,
+            [AmendingWrapperName] = ScopedNoEscapeHint,
         };
 
     /// <summary>
@@ -241,7 +241,7 @@ public sealed partial class SemanticVerifier
     /// async spawn boundary (<c>threaded</c> OR <c>suspended</c> under M:N — both are potentially
     /// parallel) by reference, aliasing the spawner's cell safely. These are the atomic /
     /// shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c> (atomic
-    /// refcount) — plus the <em>multi-threaded</em> lock-backed tokens <c>Inspecting[T,P]</c>
+    /// refcount) — plus the <em>multi-threaded</em> lock-backed tokens <c>Consulting[T,P]</c>
     /// (read-only) and <c>Claiming[T,P]</c> (exclusive), whose mutex/rwlock makes concurrent access
     /// sound. The single-threaded tokens <c>Viewing</c>/<c>Modifying</c> are deliberately NOT here —
     /// they are unsynchronized (see the 2×2 in <c>internal-wiki/v0.3.x-mn-scheduler.md</c> §4). Every
@@ -251,7 +251,7 @@ public sealed partial class SemanticVerifier
     private static bool IsThreadShareable(TypeSymbol type) =>
         type.BareName is Compiler.Resolution.RuntimeContract.Atomic
             or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
-            or Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
+            or Compiler.Resolution.RuntimeContract.Consulting or Compiler.Resolution.RuntimeContract.Amending;
 
     private static bool IsTriviallyAssignable(TypeSymbol type)
     {

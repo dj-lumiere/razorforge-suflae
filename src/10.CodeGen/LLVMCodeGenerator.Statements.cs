@@ -692,7 +692,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  store {GetLlvmType(type: fieldInfo.Type)} {value}, ptr {fieldPtr}");
         }
-        // Wrapper type forwarding: Modifying[T], Claiming[T], etc. -> write through to inner entity
+        // Wrapper type forwarding: Modifying[T], Amending[T], etc. -> write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord &&
                  GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
                  WrapperTypeNames.Contains(item: wrapBaseName) &&

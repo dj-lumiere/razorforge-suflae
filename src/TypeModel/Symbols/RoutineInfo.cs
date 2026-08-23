@@ -302,7 +302,7 @@ public sealed class RoutineInfo
     /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
     public List<string> Annotations { get; init; } = [];
 
-    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Inspecting).</summary>
+    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Consulting).</summary>
     public bool IsReadOnly =>
         Annotations.Contains(value: "readonly") || MutationCategory == MutationCategory.Readonly;
 
@@ -356,6 +356,24 @@ public sealed class RoutineInfo
 
     /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }
+
+    /// <summary>
+    /// The DECLARED library this foreign routine is linked from — the name in its <c>@link(Lib)</c>
+    /// attribute, matching a <c>library Lib …</c> declaration. Null for a static/ambient <c>C::</c> extern
+    /// (resolved from libc / a toml archive) and for <c>LLVM::</c> intrinsics. Whether that library links
+    /// STATICALLY or DYNAMICALLY, and under which calling convention, is a property of the LIBRARY (the
+    /// <c>library</c> declaration), NOT of this routine — so switching a library static↔dynamic never
+    /// touches call sites. The realm stays <c>C::</c> (= no-mangle C-ABI) regardless, so ABI/mangling are
+    /// unaffected. See <see cref="LinkSymbol"/> for a symbol-name override.
+    /// </summary>
+    public string? LinkLibrary { get; init; }
+
+    /// <summary>
+    /// The actual exported symbol name to link against, when it differs from <see cref="Name"/> — from
+    /// <c>@link(Lib, symbol: "…")</c>. Handles the "same RF name, different link name" cases (versioned
+    /// symbols, <c>stat</c>→<c>stat64</c>, decorated names). Null = link by the bare routine name.
+    /// </summary>
+    public string? LinkSymbol { get; init; }
 
     /// <summary>
     /// The realm this routine's implementation lives in. DERIVED from <see cref="CallingConvention"/> for
@@ -521,6 +539,8 @@ public sealed class RoutineInfo
             ModulePath = ModulePath,
             Annotations = Annotations,
             CallingConvention = CallingConvention,
+            LinkLibrary = LinkLibrary,
+            LinkSymbol = LinkSymbol,
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized,

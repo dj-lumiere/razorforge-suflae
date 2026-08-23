@@ -157,26 +157,24 @@ internal partial class Program
                 // (codegen -> opt -> link -> stage runtime DLLs) but does NOT run it. The
                 // intermediate <entry>.ll / .opt.ll are kept as byproducts for inspection;
                 // `codegen` remains the IR-only verb. (All-OS artifacts come from the release CI.)
-                (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2,
-                    bool showStages2, IReadOnlyList<string> libraryRoots2,
-                    IReadOnlyList<string> cLibraries2, IReadOnlyList<string> libraryPaths2) = ResolveEntryFile(args: args, needsOutputArg: false);
-                if (entryFile == null)
+                ResolvedEntry resolved = ResolveEntryFile(args: args, needsOutputArg: false);
+                if (resolved.EntryFile == null)
                 {
                     return 1;
                 }
 
-                int buildRc = BuildExecutable(entryFile: entryFile,
+                int buildRc = BuildExecutable(entryFile: resolved.EntryFile,
                     exeFile: out string builtExe,
-                    projectRoot: projectRoot,
-                    buildMode: buildMode2,
-                    dumpAst: dumpAst2,
-                    saTiming: saTiming2,
-                    requireStartRoutine: requireStart2,
-                    showBuildStages: showStages2,
-                    libraryRoots: libraryRoots2,
-                    cLibraries: cLibraries2,
-                    libraryPaths: libraryPaths2);
+                    projectRoot: resolved.ProjectRoot,
+                    buildMode: resolved.BuildMode,
+                    dumpAst: resolved.DumpAst,
+                    saTiming: resolved.SaTiming,
+                    requireStartRoutine: resolved.RequireStartRoutine,
+                    showBuildStages: resolved.ShowBuildStages,
+                    libraryRoots: resolved.LibraryRoots,
+                    cLibraries: resolved.CLibraries,
+                    libraryPaths: resolved.LibraryPaths,
+                    libraryConfigs: resolved.LibraryConfigs);
                 if (buildRc == 0)
                 {
                     Console.WriteLine(value: $"Executable written to: {Path.GetFullPath(path: builtExe)}");
@@ -187,39 +185,35 @@ internal partial class Program
 
             case "buildandrun":
             {
-                (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3,
-                    bool showStages3, IReadOnlyList<string> libraryRoots3,
-                    IReadOnlyList<string> cLibraries3, IReadOnlyList<string> libraryPaths3) = ResolveEntryFile(args: args, needsOutputArg: false);
-                if (entryFile == null)
+                ResolvedEntry resolved = ResolveEntryFile(args: args, needsOutputArg: false);
+                if (resolved.EntryFile == null)
                 {
                     return 1;
                 }
 
-                return BuildAndRun(entryFile: entryFile,
-                    projectRoot: projectRoot,
-                    buildMode: buildMode3,
-                    dumpAst: dumpAst3,
-                    saTiming: saTiming3,
-                    requireStartRoutine: requireStart3,
-                    showBuildStages: showStages3,
-                    libraryRoots: libraryRoots3,
-                    cLibraries: cLibraries3,
-                    libraryPaths: libraryPaths3);
+                return BuildAndRun(entryFile: resolved.EntryFile,
+                    projectRoot: resolved.ProjectRoot,
+                    buildMode: resolved.BuildMode,
+                    dumpAst: resolved.DumpAst,
+                    saTiming: resolved.SaTiming,
+                    requireStartRoutine: resolved.RequireStartRoutine,
+                    showBuildStages: resolved.ShowBuildStages,
+                    libraryRoots: resolved.LibraryRoots,
+                    cLibraries: resolved.CLibraries,
+                    libraryPaths: resolved.LibraryPaths,
+                    libraryConfigs: resolved.LibraryConfigs);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _, _, _, _, _, _,
-                    IReadOnlyList<string> libraryRoots4, _, _) =
-                    ResolveEntryFile(args: args, needsOutputArg: false);
-                if (entryFile == null)
+                ResolvedEntry resolved = ResolveEntryFile(args: args, needsOutputArg: false);
+                if (resolved.EntryFile == null)
                 {
                     return 1;
                 }
 
-                return CheckMultiFile(entryFile: entryFile, projectRoot: projectRoot,
-                    libraryRoots: libraryRoots4);
+                return CheckMultiFile(entryFile: resolved.EntryFile, projectRoot: resolved.ProjectRoot,
+                    libraryRoots: resolved.LibraryRoots);
             }
 
             case "validate-stdlib":
@@ -245,19 +239,51 @@ internal partial class Program
     }
 
     /// <summary>
-    /// Resolves the entry file, project root, optional output file, build mode, dump-ast, and sa-timing flags
-    /// for build/buildandrun/check commands.
+    /// The fully-resolved build configuration for a <c>build</c>/<c>buildandrun</c>/<c>check</c> invocation:
+    /// entry file, project root, build mode, and the external-library link config. Produced by
+    /// <see cref="ResolveEntryFile"/> from the CLI args + the nearest <c>razorforge.toml</c>. A resolution
+    /// FAILURE is signalled by <see cref="EntryFile"/> being null (all other fields keep their defaults).
+    /// Replaces a former 12-tuple — the field count outgrew a tuple's readability.
+    /// </summary>
+    private sealed record ResolvedEntry
+    {
+        /// <summary>The entry source file, or null when resolution failed (error already printed).</summary>
+        public string? EntryFile { get; init; }
+        /// <summary>The project root (manifest directory), used as the import search root.</summary>
+        public string? ProjectRoot { get; init; }
+        /// <summary>The optional explicit output file (codegen verb); null otherwise.</summary>
+        public string? OutputFile { get; init; }
+        /// <summary>The build optimization mode.</summary>
+        public RfBuildMode BuildMode { get; init; } = RfBuildMode.Debug;
+        /// <summary>Whether to dump the post-desugar AST alongside the build.</summary>
+        public bool DumpAst { get; init; }
+        /// <summary>Whether to print per-phase SA timings.</summary>
+        public bool SaTiming { get; init; }
+        /// <summary>Whether SA must find a <c>routine start()</c> (an executable build).</summary>
+        public bool RequireStartRoutine { get; init; }
+        /// <summary>Whether to print build-stage banners.</summary>
+        public bool ShowBuildStages { get; init; }
+        /// <summary>External RF library dependency directories (import search roots).</summary>
+        public IReadOnlyList<string> LibraryRoots { get; init; } = [];
+        /// <summary>Simple name-only C libraries to link (the <c>-l</c> names).</summary>
+        public IReadOnlyList<string> CLibraries { get; init; } = [];
+        /// <summary>Extra <c>-L</c> search directories for the C libraries.</summary>
+        public IReadOnlyList<string> LibraryPaths { get; init; } = [];
+        /// <summary>Richly-declared C libraries (<c>[libraries.NAME]</c>): linkage kind + calling convention.</summary>
+        public IReadOnlyDictionary<string, CLibrary> LibraryConfigs { get; init; } =
+            new Dictionary<string, CLibrary>();
+    }
+
+    /// <summary>
+    /// Resolves the <see cref="ResolvedEntry"/> for build/buildandrun/check commands.
     /// Searches for a razorforge.toml manifest in all cases: when no entry file is given the
     /// manifest supplies the executable; when an explicit entry file is given it overrides
     /// [target] executable but the manifest's other settings still apply.
     /// ALL build configuration lives in the manifest's [target] section (executable, library,
     /// mode, dump-ast, sa-timing, show-build-stages) — the CLI deliberately takes no flags.
-    /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming, requireStartRoutine, showBuildStages); entryFile is null on error.
+    /// On error the returned entry's <see cref="ResolvedEntry.EntryFile"/> is null.
     /// </summary>
-    private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine, bool ShowBuildStages,
-        IReadOnlyList<string> LibraryRoots, IReadOnlyList<string> CLibraries,
-        IReadOnlyList<string> LibraryPaths) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
+    private static ResolvedEntry ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
     {
         // args[0] is the command name (build/buildandrun/check)
         string? explicitEntry = null;
@@ -286,7 +312,7 @@ internal partial class Program
                 Console.WriteLine(
                     value:
                     $"Error: unknown option '{args[i]}'. RazorForge takes no build flags — configure builds in razorforge.toml ([target] executable, library, mode, ...).");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
+                return new ResolvedEntry();
             }
         }
 
@@ -301,7 +327,7 @@ internal partial class Program
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
+                return new ResolvedEntry();
             }
 
             string entryDir =
@@ -311,8 +337,11 @@ internal partial class Program
             {
                 // Truly manifest-less — debug defaults. Assume an executable build so
                 // codegen knows to synthesize @main and SA can require a 'start' routine.
-                return (explicitEntry, entryDir, outputFile, RfBuildMode.Debug, false, false,
-                    true, false, [], [], []);
+                return new ResolvedEntry
+                {
+                    EntryFile = explicitEntry, ProjectRoot = entryDir, OutputFile = outputFile,
+                    RequireStartRoutine = true
+                };
             }
 
             try
@@ -336,15 +365,21 @@ internal partial class Program
                     }
                 }
 
-                return (explicitEntry, manifest.ManifestDirectory, outputFile, buildMode,
-                    target.DumpAst, target.SaTiming, true, target.ShowBuildStages,
-                    target.Libraries, target.CLibraries, target.LibraryPaths);
+                return new ResolvedEntry
+                {
+                    EntryFile = explicitEntry, ProjectRoot = manifest.ManifestDirectory,
+                    OutputFile = outputFile, BuildMode = buildMode, DumpAst = target.DumpAst,
+                    SaTiming = target.SaTiming, RequireStartRoutine = true,
+                    ShowBuildStages = target.ShowBuildStages, LibraryRoots = target.Libraries,
+                    CLibraries = target.CLibraries, LibraryPaths = target.LibraryPaths,
+                    LibraryConfigs = target.LibraryConfigs
+                };
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
                     value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
+                return new ResolvedEntry();
             }
         }
 
@@ -368,7 +403,7 @@ internal partial class Program
                     value: "Either provide an entry file or create a razorforge.toml manifest.");
             }
 
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
+            return new ResolvedEntry();
         }
 
         try
@@ -391,15 +426,20 @@ internal partial class Program
                 }
             }
 
-            return (target.Executable, manifest.ManifestDirectory, outputFile, buildMode,
-                target.DumpAst, target.SaTiming, true, showBuildStages,
-                target.Libraries, target.CLibraries, target.LibraryPaths);
+            return new ResolvedEntry
+            {
+                EntryFile = target.Executable, ProjectRoot = manifest.ManifestDirectory,
+                OutputFile = outputFile, BuildMode = buildMode, DumpAst = target.DumpAst,
+                SaTiming = target.SaTiming, RequireStartRoutine = true, ShowBuildStages = showBuildStages,
+                LibraryRoots = target.Libraries, CLibraries = target.CLibraries,
+                LibraryPaths = target.LibraryPaths, LibraryConfigs = target.LibraryConfigs
+            };
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false, [], [], []);
+            return new ResolvedEntry();
         }
     }
 
@@ -1352,8 +1392,10 @@ internal partial class Program
         {
             if (annotations == null) return;
             foreach (string ann in annotations)
-            foreach (string name in ExtractLinkNames(annotation: ann))
-                if (seen.Add(item: name)) libs.Add(item: name);
+            {
+                (string? lib, string? _) = TypeModel.Symbols.LinkAnnotation.Parse(annotation: ann);
+                if (lib != null && seen.Add(item: lib)) libs.Add(item: lib);
+            }
         }
 
         void Visit(ISyntaxTreeNode node)
@@ -1375,27 +1417,12 @@ internal partial class Program
         return libs;
     }
 
-    /// <summary>Extracts the quoted library names from a <c>link("a", "b")</c> annotation string; yields
-    /// nothing for any other annotation.</summary>
-    internal static IEnumerable<string> ExtractLinkNames(string annotation)
-    {
-        string a = annotation.Trim();
-        if (!a.StartsWith(value: "link(", comparisonType: StringComparison.Ordinal)
-            || !a.EndsWith(value: ")", comparisonType: StringComparison.Ordinal))
-            yield break;
-
-        foreach (string part in a["link(".Length..^1].Split(separator: ','))
-        {
-            string name = part.Trim().Trim('"');
-            if (name.Length > 0) yield return name;
-        }
-    }
-
     private static int BuildExecutable(string entryFile, out string exeFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true, bool showBuildStages = false,
         IReadOnlyList<string>? libraryRoots = null, IReadOnlyList<string>? cLibraries = null,
-        IReadOnlyList<string>? libraryPaths = null)
+        IReadOnlyList<string>? libraryPaths = null,
+        IReadOnlyDictionary<string, CLibrary>? libraryConfigs = null)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1421,13 +1448,21 @@ internal partial class Program
         }
 
         // Merge manifest [target] c_libraries with source `@link(...)` directives (manifest first),
-        // de-duplicated, for the link step.
+        // de-duplicated, for the link step. A source `@link(lib: "X")` name is remapped through a
+        // [libraries.X] declaration's `name` override (e.g. "SDL2" → "SDL2-2.0") when present, so the
+        // real `-l` link name is used. The declared libraries' own names are also linked.
         var allCLibraries = new List<string>();
-        if (cLibraries != null) allCLibraries.AddRange(collection: cLibraries);
-        foreach (string lib in discoveredLinks)
+        void AddLib(string lib)
         {
-            if (!allCLibraries.Contains(item: lib)) allCLibraries.Add(item: lib);
+            string resolved = libraryConfigs != null &&
+                              libraryConfigs.TryGetValue(key: lib, value: out CLibrary? cfg)
+                ? cfg.Name
+                : lib;
+            if (!allCLibraries.Contains(item: resolved)) allCLibraries.Add(item: resolved);
         }
+        if (cLibraries != null) foreach (string lib in cLibraries) AddLib(lib: lib);
+        if (libraryConfigs != null) foreach (CLibrary cfg in libraryConfigs.Values) AddLib(lib: cfg.Name);
+        foreach (string lib in discoveredLinks) AddLib(lib: lib);
 
         string exeDir;
         string runtimeLibDir;
@@ -1493,7 +1528,8 @@ internal partial class Program
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true,
         bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null,
-        IReadOnlyList<string>? cLibraries = null, IReadOnlyList<string>? libraryPaths = null)
+        IReadOnlyList<string>? cLibraries = null, IReadOnlyList<string>? libraryPaths = null,
+        IReadOnlyDictionary<string, CLibrary>? libraryConfigs = null)
     {
         int buildResult = BuildExecutable(entryFile: entryFile,
             exeFile: out string exeFile,
@@ -1505,7 +1541,8 @@ internal partial class Program
             showBuildStages: showBuildStages,
             libraryRoots: libraryRoots,
             cLibraries: cLibraries,
-            libraryPaths: libraryPaths);
+            libraryPaths: libraryPaths,
+            libraryConfigs: libraryConfigs);
         if (buildResult != 0)
         {
             return buildResult;

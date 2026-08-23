@@ -184,7 +184,7 @@ public class RecordContainmentTests
     /// <summary>
     /// Verifies a record MAY contain an entity-typed field. Entities are reference (pointer-shaped)
     /// types, so the field stores a reference — only the scoped access tokens (Viewing/Modifying/
-    /// Inspecting/Claiming) are rejected as record members (see the token tests below).
+    /// Consulting/Amending) are rejected as record members (see the token tests below).
     /// </summary>
 
     [Fact]

@@ -454,6 +454,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     s32Type: s32Type,
                     boolType: boolType);
                 break;
+            // `assign` (shallow store) / `copy` (deep) on a GENERIC-DEFINITION record: the field-walk
+            // `BuildRecordCopyBody` (same body `HandleRecord` uses for a generic def — CloneUniversalDeriveBody
+            // is null for a def). Registering the DEF body here is REQUIRED so GMP can monomorphize it onto
+            // each concrete instance (`Maybe[S32].assign`); without it an auto-derived carrier assign/copy was
+            // declared+called but never defined (over-prune). Mirrors how eq/cmp/hash/represent above emit.
+            case "assign":
+            case "copy":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: record);
+                break;
         }
     }
 

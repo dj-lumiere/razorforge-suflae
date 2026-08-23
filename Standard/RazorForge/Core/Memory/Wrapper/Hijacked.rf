@@ -3,7 +3,7 @@ module Core
 import BuilderService
 
 ### Represents an unmanaged typed raw pointer.
-### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and borrow rules.
+### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and access rules.
 ### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
 ### Unlike `steal`, `hijack` does NOT transfer ownership: the original owner keeps its binding, its
 ### lifetime, and its `destroy`. A `Hijacked[T]` is an unsanctioned *alias* into memory you do not

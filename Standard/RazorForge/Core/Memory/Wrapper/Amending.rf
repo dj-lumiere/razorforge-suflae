@@ -3,48 +3,48 @@ module Core
 import BuilderService
 
 ### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Shared[T, P]}.
-### `Claiming[T]` is the non-Assignable token produced by `Shared.claim()` for exclusive access. It holds
+### `Amending[T]` is the non-Assignable token produced by `Shared.amend()` for exclusive access. It holds
 ### the shared {ShareController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
-### exclusive claimer hold on the controller's access-discipline lock and exiting (`exit`) releases it,
-### so the lock spans exactly the `using` block. At most one claimer may exist, with no concurrent
-### {Inspecting[T]}; the readers-XOR-writer borrow checker enforces this. Must be opened with `using` —
-### a bare/inline `claim()` would never acquire the lock.
-### :typeparam T: The entity type being claimed.
+### exclusive amender hold on the controller's access-discipline lock and exiting (`exit`) releases it,
+### so the lock spans exactly the `using` block. At most one amender may exist, with no concurrent
+### {Consulting[T]}; the readers-XOR-writer access discipline enforces this. Must be opened with `using` —
+### a bare/inline `amend()` would never acquire the lock.
+### :typeparam T: The entity type being amended.
 ### :typeparam P: The access-discipline lock policy of the originating `Shared`.
-### :see: {Inspecting[T]}, {Modifying[T]}, {Shared[T, P]}, {Access-Types}
+### :see: {Consulting[T]}, {Modifying[T]}, {Shared[T, P]}, {Access-Types}
 @llvm("ptr")
-record Claiming[T, P] obeys Controlling[T], Enterable
+record Amending[T, P] obeys Controlling[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
-# NOTE: No creators, no manual methods — the token is produced only by `Shared.claim()`, which
+# NOTE: No creators, no manual methods — the token is produced only by `Shared.amend()`, which
 # constructs it from the controller pointer. Users never create one.
 
 # ============================================================================
-# Resource management — enables `using shared.claim() as c`
+# Resource management — enables `using shared.amend() as c`
 # ============================================================================
 
-### Called on entry to the `using` block: acquires the exclusive claimer hold on the controller's
+### Called on entry to the `using` block: acquires the exclusive amender hold on the controller's
 ### access-discipline lock, then passes the token through as the bound value. Pairs with `exit`,
 ### so the lock spans exactly the `using` scope.
-### :returns: This token as `Claiming[T, P]`.
-routine Claiming[T, P].enter() -> Claiming[T, P]
+### :returns: This token as `Amending[T, P]`.
+routine Amending[T, P].enter() -> Amending[T, P]
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.add_claimer()
   return me
 
-### Called on entry to a *fallible* `using ... fallback` block: attempts the exclusive claimer hold
+### Called on entry to a *fallible* `using ... fallback` block: attempts the exclusive amender hold
 ### once, without blocking. Returns `true` if the hold was acquired (the `using` body runs and `exit`
 ### will release it) or `false` on contention (the `fallback` branch runs; nothing is held).
 ### :returns: `true` if the exclusive hold was acquired, `false` otherwise.
-routine Claiming[T, P].try_enter() -> Bool
+routine Amending[T, P].try_enter() -> Bool
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     return ctrl.try_add_claimer()
 
-### Called on exit from the `using` block (and on every escape): releases the claimer hold.
-routine Claiming[T, P].exit()
+### Called on exit from the `using` block (and on every escape): releases the amender hold.
+routine Amending[T, P].exit()
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
     ctrl.remove_claimer()
@@ -58,41 +58,41 @@ routine Claiming[T, P].exit()
 ### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The guarded entity as `T`.
 @[readonly, inline]
-routine Claiming[T, P].access() -> T
+routine Amending[T, P].access() -> T
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return ctrl.borrow_data().as_entity()
+    return ctrl.raw_data().as_entity()
 
 ### Yields the guarded entity as an in-flight `T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The guarded entity as `T`.
 @inline
-routine Claiming[T, P].control() -> T
+routine Amending[T, P].control() -> T
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return ctrl.borrow_data().as_entity()
+    return ctrl.raw_data().as_entity()
 
 # ============================================================================
 # Display (transparent — delegates to the guarded entity through the controller)
 # ============================================================================
 
-### Returns the display form of the claimed entity.
+### Returns the display form of the amended entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Claiming[T, P].represent() -> Text
+routine Amending[T, P].represent() -> Text
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return ctrl.borrow_data().as_entity().represent()
+    return ctrl.raw_data().as_entity().represent()
 
-### Returns the diagnostic form of the claimed entity.
+### Returns the diagnostic form of the amended entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Claiming[T, P].diagnose() -> Text
+routine Amending[T, P].diagnose() -> Text
   danger
     var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
-    return me.type_name() + "(" + ctrl.borrow_data().as_entity().diagnose() + ")"
+    return me.type_name() + "(" + ctrl.raw_data().as_entity().diagnose() + ")"
 
-### No-op: the token owns no heap (it only aliases the controller), and the claimer hold is
+### No-op: the token owns no heap (it only aliases the controller), and the amender hold is
 ### released by `exit`. Releasing here too would double-release the lock.
-dangerous routine Claiming[T, P].destroy()
+dangerous routine Amending[T, P].destroy()
   return

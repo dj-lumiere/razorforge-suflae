@@ -661,10 +661,10 @@ public partial class LlvmCodeGenerator
                 }
             }
             else if (wrapperRecord.HasDirectBackendType &&
-                (wrapBaseName == Resolution.RuntimeContract.Inspecting || wrapBaseName == Resolution.RuntimeContract.Claiming) &&
+                (wrapBaseName == Resolution.RuntimeContract.Consulting || wrapBaseName == Resolution.RuntimeContract.Amending) &&
                 wrapperRecord.TypeArguments is { Count: > 1 })
             {
-                // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets
+                // Consulting[T, P] / Amending[T, P] are `@llvm("ptr")` tokens whose pointer targets
                 // the shared ShareController[T, P], NOT the entity. The entity ptr lives in the
                 // controller's `data` field (offset after the two atomic counts). Project through it,
                 // exactly like Retained/Tracked, so `v.value` reads the guarded entity rather than
@@ -710,7 +710,7 @@ public partial class LlvmCodeGenerator
                 string recordTypeName = GetRecordTypeName(record: wrapperRecord);
                 innerPtr = NextTemp();
                 // Find the index of the Hijacked[T] field that holds the inner entity pointer.
-                // (e.g. Retained[T] has controller=0, data=1; Inspecting[T] has ptr=0)
+                // (e.g. Retained[T] has controller=0, data=1; Consulting[T] has ptr=0)
                 int dataFieldIndex = 0;
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
@@ -1175,8 +1175,8 @@ public partial class LlvmCodeGenerator
         if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
         {
             if (genericArgs.Count == 1 &&
-                typeExpr.Name is Resolution.RuntimeContract.Hijacked or Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Modifying or Resolution.RuntimeContract.Inspecting or
-                    Resolution.RuntimeContract.Claiming or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Watched)
+                typeExpr.Name is Resolution.RuntimeContract.Hijacked or Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Modifying or Resolution.RuntimeContract.Consulting or
+                    Resolution.RuntimeContract.Amending or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Watched)
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,
@@ -1186,7 +1186,7 @@ public partial class LlvmCodeGenerator
                     return null;
                 }
 
-                bool isReadOnly = typeExpr.Name is Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Inspecting;
+                bool isReadOnly = typeExpr.Name is Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Consulting;
                 return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
                     innerType: innerType,
                     isReadOnly: isReadOnly);

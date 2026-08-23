@@ -37,7 +37,7 @@ public enum UnaryOperator
     ///
     /// Non-stealable types (caught by semantic analyzer):
     /// <list type="bullet">
-    /// <item>Scope-bound tokens (Viewing, Modifying, Inspecting, Claiming)</item>
+    /// <item>Scope-bound tokens (Viewing, Modifying, Consulting, Amending)</item>
     /// <item>Handles and links (Retained, Tracked, Shared, Watched)</item>
     /// <item>Hijacked[T] - internal ownership type</item>
     /// </list>

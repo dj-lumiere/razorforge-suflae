@@ -194,7 +194,10 @@ public sealed partial class SemanticVerifier
 
         // @positional: the routine opts into positional calls. Named arguments always remain
         // legal, so this only RELAXES the S510/W258 rules — it never forbids names.
-        bool isPositional = routine.Annotations.Contains(value: "positional");
+        // Foreign (C::/LLVM::) routines are positional by nature: their parameter identity is the
+        // ARGUMENT ORDER (+ types), not names — a C header carries no binding parameter names, and
+        // extern re-declarations may name them differently. So they are implicitly @positional.
+        bool isPositional = routine.Annotations.Contains(value: "positional") || routine.IsForeign;
         if (isPositional)
         {
             requiresNamedArgs = false;

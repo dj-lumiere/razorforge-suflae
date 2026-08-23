@@ -123,7 +123,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Wrapper type resolutions cache for synthesized scoped/RC wrappers
-    /// (Viewing, Modifying, Inspecting, Claiming, Hijacked, Retained, Shared, Tracked, Watched).
+    /// (Viewing, Modifying, Consulting, Amending, Hijacked, Retained, Shared, Tracked, Watched).
     /// Kept separate from <see cref="_resolutions"/> to prevent key collisions when both
     /// <see cref="GetOrCreateWrapperType"/> and <see cref="GetOrCreateResolution"/> produce
     /// the same FullName-based key (e.g., "Hijacked[Core.Byte]").
@@ -1652,12 +1652,12 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates a synthesized wrapper type (Modifying, Inspecting, Claiming, Viewing).
+    /// Gets or creates a synthesized wrapper type (Modifying, Consulting, Amending, Viewing).
     /// These are builder-intrinsic types that don't need to be defined in the program.
     /// </summary>
     /// <param name="wrapperName">The name of the wrapper type (e.g., "Modifying").</param>
     /// <param name="innerType">The type being wrapped.</param>
-    /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewing, Inspecting).</param>
+    /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewing, Consulting).</param>
     /// <returns>The cached or newly created wrapper type.</returns>
     public WrapperTypeInfo GetOrCreateWrapperType(string wrapperName, TypeInfo innerType,
         bool isReadOnly)

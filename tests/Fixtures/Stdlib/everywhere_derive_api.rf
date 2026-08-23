@@ -1,0 +1,30 @@
+module Tests/Stdlib/EverywhereDeriveApi
+import IO/Console
+
+# `protocol P needs P everywhere` auto-derive: a record that OPTS INTO `obeys Comparable` and whose
+# members all obey Comparable gets `eq`/`cmp` (and the derived `lt`/`le`/`gt`/`ge`/`ne`) structurally —
+# NO hand-written eq/cmp. Comparable obeys Equatable, so `==`/`!=` come along too. A plain record that
+# does NOT opt in gets none of these (that negative is covered by the analyzer tests).
+record Version obeys Comparable
+  major: S64
+  minor: S64
+
+routine start()
+  var a = Version(major: 1_s64, minor: 4_s64)
+  var b = Version(major: 1_s64, minor: 10_s64)
+  var c = Version(major: 1_s64, minor: 4_s64)
+
+  # Equality (auto eq / ne via Equatable, the parent of Comparable).
+  show(f"a == c: {a == c}")
+  show(f"a != b: {a != b}")
+
+  # Ordering (auto cmp → lt/le/gt/ge), lexicographic over (major, minor).
+  show(f"a < b: {a < b}")
+  show(f"a <= c: {a <= c}")
+  show(f"b > a: {b > a}")
+  show(f"b >= a: {b >= a}")
+
+  # cmp directly.
+  show(f"a.cmp(b) is ME_SMALL: {a.cmp(you: b) is ComparisonSign.ME_SMALL}")
+  show(f"a.cmp(c) is SAME: {a.cmp(you: c) is ComparisonSign.SAME}")
+  return

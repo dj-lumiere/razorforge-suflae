@@ -779,13 +779,13 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-                // Read-only wrapper types (Viewing, Inspecting) cannot be written through
+                // Read-only wrapper types (Viewing, Consulting) cannot be written through
                 if (IsReadOnlyWrapper(type: objectType))
                 {
                     ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                         message:
                         $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
-                        "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
+                        "Use Modifying[T] for exclusive write access or Amending[T] for locked write access.",
                         location: location);
                 }
 
@@ -1007,13 +1007,13 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // #67: Cannot use compound assignment on read-only token (Viewing or Inspecting)
+        // #67: Cannot use compound assignment on read-only token (Viewing or Consulting)
         if (targetType is WrapperTypeInfo { IsReadOnly: true } readOnlyWrapper)
         {
             ReportError(code: SemanticDiagnosticCode.CompoundAssignmentOnReadOnlyToken,
                 message:
                 $"Cannot use compound assignment on read-only token '{readOnlyWrapper.Name}'. " +
-                "Read-only tokens (Viewing, Inspecting) do not allow modifications.",
+                "Read-only tokens (Viewing, Consulting) do not allow modifications.",
                 location: compound.Location);
             return ErrorTypeInfo.Instance;
         }

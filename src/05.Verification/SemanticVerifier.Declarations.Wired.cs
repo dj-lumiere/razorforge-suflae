@@ -179,11 +179,19 @@ public sealed partial class SemanticVerifier
 
         _currentRoutine = prevRoutine;
 
+        // `@link(lib: "X", symbol: "y")` associates this C:: extern with a foreign library and (optionally)
+        // overrides the linked symbol name. Linkage kind (static/dynamic) + calling convention live in the
+        // toml [libraries.X] declaration, NOT here — so switching a library static↔dynamic never touches
+        // source. The FIRST @link attribute wins.
+        (string? linkLibrary, string? linkSymbol) = ExtractLinkBinding(annotations: external.Annotations);
+
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             // Foreign-ness is now carried by RoutineInfo.Realm (derived from CallingConvention).
             IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention,
+            LinkLibrary = linkLibrary,
+            LinkSymbol = linkSymbol,
             IsVariadic = external.IsVariadic,
             Parameters = parameters,
             ReturnType = returnType,
@@ -197,6 +205,30 @@ public sealed partial class SemanticVerifier
         };
 
         _registry.RegisterRoutine(routine: routineInfo);
+    }
+
+    /// <summary>
+    /// Scans a foreign declaration's annotations for the first <c>@link(...)</c> attribute and returns its
+    /// (library, symbol-override) binding. Both null when there is no <c>@link</c> — an ambient/static
+    /// <c>C::</c> extern resolved from libc / a toml archive.
+    /// </summary>
+    private static (string? Library, string? Symbol) ExtractLinkBinding(List<string>? annotations)
+    {
+        if (annotations == null)
+        {
+            return (null, null);
+        }
+
+        foreach (string ann in annotations)
+        {
+            (string? lib, string? symbol) = TypeModel.Symbols.LinkAnnotation.Parse(annotation: ann);
+            if (lib != null || symbol != null)
+            {
+                return (lib, symbol);
+            }
+        }
+
+        return (null, null);
     }
 
     private void TryRegisterType(TypeSymbol type, SourceLocation location)

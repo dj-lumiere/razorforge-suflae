@@ -13,14 +13,14 @@ routine start()
   var s = Shared[Counter, MultiRead](from: Counter(value: 10))
 
   # shared (multi-reader) access
-  using s.inspect() as v
-    show(f"inspect value: {v.value}")
+  using s.consult() as v
+    show(f"consult value: {v.value}")
 
   # exclusive (read/write) access
-  using s.claim() as c
+  using s.amend() as c
     c.bump(inc: 5)
 
-  using s.inspect() as v2
+  using s.consult() as v2
     show(f"after bump: {v2.value}")
 
   show("DONE")

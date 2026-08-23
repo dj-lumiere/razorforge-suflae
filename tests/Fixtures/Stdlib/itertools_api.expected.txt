@@ -12,6 +12,12 @@ distinct: [1, 2, 3, 4]
   zip: a=10
   zip: b=20
   zip: c=30
+  zip3: a=10/true
+  zip3: b=20/false
+  zip3: c=30/true
+  zip4: a=10/true/!
+  zip4: b=20/false/?
+  zip4: c=30/true/.
 any > 5: true
 all > 0: true
 all > 5: false

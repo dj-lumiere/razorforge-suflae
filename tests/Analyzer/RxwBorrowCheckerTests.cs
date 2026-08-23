@@ -7,7 +7,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the readers-XOR-writer borrow checker (RF-S630). Within overlapping (nested) `using`
-/// scopes on the SAME Shared handle, a `claim()` (writer) conflicts with any other hold; `inspect()`
+/// scopes on the SAME Shared handle, an `amend()` (writer) conflicts with any other hold; `consult()`
 /// readers may coexist with other readers. Non-overlapping (sequential) scopes and distinct handles
 /// never conflict. Detection is name-based on the Shared handle (v1).
 /// </summary>
@@ -28,14 +28,14 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.claim() as c1
-                                      using s.claim() as c2
+                                    using s.amend() as c1
+                                      using s.amend() as c2
                                         show("nested")
                                     return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "conflicts with an active 'claim()'");
+            expectedErrorSubstring: "conflicts with an active 'amend()'");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ReadersXorWriter);
     }
@@ -46,14 +46,14 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.claim() as c
-                                      using s.inspect() as v
+                                    using s.amend() as c
+                                      using s.consult() as v
                                         show("nested")
                                     return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "conflicts with an active 'claim()'");
+            expectedErrorSubstring: "conflicts with an active 'amend()'");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ReadersXorWriter);
     }
@@ -64,14 +64,14 @@ public class RxwBorrowCheckerTests
         string source = Prelude + """
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.inspect() as v
-                                      using s.claim() as c
+                                    using s.consult() as v
+                                      using s.amend() as c
                                         show("nested")
                                     return
                                   """;
 
         AnalysisResult result = AssertHasErrorSa(source: source,
-            expectedErrorSubstring: "conflicts with an active 'inspect()'");
+            expectedErrorSubstring: "conflicts with an active 'consult()'");
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ReadersXorWriter);
     }
@@ -79,12 +79,12 @@ public class RxwBorrowCheckerTests
     [Fact]
     public void Analyze_NestedInspectInspect_SameHandle_Ok()
     {
-        // Readers coexist — multiple inspect holds on the same handle are allowed.
+        // Readers coexist — multiple consult holds on the same handle are allowed.
         string source = Prelude + """
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.inspect() as v1
-                                      using s.inspect() as v2
+                                    using s.consult() as v1
+                                      using s.consult() as v2
                                         show(f"{v1.value} {v2.value}")
                                     return
                                   """;
@@ -101,8 +101,8 @@ public class RxwBorrowCheckerTests
                                   routine start()
                                     var s1 = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = Shared[Counter, MultiRead](from: Counter(value: 2))
-                                    using s1.claim() as c1
-                                      using s2.claim() as c2
+                                    using s1.amend() as c1
+                                      using s2.amend() as c2
                                         show("two handles")
                                     return
                                   """;
@@ -114,7 +114,7 @@ public class RxwBorrowCheckerTests
     [Fact]
     public void Analyze_SequentialClaim_SameHandle_Ok()
     {
-        // Non-overlapping scopes — the first claim is released before the second opens.
+        // Non-overlapping scopes — the first amend is released before the second opens.
         string source = Prelude + """
                                   routine Counter.bump(inc: S64)
                                     me.value = me.value + inc
@@ -122,9 +122,9 @@ public class RxwBorrowCheckerTests
 
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    using s.claim() as c1
+                                    using s.amend() as c1
                                       c1.bump(inc: 1)
-                                    using s.claim() as c2
+                                    using s.amend() as c2
                                       c2.bump(inc: 1)
                                     return
                                   """;
@@ -136,15 +136,15 @@ public class RxwBorrowCheckerTests
     [Fact]
     public void Analyze_NestedClaim_AliasedHandle_Errors()
     {
-        // `s2 = s.share()` is a CLONE — a second handle to the SAME controller. Claiming both in
+        // `s2 = s.share()` is a CLONE — a second handle to the SAME controller. Amending both in
         // overlapping scopes deadlocks at runtime; the identity-keyed check catches it even though
         // the handle names differ.
         string source = Prelude + """
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
-                                    using s.claim() as c1
-                                      using s2.claim() as c2
+                                    using s.amend() as c1
+                                      using s2.amend() as c2
                                         show("aliased")
                                     return
                                   """;
@@ -163,8 +163,8 @@ public class RxwBorrowCheckerTests
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
-                                    using s.claim() as c
-                                      using s2.inspect() as v
+                                    using s.amend() as c
+                                      using s2.consult() as v
                                         show("aliased reader")
                                     return
                                   """;
@@ -183,8 +183,8 @@ public class RxwBorrowCheckerTests
                                   routine start()
                                     var s = Shared[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
-                                    using s.inspect() as v1
-                                      using s2.inspect() as v2
+                                    using s.consult() as v1
+                                      using s2.consult() as v2
                                         show("two readers, one controller")
                                     return
                                   """;

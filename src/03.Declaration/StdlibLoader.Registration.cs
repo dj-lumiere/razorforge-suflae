@@ -459,11 +459,16 @@ public sealed partial class StdlibLoader
                 moduleName: moduleName)
             : null;
 
+        (string? linkLibrary, string? linkSymbol) =
+            ExtractExternalLinkBinding(annotations: external.Annotations);
+
         var routineInfo = new RoutineInfo(name: external.Name)
         {
             // Foreign-ness is now carried by RoutineInfo.Realm (derived from CallingConvention).
             IsFailable = external.IsFailable,
             CallingConvention = external.CallingConvention ?? "C",
+            LinkLibrary = linkLibrary,
+            LinkSymbol = linkSymbol,
             IsVariadic = external.IsVariadic,
             Parameters = parameters,
             ReturnType = returnType,
@@ -483,6 +488,28 @@ public sealed partial class StdlibLoader
         {
             // Ignore duplicate routine registration
         }
+    }
+
+    /// <summary>
+    /// First <c>@link(...)</c> binding (library, symbol-override) on a foreign declaration, or (null, null).
+    /// </summary>
+    private static (string? Library, string? Symbol) ExtractExternalLinkBinding(List<string>? annotations)
+    {
+        if (annotations == null)
+        {
+            return (null, null);
+        }
+
+        foreach (string ann in annotations)
+        {
+            (string? lib, string? symbol) = TypeModel.Symbols.LinkAnnotation.Parse(annotation: ann);
+            if (lib != null || symbol != null)
+            {
+                return (lib, symbol);
+            }
+        }
+
+        return (null, null);
     }
 
     /// <summary>
@@ -735,6 +762,20 @@ public sealed partial class StdlibLoader
                 genericParams: ctx,
                 moduleName: moduleName)
             : null;
+
+        // `Me` as a member-routine return type is the OWNER type (applied to its own generic params for a
+        // generic def), NOT the abstract ProtocolSelf. `ResolveSimpleType` has no owner context, so it
+        // yields ProtocolSelf — which leaks to codegen ("Unknown type category: ProtocolSelf"). Concrete
+        // owner-relative `Me` mirrors TypeResolver.ResolveTypeCore's owner-`Me` handling. (Protocol owners
+        // keep ProtocolSelf — resolved per-implementer — but stdlib member routines here own a real type.)
+        if (routine.ReturnType is { Name: "Me", GenericArguments: not { Count: > 0 } } &&
+            ownerType != null && ownerType is not ProtocolTypeInfo)
+        {
+            returnType = ownerType is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } ownerParams }
+                ? registry.GetOrCreateResolution(genericDef: ownerType,
+                    typeArguments: ownerParams.Select(selector: p => (TypeInfo)new GenericParameterTypeInfo(name: p)).ToList())
+                : ownerType;
+        }
 
         // Resolve the specialized receiver (e.g. List[Agent[V]]) with the generic context now in
         // scope, so `me` is typed as the specialized receiver. OwnerType stays the generic def.

@@ -25,9 +25,17 @@ internal sealed class AutoWiredRegistrationPass
 
     private readonly TypeRegistry _registry;
 
-    public AutoWiredRegistrationPass(TypeRegistry registry)
+    /// <summary>(TypeFullName, ProtocolName) pairs that a type obeys only IMPLICITLY — marker-protocol
+    /// conferral or the structural `needs P everywhere` auto-conferral — as opposed to a user-written
+    /// `obeys P`. Everywhere-derive members (eq/cmp/…) attach only on EXPLICIT opt-in, so these are
+    /// excluded (their transitive parents are re-added via the explicit protocol's own obeys chain).</summary>
+    private readonly HashSet<(string TypeName, string ProtocolName)> _implicitConformances;
+
+    public AutoWiredRegistrationPass(TypeRegistry registry,
+        HashSet<(string TypeName, string ProtocolName)>? implicitConformances = null)
     {
         _registry = registry;
+        _implicitConformances = implicitConformances ?? [];
     }
 
     public void Run(bool builderServiceImported = true)
@@ -169,42 +177,16 @@ internal sealed class AutoWiredRegistrationPass
                     // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
                     // already hand-write these. store (below) + represent / diagnose stay auto-derived.
 
-                    // `store` / `clone` (Assignable): their bodies are `return me` /
-                    // `return me.assign()` — NOT field-based — so they are safe even for @llvm-backed
-                    // opaque primitives (S64, Bool, F64, …), unlike the field-based hash/eq above.
-                    // Registering them for primitives lets explicit `clone()`/`store()` calls (e.g.
-                    // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
-                    // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
-                    // `store` is registered for any Assignable-obeyer (incl. Copyable types, which obey
-                    // Assignable transitively). Deep `copy` is Copyable-ONLY — Assignable-only raw-pointer
-                    // types (Hijacked/CPtr) can bitwise-`store` but have no meaningful deep copy.
-                    if (!type.IsNone && !isWrapper &&
-                        ObeysProtocol(type: type, protocolName: "Assignable"))
-                    {
-                        MaybeRegisterWired(owner: type, name: "assign",
-                            returnType: type, existingMemberRoutines: existingMemberRoutines);
-                    }
-                    if (!type.IsNone && !isWrapper &&
-                        ObeysProtocol(type: type, protocolName: "Copyable"))
-                    {
-                        MaybeRegisterWired(owner: type, name: "copy",
-                            returnType: type, existingMemberRoutines: existingMemberRoutines);
-                    }
+                    // `assign` (Assignable) / `copy` (Copyable) are now registered by the declaration-driven
+                    // everywhere-derive loop (RegisterEverywhereDeriveMembers) — the `needs P everywhere` rule
+                    // read straight from the protocol, opt-in via `obeys P`, replacing this per-protocol
+                    // hardcode. A type that must be assignable/copyable declares `obeys Assignable`/`Copyable`.
 
-                    // A record that OPTS IN via `obeys Equatable` / `Hashable` gets a field-walk `eq` /
-                    // `hash` (template-derived in WiredRoutinePass; `ne`/comparison operators follow via
-                    // DerivedOperatorPass). This is OPT-IN, NOT the auto-for-all-records the 2026-06-14
-                    // decision (above) rejected — that decision's concern (field-delegated eq is fragile /
-                    // semantically wrong for opaque/container records) is answered by the author's explicit
-                    // `obeys`, while a plain value record can now satisfy `List[T].contains`/`Set[T]`/… whose
-                    // constraint is `needs T obeys Equatable`. Wrappers are excluded (their eq/hash forward
-                    // from the inner T via WrapperForwardingPass).
-                    if (!type.IsNone && !isWrapper && boolType != null &&
-                        ObeysProtocol(type: type, protocolName: EquatableProtocolName))
-                    {
-                        MaybeRegisterWiredWithParam(owner: type, name: "eq", paramName: "you",
-                            paramType: type, returnType: boolType, existingMemberRoutines: existingMemberRoutines);
-                    }
+                    // `eq` (Equatable) is now registered by the declaration-driven everywhere-derive loop
+                    // (RegisterEverywhereDeriveMembers) — the `needs Equatable everywhere` rule read straight
+                    // from the protocol, opt-in + all-members-Equatable, replacing this per-protocol hardcode.
+                    // `hash` (Hashable) stays below: its keyed `hash(k0, k1)` form is not a field-walk derive.
+
                     // `Hashable` requires ONLY the keyed `hash(k0, k1)` (what Set/Dict use); there is no
                     // 0-arg `hash()` on value types (scalars supply only the keyed form), so field-walking
                     // a 0-arg field hash would be undefined. Register just the keyed hash.
@@ -500,6 +482,23 @@ internal sealed class AutoWiredRegistrationPass
                             existingMemberRoutines: existingMemberRoutines);
                     }
 
+                    // A variant whose every arm is Assignable gets a shallow `assign` (arm-walk re-store).
+                    // REQUIRED so a variant used as a record member (e.g. `Maybe[S32]` in a struct) resolves
+                    // the field-walk `.assign()` its owner's auto-derived `assign` emits — the everywhere-
+                    // derive for records/entities is arm-blind, so variants register here. Gate on the
+                    // STRUCTURAL `EverywhereObeys` (branchof over THIS instance's concrete arms), NOT the
+                    // conferred `obeys` — a monomorphized instance (`Maybe[S32]`) is created AFTER conferral
+                    // ran, so it never gained the conferred `obeys Assignable`. Body: the `T.assign() needs T
+                    // is VariantType` derive template (branchof re-store).
+                    if (!type.IsGenericDefinition && type is VariantTypeInfo &&
+                        _registry.EverywhereObeys(type: type, protocol: "Assignable"))
+                    {
+                        MaybeRegisterWired(owner: type,
+                            name: "assign",
+                            returnType: type,
+                            existingMemberRoutines: existingMemberRoutines);
+                    }
+
                     // Bidirectional per-arm constructors, auto-generated for every variant:
                     //   V.create(from: Arm)  -> V    — box a branch value into the variant.
                     //   Arm.create!(from: V) -> Arm  — failable extraction (absent when the active arm
@@ -512,6 +511,13 @@ internal sealed class AutoWiredRegistrationPass
                     }
                     break;
             }
+
+            // Declaration-driven everywhere-derive registration: for each protocol P carrying a
+            // `needs P everywhere` self-constraint that this type OPTS INTO (`obeys P`) AND structurally
+            // satisfies (every member obeys P), register P's non-generated templated members (cmp/eq/…)
+            // from P's own declared signatures. Replaces the per-protocol hardcoded stubs above with the
+            // rule read straight from the stdlib protocol declaration (the `everywhere` self-constraint).
+            RegisterEverywhereDeriveMembers(type: type);
         }
 
         // Source location and caller standalone routines (injected at call site by codegen)
@@ -740,6 +746,170 @@ internal sealed class AutoWiredRegistrationPass
     /// <summary>
     /// Registers a single-parameter readonly wired routine if not already defined.
     /// </summary>
+    /// <summary>
+    /// Registers the auto-derive member routines conferred by every <c>needs P everywhere</c> protocol the
+    /// type opts into. The rule is read from the stdlib protocol declaration, not hardcoded per protocol:
+    /// a protocol with an <c>everywhere</c> self-constraint (Equatable/Comparable/Hashable/Assignable/…),
+    /// that <paramref name="type"/> both OBEYS (opt-in) and structurally satisfies (<see
+    /// cref="TypeRegistry.EverywhereObeys"/> — every member obeys P), contributes each of its non-generated
+    /// members that has a universal derive body. The member's signature comes from the protocol declaration,
+    /// with the protocol-self type (<c>Me</c>) substituted to the concrete type. Generated operators
+    /// (lt/le/gt/ge, ne) are skipped — DerivedOperatorPass produces them from cmp/eq. Wrappers are excluded
+    /// (they override/forward eq/hash/cmp from their inner T). Idempotent via a live own-member check, so it
+    /// never double-registers a member the type already declares or an earlier pass registered.
+    /// </summary>
+    /// <summary>Adds <paramref name="proto"/> and its full transitive parent chain to
+    /// <paramref name="into"/> (canonical registry instances), keyed by name.</summary>
+    private void AddProtocolAndParents(ProtocolTypeInfo proto,
+        Dictionary<string, ProtocolTypeInfo> into)
+    {
+        // Resolve the canonical instance so GenericConstraints / MemberRoutines / ParentProtocols are
+        // populated (an ImplementedProtocols / ParentProtocols entry may be a lightweight reference).
+        ProtocolTypeInfo canonical =
+            _registry.LookupType(name: proto.Name) as ProtocolTypeInfo ?? proto;
+        if (!into.TryAdd(key: canonical.Name, value: canonical))
+        {
+            return;
+        }
+
+        foreach (ProtocolTypeInfo parent in canonical.ParentProtocols)
+        {
+            AddProtocolAndParents(proto: parent, into: into);
+        }
+    }
+
+    private void RegisterEverywhereDeriveMembers(TypeSymbol type)
+    {
+        if (type.IsNone || IsWrapperType(type: type))
+        {
+            return;
+        }
+
+        // A GENERIC DEFINITION (Maybe[T]/Result[T]/user generic obeying P) IS processed: registering the
+        // derive on the DEF is what lets GMP monomorphize it onto each concrete instance. Its everywhere
+        // condition is DEFERRED to instantiation (a generic-param member obeys P only for a concrete arg),
+        // so the EverywhereObeys gate below is skipped for a def — the def carries the derive's
+        // `needs T obeys P` constraint, and a non-conforming instance simply never emits a used body.
+        bool isGenericDef = type.IsGenericDefinition;
+
+        // memberCount drives the 0-memvar rule below (per member, not a whole-type skip).
+        int memberCount = type switch
+        {
+            RecordTypeInfo r => r.MemberVariables?.Count ?? 0,
+            EntityTypeInfo e => e.MemberVariables?.Count ?? 0,
+            _ => 0
+        };
+
+        // Record/Choice/Flags/Crashable all carry ImplementedProtocols on RecordTypeInfo (their base);
+        // entities on EntityTypeInfo. Mirrors ProtocolConformanceAnalyzer.GetImplementedProtocols.
+        List<TypeSymbol> obeyed = type switch
+        {
+            RecordTypeInfo r => r.ImplementedProtocols,
+            EntityTypeInfo e => e.ImplementedProtocols,
+            _ => []
+        };
+
+        // Every obeyed protocol + its parent chain. The structural-vs-opt-in split is enforced by the
+        // CONFERRAL layer, not here: Assignable/Copyable are auto-conferred (so a value record obeys them
+        // and gets assign/copy), while Equatable/Comparable/Hashable are NOT auto-conferred (so only a type
+        // that explicitly `obeys` them appears here and gets eq/cmp/hash). Marker protocols (RecordType/…)
+        // also appear but are filtered below — they carry no `everywhere` self-constraint.
+        var explicitClosure = new Dictionary<string, ProtocolTypeInfo>(comparer: StringComparer.Ordinal);
+        foreach (TypeSymbol protoRef in obeyed)
+        {
+            if (_registry.LookupType(name: protoRef.Name) is ProtocolTypeInfo obeyedProto)
+            {
+                AddProtocolAndParents(proto: obeyedProto, into: explicitClosure);
+            }
+        }
+
+        foreach (ProtocolTypeInfo p in explicitClosure.Values)
+        {
+            if (p.GenericConstraints?.Any(predicate: c =>
+                    c.ConstraintType == SyntaxTree.ConstraintKind.Everywhere) != true)
+            {
+                continue;
+            }
+
+            // Opt-in is not enough: for a CONCRETE type the derive is only VALID when every member obeys P
+            // (its bodies field-walk into `member.cmp/eq/…`). A concrete type that declares `obeys P` but
+            // fails this is a conformance error surfaced elsewhere; we simply don't fabricate an ill-typed
+            // body. A generic DEF defers this to instantiation (see isGenericDef above).
+            if (!isGenericDef && !_registry.EverywhereObeys(type: type, protocol: p.Name))
+            {
+                continue;
+            }
+
+            foreach (ProtocolMemberRoutineInfo member in p.MemberRoutines)
+            {
+                // Register only the BASE wired derive of the protocol (cmp/eq/hash/assign) — never a
+                // DERIVED operator (lt/le/gt/ge from cmp, ne from eq). The catalog is the declarative
+                // source: a derived operator's `CapabilityWired` points at its base (≠ its own name);
+                // a base derive's points at itself. DerivedOperatorPass produces the operators from the
+                // base, so registering them here as bodyless stubs would shadow those real bodies. (The
+                // protocol member's own GenerationKind is unreliable at this pre-pass timing, and the
+                // derive-template store isn't populated yet — the static catalog is authoritative.)
+                if (member.HasDefaultImplementation || !member.IsInstanceMemberRoutine ||
+                    !Compiler.Resolution.WiredRoutineCatalog.TryGet(name: member.Name, entry: out WiredEntry we) ||
+                    we.CapabilityWired != member.Name)
+                {
+                    continue;
+                }
+
+                // 0-memvar rule (per member, not per type): a field-less type (an `@llvm` scalar like U64,
+                // an empty record, choice/flags) has no members to walk, so a FIELD-WALK derive (eq/cmp/hash
+                // → returns Bool/ComparisonSign/U64) would produce a WRONG empty-walk body (`return true` /
+                // `SAME` / `0`) — such a type must IMPLEMENT those itself (`@override`). But an IDENTITY
+                // derive (assign/copy → returns `Me`) is CORRECT as `return me` even with no members, so it
+                // still auto-derives. Signal = the member's return type is the self type (`Me`). This is what
+                // gives every 0-memvar `obeys Assignable` primitive its trivial `assign`/`copy`.
+                if (memberCount == 0 && member.ReturnType is not ProtocolSelfTypeInfo)
+                {
+                    continue;
+                }
+
+                // Uniform "already provided" check — NO type-category special rule: skip when the type
+                // already resolves a CONCRETE (non-abstract) impl of this member, whether a hand-written
+                // routine, an earlier hardcoded stub, or a native/wired op on an @llvm scalar (U64.cmp etc.).
+                // A resolution to the ABSTRACT protocol member (OwnerType is a protocol) does NOT count —
+                // that is the obligation this derive fulfils. Mirrors ComputeCapability's `direct` check.
+                if (_registry.LookupMemberRoutine(type: type, memberRoutineName: member.Name) is
+                        { OwnerType: not ProtocolTypeInfo })
+                {
+                    continue;
+                }
+
+                // Build the stub from the protocol's declared signature, substituting the self type.
+                var parameters = new List<ParameterInfo>();
+                for (int i = 0; i < member.ParameterTypes.Count; i++)
+                {
+                    TypeSymbol pt = member.ParameterTypes[index: i] is ProtocolSelfTypeInfo
+                        ? type
+                        : member.ParameterTypes[index: i];
+                    string pn = i < member.ParameterNames.Count ? member.ParameterNames[index: i] : $"arg{i}";
+                    parameters.Add(item: new ParameterInfo(name: pn, type: pt));
+                }
+
+                TypeSymbol? returnType = member.ReturnType is ProtocolSelfTypeInfo
+                    ? type
+                    : member.ReturnType;
+
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: member.Name)
+                {
+                    Kind = RoutineKind.MemberRoutine,
+                    OwnerType = type,
+                    Parameters = parameters,
+                    ReturnType = returnType,
+                    IsFailable = member.IsFailable,
+                    DeclaredMutation = member.Mutation,
+                    MutationCategory = member.Mutation,
+                    Visibility = VisibilityModifier.Open,
+                    IsSynthesized = true
+                });
+            }
+        }
+    }
+
     private void MaybeRegisterWiredWithParam(TypeSymbol owner, string name, string paramName,
         TypeSymbol paramType, TypeSymbol returnType, List<RoutineInfo> existingMemberRoutines)
     {

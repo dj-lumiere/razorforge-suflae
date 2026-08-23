@@ -768,14 +768,14 @@ public partial class LlvmCodeGenerator
             return convResult;
         }
 
-        // Inspecting[T, P] / Claiming[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
+        // Consulting[T, P] / Amending[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
         // ShareController[T, P], NOT the guarded entity. When the resolved memberRoutine is a FORWARDED entity
         // memberRoutine (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
         // project the receiver through `controller.data`. Token-own memberRoutines (enter/exit/refer/
         // control/represent/diagnose/destroy, owned by the token itself) keep the controller ptr.
         if (memberRoutine is { OwnerType: { } memberRoutineOwner } &&
             receiverType is RecordTypeInfo tokenRec &&
-            GetGenericBaseName(type: tokenRec) is Resolution.RuntimeContract.Inspecting or Resolution.RuntimeContract.Claiming &&
+            GetGenericBaseName(type: tokenRec) is Resolution.RuntimeContract.Consulting or Resolution.RuntimeContract.Amending &&
             tokenRec.TypeArguments is { Count: > 1 } &&
             tokenRec.TypeArguments[index: 0] is EntityTypeInfo tokenInner &&
             memberRoutineOwner.FullName == tokenInner.FullName)

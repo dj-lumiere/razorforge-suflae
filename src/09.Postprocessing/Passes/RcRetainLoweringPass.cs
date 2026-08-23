@@ -57,9 +57,18 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     {
         foreach (string key in ctx.VariantBodies.Keys.ToList())
         {
+            _inCopyDeriveBody = IsCopyDeriveKey(key: key);
             LowerBody(ctx.VariantBodies[key]);
         }
+        _inCopyDeriveBody = false;
     }
+
+    /// <summary>True when a synthesized-body key is a `copy`/`assign` DERIVE — one that CONSTRUCTS a fresh
+    /// value (`var result = me; result.field = me.field.assign(); return result`). Inside such a body a
+    /// field write is initializing a just-copied slot, NOT overwriting a live-held one, so it must NOT get a
+    /// reassignment release-old (that would destroy the bitwise-aliased field and corrupt the source's RC).</summary>
+    private static bool IsCopyDeriveKey(string key) =>
+        key.Contains(value: ".assign") || key.Contains(value: ".copy");
 
     /// <summary>
     /// Inserts RC copy-verb bumps into instantiated generic routine bodies. GMP populates these
@@ -75,8 +84,10 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
         {
             MonomorphizedBody entry = instantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
+            _inCopyDeriveBody = IsCopyDeriveKey(key: key);
             LowerBody(entry.Ast.Body);
         }
+        _inCopyDeriveBody = false;
     }
 
     private void LowerDeclaration(SyntaxTree.Declaration decl)
@@ -122,10 +133,18 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
             // A Roamed[T] entity-field reassignment overwrites a handle that owns a strong reference:
             // snapshot the OLD value BEFORE the store, release it AFTER the retain-new bump. Retain
             // (the RHS `.share()`) before release keeps a self-assignment from freeing mid-swap.
-            (Statement? preRelease, Statement? postRelease) = ReassignRelease(stmt: stmt);
+            // SKIPPED inside a copy/assign derive body: there the field write initializes a fresh copy
+            // (the slot holds a bitwise alias from `var result = me`, not an owned old value), so a
+            // release-old would destroy the alias and drop the SOURCE's refcount → heap corruption.
+            (Statement? preRelease, Statement? postRelease) =
+                _inCopyDeriveBody ? (null, null) : ReassignRelease(stmt: stmt);
             if (preRelease is not null) rewritten.Add(item: preRelease);
             rewritten.Add(item: stmt);
-            rewritten.AddRange(collection: CollectBumps(stmt));
+            // Retain-new (CollectBumps) is SYMMETRICALLY suppressed inside a copy/assign derive body: there
+            // the explicit `me.field.assign()` RHS already performs the hold/share, so an extra per-field
+            // retain here would DOUBLE-count — the copy ends up over-held and teardown double-frees (the
+            // bundle-only heap corruption). The derive body owns its own RC balance end-to-end.
+            if (!_inCopyDeriveBody) rewritten.AddRange(collection: CollectBumps(stmt));
             if (postRelease is not null) rewritten.Add(item: postRelease);
         }
         block.Statements.Clear();
@@ -139,6 +158,10 @@ internal sealed class RcRetainLoweringPass(PostprocessingContext ctx)
     // field-write releases. -----------------------------------------------------------------------
 
     private int _reoldCounter;
+
+    /// <summary>Set while lowering a `copy`/`assign` derive body (see <see cref="IsCopyDeriveKey"/>) — its
+    /// field writes construct a fresh copy, so they get NO reassignment release-old.</summary>
+    private bool _inCopyDeriveBody;
 
     private (Statement? Pre, Statement? Post) ReassignRelease(Statement stmt) => stmt switch
     {

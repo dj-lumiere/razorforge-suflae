@@ -28,7 +28,8 @@ public sealed partial class SemanticVerifier
             if (builderServiceImported) break;
         }
 
-        new AutoWiredRegistrationPass(_registry).Run(builderServiceImported: builderServiceImported);
+        new AutoWiredRegistrationPass(_registry, implicitConformances: _implicitProtocolConformances)
+            .Run(builderServiceImported: builderServiceImported);
     }
 
     #endregion

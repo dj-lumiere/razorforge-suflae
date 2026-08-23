@@ -149,8 +149,8 @@ public static class BackendReprResolver
         {
             RuntimeContract.Viewing => PointerFlavor.Viewing,
             RuntimeContract.Modifying => PointerFlavor.Modifying,
-            RuntimeContract.Inspecting => PointerFlavor.Inspecting,
-            RuntimeContract.Claiming => PointerFlavor.Claiming,
+            RuntimeContract.Consulting => PointerFlavor.Consulting,
+            RuntimeContract.Amending => PointerFlavor.Amending,
             RuntimeContract.Retained => PointerFlavor.Retained,
             RuntimeContract.Tracked => PointerFlavor.Tracked,
             RuntimeContract.Shared => PointerFlavor.Shared,

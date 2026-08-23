@@ -164,7 +164,7 @@ internal sealed class TypeBodyResolver
                 // Records can contain: value types, entity/crashable REFERENCE fields (entities are
                 // pointer-shaped reference types, so the field stores a reference), generic parameters,
                 // and Assignable wrappers (Hijacked, Retained, Shared, Tracked, Watched). Scoped access
-                // tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the Assignable set.
+                // tokens (Viewing, Modifying, Consulting, Amending) are wrappers NOT in the Assignable set.
                 bool isReferenceTyped =
                     memberVariableType?.Category == TypeCategory.Entity ||
                     memberVariableType?.Category == TypeCategory.Crashable;

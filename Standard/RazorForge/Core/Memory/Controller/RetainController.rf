@@ -73,7 +73,7 @@ routine RetainController[T].should_deallocate_controller() -> Bool
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-routine RetainController[T].borrow_data() -> Hijacked[T]
+routine RetainController[T].raw_data() -> Hijacked[T]
   return me.data
 
 ### Destroys the managed entity. Call only when strong count reaches zero.

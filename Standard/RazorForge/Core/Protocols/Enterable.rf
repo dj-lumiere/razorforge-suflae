@@ -15,7 +15,7 @@ module Core
 ### guard that blocks, or a no-op — is a valid implementation. A resource whose acquisition can
 ### error expresses that in a failable factory (`open!`) consumed as the `using` resource; `enter`
 ### itself usually just returns `me`.
-### :see: {Inspecting}, {Claiming}, {FileHandle}
+### :see: {Consulting}, {Amending}, {FileHandle}
 protocol Enterable
   ### Called on entry to the `using` scope. Returns the value the scope binds (usually `me`).
   ### :returns: The entered value as `?Me`.

@@ -65,7 +65,7 @@ public enum TypeCategory
     /// <summary>Builder-generated tuple types (always inline LLVM structs).</summary>
     Tuple,
 
-    /// <summary>Builder-synthesized wrapper types (Viewing, Modifying, Retained, Tracked, Shared, Watched, Inspecting, Claiming, Hijacked).</summary>
+    /// <summary>Builder-synthesized wrapper types (Viewing, Modifying, Retained, Tracked, Shared, Watched, Consulting, Amending, Hijacked).</summary>
     Wrapper,
 
     /// <summary>Compile-time constant value used as a generic argument (e.g., 4 in Array[S64, 4]).</summary>

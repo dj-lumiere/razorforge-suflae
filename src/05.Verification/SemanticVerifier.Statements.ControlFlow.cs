@@ -700,7 +700,7 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeUsingStatement(UsingStatement usingStmt)
     {
-        // Mark the resource node so a multi-threaded access token (Inspecting/Claiming) produced
+        // Mark the resource node so a multi-threaded access token (Consulting/Amending) produced
         // directly here is accepted; the same token produced anywhere else is rejected (RF-S629),
         // keeping its lock strictly `using`-scoped. Save/restore to support nested `using`.
         ISyntaxTreeNode? previousUsingResource = _usingResourceNode;
@@ -711,17 +711,17 @@ public sealed partial class SemanticVerifier
 
         // Readers-XOR-writer (RF-S630): if this `using` opens an MT access token on a named Shared
         // handle, check it against the holds already live in the enclosing `using` scopes on the SAME
-        // handle. A writer (`claim`) conflicts with any other hold; readers (`inspect`) coexist.
+        // handle. A writer (`amend`) conflicts with any other hold; readers (`consult`) coexist.
         // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
         // scopes conflict (sequential `using`s on the same handle are fine).
         string accessBase = resourceType.BareName;
-        bool opensAccessToken = accessBase is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming;
+        bool opensAccessToken = accessBase is Compiler.Resolution.RuntimeContract.Consulting or Compiler.Resolution.RuntimeContract.Amending;
         string? accessHandle = opensAccessToken
             ? ExtractAccessReceiverName(resource: usingStmt.Resource)
             : null;
         if (accessHandle != null)
         {
-            bool isWriter = accessBase == Compiler.Resolution.RuntimeContract.Claiming;
+            bool isWriter = accessBase == Compiler.Resolution.RuntimeContract.Amending;
             int accessIdentity = GetOrAssignHandleIdentity(path: accessHandle);
             foreach ((string Handle, int Identity, bool IsWriter, SourceLocation Location) hold
                      in _activeAccessHolds)
@@ -733,8 +733,8 @@ public sealed partial class SemanticVerifier
                                   PathsOverlap(a: hold.Handle, b: accessHandle);
                 if (!sameMemory || (!isWriter && !hold.IsWriter))
                     continue;
-                string newKind = isWriter ? "claim()" : "inspect()";
-                string heldKind = hold.IsWriter ? "claim()" : "inspect()";
+                string newKind = isWriter ? "amend()" : "consult()";
+                string heldKind = hold.IsWriter ? "amend()" : "consult()";
                 string overlapNote = hold.Handle == accessHandle
                     ? "the same shared handle"
                     : hold.Identity == accessIdentity
@@ -743,8 +743,8 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.ReadersXorWriter,
                     message:
                     $"'{newKind}' on '{accessHandle}' conflicts with an active '{heldKind}' on " +
-                    $"{overlapNote} in an enclosing 'using' scope. A writer ('claim') excludes all other " +
-                    "access; readers ('inspect') may coexist only with other readers.",
+                    $"{overlapNote} in an enclosing 'using' scope. A writer ('amend') excludes all other " +
+                    "access; readers ('consult') may coexist only with other readers.",
                     location: usingStmt.Location);
                 break;
             }
@@ -825,10 +825,10 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Extracts a path key for the Shared handle of an `inspect`/`claim` access expression — the
-    /// receiver of `s.inspect()` / `s.claim()`, as a dotted path so distinct fields are distinct
-    /// handles: `s` → "s", `s.a` → "s.a". This makes `s.a.claim()` and `s.b.claim()` independent
-    /// (both claimable in one scope) while `s.a` claimed twice still conflicts. Returns null for
+    /// Extracts a path key for the Shared handle of an `consult`/`amend` access expression — the
+    /// receiver of `s.consult()` / `s.amend()`, as a dotted path so distinct fields are distinct
+    /// handles: `s` → "s", `s.a` → "s.a". This makes `s.a.amend()` and `s.b.amend()` independent
+    /// (both amendable in one scope) while `s.a` amended twice still conflicts. Returns null for
     /// receivers that aren't a pure identifier/field path (indexing, call results), which the
     /// readers-XOR-writer check conservatively skips (no false positives).
     /// </summary>

@@ -17,7 +17,7 @@ public sealed partial class SemanticVerifier
     private const string UseWhenHint = "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).";
     private const string NoneTypeName = "None";
     private const string ModifyMemberRoutineName = "modify";
-    private const string InspectMemberRoutineName = "inspect";
+    private const string ConsultMemberRoutineName = "consult";
 
     /// <summary>
     /// Enforces the realm gate at a free-routine call site: a FOREIGN routine (C extern / LLVM intrinsic)
@@ -212,6 +212,25 @@ public sealed partial class SemanticVerifier
                         genericDef: routine, typeArguments: resolvedTypeArguments);
                     if (monomorphized != null)
                         routine = monomorphized;
+                }
+
+                // Generic overload disambiguation by arity: several generic free routines can share one
+                // name (e.g. `zip(a,b)` / `zip(a,b,c)` / `zip(a,b,c,d)`), but the first-wins name lookup
+                // returns a single instance. When that instance is a generic definition whose parameter
+                // count doesn't match the call, re-resolve to the same-name generic overload with the
+                // matching arity so inference below runs against the right template.
+                if (routine is { IsGenericDefinition: true, IsVariadic: false } &&
+                    (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                    routine.Parameters.Count != call.Arguments.Count)
+                {
+                    RoutineInfo? arityGeneric =
+                        _registry.LookupGenericOverload(name: callName,
+                            preferredArity: call.Arguments.Count)
+                        ?? _registry.LookupGenericOverload(name: routine.BaseName,
+                            preferredArity: call.Arguments.Count);
+                    if (arityGeneric is { IsVariadic: false } &&
+                        arityGeneric.Parameters.Count == call.Arguments.Count)
+                        routine = arityGeneric;
                 }
 
                 // Implicit type-argument inference for a generic routine call without explicit `[...]`.
@@ -669,7 +688,7 @@ public sealed partial class SemanticVerifier
                         arguments: call.Arguments,
                         location: call.Location);
 
-                    // Validate exclusive token uniqueness (cannot pass same Modifying/Claiming twice)
+                    // Validate exclusive token uniqueness (cannot pass same Modifying/Amending twice)
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 
@@ -846,6 +865,47 @@ public sealed partial class SemanticVerifier
                 // This is done after type creator check to avoid shadowing type creators
                 // with identically-named convenience functions (e.g., "routine U32(from: U8)")
                 routine = LookupRoutineWithImports(name: callName);
+
+                // Generic overload disambiguation by arity for an import-resolved routine: several
+                // generic free routines can share one name (e.g. `zip(a,b)` / `zip(a,b,c)` /
+                // `zip(a,b,c,d)` in IterTools). The import lookup returns a single arbitrary-arity
+                // instance; when its parameter count doesn't match the call, re-resolve to the
+                // same-name generic overload with the matching arity so inference below runs against
+                // the right template.
+                if (routine is { IsGenericDefinition: true, IsVariadic: false } &&
+                    (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                    routine.Parameters.Count != call.Arguments.Count)
+                {
+                    RoutineInfo? arityGeneric =
+                        _registry.LookupGenericOverload(name: callName,
+                            preferredArity: call.Arguments.Count)
+                        ?? _registry.LookupGenericOverload(name: routine.BaseName,
+                            preferredArity: call.Arguments.Count);
+                    if (arityGeneric is { IsVariadic: false } &&
+                        arityGeneric.Parameters.Count == call.Arguments.Count)
+                        routine = arityGeneric;
+                }
+
+                // Import-resolved generic routine with matching arity but no explicit type args:
+                // infer type arguments so the resolved routine is concrete (mirrors the
+                // module-local inference path above). Without this, an import-resolved `zip(a,b)`
+                // keeps its generic definition and RF-S161 fires downstream.
+                if (routine is { IsGenericDefinition: true } &&
+                    (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                    routine.GenericParameters is { Count: > 0 } &&
+                    call.Arguments.Count == routine.Parameters.Count)
+                {
+                    List<TypeInfo>? inferredImportGen =
+                        InferGenericTypeArguments(genericRoutine: routine,
+                            arguments: call.Arguments, expectedType: expectedType);
+                    if (inferredImportGen != null)
+                    {
+                        RoutineInfo? monomorphized = _registry.GetOrCreateRoutineResolution(
+                            genericDef: routine, typeArguments: inferredImportGen);
+                        if (monomorphized != null)
+                            routine = monomorphized;
+                    }
+                }
 
                 // Overload resolution for import-resolved routines (e.g., show[T] from IO/Console)
                 if (routine is { IsGenericDefinition: false } && call.Arguments.Count > 0 &&
@@ -1422,13 +1482,13 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #170: Downgrade prohibition — cannot call .view() on Modifying/Claiming
+                    // #170: Downgrade prohibition — cannot call .view() on Modifying/Amending
                     if (member.MemberName == "view" && (IsModifyingType(type: objectType) ||
-                                                          IsClaimingType(type: objectType)))
+                                                          IsAmendingType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.TokenDowngradeProhibited,
                             message: $"Cannot downgrade '{objectType.Name}' with '.view()'. " +
-                                     "Modifying/Claiming tokens already have write access — use them directly.",
+                                     "Modifying/Amending tokens already have write access — use them directly.",
                             location: call.Location);
                     }
 
@@ -1450,29 +1510,29 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // NOTE: `inspect()` / `claim()` are ordinary `Shared[T, P]` memberRoutines now —
+                    // NOTE: `consult()` / `amend()` are ordinary `Shared[T, P]` memberRoutines now —
                     // resolution + the `needs P in [...]` type-equality constraint (RF-S160) enforce
-                    // policy legality (inspect not on Exclusive, claim not on ReadOnly), and the
+                    // policy legality (consult not on Exclusive, amend not on ReadOnly), and the
                     // scoped-token / `using`-binding rules enforce lifetime. The earlier ad-hoc
-                    // inspect!/claim! validation (a variable→policy side-table that did not recognize
+                    // consult!/amend! validation (a variable→policy side-table that did not recognize
                     // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
 
                     // Enforce a memberRoutine's `needs P in [...]` (TypeEquality) constraint when the
                     // constrained parameter is INHERITED FROM THE RECEIVER (e.g.
-                    // `Shared[T, P].claim() needs P in [Exclusive, MultiRead]`, with P bound by the
+                    // `Shared[T, P].amend() needs P in [Exclusive, MultiRead]`, with P bound by the
                     // receiver `Shared[Counter, ReadOnly]`). The general constraint validator only
                     // fires for explicitly-instantiated generics, so a receiver-bound param — which
                     // carries no explicit type args at the call site — is validated here instead.
                     ValidateReceiverInheritedTypeEqualityConstraints(memberRoutine: memberRoutine,
                         receiverType: objectType, member: member, location: call.Location);
 
-                    // A multi-threaded access token (Inspecting/Claiming, produced by
-                    // inspect()/claim()) is only legal as the immediate resource of a `using` block,
+                    // A multi-threaded access token (Consulting/Amending, produced by
+                    // consult()/amend()) is only legal as the immediate resource of a `using` block,
                     // so its lock spans exactly that scope. Reject every other position — inline use,
                     // a function argument, an unbound statement — with RF-S629. (The "cannot bind to a
                     // var" half is already enforced for inline-only tokens at var-declaration sites.)
                     if (memberRoutine.ReturnType is { } mtReturn &&
-                        mtReturn.BareName is Compiler.Resolution.RuntimeContract.Inspecting or Compiler.Resolution.RuntimeContract.Claiming &&
+                        mtReturn.BareName is Compiler.Resolution.RuntimeContract.Consulting or Compiler.Resolution.RuntimeContract.Amending &&
                         !ReferenceEquals(objA: call, objB: _usingResourceNode))
                     {
                         ReportError(code: SemanticDiagnosticCode.MtTokenRequiresUsing,
@@ -1524,7 +1584,7 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // Validate exclusive token uniqueness (cannot pass same Modifying/Claiming twice)
+                    // Validate exclusive token uniqueness (cannot pass same Modifying/Amending twice)
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 
@@ -1940,7 +2000,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Validates a called memberRoutine's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
     /// constraints when the constrained parameter is inherited from the receiver type rather than
-    /// supplied as an explicit type argument — e.g. <c>Shared[T, P].claim() needs P in [Exclusive,
+    /// supplied as an explicit type argument — e.g. <c>Shared[T, P].amend() needs P in [Exclusive,
     /// MultiRead]</c> called on a <c>Shared[Counter, ReadOnly]</c>. The standard constraint validator
     /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/memberRoutine is
     /// explicitly instantiated, so receiver-bound parameters would otherwise go unchecked.

@@ -9,7 +9,7 @@ using static TestHelpers;
 /// Tests for the generalized <c>needs T in [Types]</c> (type-equality) constraint when the
 /// constrained parameter is INHERITED FROM THE RECEIVER rather than supplied as an explicit type
 /// argument at the call site — e.g. <c>Box[T].only_ab() needs T in [Alpha, Beta]</c> called on a
-/// <c>Box[Gamma]</c>, or the stdlib <c>Shared[T, P].claim() needs P in [Exclusive, MultiRead]</c>.
+/// <c>Box[Gamma]</c>, or the stdlib <c>Shared[T, P].amend() needs P in [Exclusive, MultiRead]</c>.
 ///
 /// Such constraints used to be silently dropped during memberRoutine resolution (the resolved instance
 /// memberRoutine kept only constraints on its OWN generic params, discarding owner-param constraints), so
@@ -67,7 +67,7 @@ public class ReceiverInheritedConstraintTests
 
     #endregion
 
-    #region Stdlib lock-policy instantiation (Shared[T, P].inspect/claim)
+    #region Stdlib lock-policy instantiation (Shared[T, P].consult/amend)
 
     private const string LockPrelude = """
                                        import IO/Console
@@ -84,7 +84,7 @@ public class ReceiverInheritedConstraintTests
         string source = LockPrelude + """
                                       routine start()
                                         var s = Shared[Counter, ReadOnly](from: Counter(value: 1))
-                                        using s.claim() as c
+                                        using s.amend() as c
                                           show("nope")
                                         return
                                       """;
@@ -101,7 +101,7 @@ public class ReceiverInheritedConstraintTests
         string source = LockPrelude + """
                                       routine start()
                                         var s = Shared[Counter, Exclusive](from: Counter(value: 1))
-                                        using s.inspect() as v
+                                        using s.consult() as v
                                           show("nope")
                                         return
                                       """;
@@ -120,9 +120,9 @@ public class ReceiverInheritedConstraintTests
 
                                       routine start()
                                         var s = Shared[Counter, MultiRead](from: Counter(value: 10))
-                                        using s.inspect() as v
+                                        using s.consult() as v
                                           show(f"value: {v.value}")
-                                        using s.claim() as c
+                                        using s.amend() as c
                                           c.bump(inc: 5)
                                         return
                                       """;
@@ -141,7 +141,7 @@ public class ReceiverInheritedConstraintTests
 
                                       routine start()
                                         var s = Shared[Counter, Exclusive](from: Counter(value: 1))
-                                        using s.claim() as c
+                                        using s.amend() as c
                                           c.bump(inc: 1)
                                         return
                                       """;
@@ -156,7 +156,7 @@ public class ReceiverInheritedConstraintTests
         string source = LockPrelude + """
                                       routine start()
                                         var s = Shared[Counter, ReadOnly](from: Counter(value: 1))
-                                        using s.inspect() as v
+                                        using s.consult() as v
                                           show(f"{v.value}")
                                         return
                                       """;

@@ -71,7 +71,7 @@ routine Retained[T].weak_count() -> U32
 routine Retained[T].access() -> T
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
-    return ctrl.borrow_data().as_entity()
+    return ctrl.raw_data().as_entity()
 
 ### Yields the inner entity as an in-flight `T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
@@ -80,7 +80,7 @@ routine Retained[T].access() -> T
 routine Retained[T].control() -> T
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
-    return ctrl.borrow_data().as_entity()
+    return ctrl.raw_data().as_entity()
 
 # ============================================================================
 # Display (transparent — delegates to inner value)
@@ -92,7 +92,7 @@ routine Retained[T].control() -> T
 routine Retained[T].represent() -> Text
   danger
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
-    return ctrl.borrow_data().as_entity().represent()
+    return ctrl.raw_data().as_entity().represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -102,8 +102,8 @@ routine Retained[T].diagnose() -> Text
     var ctrl = Hijacked[RetainController[T]](me).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
-    var addr = ctrl.borrow_data().get_address()
-    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl.borrow_data().as_entity().diagnose() + ")"
+    var addr = ctrl.raw_data().get_address()
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ", " + ctrl.raw_data().as_entity().diagnose() + ")"
 
 ### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
 ### reach zero). This IS the decrement — there is no separate `release` verb; `destroy` is the teardown.

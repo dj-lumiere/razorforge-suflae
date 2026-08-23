@@ -43,13 +43,13 @@ public class MarkerConformanceTests
     {
         // represent/diagnose/serialize are UNIVERSAL built-in operations (every value has them) — no
         // longer opt-in protocols, so a record does NOT "obey Representable/Diagnosable/Serializable"
-        // (those protocols were removed). Equatable/Comparable/Hashable ARE still opt-in, conferred by
-        // the `needs P everywhere` structural gate: a record auto-obeys P iff EVERY member obeys P, and
-        // the auto-derived `eq`/`cmp`/`hash` supply a real body (no bodyless-promise LINKERR).
-        // `Point{x: S32, y: S32}` — S32 obeys Ordered (→ Equatable, Comparable) and Hashable — so Point
-        // auto-conforms all three.
+        // (those protocols were removed). Equatable/Comparable/Hashable are OPT-IN: a record must
+        // DECLARE `obeys P`, and then the `needs P everywhere` structural gate confers a real
+        // auto-derived body iff EVERY member obeys P (no bodyless-promise LINKERR). `Point obeys
+        // Equatable, Comparable, Hashable` with `x/y: S32` — S32 obeys Ordered (→ Equatable,
+        // Comparable) and Hashable — so the gate passes and Point conforms all three with derived bodies.
         string source = """
-                        record Point
+                        record Point obeys Equatable, Comparable, Hashable
                           x: S32
                           y: S32
                         """;
@@ -59,8 +59,8 @@ public class MarkerConformanceTests
 
         var record = (RecordTypeInfo)result.Registry.LookupType(name: "Point")!;
 
-        // Equatable/Comparable/Hashable ARE conferred via `needs P everywhere` (all members are S32,
-        // which obeys them) — the auto-derive gives each a real body.
+        // Point opts into Equatable/Comparable/Hashable; the `needs P everywhere` gate passes (all
+        // members are S32, which obeys them) so each gets a real auto-derived body.
         Assert.Contains(collection: record.ImplementedProtocols,
             filter: p => p.Name == "Equatable");
         Assert.Contains(collection: record.ImplementedProtocols,

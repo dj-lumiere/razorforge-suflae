@@ -6,7 +6,7 @@ module Core
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
 ### Also holds the access-discipline lock `P` (a {LockPolicy}). The lock state lives here — at the one
-### address every handle references — so `inspect()`/`claim()` (a later phase) synchronize correctly.
+### address every handle references — so `consult()`/`amend()` (a later phase) synchronize correctly.
 ### Selected by monomorphization: `ReadOnly` is zero-sized (no overhead), `Exclusive`/`MultiRead` carry
 ### their atomic flags.
 ### :typeparam T: The exclusively owned entity type.
@@ -79,11 +79,11 @@ routine ShareController[T, P].weak_count() -> U64
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-routine ShareController[T, P].borrow_data() -> Hijacked[T]
+routine ShareController[T, P].raw_data() -> Hijacked[T]
   return me.data
 
 # ============================================================================
-# Access-discipline lock — drives `Shared.inspect()` / `Shared.claim()`. The lock state lives
+# Access-discipline lock — drives `Shared.consult()` / `Shared.amend()`. The lock state lives
 # here, at the single address every handle shares, so synchronization is correct across threads.
 # Each call delegates to the monomorphized policy `P` (no runtime dispatch).
 # ============================================================================
@@ -108,12 +108,12 @@ routine ShareController[T, P].remove_claimer()
   me.lock.remove_claimer()
   return
 
-### Non-blocking inspector admission through the lock (drives `Shared.try_inspect`).
+### Non-blocking inspector admission through the lock (drives `Shared.try_consult`).
 ### :returns: `true` if a read hold was taken without waiting.
 routine ShareController[T, P].try_add_inspector() -> Bool
   return me.lock.try_add_inspector()
 
-### Non-blocking claimer admission through the lock (drives `Shared.try_claim`).
+### Non-blocking claimer admission through the lock (drives `Shared.try_amend`).
 ### :returns: `true` if the exclusive hold was taken without waiting.
 routine ShareController[T, P].try_add_claimer() -> Bool
   return me.lock.try_add_claimer()

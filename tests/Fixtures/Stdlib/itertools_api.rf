@@ -34,10 +34,20 @@ routine start()
   each pair in labels.enumerate()
     show(f"  enum: {pair.item0} -> {pair.item1}")
 
-  # zip
+  # zip (arity 2)
   var nums: List[S64] = [10, 20, 30]
-  each pair in labels.zip(you: nums)
+  each pair in zip(a: labels, b: nums)
     show(f"  zip: {pair.item0}={pair.item1}")
+
+  # zip (arity 3) — stops at shortest source
+  var bits: List[Bool] = [true, false, true, false]
+  each triple in zip(a: labels, b: nums, c: bits)
+    show(f"  zip3: {triple.item0}={triple.item1}/{triple.item2}")
+
+  # zip (arity 4) — stops at shortest source
+  var marks: List[Text] = ["!", "?", ".", ",", ";"]
+  each quad in zip(a: labels, b: nums, c: bits, d: marks)
+    show(f"  zip4: {quad.item0}={quad.item1}/{quad.item2}/{quad.item3}")
 
   # Terminals: any / all / get_count / first / last
   show(f"any > 5: {src.any(predicate: x => x > 5_s64)}")

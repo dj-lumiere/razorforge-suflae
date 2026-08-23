@@ -10,7 +10,7 @@ using static TestHelpers;
 /// and — under M:N — a `suspended routine` yields a coroutine that may migrate to any worker in
 /// parallel with its siblings, so BOTH boundaries enforce the same crossing rule: an argument is
 /// safe when it is `steal`-moved (exclusive transfer), trivially-copyable value data (passed BY
-/// VALUE), or a thread-shareable wrapper (Atomic/Shared/Watched/Inspecting/Claiming — carries its
+/// VALUE), or a thread-shareable wrapper (Atomic/Shared/Watched/Consulting/Amending — carries its
 /// own synchronization). Anything else passed by copy — a bare entity, or a record/tuple that
 /// transitively owns a single-threaded RC wrapper (Retained/Tracked) or single-threaded token
 /// (Viewing/Modifying) — would silently alias unsynchronized state across parallel coroutines and

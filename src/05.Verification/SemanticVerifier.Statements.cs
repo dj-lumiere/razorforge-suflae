@@ -702,12 +702,12 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // #96: Claiming[T] cannot be copied or aliased — exclusive lock token
-        if (varDecl.Initializer is IdentifierExpression && IsClaimingType(type: varType))
+        // #96: Amending[T] cannot be copied or aliased — exclusive lock token
+        if (varDecl.Initializer is IdentifierExpression && IsAmendingType(type: varType))
         {
-            ReportError(code: SemanticDiagnosticCode.ClaimingCopyNotAllowed,
-                message: $"Cannot copy or alias 'Claiming[T]' variable to '{varDecl.Name}'. " +
-                         "Claiming tokens are exclusive and cannot be duplicated — use the original variable directly.",
+            ReportError(code: SemanticDiagnosticCode.AmendingCopyNotAllowed,
+                message: $"Cannot copy or alias 'Amending[T]' variable to '{varDecl.Name}'. " +
+                         "Amending tokens are exclusive and cannot be duplicated — use the original variable directly.",
                 location: varDecl.Location);
         }
 
@@ -723,7 +723,7 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // Scoped access tokens (Viewing / Modifying / Inspecting / Claiming) cannot bind to a
+        // Scoped access tokens (Viewing / Modifying / Consulting / Amending) cannot bind to a
         // var at all — they only exist inline within their producing expression. Use the
         // value inline (`a.view().x`) or open a scope (`using a.view() as v`).
         if (_registry.Language == Language.RazorForge &&
@@ -917,13 +917,13 @@ public sealed partial class SemanticVerifier
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-            // Read-only wrapper types (Viewing, Inspecting) cannot be written through
+            // Read-only wrapper types (Viewing, Consulting) cannot be written through
             if (IsReadOnlyWrapper(type: objectType))
             {
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
                     $"Cannot write to member '{member.MemberName}' through read-only wrapper '{objectType.Name}'. " +
-                    "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
+                    "Use Modifying[T] for exclusive write access or Amending[T] for locked write access.",
                     location: assign.Location);
             }
 

@@ -17,10 +17,10 @@ public enum PointerFlavor
     Viewing,
     /// <summary>Modifying borrow (Modifying[T]).</summary>
     Modifying,
-    /// <summary>Inspecting borrow (read-only, internal use).</summary>
-    Inspecting,
-    /// <summary>Claiming borrow (exclusive, internal use).</summary>
-    Claiming,
+    /// <summary>Consulting borrow (read-only, internal use).</summary>
+    Consulting,
+    /// <summary>Amending borrow (exclusive, internal use).</summary>
+    Amending,
     /// <summary>Reference-counted shared pointer (Retained[T]).</summary>
     Retained,
     /// <summary>Tracked ownership pointer (Tracked[T]).</summary>

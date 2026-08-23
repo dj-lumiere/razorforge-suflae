@@ -52,6 +52,53 @@ public sealed class CLinkingTests
     }
 
     [Fact]
+    public void Manifest_ParsesLibraryConfigs()
+    {
+        string root = CreateTempProject(new()
+        {
+            ["razorforge.toml"] = """
+                [package]
+                name = "test"
+                version = "0.0.1"
+
+                [target]
+                executable = "App"
+                mode = "debug"
+
+                [libraries.SDL2]
+                kind = "dynamic"
+                calling-convention = "c"
+
+                [libraries.physx]
+                kind = "static"
+                name = "physx_static"
+                """,
+            ["App.rf"] = "module App\n\nroutine start()\n  return\n",
+        });
+        try
+        {
+            ProjectManifest manifest = ManifestLoader.Load(
+                tomlPath: Path.Combine(path1: root, path2: "razorforge.toml"));
+
+            Assert.Equal(expected: 2, actual: manifest.Target.LibraryConfigs.Count);
+
+            CLibrary sdl = manifest.Target.LibraryConfigs["SDL2"];
+            Assert.Equal(expected: "SDL2", actual: sdl.Name);
+            Assert.Equal(expected: CLinkKind.Dynamic, actual: sdl.Kind);
+            Assert.Equal(expected: "c", actual: sdl.CallingConvention);
+
+            // `kind = "static"` + a `name` override that differs from the table key.
+            CLibrary physx = manifest.Target.LibraryConfigs["physx"];
+            Assert.Equal(expected: "physx_static", actual: physx.Name);
+            Assert.Equal(expected: CLinkKind.Static, actual: physx.Kind);
+        }
+        finally
+        {
+            DeleteTempProject(root: root);
+        }
+    }
+
+    [Fact]
     public void Manifest_NoCLinkingKeys_YieldsEmptyLists()
     {
         string root = CreateTempProject(new()
@@ -96,17 +143,28 @@ public sealed class CLinkingTests
     }
 
     [Fact]
-    public void ExtractLinkNames_ParsesSingleAndMultiple()
+    public void LinkAnnotation_ParsesAllForms()
     {
-        Assert.Equal(expected: new[] { "SDL2" }, actual: Program.ExtractLinkNames(annotation: "link(\"SDL2\")"));
-        Assert.Equal(expected: new[] { "a", "b" }, actual: Program.ExtractLinkNames(annotation: "link(\"a\", \"b\")"));
+        // Legacy positional + bare-identifier library reference.
+        Assert.Equal(expected: ("SDL2", (string?)null),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "link(\"SDL2\")"));
+        Assert.Equal(expected: ("SDL2", (string?)null),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "link(SDL2)"));
+
+        // Named library, with and without a symbol-name override.
+        Assert.Equal(expected: ("SDL2", (string?)null),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "link(lib=\"SDL2\")"));
+        Assert.Equal(expected: ("SDL2", (string?)"SDL_Init"),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "link(lib=\"SDL2\", symbol=\"SDL_Init\")"));
     }
 
     [Fact]
-    public void ExtractLinkNames_NonLinkAnnotation_IsEmpty()
+    public void LinkAnnotation_NonLinkAnnotation_IsNull()
     {
-        Assert.Empty(collection: Program.ExtractLinkNames(annotation: "readonly"));
-        Assert.Empty(collection: Program.ExtractLinkNames(annotation: "llvm(\"i32\")"));
+        Assert.Equal(expected: ((string?)null, (string?)null),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "readonly"));
+        Assert.Equal(expected: ((string?)null, (string?)null),
+            actual: global::TypeModel.Symbols.LinkAnnotation.Parse(annotation: "llvm(\"i32\")"));
     }
 
     private static string CreateTempProject(Dictionary<string, string> files)

@@ -45,7 +45,7 @@
         {
           "comment": "Control flow",
           "name": "keyword.control.razorforge",
-          "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard)\\b"
+          "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard|pierce)\\b"
         },
         {
           "comment": "Compile-time reflection sources (expand m in memvarof(T)/branchof(T)/caseof(T))",
@@ -55,7 +55,7 @@
         {
           "comment": "Type and pattern operations",
           "name": "keyword.operator.razorforge",
-          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but)\\b"
+          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but|everywhere)\\b"
         },
         {
           "comment": "Module system",

@@ -16,7 +16,7 @@ import BuilderService
 ### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
 ### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
 ### handle is a strong reference, so the inner is never dangling. (The scope is per-access on the
-### explicit RazorForge side, per-borrow-scope on the Suflae side, chosen by the lock-bracket pass.)
+### explicit RazorForge side, per-access-scope on the Suflae side, chosen by the lock-bracket pass.)
 ###
 ### **Insertion is compiler-driven in Suflae.** `Roamed` IS registered as an RC wrapper
 ### (`RuntimeContract.RcWrapperBaseNames` / `RcCopyVerb`); the aliasing `roam()`, spawn-boundary

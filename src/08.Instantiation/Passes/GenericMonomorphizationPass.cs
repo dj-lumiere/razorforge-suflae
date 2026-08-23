@@ -580,8 +580,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // every live owner type. Types created during GMP body rewriting (e.g.,
             // ListEmitter[Byte] from List[Byte].represent) post-date RoutineReachabilityPass
             // and so were never seeded — without this bypass their wired routines vanish.
-            if (ctx.LiveRoutineKeys.Count > 0 && !ctx.LiveRoutineKeys.Contains(item: key)
-                && !IsWiredRoutineName(genMemberRoutine.Name))
+            // Genuinely reachable from entry points (in the live set) vs merely wired-bypass-built for a
+            // live OWNER (a wired routine synthesized for every owner even if never called). Only the former
+            // is asserted below — a wired-bypass body (e.g. `Roamed[Node].eq` synthesized but never compared)
+            // may legitimately carry an abstract-forwarding call that is dead and never emitted.
+            bool genuinelyLive = ctx.LiveRoutineKeys.Count == 0 || ctx.LiveRoutineKeys.Contains(item: key);
+            if (!genuinelyLive && !IsWiredRoutineName(genMemberRoutine.Name))
                 continue;
 
             // Capability gate: skip wired comparison/containment/hashing routines whose
@@ -596,6 +600,32 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 genDef: genDef,
                 typeSubs: typeSubs,
                 stringSubs: stringSubs);
+
+            if (body != null && BodyHasAbstractDeriveCall(body: body, member: out string absMember))
+            {
+                // A monomorphized body still calls an abstract derive member. TWO cases:
+                //  * WRAPPER forwarder (Roamed/Retained/…): the inner type simply doesn't implement this
+                //    member (e.g. `Roamed[Node].eq` where the entity Node isn't Equatable). The forwarder is
+                //    DEAD — drop it (don't emit), exactly as if it were never synthesized.
+                //  * Anything else (a real collection/carrier like `List[Text].copy`): the receiver obeys the
+                //    protocol but has no concrete derive — a genuine conformance/derive gap. Blow up LOUDLY.
+                bool ownerIsWrapper =
+                    WrapperForwardingPass.WrapperTypeNames.Contains(genDef.Name);
+                if (ownerIsWrapper)
+                {
+                    body = null;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Monomorphization left a call to the ABSTRACT protocol member '{absMember}' inside the " +
+                        $"concrete routine '{concreteInfo.RegistryKey}'. The receiver obeys the protocol but has " +
+                        "NO concrete derive/impl to resolve to — the conformance/derive layer must provide it " +
+                        "(a managed leaf like Text implements it; a variant that obeys Copyable gets its arm-walk " +
+                        "`copy`). Failing loudly pre-codegen instead of emitting an unresolved abstract symbol.");
+                }
+            }
 
             if (body != null)
             {
@@ -864,6 +894,40 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     // Body construction
 
+    /// <summary>The base wired derives that MUST resolve to a CONCRETE per-type implementation — never to
+    /// the abstract protocol member. If a monomorphized body still calls the abstract, the receiver type
+    /// obeys the protocol but has no concrete derive/impl; that must blow up LOUDLY here (pre-codegen),
+    /// naming the offending routine, rather than silently degrading to an unresolved abstract symbol.</summary>
+    private static readonly HashSet<string> _concreteRequiredDerives =
+        new(comparer: StringComparer.Ordinal) { "assign", "copy", "eq", "ne", "cmp", "hash" };
+
+    /// <summary>
+    /// After monomorphization, no call in a CONCRETE routine body may remain resolved to an ABSTRACT
+    /// protocol member (owner is a <see cref="ProtocolTypeInfo"/>) for the derive family — the receiver is
+    /// concrete, so it must resolve to that type's own derive. A leftover abstract call means the type
+    /// "obeys P" but never got P's derive (e.g. a variant that obeys Copyable whose `copy` was never
+    /// synthesized). Throw with the enclosing routine so the conformance/derive gap is unmissable.
+    /// </summary>
+    private static bool BodyHasAbstractDeriveCall(MonomorphizedBody body, out string member)
+    {
+        string? found = null;
+        AstWalker.WalkExpressions(root: body.Ast, visit: expr =>
+        {
+            if (found != null)
+            {
+                return;
+            }
+
+            RoutineInfo? rr = (expr as CallExpression)?.ResolvedRoutine;
+            if (rr?.OwnerType is ProtocolTypeInfo proto && _concreteRequiredDerives.Contains(item: rr.Name))
+            {
+                found = $"{proto.Name}.{rr.Name}()";
+            }
+        });
+        member = found ?? "";
+        return found != null;
+    }
+
     private MonomorphizedBody? BuildBody(
         RoutineInfo genMemberRoutine,
         RoutineInfo concreteInfo,
@@ -921,9 +985,6 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // don't stop here — fall through to FindInStdlib below.
         if (genMemberRoutine.IsSynthesized && !skippedVariantBodyForStdlibFallback)
         {
-            string ck = concreteInfo.RegistryKey;
-            if (ck.Contains("List[Core.Owned") && (ck.Contains("eq") || ck.Contains("contains")))
-                Console.Error.WriteLine($"[BuildBody-null-synth] gen={genMemberRoutine.RegistryKey} concrete={ck}");
             return null;
         }
         // Regular memberRoutine: search stdlib + user program ASTs
@@ -1635,7 +1696,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private static readonly HashSet<string> BorrowWrapperNames = new(StringComparer.Ordinal)
     {
         RuntimeContract.Accessing, RuntimeContract.Viewing, RuntimeContract.Controlling, RuntimeContract.Modifying, RuntimeContract.Hijacked,
-        RuntimeContract.Inspecting, RuntimeContract.Claiming, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Shared
+        RuntimeContract.Consulting, RuntimeContract.Amending, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Shared
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading

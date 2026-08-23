@@ -26,7 +26,7 @@ namespace Compiler.Synthesis;
 /// transitively through raw.extract() to the concrete inner type.
 ///
 /// Policy:
-///   - Read-only wrappers (Viewing, Inspecting) forward ONLY @readonly memberRoutines of T.
+///   - Read-only wrappers (Viewing, Consulting) forward ONLY @readonly memberRoutines of T.
 ///   - All other wrappers forward any modification category.
 ///
 /// Signature synthesis: params/return are taken from the inner memberRoutine's signature
@@ -206,7 +206,11 @@ internal sealed class WrapperForwardingPass
             _registry.LookupMemberRoutine(type: innerType, memberRoutineName: memberRoutineName, isFailable: isFailable)
             ?? _registry.LookupMemberRoutine(type: innerLookupType, memberRoutineName: memberRoutineName,
                 isFailable: isFailable);
-        if (innerMemberRoutine == null)
+        // No concrete inner impl → no forwarder. A resolution to the ABSTRACT protocol member (e.g. an
+        // eagerly-seeded `eq`/`cmp`/`hash` whose inner entity does NOT obey Equatable/Comparable/Hashable,
+        // so the lookup falls back to `Equatable.eq`) does NOT count — forwarding to it would emit a call to
+        // an unimplemented abstract symbol. The wrapper only forwards what the inner actually implements.
+        if (innerMemberRoutine == null || innerMemberRoutine.OwnerType is ProtocolTypeInfo)
         {
             return null;
         }
@@ -480,13 +484,13 @@ internal sealed class WrapperForwardingPass
             //   danger
             //     var raw  = Hijacked[RetainController[T]](me)
             //     var ctrl = raw.as_entity()              # RetainController[T] ptr
-            //     [return] ctrl.borrow_data().as_entity().MemberRoutine(args...)
+            //     [return] ctrl.raw_data().as_entity().MemberRoutine(args...)
             //
             // Without this branch, the pointer-wrapper branch below would emit
             // `Hijacked[T](me).as_entity().MemberRoutine(...)`, treating the controller's strong+weak
             // counts (first 8 bytes) as if they were T's first 8 bytes.
             // A `Roaming` guard indirects through `RoamController.data_ptr()`; Retained/Tracked through
-            // `RetainController.borrow_data()`. Both just reach the inner entity — for `Roaming` the
+            // `RetainController.raw_data()`. Both just reach the inner entity — for `Roaming` the
             // lock is already held by the enclosing `using` (enter), so the forwarder only reaches +
             // calls (release happens at exit on every path).
             bool isRoamed = wrapperType.BareName == RuntimeContract.Roamed;
@@ -494,7 +498,7 @@ internal sealed class WrapperForwardingPass
             string controllerName = viaRoamController ? "RoamController" : "RetainController";
             string dataRevealName = viaRoamController
                 ? "data_ptr"
-                : RuntimeContract.RefCount.BorrowData;
+                : RuntimeContract.RefCount.RawData;
             var controllerTypeExpr = new TypeExpression(
                 Name: controllerName,
                 GenericArguments:
@@ -576,7 +580,7 @@ internal sealed class WrapperForwardingPass
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc)
                         { ResolvedType = retainControllerType },
-                    MemberName: RuntimeContract.RefCount.BorrowData,
+                    MemberName: RuntimeContract.RefCount.RawData,
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -769,7 +773,7 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Checks if a wrapper type is read-only (Viewing, Inspecting).
+    /// Checks if a wrapper type is read-only (Viewing, Consulting).
     /// </summary>
     private static bool IsReadOnlyWrapper(TypeSymbol type)
     {

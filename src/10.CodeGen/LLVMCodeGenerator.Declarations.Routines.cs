@@ -945,11 +945,13 @@ public partial class LlvmCodeGenerator
             return Q(name: $"{lambdaName}({paramTypes})");
         }
 
-        // External("C") functions use the raw C symbol name — no module prefix,
-        // so that LLVM IR symbols match the actual C linker symbols.
+        // External("C") functions use the raw C symbol name — no module prefix, so that LLVM IR symbols
+        // match the actual C linker symbols. `@link(..., symbol: "x")` overrides the linked symbol when the
+        // RF-side name differs (versioned symbols, stat→stat64, decorated names). Declaration and call site
+        // both mangle from the same RoutineInfo, so they agree on the override.
         if (routine.CallingConvention == "C")
         {
-            return Q(name: Bang(name: SanitizeLlvmName(name: routine.Name),
+            return Q(name: Bang(name: SanitizeLlvmName(name: routine.LinkSymbol is { Length: > 0 } sym ? sym : routine.Name),
                 failable: routine.IsFailable));
         }
 

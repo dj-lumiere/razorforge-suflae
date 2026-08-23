@@ -30,8 +30,8 @@ public sealed partial class SemanticVerifier
         {
             Compiler.Resolution.RuntimeContract.Viewing => "read-only token (Viewing)",
             Compiler.Resolution.RuntimeContract.Modifying => "exclusive write token (Modifying)",
-            Compiler.Resolution.RuntimeContract.Inspecting => "shared read token (Inspecting)",
-            Compiler.Resolution.RuntimeContract.Claiming => "exclusive shared write token (Claiming)",
+            Compiler.Resolution.RuntimeContract.Consulting => "shared read token (Consulting)",
+            Compiler.Resolution.RuntimeContract.Amending => "exclusive shared write token (Amending)",
             _ => "token"
         };
     }
@@ -146,7 +146,7 @@ public sealed partial class SemanticVerifier
     /// <item><c>steal</c>-moved — exclusive transfer, the caller loses access (safe regardless of
     /// type — a moved bare entity / <c>Retained</c> leaves exactly one live handle);</item>
     /// <item>trivially copyable — passed BY VALUE as an independent copy;</item>
-    /// <item>a thread-shareable wrapper (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>/<c>Inspecting</c>/
+    /// <item>a thread-shareable wrapper (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>/<c>Consulting</c>/
     /// <c>Claiming</c>) — carries its own synchronization (atomic refcount or lock).</item>
     /// </list>
     /// A parameter that is none of these <em>and</em> is not steal-moved at the call site — e.g. a
@@ -215,9 +215,9 @@ public sealed partial class SemanticVerifier
                 ? "a bare entity aliases the same object across parallel coroutines"
                 : $"it transitively owns `{offender!.Value.Wrapper}` at `{offender.Value.Path}`";
             string fix = isEntity
-                ? "`steal`-move it, share it with `Shared`/`Watched`/`Atomic`/`Inspecting`/`Claiming`, " +
+                ? "`steal`-move it, share it with `Shared`/`Watched`/`Atomic`/`Consulting`/`Claiming`, " +
                   "or pass a copyable value"
-                : "share it with `Shared`/`Watched`/`Atomic`/`Inspecting`/`Claiming`, or pass a copyable value";
+                : "share it with `Shared`/`Watched`/`Atomic`/`Consulting`/`Claiming`, or pass a copyable value";
             ReportError(code: SemanticDiagnosticCode.ThreadArgNotShareable,
                 message:
                 $"Parameter `{param.Name}: {type.Name}` of a {boundaryKind} routine cannot cross the " +

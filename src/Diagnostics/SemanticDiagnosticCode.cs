@@ -671,7 +671,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Partial access on entity (e.g., entity.field.view()) is not allowed.</summary>
     PartialAccessOnEntity = 616,
 
-    /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Claiming).</summary>
+    /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Amending).</summary>
     TokenDowngradeProhibited = 618,
 
     /// <summary>Suflae: member access on a possibly-none (`E?`) entity reference that has not been
@@ -687,10 +687,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Reshaping operation on collection during iteration is not allowed.</summary>
     ReshapingDuringIteration = 625,
 
-    /// <summary>Claiming[T] cannot be copied or aliased.</summary>
-    ClaimingCopyNotAllowed = 626,
+    /// <summary>Amending[T] cannot be copied or aliased.</summary>
+    AmendingCopyNotAllowed = 626,
 
-    /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
+    /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Consulting).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
     /// <summary>Hijacked[T] memberRoutine calls require danger block.</summary>
@@ -699,12 +699,12 @@ public enum SemanticDiagnosticCode
     /// <summary>.hijack() on Shared/Watched requires danger block.</summary>
     SnatchRequiresDanger = 628,
 
-    /// <summary>A multi-threaded access token (Inspecting/Claiming from inspect()/claim()) must be
+    /// <summary>A multi-threaded access token (Consulting/Amending from consult()/amend()) must be
     /// opened with a `using` block — it cannot be used inline or stored.</summary>
     MtTokenRequiresUsing = 629,
 
-    /// <summary>Readers-XOR-writer violation: a `claim()` (writer) coexists with another `claim()`
-    /// or an `inspect()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
+    /// <summary>Readers-XOR-writer violation: an `amend()` (writer) coexists with another `amend()`
+    /// or an `consult()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
     ReadersXorWriter = 630,
 
     /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
@@ -815,7 +815,7 @@ public enum SemanticDiagnosticCode
     /// Code number reserved to avoid reuse.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
-    /// <summary>Cannot use compound assignment on a read-only token (Viewing or Inspecting).</summary>
+    /// <summary>Cannot use compound assignment on a read-only token (Viewing or Consulting).</summary>
     CompoundAssignmentOnReadOnlyToken = 766,
 
     /// <summary>Fixed-width numeric types must match exactly; explicit conversion required.</summary>

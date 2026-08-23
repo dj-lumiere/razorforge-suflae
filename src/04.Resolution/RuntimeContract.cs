@@ -57,8 +57,8 @@ public static class RuntimeContract
     /// from wrapper <c>.rf</c> bodies, so they need no constants here.</remarks>
     public static class RefCount
     {
-        /// <summary><c>RetainController[T].borrow_data()</c> — read the controlled payload.</summary>
-        public const string BorrowData = "borrow_data";
+        /// <summary><c>RetainController[T].raw_data()</c> — read the controlled payload.</summary>
+        public const string RawData = "raw_data";
         /// <summary>The UNIFIED RC copy verb: a same-strength co-owner mint on any RC wrapper handle
         /// (Retained/Tracked/Shared/Watched/Roamed) — strong→strong, weak→weak, biased→biased. This is the
         /// user-facing `.share()` and the verb codegen/lowering inserts implicitly for RC copy sites.</summary>
@@ -162,7 +162,7 @@ public static class RuntimeContract
     [
         RawPointer.Peek, RawPointer.Poke, RawPointer.AsEntity, RawPointer.IsNone,
         RawPointer.Invalidate, RawPointer.Hijack,
-        RefCount.BorrowData,
+        RefCount.RawData,
         Collection.Count, Collection.Add, Collection.AddLast, Collection.Replace,
         Resolve, CrashMessage,
     ];
@@ -206,9 +206,9 @@ public static class RuntimeContract
     /// <summary>Exclusive-write single-threaded borrow token.</summary>
     public const string Modifying = "Modifying";
     /// <summary>Read-only multi-threaded borrow token.</summary>
-    public const string Inspecting = "Inspecting";
+    public const string Consulting = "Consulting";
     /// <summary>Exclusive-write multi-threaded borrow token.</summary>
-    public const string Claiming = "Claiming";
+    public const string Amending = "Amending";
     /// <summary>Reference-counted single-threaded handle.</summary>
     public const string Retained = "Retained";
     /// <summary>Weak-reference single-threaded handle.</summary>
@@ -240,24 +240,24 @@ public static class RuntimeContract
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>
     public static readonly IReadOnlySet<string> WrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Hijacked, Roamed };
+            { Viewing, Modifying, Consulting, Amending, Shared, Watched, Retained, Tracked, Hijacked, Roamed };
 
     /// <summary>Wrapper types that transparently forward inner-type memberRoutines — every wrapper EXCEPT
     /// <see cref="Hijacked"/> (the raw-pointer escape hatch). Mirrors WrapperForwardingPass.ForwardingWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ForwardingWrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Shared, Watched, Retained, Tracked, Roamed };
+            { Viewing, Modifying, Consulting, Amending, Shared, Watched, Retained, Tracked, Roamed };
 
     /// <summary>Read-only borrow tokens (only <c>@readonly</c> memberRoutines reachable). Mirrors
     /// WrapperForwardingPass.ReadOnlyWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ReadOnlyWrapperTypes =
-        new HashSet<string>(comparer: StringComparer.Ordinal) { Viewing, Inspecting };
+        new HashSet<string>(comparer: StringComparer.Ordinal) { Viewing, Consulting };
 
     /// <summary>Borrow/view wrappers whose value points INTO another value, so a memberRoutine returning one
     /// may ALIAS its receiver. Mirrors TemporaryTeardownPass.ReferringWrapperNAmes.</summary>
     public static readonly IReadOnlySet<string> ReferringWrapperNAmes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Viewing, Modifying, Inspecting, Claiming, Retained };
+            { Viewing, Modifying, Consulting, Amending, Retained };
 
     /// <summary>RC-wrapper base names whose refcount release is owned by codegen. Mirrors
     /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>

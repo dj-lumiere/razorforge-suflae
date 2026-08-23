@@ -23,8 +23,8 @@ namespace Verification;
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Step 3 (Token Checking):
-///   - Viewing/Inspecting tokens can only call Readonly memberRoutines
-///   - Modifying/Claiming tokens can call Readonly or Writable memberRoutines
+///   - Viewing/Consulting tokens can only call Readonly memberRoutines
+///   - Modifying/Amending tokens can call Readonly or Writable memberRoutines
 ///   - Only owned/non-token access can call Reshaping memberRoutines
 /// </summary>
 public sealed class MutationInference

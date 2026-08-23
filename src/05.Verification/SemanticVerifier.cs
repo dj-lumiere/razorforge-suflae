@@ -169,11 +169,11 @@ public sealed partial class SemanticVerifier
     internal readonly List<PendingRoutine> _pendingRoutines = [];
 
     /// <summary>The resource expression currently being analyzed as a `using` target, if any. A
-    /// multi-threaded access token (Inspecting/Claiming) is only legal in this exact position —
+    /// multi-threaded access token (Consulting/Amending) is only legal in this exact position —
     /// any other use is rejected (RF-S629) so its lock is always `using`-scoped.</summary>
     private ISyntaxTreeNode? _usingResourceNode;
 
-    /// <summary>Stack of MT access holds (`inspect`/`claim`) live in the enclosing `using` scopes.
+    /// <summary>Stack of MT access holds (`consult`/`amend`) live in the enclosing `using` scopes.
     /// Each hold records the syntactic handle path AND the controller-identity it resolves to (see
     /// <see cref="_sharedHandleIdentity"/>), so aliased handles (`s2 = s.share()`) conflict even
     /// though their names differ. Pushed on `using` entry, popped on exit, so a nested `using` sees

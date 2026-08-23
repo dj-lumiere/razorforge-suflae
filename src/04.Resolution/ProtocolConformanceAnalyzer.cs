@@ -91,10 +91,25 @@ internal sealed class ProtocolConformanceAnalyzer
             }
         }
 
+        // SPLIT (2026-08-23) — structural vs semantic:
+        // * Assignable/Copyable are STRUCTURAL (memory/value semantics): a record is assignable by default,
+        //   EXCLUDING the 9 non-assignable wrapper/token types (Viewing/Modifying/Amending/Consulting/
+        //   Retained/Roamed/Shared/Tracked/Watched) and any record transitively containing one. Entities are
+        //   NEVER assignable (identity). This is auto-conferred (no `obeys` needed) by the two passes below.
+        // * Equatable/Comparable/Hashable are SEMANTIC (opt-in): equality/ordering is an assertion, so they
+        //   are NOT auto-conferred — the generic `ApplyEverywhereConformance` is deliberately NOT run, so a
+        //   plain value record does not silently gain `==`/`<`. The everywhere-derive loop registers their
+        //   derives ONLY for a type that explicitly declares `obeys P`.
         ApplyAutoAssignableConformance();
         ApplyAutoAssignableCascadeConformance();
         ApplyEverywhereConformance();
     }
+
+    /// <summary>The STRUCTURAL everywhere-protocols that are auto-conferred (value/memory semantics). The
+    /// SEMANTIC everywhere-protocols (Equatable/Comparable/Hashable) are opt-in and deliberately excluded —
+    /// a plain value record must not silently gain equality/ordering. Keyed by bare protocol name.</summary>
+    private static readonly HashSet<string> _autoConferredEverywhereProtocols =
+        new(comparer: System.StringComparer.Ordinal) { "Assignable", "Copyable" };
 
     /// <summary>
     /// Generic <c>needs P everywhere</c> gate (④ standard-impl eligibility): for every protocol that declares
@@ -113,7 +128,13 @@ internal sealed class ProtocolConformanceAnalyzer
         var everywhereProtocols = new List<ProtocolTypeInfo>();
         foreach (TypeSymbol type in _sa._registry.GetAllTypes())
         {
-            if (type is ProtocolTypeInfo proto && ProtocolHasEverywhereSelfConstraint(proto: proto))
+            // Only the STRUCTURAL everywhere-protocols (Assignable/Copyable) are auto-conferred here. The
+            // SEMANTIC ones (Equatable/Comparable/Hashable) carry the same `needs P everywhere` self-
+            // constraint but are OPT-IN — conferring them structurally would give a plain value record
+            // silent `==`/`<`. Their derives attach only on an explicit `obeys P` (the everywhere-derive
+            // loop reads the declared conformance).
+            if (type is ProtocolTypeInfo proto && ProtocolHasEverywhereSelfConstraint(proto: proto) &&
+                _autoConferredEverywhereProtocols.Contains(item: (proto.GenericDefinition ?? proto).BareName))
             {
                 everywhereProtocols.Add(item: proto);
             }

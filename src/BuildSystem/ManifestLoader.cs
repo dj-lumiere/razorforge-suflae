@@ -95,6 +95,21 @@ public static class ManifestLoader
                 "[target]\nexecutable = \"MainModule\"\nlibrary = [\"../shared-utils\"]\nmode = \"debug\"");
         }
 
+        // [libraries.NAME] — richly-declared foreign C libraries (linkage kind + calling convention). This
+        // is where static-vs-dynamic lives, keeping that packaging decision out of source. Optional.
+        if (root.TryGetValue(key: "libraries", value: out object? librariesObj) &&
+            librariesObj is TomlTable librariesTable)
+        {
+            foreach ((string libName, object? libValue) in librariesTable)
+            {
+                if (libValue is TomlTable libTable)
+                {
+                    manifest.Target.LibraryConfigs[key: libName] =
+                        ParseLibrary(name: libName, table: libTable);
+                }
+            }
+        }
+
         // Resolve external library dependency directories relative to the manifest.
         for (int i = 0; i < manifest.Target.Libraries.Count; i++)
         {
@@ -113,6 +128,42 @@ public static class ManifestLoader
         }
 
         return manifest;
+    }
+
+    /// <summary>
+    /// Parses one <c>[libraries.NAME]</c> table into a <see cref="CLibrary"/>. Fields (all optional):
+    /// <c>name</c> (the <c>-l</c> link name; defaults to the table key), <c>kind</c> (<c>"dynamic"</c>
+    /// default / <c>"static"</c>), <c>calling-convention</c> (<c>"c"</c> default).
+    /// </summary>
+    private static CLibrary ParseLibrary(string name, TomlTable table)
+    {
+        var lib = new CLibrary { Name = name };
+
+        if (table.TryGetValue(key: "name", value: out object? linkName) &&
+            !string.IsNullOrWhiteSpace(value: linkName?.ToString()))
+        {
+            lib.Name = linkName!.ToString()!.Trim();
+        }
+
+        if (table.TryGetValue(key: "kind", value: out object? kindObj))
+        {
+            string kind = kindObj?.ToString()?.Trim().ToLowerInvariant() ?? "";
+            lib.Kind = kind switch
+            {
+                "static" => CLinkKind.Static,
+                "dynamic" or "" => CLinkKind.Dynamic,
+                _ => throw new InvalidOperationException(
+                    message: $"{ManifestFileName}: [libraries.{name}] kind must be \"static\" or \"dynamic\", got \"{kind}\".")
+            };
+        }
+
+        if (table.TryGetValue(key: "calling-convention", value: out object? ccObj) &&
+            !string.IsNullOrWhiteSpace(value: ccObj?.ToString()))
+        {
+            lib.CallingConvention = ccObj!.ToString()!.Trim().ToLowerInvariant();
+        }
+
+        return lib;
     }
 
     private static PackageInfo ParsePackage(TomlTable table)
