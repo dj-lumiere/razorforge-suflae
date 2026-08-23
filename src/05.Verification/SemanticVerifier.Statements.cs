@@ -100,7 +100,7 @@ public sealed partial class SemanticVerifier
         {
             // Skip SA for an OPT-IN derive template. It isn't registered as a live universal memberRoutine
             // (see StdlibLoader.Registration), so its bare owner placeholder `T` is unbound during SA —
-            // `expand m in memvarof(T)`, a `you: T` param, etc. would spuriously error (RF-S100). The
+            // `expand m in allmemvarof(T)`, a `you: T` param, etc. would spuriously error (RF-S100). The
             // per-type body instead comes from the derive-template store via CloneUniversalDeriveBody,
             // which unrolls the `expand` against the concrete type post-monomorph. The auto-conferred
             // display derives (represent/diagnose) ARE registered universals → `T` is bound → they stay

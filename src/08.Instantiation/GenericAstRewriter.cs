@@ -190,7 +190,7 @@ internal static class GenericAstRewriter
             {
                 // `$Col` is the decl-position expand-column placeholder. In an EXPRESSION-position type
                 // splice — `hijacked_from[${m.type}]` / `blank[Hijacked[${m.type}]]` inside an
-                // `expand m in memvarof(T)` body — it must fold to the CURRENT member's concrete type,
+                // `expand m in allmemvarof(T)` body — it must fold to the CURRENT member's concrete type,
                 // mirroring TypeRegistry.ExpandSoAColumns' decl-position substitution but driven here by
                 // the active expand unroll at monomorphization. Without this the `$Col` GenericParameter
                 // reaches codegen's GetLlvmType and trips the "all generic parameters must be substituted".
@@ -1832,7 +1832,7 @@ internal static class GenericAstRewriter
     }
 
     /// <summary>
-    /// Unrolls a comptime <c>expand m in memvarof(T)</c> loop at monomorphization: resolves the
+    /// Unrolls a comptime <c>expand m in allmemvarof(T)</c> loop at monomorphization: resolves the
     /// concrete source type, then clones the body once per member variable with the handle
     /// projections folded (<c>m.name</c>→Text literal, <c>m.id</c>→U64 literal) and the
     /// <c>x.${m.name}</c> splices rewritten to real member accesses. The per-member clones are
@@ -1847,7 +1847,7 @@ internal static class GenericAstRewriter
         if (expand.SourceKind == ExpandSourceKind.Cases)
             return RewriteCaseExpand(expand: expand, source: source, ctx: ctx);
 
-        // memvarof/openmemvarof/allmemvarof work over any field-carrying aggregate: records, tuples (a
+        // openmemvarof/allmemvarof work over any field-carrying aggregate: records, tuples (a
         // RecordTypeInfo subtype), and entities (their own MemberVariables list).
         List<MemberVariableInfo>? members = source switch
         {
@@ -1862,7 +1862,7 @@ internal static class GenericAstRewriter
         Dictionary<MemberVariableInfo, long> offsets = ComputeMemberOffsets(members: members);
 
         // openmemvarof(T) yields only the publicly-readable members (OPEN ∪ POSTED) — a `secret` field is
-        // filtered out. allmemvarof(T) and legacy memvarof(T) yield every member. This visibility split is
+        // filtered out. allmemvarof(T) yields every member. This visibility split is
         // the sole filter (the old `if not m.is_secret` gate is gone — pick the intrinsic instead).
         if (members != null && expand.SourceKind == ExpandSourceKind.OpenMemberVariables)
             members = members

@@ -251,7 +251,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// ④ standard-impl eligibility evaluator (<c>needs P everywhere</c>): the CONCRETE type
     /// <paramref name="type"/> obeys <paramref name="protocol"/> structurally IFF EVERY member
-    /// (memvarof per kind) obeys it — ∀-only, concrete-only. Per-member verdict uses the declared
+    /// (allmemvarof per kind) obeys it — ∀-only, concrete-only. Per-member verdict uses the declared
     /// conformance query (<see cref="TypeObeysProtocol"/>), matching how <c>needs T obeys P</c> is
     /// checked. Empty member set (field-less record, choice/flags) ⇒ vacuously true.
     /// <para>
@@ -280,7 +280,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Kind-appropriate member sequence for the <c>everywhere</c> quantifier: record/entity →
-    /// member-variable types (memvarof), variant → live branch payload types (branchof, skipping the
+    /// member-variable types (allmemvarof), variant → live branch payload types (branchof, skipping the
     /// payload-less None branch), choice/flags → none (scalar discriminant, no member types). A TUPLE is
     /// NOT special-cased: by the time <c>everywhere</c> is evaluated it has been lowered to a
     /// <see cref="RecordTypeInfo"/> (positional member variables), so it flows through the record arm. An
@@ -289,7 +289,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     // Choice/Flags/Variant derive from RecordTypeInfo, so the more-derived arms MUST precede the record
     // arm (else CS8510 unreachable). Variant → branchof; choice/flags → none; plain record/entity →
-    // memvarof.
+    // allmemvarof.
     private static IEnumerable<TypeInfo> MemberProjection(TypeInfo type) => type switch
     {
         ChoiceTypeInfo or FlagsTypeInfo => [],

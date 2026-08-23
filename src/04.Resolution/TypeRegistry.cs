@@ -1168,7 +1168,7 @@ public sealed partial class TypeRegistry
 
         foreach (MemberExpandTemplateInfo template in templates)
         {
-            // The concrete source type whose members become columns (the T in `memvarof(T)`).
+            // The concrete source type whose members become columns (the T in `allmemvarof(T)`).
             if (!baseSubs.TryGetValue(key: template.SourceParamName, value: out TypeInfo? sourceType))
             {
                 continue;

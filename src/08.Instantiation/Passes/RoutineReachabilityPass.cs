@@ -1092,7 +1092,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
 
             // (2b) A live `destroy` runs the auto-derived teardown, which walks EVERY member and calls
-            // its `.destroy()` (`expand m in memvarof(T): me.$nameof(m).destroy()`). Reachability runs
+            // its `.destroy()` (`expand m in allmemvarof(T): me.$nameof(m).destroy()`). Reachability runs
             // BEFORE that expand unrolls, so it cannot see the per-field `.destroy()` calls; without help
             // it prunes a member's destroy that nothing ELSE calls — notably a trivially-destructible
             // `Hijacked[U]`/leaf whose destroy is elided at every ordinary teardown, leaving the

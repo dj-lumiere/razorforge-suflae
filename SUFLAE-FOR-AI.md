@@ -51,6 +51,15 @@ When unsure, consult ground truth in the repo:
 7. **Suflae hides low-level concepts** RazorForge surfaces (see §5). You will not
    write `danger`, `Hijacked`, access tokens (`Viewing`/`Modifying`/`Consulting`/
    `Amending`), `steal`, `@reshaping`, or anything about iterator invalidation.
+8. **Keyword set = RazorForge's, minus the RF-only reserved words.** The shared
+   keyword inventory is RAZORFORGE-FOR-AI §16; Suflae does NOT reserve the
+   RF-only ones: `steal` `danger` `dangerous` `threaded` `everywhere`, and the
+   comptime-reflection keywords `expand` `openmemvarof` `allmemvarof` `branchof`
+   `caseof`. (The `*of` accessors like `nameof`/`typeof`/`valueof` are comptime
+   builtin intrinsics, not reserved keywords. Comptime reflection is RF's model;
+   SF's is the runtime ObjectHacker, not yet shipped.)
+   Everything else — declarations, control flow (`each`, `when`, `unless`, …),
+   `suspended`, `using`, `obeys`, literals — is identical.
 
 ## 3. Program skeletons
 

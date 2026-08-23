@@ -642,7 +642,7 @@ public partial class Parser
                 else if (Match(type: TokenType.Everywhere))
                 {
                     // `needs <Protocol> everywhere` — standard-impl eligibility gate: the owner `Me`
-                    // obeys the protocol IFF every member (memvarof/branchof/caseof, per kind) obeys it.
+                    // obeys the protocol IFF every member (allmemvarof/branchof/caseof, per kind) obeys it.
                     // There is no explicit subject; the identifier just consumed as `paramName` is
                     // actually the protocol name, and the subject is implicitly `Me`.
                     constraints.Add(item: new GenericConstraintDeclaration(

@@ -1504,7 +1504,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <c>@overridable routine T.&lt;memberRoutine&gt;()</c> RazorForge derive template (owner = a
     /// type-parameter placeholder) with the placeholder + <c>Me</c> substituted to the concrete
     /// owner. The clone runs through <see cref="GenericAstRewriter"/>, which unrolls the template's
-    /// comptime <c>expand memvarof(T)</c> right here (T is now concrete) — so the field-walk logic
+    /// comptime <c>expand allmemvarof(T)</c> right here (T is now concrete) — so the field-walk logic
     /// lives in RF, not in this C# synthesizer, yet each type still gets its own concrete body (one
     /// per type ⇒ no signature clash). Returns null if the template or its body isn't found.
     /// </summary>

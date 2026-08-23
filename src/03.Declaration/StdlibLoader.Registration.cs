@@ -970,7 +970,7 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront (TypeInfo uses init properties with IReadOnlyList)
         var memberVariables = new List<MemberVariableInfo>();
-        // Decl-position `expand m in memvarof(T)` column templates. The stdlib registration path does NOT
+        // Decl-position `expand m in allmemvarof(T)` column templates. The stdlib registration path does NOT
         // run TypeBodyResolver.ResolveRecordBody (user-program only), so resolve them HERE — otherwise a
         // stdlib SoA type (SplitList) never gets its ExpandTemplates and ExpandSoAColumns materializes
         // no columns (`me.${m.name}` → "member 'x' not found" at codegen).
@@ -1181,7 +1181,7 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront
         var memberVariables = new List<MemberVariableInfo>();
-        // Decl-position `expand m in memvarof(T)` columns (SoA entity, e.g. a growable SplitList) —
+        // Decl-position `expand m in allmemvarof(T)` columns (SoA entity, e.g. a growable SplitList) —
         // resolved here because the stdlib path does NOT run TypeBodyResolver (see RegisterRecordType).
         var expandTemplates = new List<MemberExpandTemplateInfo>();
         foreach (SyntaxTree.Declaration member in entity.Members)

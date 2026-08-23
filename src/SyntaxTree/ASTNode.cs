@@ -380,7 +380,7 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the for statement</returns>
     T VisitEachStatement(EachStatement node);
 
-    /// <summary>Visits a comptime member-expansion statement node (expand m in memvarof(T))</summary>
+    /// <summary>Visits a comptime member-expansion statement node (expand m in allmemvarof(T))</summary>
     /// <param name="node">The expand statement to visit</param>
     /// <returns>Result of visiting the expand statement</returns>
     T VisitExpandStatement(ExpandStatement node);

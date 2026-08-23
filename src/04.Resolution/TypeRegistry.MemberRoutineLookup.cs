@@ -581,7 +581,7 @@ public sealed partial class TypeRegistry
                 return IsTriviallyDestructible(type: implementer);
             case ConstraintKind.ZeroMemvarType:
                 // A field-less aggregate: an empty record, or a scalar kind (choice/flags carry no
-                // member variables). Its `memvarof` is empty, so the base field-walk is degenerate.
+                // member variables). Its `allmemvarof` is empty, so the base field-walk is degenerate.
                 return implementer switch
                 {
                     RecordTypeInfo r => r.MemberVariables.Count == 0,

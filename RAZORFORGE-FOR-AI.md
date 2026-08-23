@@ -526,6 +526,43 @@ each n in rx
   arm64/aarch64). There is no block-level `#if` — platform code splits into
   separate files (`foo_windows.rf` / `foo_linux.rf`), one type per file.
 
+## 16. Keyword inventory
+
+Every reserved word the tokenizer recognizes. Words marked **†** are **RF-only**
+(Suflae does not reserve them — see SUFLAE-FOR-AI §2). Everything else is shared by
+both realms. There is NO `for`, `external`, `async`, `spawn`, `let`, `const`, `fn`,
+`class`, `struct`, `enum`, `match`, `trait`, or `impl` keyword — if you reach for one,
+you are writing another language.
+
+- **Declarations**: `routine` `entity` `record` `choice` `flags` `crashable`
+  `variant` `protocol`
+- **Bindings**: `var` `preset` `lateinit`
+- **Visibility / receiver**: `secret` `posted` `common`
+- **Self**: `me` `Me`
+- **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`†
+- **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
+- **Iteration / range / ownership**: `in` `notin` `to` `til` `by` `steal`†
+- **Module system**: `import` `module`
+- **Other statements**: `using` `as` `define` `pass` `with` `given` `discard`
+- **Logical operators**: `and` `or` `not` `but`
+- **Literals**: `true` `false` `None` `none`
+- **Concurrency**: `suspended` `threaded`†
+- **Danger**†: `danger` (block) `dangerous` (modifier)
+- **Comptime reflection**†: `expand` (loop) plus the reflection **sources**
+  `openmemvarof` `allmemvarof` `branchof` `caseof` — these are reserved. There is no
+  `memvarof`.
+
+The metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof` `typeidof`
+`valueof` `visibilityof` are **comptime builtin intrinsics, NOT reserved keywords** — they
+tokenize as ordinary identifiers and are recognized contextually (bare `nameof(m)` or
+`$`-spliced `me.$nameof(m)`), each reading a comptime property off the active `expand`
+handle or a type.
+
+`$` (wired-routine marker / `${…}` comptime splice) and `!` (failable marker) are
+**structural sigils on a name, not keywords** — the name stays bare (RoutineInfo
+carries the flags). See §1b.
+
 ---
 
 When generating RazorForge: start from the closest fixture in

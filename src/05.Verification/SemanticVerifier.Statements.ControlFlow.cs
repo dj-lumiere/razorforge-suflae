@@ -137,7 +137,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Analyzes a comptime <c>expand m in memvarof(T)</c> loop. Because the concrete members of
+    /// Analyzes a comptime <c>expand m in allmemvarof(T)</c> loop. Because the concrete members of
     /// <c>T</c> are unknown until monomorphization, this does NOT unroll or fully type the body —
     /// it only validates the template shape: the source type resolves, the handle <c>m</c> is
     /// registered as a comptime-handle sentinel (so <c>m.name</c>/<c>m.id</c> and the splices type

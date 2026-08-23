@@ -30,7 +30,7 @@ public enum ConstraintKind
     TupleType,
 
     /// <summary>Zero-member-variable constraint (where T is ZeroMemvarType) — a type whose
-    /// `memvarof` is empty: a field-less record, or a scalar kind (choice/flags) that carries no
+    /// `allmemvarof` is empty: a field-less record, or a scalar kind (choice/flags) that carries no
     /// member variables. Lets a derive specialize the degenerate empty-field-walk case.</summary>
     ZeroMemvarType,
 
@@ -50,7 +50,7 @@ public enum ConstraintKind
     Crashable,
 
     /// <summary>Standard-implementation eligibility constraint (<c>needs P everywhere</c>): the owner
-    /// <c>Me</c> obeys protocol <c>P</c> IFF every member (memvarof/branchof/caseof, per kind) obeys it.
+    /// <c>Me</c> obeys protocol <c>P</c> IFF every member (allmemvarof/branchof/caseof, per kind) obeys it.
     /// The single ∀-quantified structural gate that drives a standard-impl template's eligibility and
     /// conformance verdict. ParameterName is <c>"Me"</c>; ConstraintTypes[0] is the protocol.</summary>
     Everywhere

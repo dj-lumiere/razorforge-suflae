@@ -25,7 +25,7 @@ public sealed class MemberExpandTemplateInfo
     /// <summary>The literal name prefix (e.g. <c>"inner_"</c>) prepended to each field name, or "".</summary>
     public string NamePrefix { get; }
 
-    /// <summary>The generic-parameter name whose members are iterated (the <c>T</c> in <c>memvarof(T)</c>).</summary>
+    /// <summary>The generic-parameter name whose members are iterated (the <c>T</c> in <c>allmemvarof(T)</c>).</summary>
     public string SourceParamName { get; }
 
     /// <summary>The column type with <see cref="ColumnPlaceholderName"/> standing in for the field type

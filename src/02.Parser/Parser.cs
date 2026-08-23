@@ -422,7 +422,7 @@ public partial class Parser
         // ExternalDeclaration. The old `external("C"|"llvm")` keyword form (incl. the block form) was
         // removed in favor of that spelling.
 
-        // Decl-position expand: `expand m in memvarof(T)` inside a record/entity body generates one
+        // Decl-position expand: `expand m in allmemvarof(T)` inside a record/entity body generates one
         // member-variable column per member of the (concrete-at-instantiation) source type. Used by the
         // struct-of-arrays collections SplitArray/SplitList.
         if (_parsingTypeBody && Check(type: TokenType.Expand))

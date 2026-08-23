@@ -146,14 +146,14 @@ public record ExpandMemberTemplate(
 
 /// <summary>
 /// A decl-position comptime member-generation directive inside a record/entity body:
-/// <c>expand m in memvarof(T)</c> followed by an indented block of <see cref="ExpandMemberTemplate"/>s.
+/// <c>expand m in allmemvarof(T)</c> followed by an indented block of <see cref="ExpandMemberTemplate"/>s.
 /// At instantiation (when the source type <c>T</c> is concrete) each template is materialized once per
 /// member of <c>T</c>, laying out struct-of-arrays column members (SplitArray/SplitList). Never survives
 /// to codegen — the generated <see cref="MemberVariableInfo"/> columns are appended to the concrete
 /// instance's member list by the type registry.
 /// </summary>
 /// <param name="HandleName">The per-member handle identifier (e.g. <c>m</c>).</param>
-/// <param name="SourceType">The type inside <c>memvarof(...)</c> — a generic param before instantiation.</param>
+/// <param name="SourceType">The type inside <c>allmemvarof(...)</c> — a generic param before instantiation.</param>
 /// <param name="Templates">The per-member column templates.</param>
 /// <param name="Location">Source location information.</param>
 public record ExpandMemberDeclaration(
