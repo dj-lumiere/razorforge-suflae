@@ -450,6 +450,7 @@ public sealed partial class SemanticVerifier
             Visibility = record.Visibility,
             Location = record.Location,
             Module = GetCurrentModuleName(),
+            Annotations = record.Annotations,
             BackendType = ExtractLlvmAnnotation(annotations: record.Annotations)
         };
 

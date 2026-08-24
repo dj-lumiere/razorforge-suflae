@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 # SignalCaster — a condition-variable monitor for coordinating agents.
 #

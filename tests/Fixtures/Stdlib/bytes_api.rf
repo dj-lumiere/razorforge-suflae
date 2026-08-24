@@ -1,6 +1,6 @@
 module Tests/Stdlib/BytesApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 routine start()
   var b = "hello".encode_as_utf8()

@@ -107,7 +107,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                         startText = startRoutine.Accept(this);
                         break;
                     case RoutineDeclaration { ResolvedInfo: null }:
-                        // Unregistered routine surface decl — e.g. an @innate BuilderService standalone
+                        // Unregistered routine surface decl — e.g. an @innate BuilderQuery standalone
                         // (build_mode/target_os/…) whose sole real definition is the synthesized,
                         // build-time-folded routine emitted from the synthesizedBodies bucket. Its bare
                         // decl has no ResolvedInfo; drop it so the dump shows one bodied routine, not a

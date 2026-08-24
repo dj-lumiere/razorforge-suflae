@@ -88,7 +88,7 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         new RoamHookRefLoweringPass(registry: ctx.Registry)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
-        new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
+        new BuilderQueryInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         // Operator lowering for instantiated bodies: GMP's clones inherit unlowered
         // BinaryExpression/UnaryExpression nodes from the generic-def AST (the Phase 8
         // RunGlobal sweep finished before GMP populated the InstantiatedGenericBodies

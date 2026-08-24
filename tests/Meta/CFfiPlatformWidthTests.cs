@@ -33,7 +33,7 @@ public sealed class CFfiPlatformWidthTests
 
     private static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    /// <summary>Byte width of each platform-dependent wrapper via the BuilderService `data_size()` intrinsic.</summary>
+    /// <summary>Byte width of each platform-dependent wrapper via the BuilderQuery `data_size()` intrinsic.</summary>
     [Fact]
     public void CFfiScalarWrappers_TakePlatformWidth()
     {
@@ -42,7 +42,7 @@ public sealed class CFfiPlatformWidthTests
             module Playground
 
             import IO/Console
-            import BuilderService
+            import BuilderQuery
 
             routine start()
               show(f"CLong={CLong.data_size().byte_size()}")
@@ -133,7 +133,7 @@ public sealed class CFfiPlatformWidthTests
             module Playground
 
             import IO/Console
-            import BuilderService
+            import BuilderQuery
 
             routine start()
               danger

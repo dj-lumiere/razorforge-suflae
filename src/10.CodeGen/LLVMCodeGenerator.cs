@@ -1104,7 +1104,7 @@ public partial class LlvmCodeGenerator
                             _generatedRoutines.Add(item: monoFuncName);
                             // Rewrite the shared generic-def body per concrete owner BEFORE
                             // emission. The raw AST is shared across every instantiation, so
-                            // BuilderServiceInliningPass had to defer folding its BuilderService
+                            // BuilderQueryInliningPass had to defer folding its BuilderQuery
                             // constants (me.type_name() in synthesized represent/diagnose).
                             // GenericAstRewriter deep-clones, substitutes the type params, folds
                             // those constants against the concrete owner (same fold logic as the

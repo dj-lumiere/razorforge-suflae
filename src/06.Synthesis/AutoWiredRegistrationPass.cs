@@ -58,9 +58,9 @@ internal sealed class AutoWiredRegistrationPass
             ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [textType])
             : null;
 
-        // BuilderService helper-type closures (List[FieldInfo], List[ProtocolInfo],
+        // BuilderQuery helper-type closures (List[FieldInfo], List[ProtocolInfo],
         // List[RoutineInfo]) are only resolved when the user program
-        // actually imports BuilderService. Otherwise GMP would drag in the full
+        // actually imports BuilderQuery. Otherwise GMP would drag in the full
         // BTreeListNode/Owned/Array/ArrayIterator closure for every type via the
         // metadata routines registered on each type.
         TypeSymbol? listFieldInfoType = null;
@@ -141,7 +141,7 @@ internal sealed class AutoWiredRegistrationPass
                     existingMemberRoutines: existingMemberRoutines);
             }
 
-            // All types: BuilderService metadata routines
+            // All types: BuilderQuery metadata routines
             BuilderInfoProvider.RegisterRoutinesOnType(type: type,
                 existingMemberRoutines: existingMemberRoutines,
                 registry: _registry,
@@ -241,7 +241,7 @@ internal sealed class AutoWiredRegistrationPass
                 case TypeCategory.Choice:
                     // Choices/flags get eq/hash unconditionally — equality is unambiguous
                     // tag-compare with no field-selection design choice to make. Stdlib's
-                    // ComparisonSign and BuilderService enums rely on this for represent /
+                    // ComparisonSign and BuilderQuery enums rely on this for represent /
                     // diagnose / derived comparison operators.
                     if (u64Type != null)
                     {
@@ -525,7 +525,7 @@ internal sealed class AutoWiredRegistrationPass
             textType: textType,
             s64Type: s64Type);
 
-        // Synthesize BuilderService record type with platform/build info member routines
+        // Synthesize BuilderQuery record type with platform/build info member routines
         BuilderInfoProvider.RegisterModuleRoutines(registry: _registry,
             textType: textType,
             u64Type: u64Type,

@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents the success-or-crash-or-absent carrier used by `lookup_` routines.
 ### `Lookup[T]` extends the `Result[T]` carrier shape with an explicit absent

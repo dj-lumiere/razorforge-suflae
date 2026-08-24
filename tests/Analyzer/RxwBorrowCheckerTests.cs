@@ -15,7 +15,7 @@ public class RxwBorrowCheckerTests
 {
     private const string Prelude = """
                                    import IO/Console
-                                   import BuilderService
+                                   import BuilderQuery
 
                                    entity Counter
                                      value: S64

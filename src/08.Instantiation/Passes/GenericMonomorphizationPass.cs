@@ -217,7 +217,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // surface deeper layers of the adapter chain.
         ExpandLivenessThroughEmittedBodies();
 
-        EmitGenericDefBuilderServiceBodies();
+        EmitGenericDefBuilderQueryBodies();
     }
 
     /// <summary>
@@ -519,7 +519,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // always seeds at least the entry point, so a non-empty LiveRoutineKeys means the pass ran.
         // A program that uses no generic types at all produces a genuinely EMPTY LiveOwnerTypeNames
         // — gating on `LiveOwnerTypeNames.Count > 0` would misread that as "filter off" and fan out
-        // over every concrete instance in the registry (BuilderService/BTree/numeric machinery),
+        // over every concrete instance in the registry (BuilderQuery/BTree/numeric machinery),
         // force-emitting wired operators whose plain-helper callees (add_with_overflow, recast_as,
         // cmp) are never emitted → LINKERR. Mirror the per-routine gate at the BuildBody site below,
         // which already keys off LiveRoutineKeys. Both empty = legacy fan-out (reachability skipped).
@@ -854,7 +854,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Emits generic-definition variant bodies for BuilderService routines (e.g. member_variable_count,
+    /// Emits generic-definition variant bodies for BuilderQuery routines (e.g. member_variable_count,
     /// type_name, is_generic) directly for the generic def owner. These bodies are safe to emit without
     /// type substitution because they return fixed literals and never reference the generic type parameter.
     ///
@@ -863,7 +863,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// mangled name (e.g. Collections.BTreeDictNode.type_name). This pass ensures that name has a
     /// definition so the linker does not fail.
     /// </summary>
-    private void EmitGenericDefBuilderServiceBodies() // NOSONAR S3776
+    private void EmitGenericDefBuilderQueryBodies() // NOSONAR S3776
     {
         foreach (TypeInfo type in ctx.Registry.GetTypesWithMemberRoutines())
         {
@@ -876,7 +876,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
             foreach (RoutineInfo routine in ctx.Registry.GetMemberRoutinesForType(type))
             {
-                if (!BuilderInfoProvider.IsBuilderServiceRoutine(name: routine.Name)) continue;
+                if (!BuilderInfoProvider.IsBuilderQueryRoutine(name: routine.Name)) continue;
                 string key = routine.RegistryKey;
                 if (ctx.InstantiatedGenericBodies.ContainsKey(key)) continue;
                 if (!ctx.VariantBodies.TryGetValue(key: key, value: out Statement? body)) continue;

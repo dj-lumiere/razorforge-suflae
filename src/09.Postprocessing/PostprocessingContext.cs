@@ -21,7 +21,7 @@ public sealed class PostprocessingContext
     public TargetConfig Target { get; }
 
     /// <summary>
-    /// Build mode used by BuilderService and other compile-time metadata lowering.
+    /// Build mode used by BuilderQuery and other compile-time metadata lowering.
     /// </summary>
     public RfBuildMode BuildMode { get; }
 

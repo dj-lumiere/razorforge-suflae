@@ -1,6 +1,6 @@
 module Tests/Stdlib/StructLayout
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Locks record memory layout against the C ABI: a member is padded to its NATURAL alignment (max of
 # its own fields' alignments for a nested struct), NOT to its total size. Before the fix the layout

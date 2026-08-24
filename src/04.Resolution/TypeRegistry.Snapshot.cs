@@ -56,7 +56,7 @@ partial class TypeRegistry
         /// <summary>Module alias → qualified module name map.</summary>
         public Dictionary<string, string> ModuleNames { get; init; } = null!;
 
-        /// <summary>Root path for on-demand module loading (e.g. import BuilderService).</summary>
+        /// <summary>Root path for on-demand module loading (e.g. import BuilderQuery).</summary>
         public string? StdlibRootPath { get; init; }
     }
 
@@ -125,7 +125,7 @@ partial class TypeRegistry
 
         // Fresh loader per test — shares no mutable state with other test instances.
         // The snapshot's loader is only used to capture the registry state; on-demand module
-        // loading (import BuilderService, etc.) goes through this new per-test loader.
+        // loading (import BuilderQuery, etc.) goes through this new per-test loader.
         // Modules already in _loadedModules (restored from snapshot) are skipped without re-parsing.
         _stdlibPath = snapshot.StdlibRootPath;
         if (snapshot.StdlibRootPath != null)

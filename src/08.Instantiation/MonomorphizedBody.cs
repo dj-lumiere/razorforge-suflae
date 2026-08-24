@@ -12,8 +12,8 @@ namespace Compiler.Instantiation;
 /// </summary>
 /// <param name="Ast">The AST.</param>
 /// <param name="Info">The info.</param>
-/// <param name="TypeSubs">The type substitutions (consumed by BuilderServiceInliningPass to fold
-///   BuilderService constants against the concrete owner; NOT used by codegen — Track C removed the
+/// <param name="TypeSubs">The type substitutions (consumed by BuilderQueryInliningPass to fold
+///   BuilderQuery constants against the concrete owner; NOT used by codegen — Track C removed the
 ///   codegen-time substitution map).</param>
 /// <param name="VariantStatus">The variant status.</param>
 /// <param name="VariantInnerType">The variant inner type.</param>

@@ -1,10 +1,10 @@
 module Tests/Stdlib/ExpandMtypeExprApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Exercises `$typeof(m)` in EXPRESSION position: inside an `expand m in allmemvarof(T)` loop, the comptime
 # member type splices into a typewise receiver for a static/universal method — here `$typeof(m).data_size()`
-# (a `@innate` BuilderService constant). Each field's type folds to its concrete byte size at
+# (a `@innate` BuilderQuery constant). Each field's type folds to its concrete byte size at
 # monomorphization (S64 -> 8, F32 -> 4, Bool -> 1, U16 -> 2).
 
 record Mixed

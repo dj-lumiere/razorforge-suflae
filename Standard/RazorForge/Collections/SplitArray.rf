@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 ### A fixed-size, struct-of-arrays (SoA) array of `N` records with value semantics.
 ###

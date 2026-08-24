@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 secret preset B_LIST: U64 = 64u64
 secret preset MIN_KEYS_LIST: U64 = 31u64

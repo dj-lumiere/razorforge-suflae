@@ -40,10 +40,10 @@ public sealed class DesugaringContext
     /// </summary>
     public Dictionary<string, MonomorphizedBody> InstantiatedGenericBodies { get; } = new();
 
-    /// <summary>Target platform — drives BuilderService platform constants.</summary>
+    /// <summary>Target platform — drives BuilderQuery platform constants.</summary>
     public TargetConfig Target { get; }
 
-    /// <summary>Build mode — drives BuilderService.build_mode.</summary>
+    /// <summary>Build mode — drives BuilderQuery.build_mode.</summary>
     public RfBuildMode BuildMode { get; }
 
     /// <summary>When true, diagnostic passes print per-iteration timings to stderr.</summary>

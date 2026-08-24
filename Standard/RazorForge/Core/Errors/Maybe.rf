@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents an optional record value.
 ### `Maybe[T]` stores either a present `T` or the absence of a value without

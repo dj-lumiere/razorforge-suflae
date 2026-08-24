@@ -1,6 +1,6 @@
-module BuilderService
+module BuilderQuery
 
-### Enumerates the high-level type categories exposed by BuilderService.
+### Enumerates the high-level type categories exposed by BuilderQuery.
 ### These values are returned by `type_kind()` and related reflection-style APIs.
 choice TypeKind
   ### A record type: value semantics, stack-allocated inline struct.
@@ -23,7 +23,7 @@ choice TypeKind
   PROTOCOL
 
 ### Enumerates declaration visibility levels.
-### Visibility metadata is surfaced through BuilderService inspection routines.
+### Visibility metadata is surfaced through BuilderQuery inspection routines.
 choice Visibility
   ### Readable and writable from anywhere; no keyword is written in source.
   OPEN
@@ -47,7 +47,7 @@ choice BuildMode
   TEST
 
 ### Describes a member variable declared on a type.
-### Instances of `FieldInfo` are returned by BuilderService metadata queries.
+### Instances of `FieldInfo` are returned by BuilderQuery metadata queries.
 entity FieldInfo
   ### Stores the declared member variable name.
   name: Text
@@ -226,13 +226,13 @@ common routine T.is_generic() -> Bool
 routine T.is_generic() -> Bool
 
 ### Returns the `TypeKind` category of this type.
-### This is the broadest built-in classification exposed by BuilderService.
+### This is the broadest built-in classification exposed by BuilderQuery.
 ### :returns: The `TypeKind` classification of this type.
 @readonly
 @innate
 common routine T.type_kind() -> TypeKind
 ### Returns the `TypeKind` category of this value's type.
-### This is the broadest built-in classification exposed by BuilderService.
+### This is the broadest built-in classification exposed by BuilderQuery.
 ### :returns: The `TypeKind` classification of this type.
 @readonly
 @innate

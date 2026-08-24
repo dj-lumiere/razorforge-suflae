@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 # B-tree order (max children per node)
 # B = 64 means each node has 31-63 keys (except root)

@@ -1,6 +1,6 @@
 module Tests/StdlibSf/MaybeApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Record return type — exercises Maybe[Record] (no Owned auto-wrap).
 record Point

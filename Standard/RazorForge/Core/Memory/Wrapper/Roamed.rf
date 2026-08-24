@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Shared[T, P]}.
 ### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves

@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 import Core.SecureHashKey
 
 secret preset SET_INITIAL_CAPACITY: U64 = 16u64

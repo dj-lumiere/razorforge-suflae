@@ -1,6 +1,6 @@
 module Tests/Stdlib/CrashableApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # User-defined crashable type — exercises the Crashable protocol surface.
 crashable BadInputError

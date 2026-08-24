@@ -12,32 +12,32 @@ namespace Verification;
 using TypeSymbol = TypeInfo;
 
 /// <summary>
-/// Central authority for BuilderService routine registration and import-gating.
+/// Central authority for BuilderQuery routine registration and import-gating.
 /// Provides static name sets for identifying BS routines and memberRoutines to register
 /// them on types, as standalone functions, and as module-level routines.
 /// </summary>
 public static class BuilderInfoProvider
 {
-    /// <summary>Per-type BuilderService member routines (require 'import BuilderService').</summary>
+    /// <summary>Per-type BuilderQuery member routines (require 'import BuilderQuery').</summary>
     private static readonly IReadOnlySet<string> PerTypeRoutines = RuntimeContract.BuilderPerTypeRoutines;
 
-    /// <summary>Standalone BuilderService routines (require 'import BuilderService').</summary>
+    /// <summary>Standalone BuilderQuery routines (require 'import BuilderQuery').</summary>
     private static readonly IReadOnlySet<string> StandaloneRoutines = RuntimeContract.BuilderStandaloneRoutines;
 
-    /// <summary>Returns true if the routine name is a per-type BuilderService member routine.</summary>
-    public static bool IsBuilderServiceRoutine(string name)
+    /// <summary>Returns true if the routine name is a per-type BuilderQuery member routine.</summary>
+    public static bool IsBuilderQueryRoutine(string name)
     {
         return PerTypeRoutines.Contains(item: name);
     }
 
-    /// <summary>Returns true if the routine name is a standalone BuilderService routine.</summary>
-    public static bool IsBuilderServiceStandalone(string name)
+    /// <summary>Returns true if the routine name is a standalone BuilderQuery routine.</summary>
+    public static bool IsBuilderQueryStandalone(string name)
     {
         return StandaloneRoutines.Contains(item: name);
     }
 
     /// <summary>
-    /// Registers all per-type BuilderService metadata routines on a given type.
+    /// Registers all per-type BuilderQuery metadata routines on a given type.
     /// </summary>
     public static void RegisterRoutinesOnType(TypeSymbol type, List<RoutineInfo> existingMemberRoutines,
         TypeRegistry registry, TypeSymbol? textType, TypeSymbol? boolType,
@@ -195,7 +195,7 @@ public static class BuilderInfoProvider
     }
 
     /// <summary>
-    /// Registers standalone BuilderService routines (source_*, caller_*).
+    /// Registers standalone BuilderQuery routines (source_*, caller_*).
     /// </summary>
     public static void RegisterStandaloneRoutines(TypeRegistry registry, TypeSymbol? textType,
         TypeSymbol? s64Type)
@@ -231,7 +231,7 @@ public static class BuilderInfoProvider
     }
 
     /// <summary>
-    /// Registers the BuilderService platform/build info routines as standalone functions.
+    /// Registers the BuilderQuery platform/build info routines as standalone functions.
     /// </summary>
     public static void RegisterModuleRoutines(TypeRegistry registry, TypeSymbol? textType,
         TypeSymbol? u64Type, TypeSymbol? s64Type)
@@ -340,9 +340,9 @@ public static class BuilderInfoProvider
             return;
         }
 
-        // Standalone BuilderService routines (target_os/build_mode/source_*/page_size/…) belong to the
-        // real `module BuilderService`, so register them under it: name resolution then gates them by
-        // normal module-import scoping — `import BuilderService` brings them in, and a bare call without
+        // Standalone BuilderQuery routines (target_os/build_mode/source_*/page_size/…) belong to the
+        // real `module BuilderQuery`, so register them under it: name resolution then gates them by
+        // normal module-import scoping — `import BuilderQuery` brings them in, and a bare call without
         // the import is a plain UnknownIdentifier, exactly like any other unimported module member.
         // (The per-TYPE reflection routines — type_id/type_name/… injected onto every type — still use
         // the dedicated import-gate, since they are not free routines you can resolve through a module.)
@@ -350,7 +350,7 @@ public static class BuilderInfoProvider
         {
             Kind = RoutineKind.Function,
             OwnerType = null,
-            Module = "BuilderService",
+            Module = "BuilderQuery",
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,

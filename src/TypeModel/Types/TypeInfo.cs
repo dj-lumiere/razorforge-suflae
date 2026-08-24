@@ -63,6 +63,15 @@ public abstract class TypeInfo
     public string? Module { get; init; }
 
     /// <summary>
+    /// Annotation markers written on this type's declaration (e.g. <c>positional</c>, <c>llvm("i64")</c>),
+    /// spelled as they appear in source after the leading <c>@</c> is stripped by the parser. Surfaced by
+    /// the BuilderQuery <c>T.annotations()</c> reflection routine. <c>null</c>/empty when the type carries
+    /// no annotations. A structured attribute plumbed from <see cref="SyntaxTree.Declaration"/>, never
+    /// re-derived from the name.
+    /// </summary>
+    public List<string>? Annotations { get; init; }
+
+    /// <summary>
     /// The stdlib "world-line" this type identity belongs to: <c>"RF"</c> (RazorForge realm — bare
     /// single-owner entities, deterministic teardown) or <c>"SF"</c> (Suflae realm — <c>entity</c> lowers
     /// to <c>Roamed</c>, cycle-collected). A structured attribute (like <c>IsFailable</c> /

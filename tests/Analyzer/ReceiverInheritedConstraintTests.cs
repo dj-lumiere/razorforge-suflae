@@ -71,7 +71,7 @@ public class ReceiverInheritedConstraintTests
 
     private const string LockPrelude = """
                                        import IO/Console
-                                       import BuilderService
+                                       import BuilderQuery
 
                                        entity Counter
                                          value: S64

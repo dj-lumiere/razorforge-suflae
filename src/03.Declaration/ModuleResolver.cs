@@ -261,7 +261,7 @@ public sealed class ModuleResolver
             string idxRf = Path.Combine(path1: root, path2: relPath, path3: "index.rf");
             if (File.Exists(path: idxRf)) return idxRf;
 
-            // Try: root/module/module.rf (same-name-as-directory convention, e.g., BuilderService/BuilderService.rf)
+            // Try: root/module/module.rf (same-name-as-directory convention, e.g., BuilderQuery/BuilderQuery.rf)
             string dirName = Path.GetFileName(path: relPath);
             if (!string.IsNullOrEmpty(value: dirName))
             {

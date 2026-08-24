@@ -1236,10 +1236,10 @@ public class CompilerPipelineLoweringTests
     /// Verifies code generation behavior for typewise builder service memberRoutine uses semantic receiver type.
     /// </summary>
     [Fact]
-    public void Codegen_TypewiseBuilderServiceMemberRoutine_UsesSemanticReceiverType()
+    public void Codegen_TypewiseBuilderQueryMemberRoutine_UsesSemanticReceiverType()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         routine start() -> ByteSize
                           return S64.data_size()

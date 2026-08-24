@@ -271,8 +271,8 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
     /// <param name="stdlibPath">Optional path to the stdlib directory.</param>
-    /// <param name="target">Target platform -> drives BuilderService platform constants. Defaults to host.</param>
-    /// <param name="buildMode">Build mode -> drives BuilderService.build_mode. Defaults to Debug.</param>
+    /// <param name="target">Target platform -> drives BuilderQuery platform constants. Defaults to host.</param>
+    /// <param name="buildMode">Build mode -> drives BuilderQuery.build_mode. Defaults to Debug.</param>
     public SemanticVerifier(Language language, string? stdlibPath = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {
@@ -1113,6 +1113,15 @@ public sealed partial class SemanticVerifier
         }
         Mark(label: "Phase 3 -> Declarations");
 
+        // Record per-module import lists for BuilderQuery's T.dependencies(). importSnapshots is keyed
+        // by file; a module may span files, so accumulate each file's imports under its declared module.
+        foreach ((string filePath, HashSet<string> imports) in importSnapshots)
+        {
+            string? mod = moduleNameSnapshots.GetValueOrDefault(key: filePath);
+            if (!string.IsNullOrEmpty(value: mod))
+                _registry.AddModuleDependencies(module: mod, imports: imports);
+        }
+
         // Phase 1b: Re-resolve record/entity `obeys` conformances now that ALL files' types AND
         // every referenced (lazily-loaded) protocol are registered. Initial per-file declaration
         // resolution can drop a protocol whose definition wasn't loaded yet — e.g. a user module
@@ -1175,6 +1184,14 @@ public sealed partial class SemanticVerifier
         // Phase 4 global: once, registry-only -> no per-file import scoping needed
         _conformanceAnalyzer.ApplyImplicitMarkerConformance();
         Mark(label: "Phase 4 global -> implicit marker conformance");
+
+        // Detect a NON-stdlib `import BuilderQuery` from the build graph directly: UserPrograms is
+        // not populated until the Phase-5 sweep below, so the AutoRegisterWiredRoutines UserPrograms
+        // scan would see an empty list here and never register the gated entity-list metadata
+        // routines. The stdlib imports BuilderQuery everywhere, so only a file OUTSIDE StdlibPath
+        // counts as a genuine user opt-in (this preserves the "skip the heavy List[FieldInfo] closure
+        // unless the user actually asked for BuilderQuery" optimization).
+        _builderQueryUserImportedOverride = DetectUserBuilderQueryImport(files: files);
 
         // Phase 3 global: synthesized routines, derived operators, protocol validation
         AutoRegisterWiredRoutines();
@@ -1395,6 +1412,15 @@ public sealed partial class SemanticVerifier
                     _importedModules.Add(item: routineInfo.Module[..dotIdx]);
             }
         }
+
+        // BuilderQuery per-type entity-list routines (member_variable_info / protocol_info / routine_info)
+        // synthesize bodies that construct FieldInfo/ProtocolInfo/RoutineInfo/Visibility values — all in
+        // the BuilderQuery module. Their owner is a user/stdlib type, so the import scope restored above
+        // does NOT include BuilderQuery; without this those constructors resolve to ErrorType (silently,
+        // since synthesized-body errors are suppressed below) and the body is dropped, surfacing as an
+        // over-prune "declared and called but never defined" at codegen. Make BuilderQuery visible.
+        if (BuilderInfoProvider.IsBuilderQueryRoutine(name: routineInfo.Name))
+            _importedModules.Add(item: "BuilderQuery");
 
         // Analyze the compiler-generated body in its OWNER's module, not whatever module happens to be
         // current when the body is first made live. A synthesized failable variant of a Core routine

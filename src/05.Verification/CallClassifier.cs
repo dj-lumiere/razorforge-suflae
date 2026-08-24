@@ -18,7 +18,7 @@ internal static class CallClassifier
         if (routine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceStandalone(name: routine.Name))
+        if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderQueryStandalone(name: routine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectRoutine;
@@ -32,7 +32,7 @@ internal static class CallClassifier
         if (memberRoutine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name))
+        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderQueryRoutine(name: memberRoutine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectMemberRoutine;

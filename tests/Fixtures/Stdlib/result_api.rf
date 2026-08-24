@@ -1,6 +1,6 @@
 module Tests/Stdlib/ResultApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Failable routine using throw only -> exposes check_ variant returning Result[T]
 routine divide!(a: S64, b: S64) -> S64

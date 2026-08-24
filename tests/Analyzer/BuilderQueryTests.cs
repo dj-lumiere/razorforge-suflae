@@ -6,9 +6,9 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for BuilderService import-gating and routine availability.
+/// Tests for BuilderQuery import-gating and routine availability.
 /// </summary>
-public class BuilderServiceTests
+public class BuilderQueryTests
 {
     #region Import Gating -> Per-Type Routines
     /// <summary>
@@ -31,7 +31,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates name with import without unexpected diagnostics.
@@ -41,7 +41,7 @@ public class BuilderServiceTests
     public void TypeName_WithImport_NoError()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         record Point
                           x: S64
@@ -55,7 +55,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates size without import and reports the expected error.
@@ -77,7 +77,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates size with import without unexpected diagnostics.
@@ -87,7 +87,7 @@ public class BuilderServiceTests
     public void DataSize_WithImport_NoError()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         record Pair
                           a: S64
@@ -101,7 +101,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -120,7 +120,7 @@ public class BuilderServiceTests
                           return
                         """;
 
-        // Standalone BuilderService routines are plain `module BuilderService` members: a missing
+        // Standalone BuilderQuery routines are plain `module BuilderQuery` members: a missing
         // import is an ordinary UnknownIdentifier, not a bespoke import-required diagnostic.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -134,7 +134,7 @@ public class BuilderServiceTests
     public void SourceFile_WithImport_NoError()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         routine test()
                           var f = source_file()
@@ -143,7 +143,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates line without import and reports the expected error.
@@ -205,7 +205,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates eq without import without unexpected diagnostics.
@@ -228,7 +228,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -242,7 +242,7 @@ public class BuilderServiceTests
     public void MultipleRoutines_WithImport_AllAvailable()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         record Pair
                           x: S64
@@ -262,7 +262,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates routines with import available.
@@ -272,7 +272,7 @@ public class BuilderServiceTests
     public void ListRoutines_WithImport_Available()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         record Pair
                           x: S64
@@ -290,7 +290,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>
     /// Verifies that the test validates routines with import available.
@@ -300,7 +300,7 @@ public class BuilderServiceTests
     public void StandaloneRoutines_WithImport_Available()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         routine test()
                           var f = source_file()
@@ -313,7 +313,7 @@ public class BuilderServiceTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion

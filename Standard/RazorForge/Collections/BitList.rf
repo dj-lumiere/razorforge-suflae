@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 ### A growable, densely packed sequence of boolean values stored in machine words.
 ###

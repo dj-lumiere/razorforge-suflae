@@ -389,7 +389,7 @@ public class ProtocolImplementationTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
-    /// Verifies that @innate is valid on non-protocol routines (e.g., BuilderService routines).
+    /// Verifies that @innate is valid on non-protocol routines (e.g., BuilderQuery routines).
     /// </summary>
 
     [Fact]

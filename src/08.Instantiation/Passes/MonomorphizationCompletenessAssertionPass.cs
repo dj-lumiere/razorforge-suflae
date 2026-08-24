@@ -18,8 +18,8 @@ namespace Compiler.Instantiation.Passes;
 /// <para>
 /// Only bodies whose <see cref="MonomorphizedBody.Info"/> is itself concrete (owner not a generic
 /// definition, routine not a generic definition, no residual generic parameters in its signature)
-/// are checked. Generic-definition BuilderService bodies (emitted deliberately with an empty
-/// substitution map by <c>EmitGenericDefBuilderServiceBodies</c>) are exempt: codegen substitutes
+/// are checked. Generic-definition BuilderQuery bodies (emitted deliberately with an empty
+/// substitution map by <c>EmitGenericDefBuilderQueryBodies</c>) are exempt: codegen substitutes
 /// their single type parameter per concrete owner and they never reach the concrete-only guards.
 /// </para>
 /// </summary>

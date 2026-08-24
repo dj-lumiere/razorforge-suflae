@@ -1,6 +1,6 @@
 module Tests/Stdlib/CSubsystemApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Platform-INDEPENDENT surface of the C FFI scalar/string wrappers. Every value here fits BOTH data
 # models (CLong/CULong ≤ 2^31-1, CWChar ≤ 0xFFFF), so the observable output is identical on Windows

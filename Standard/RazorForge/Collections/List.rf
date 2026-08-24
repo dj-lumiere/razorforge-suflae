@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### A growable, contiguous sequence of elements with amortized O(1) append.
 ###

@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents a null-terminated wide C string (`wchar_t*`) — the FFI wrapper for wide-character
 ### C strings, the sibling of {CStr} for narrow `char*`. The wrapper is value-typed (a raw pointer);

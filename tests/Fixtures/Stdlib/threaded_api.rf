@@ -1,6 +1,6 @@
 module Tests/Stdlib/ThreadedApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # v0.1 concurrency, Phase 1: `threaded routine` spawns an OS thread; calling it yields a
 # Task[T] handle; `.waitfor()` joins (-> T) and `.waitfor(timeout)` joins with a deadline

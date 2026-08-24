@@ -1006,7 +1006,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                 continue;
                             }
                             // Collection literals in synthesized bodies (e.g. MakeListReturn for
-                            // BuilderService.protocols) need the same implicit add/create seeding
+                            // BuilderQuery.protocols) need the same implicit add/create seeding
                             // as user-code literals; otherwise the literal's create body never
                             // gets monomorphized and codegen emits a call to an undefined symbol.
                             if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap } or BinaryExpression)

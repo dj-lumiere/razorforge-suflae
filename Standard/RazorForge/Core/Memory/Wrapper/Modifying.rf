@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents temporary unmanaged mutable access to an entity.
 ### `Modifying[T]` is the non-Assignable access type used for explicit low-level manipulation outside the scoped-access wrappers.

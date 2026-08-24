@@ -128,8 +128,8 @@ public static class RuntimeContract
     /// <remarks>Sites: OperatorLoweringPass, RoutineReachabilityPass. Failable.</remarks>
     public const string Resolve = "resolve";
 
-    /// <summary><c>data_size()</c> — per-type byte size (compile-time BuilderService intrinsic, folded not called).</summary>
-    /// <remarks>Sites: BuilderInfoProvider, BuilderServiceInliningPass, GenericAstRewriter.</remarks>
+    /// <summary><c>data_size()</c> — per-type byte size (compile-time BuilderQuery intrinsic, folded not called).</summary>
+    /// <remarks>Sites: BuilderInfoProvider, BuilderQueryInliningPass, GenericAstRewriter.</remarks>
     public const string DataSize = "data_size";
 
     /// <summary><c>crash_message()</c> on error types — extracts the diagnostic string on the throw path.</summary>
@@ -155,7 +155,7 @@ public static class RuntimeContract
     /// the rename-sensitive set that <c>validate-stdlib</c>'s <see cref="RuntimeContractCheck"/>
     /// asserts. Deliberately EXCLUDES compiler-generated / intrinsic names that have no stdlib
     /// routine body: <see cref="TryEmit"/> (generated from <c>emit</c>), the marker verbs
-    /// <see cref="Access"/>/<see cref="Control"/>, <see cref="DataSize"/> + the BuilderService sets
+    /// <see cref="Access"/>/<see cref="Control"/>, <see cref="DataSize"/> + the BuilderQuery sets
     /// (folded intrinsics), and the native <see cref="Runtime"/> externs (link-checked C-ABI). The
     /// carrier FIELDS (<see cref="Carrier"/>) are member variables, not routines — checked separately.</summary>
     public static readonly IReadOnlyList<string> StdlibRoutineContracts =
@@ -266,12 +266,12 @@ public static class RuntimeContract
             { Retained, Tracked, Shared, Watched, Roamed };
 
     // =====================================================================================
-    // BuilderService intrinsic names — reflection-style routines folded at compile time
+    // BuilderQuery intrinsic names — reflection-style routines folded at compile time
     // (Axis-2 intrinsics: no linkable body, no user-import dependency). Mirrors
     // BuilderInfoProvider.PerTypeRoutines / .StandaloneRoutines.
     // =====================================================================================
 
-    /// <summary>Per-type BuilderService member routines (require <c>import BuilderService</c>).</summary>
+    /// <summary>Per-type BuilderQuery member routines (require <c>import BuilderQuery</c>).</summary>
     public static readonly IReadOnlySet<string> BuilderPerTypeRoutines =
         new HashSet<string>(comparer: StringComparer.Ordinal)
         {
@@ -281,7 +281,7 @@ public static class RuntimeContract
             "full_type_name", "dependencies", "member_type_id",
         };
 
-    /// <summary>Standalone BuilderService routines (require <c>import BuilderService</c>).</summary>
+    /// <summary>Standalone BuilderQuery routines (require <c>import BuilderQuery</c>).</summary>
     public static readonly IReadOnlySet<string> BuilderStandaloneRoutines =
         new HashSet<string>(comparer: StringComparer.Ordinal)
         {

@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Multi-threaded weak reference. Thin pointer to the same {ShareController[T, P]} as {Shared[T, P]}.
 ### The atomic-refcount twin of {Tracked[T]} — equivalent to `Weak[T]` in Rust. Does not keep the

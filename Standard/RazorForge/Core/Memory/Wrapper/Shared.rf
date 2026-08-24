@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Multi-threaded strong reference to shared data under an access discipline `P`. Thin pointer to
 ### {ShareController[T, P]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.

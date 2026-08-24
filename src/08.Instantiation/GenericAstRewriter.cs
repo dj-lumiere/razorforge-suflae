@@ -966,14 +966,14 @@ internal static class GenericAstRewriter
 
             // Fold T.BS_ROUTINE() -> compile-time literal during monomorphization.
             // After substituting T -> Byte (or S64 etc.), the identifier is now a concrete
-            // type name. BuilderServiceInliningPass handles the static/concrete cases:
+            // type name. BuilderQueryInliningPass handles the static/concrete cases:
             // this fold handles the residual case where the receiver name still matches a
             // type-param string substitution (e.g., the receiver is IdentifierExpression("T")
             // and stringSubs["T"] = "Core.Byte" -> the name hasn't been rewritten yet when
             // the switch arm fires).
             CallExpression { Callee: MemberExpression { MemberName: var bsName } bsCallee,
                 Arguments: { Count: 0 } } bsCall
-                when ctx.Registry != null && BuilderServiceInliningPass.IsFoldable(bsName)
+                when ctx.Registry != null && BuilderQueryInliningPass.IsFoldable(bsName)
                 => TryFoldBsCallViaStringSubs(
                        callee: bsCallee, location: bsCall.Location, ctx: ctx)
                    ?? bsCall with
@@ -1267,7 +1267,7 @@ internal static class GenericAstRewriter
             // `$typeof(m)` / bare `typeof(m)` (a metadata-intrinsic CallExpression) — carries a deferred
             // `ErrorTypeInfo` placeholder (SA can't resolve it pre-monomorph), which would otherwise
             // clobber the folded type here, breaking a following `.data_size()`/`.type_id()` fold (the
-            // BuilderService pass reads the receiver's ResolvedType). Only fires when the rewrite genuinely
+            // BuilderQuery pass reads the receiver's ResolvedType). Only fires when the rewrite genuinely
             // produced a concrete type from an error placeholder, so real error nodes are untouched.
             bool exprFoldsTypewise = expr is SpliceExpression
                 or MemberExpression { Object: IdentifierExpression }
@@ -1519,7 +1519,7 @@ internal static class GenericAstRewriter
         return rewritten;
     }
 
-    //  BuilderService constant folding
+    //  BuilderQuery constant folding
 
     /// <summary>
     /// Attempts to fold <c>T.BS_ROUTINE()</c> to a literal expression when the receiver
@@ -1551,7 +1551,7 @@ internal static class GenericAstRewriter
         TypeInfo? typeInfo = ctx.Registry!.LookupType(name: typeName);
         if (typeInfo == null) return null;
 
-        // Delegate actual folding to BuilderServiceInliningPass so both code paths
+        // Delegate actual folding to BuilderQueryInliningPass so both code paths
         // use identical constant-computation logic.
         TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
         TypeInfo? s64Type = ctx.Registry.LookupType(name: "S64");
@@ -1562,8 +1562,8 @@ internal static class GenericAstRewriter
         return callee.MemberName switch
         {
             RuntimeContract.DataSize when u64Type != null && byteSizeType != null =>
-                BuilderServiceInliningPass.MakeByteSizeCreatorPublic(
-                    BuilderServiceInliningPass.CalculateDataSizeForType(typeInfo),
+                BuilderQueryInliningPass.MakeByteSizeCreatorPublic(
+                    BuilderQueryInliningPass.CalculateDataSizeForType(typeInfo),
                     u64Type, byteSizeType, location),
 
             "type_id" when u64Type != null =>

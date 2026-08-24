@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Single-threaded weak reference. Thin pointer to the same {RetainController[T]} as {Retained[T]}.
 ### Does not keep the entity alive. Use {hold!()} to attempt upgrade to a strong reference.

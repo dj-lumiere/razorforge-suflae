@@ -1,6 +1,6 @@
 module Tests/Stdlib/ExpandVisibilityLayoutApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 # Exercises the comptime member-reflection surfaces the other expand fixtures skip:
 #   * `openmemvarof(T)` vs `allmemvarof(T)` — the visibility filter. A `secret` member is present in

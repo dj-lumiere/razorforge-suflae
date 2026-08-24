@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Shared[T, P]}.
 ### `Amending[T]` is the non-Assignable token produced by `Shared.amend()` for exclusive access. It holds

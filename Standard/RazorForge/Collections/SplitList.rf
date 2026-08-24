@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### A growable struct-of-arrays (SoA) sequence of records: each field of the element type `T` is stored
 ### in its OWN contiguous column buffer, rather than interleaving whole `T` values. Indexing copies a

@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents an unmanaged typed raw pointer.
 ### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and access rules.

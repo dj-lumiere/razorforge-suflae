@@ -83,7 +83,7 @@ public sealed partial class SemanticVerifier
             "orderof" or "typeidof" or "placeof" or "sizeof" =>
                 _registry.LookupType(name: "U64") ?? ErrorTypeInfo.Instance,
             // `visibilityof(m)` yields the member's OPEN/POSTED/SECRET visibility as the existing
-            // `Visibility` choice (BuilderService), narrowed by `is SECRET` etc. at the use site.
+            // `Visibility` choice (BuilderQuery), narrowed by `is SECRET` etc. at the use site.
             "visibilityof" => _registry.LookupType(name: "Visibility") ?? ErrorTypeInfo.Instance,
             "valueof" => _registry.LookupType(name: "S32") ?? ErrorTypeInfo.Instance,
             // `typeof(m)` in expression position is a comptime typewise receiver (deferred, like the
@@ -659,7 +659,7 @@ public sealed partial class SemanticVerifier
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
-                    // Standalone BuilderService routines are plain `module BuilderService` members now:
+                    // Standalone BuilderQuery routines are plain `module BuilderQuery` members now:
                     // normal import scoping gates them (no import → UnknownIdentifier), so no bespoke
                     // import-required diagnostic here. (Per-type reflection routines keep their gate.)
 
@@ -1014,7 +1014,7 @@ public sealed partial class SemanticVerifier
                     call.ResolvedRoutine = routine;
                     call.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
 
-                    // Standalone BuilderService routines are plain `module BuilderService` members now:
+                    // Standalone BuilderQuery routines are plain `module BuilderQuery` members now:
                     // normal import scoping gates them (no import → UnknownIdentifier), so no bespoke
                     // import-required diagnostic here. (Per-type reflection routines keep their gate.)
 
@@ -1311,13 +1311,13 @@ public sealed partial class SemanticVerifier
                 {
                     call.LoweringKind = ClassifyMemberRoutineCall(memberRoutine: memberRoutine);
 
-                    // Import-gating: BuilderService routines require 'import BuilderService'
+                    // Import-gating: BuilderQuery routines require 'import BuilderQuery'
                     if (memberRoutine.IsSynthesized &&
-                        BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name) &&
-                        !_importedModules.Contains(item: "BuilderService"))
+                        BuilderInfoProvider.IsBuilderQueryRoutine(name: memberRoutine.Name) &&
+                        !_importedModules.Contains(item: "BuilderQuery"))
                     {
-                        ReportError(code: SemanticDiagnosticCode.BuilderServiceImportRequired,
-                            message: $"'{memberRoutine.Name}()' requires 'import BuilderService'.",
+                        ReportError(code: SemanticDiagnosticCode.BuilderQueryImportRequired,
+                            message: $"'{memberRoutine.Name}()' requires 'import BuilderQuery'.",
                             location: call.Location);
                         return ErrorTypeInfo.Instance;
                     }
@@ -1970,7 +1970,7 @@ public sealed partial class SemanticVerifier
         if (routine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceStandalone(name: routine.Name))
+        if (routine.IsSynthesized && BuilderInfoProvider.IsBuilderQueryStandalone(name: routine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectRoutine;
@@ -1981,7 +1981,7 @@ public sealed partial class SemanticVerifier
         if (memberRoutine.LlvmIrTemplate != null)
             return CallLoweringKind.LlvmIntrinsic;
 
-        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: memberRoutine.Name))
+        if (memberRoutine.IsSynthesized && BuilderInfoProvider.IsBuilderQueryRoutine(name: memberRoutine.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectMemberRoutine;

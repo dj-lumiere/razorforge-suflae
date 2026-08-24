@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 import Collections
 
 ### The auto-derived default `represent()` for any record: `TypeName(field: value, …)`. Written as a
@@ -217,7 +217,7 @@ needs T obeys Hashable
 ### is lowered through its OWN `serialize()`. Every OTHER member type has no `serialize` and boxes its
 ### `represent()` Text instead: a routine-typed member (entities may hold one — records can't, RF-S412)
 ### whose serialized code is meaningless, an enum-like `choice`/`flags` (Diagnosable but not Serializable
-### — e.g. BuilderService's `Visibility`), and any opaque @llvm leaf. The comptime `m.obeying(Serializable)`
+### — e.g. BuilderQuery's `Visibility`), and any opaque @llvm leaf. The comptime `m.obeying(Serializable)`
 ### gate prunes to exactly one arm per member at monomorph, so codegen never sees a `.serialize()` on a
 ### type that has none. Keys are the field names in declaration order; `Dict` iteration is
 ### insertion-ordered, so the output is stable.

@@ -671,6 +671,38 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                         if (Unwrap(val) is IdentifierExpression a)
                             _movedNames.Add(item: a.Name);
                     break;
+                // Constructing an ENTITY (incl. Crashable) MOVES each identifier argument bound to a
+                // NON-Copyable field into that field: the entity is single-owner and a non-Copyable value
+                // (an entity, or a collection like List) transfers ownership on construction. A Copyable
+                // field (Text, scalar) instead receives a retaining copy (RecordCopyLoweringPass injects
+                // it, in a LATER pass), so the source binding stays owned and must still be torn down —
+                // hence the field-type Copyable gate (NOT the argument's own ResolvedType, which a hoisted
+                // temp identifier may not carry). This matters for synthesized bodies whose list literals
+                // ExpressionLoweringPass hoists to `var _lit = List[…](); …` temps BEFORE this pass runs
+                // (the reverse of user code, torn down while the literal is still inline): without marking
+                // the moved temp, scope-exit teardown would `_lit.destroy()` it on top of the entity's own
+                // field teardown → double free (e.g. BuilderQuery `protocol_info`/`routine_info` nested
+                // `List[Text]` fields).
+                case CreatorExpression entityCreator
+                    when (entityCreator.ConstructedType ?? entityCreator.ResolvedType) is EntityTypeInfo ent:
+                    foreach ((string memberName, Expression val) in entityCreator.MemberVariables)
+                        if (Unwrap(val) is IdentifierExpression a)
+                        {
+                            TypeInfo? fieldType = ent.MemberVariables
+                                .FirstOrDefault(m => m.Name == memberName)?.Type;
+                            if (fieldType == null) continue;
+                            // Mirror RecordCopyLoweringPass.NeedsRetainingCopy EXACTLY (both keyed on the
+                            // unified GetLifecycle): a field whose type needs a retaining copy (hand-written
+                            // `store`, e.g. Text) receives an INJECTED copy — the source stays owned and must
+                            // still be torn down, so it is NOT moved. A field without one (a collection like
+                            // List, or a bare entity) takes the source by MOVE, so the source binding must
+                            // not be destroyed. Agreeing with the copy pass is what keeps ownership balanced.
+                            TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: fieldType);
+                            bool needsRetainingCopy = !lc.IsBorrow && lc.Store != null;
+                            if (!needsRetainingCopy)
+                                _movedNames.Add(item: a.Name);
+                        }
+                    break;
             }
         });
     }

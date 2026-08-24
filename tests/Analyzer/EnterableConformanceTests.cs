@@ -117,7 +117,7 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64
@@ -143,7 +143,7 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64
@@ -164,7 +164,7 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64

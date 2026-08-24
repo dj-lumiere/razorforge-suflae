@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 # Channels — `Receiver[T]` (single consumer) / `SharedReceiver[T]` (multi consumer) message passing.
 #

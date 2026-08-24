@@ -294,7 +294,7 @@ public sealed partial class SemanticVerifier
         if (routineInfo == null)
         {
             // @innate routines may be intentionally skipped at registration
-            // (e.g., BuilderService closure-cascading stubs synthesized per-type).
+            // (e.g., BuilderQuery closure-cascading stubs synthesized per-type).
             if (routine.Annotations.Contains(item: "innate"))
             {
                 _currentRoutine = prevRoutine;

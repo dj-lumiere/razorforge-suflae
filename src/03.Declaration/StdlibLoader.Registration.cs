@@ -326,15 +326,15 @@ public sealed partial class StdlibLoader
     /// This is pass 2 of module-based loading - all types are already registered.
     /// </summary>
     /// <summary>
-    /// BuilderService per-type routines whose stdlib decls return
+    /// BuilderQuery per-type routines whose stdlib decls return
     /// <c>List[Owned[FieldInfo|ProtocolInfo|RoutineInfo]]</c> or <c>Dict[Text, Data]</c>.
-    /// Registering these as universal <c>T.x()</c> routines from BuilderService.rf forces GMP to
+    /// Registering these as universal <c>T.x()</c> routines from BuilderQuery.rf forces GMP to
     /// monomorphize the heavy carrier closure (BTreeListNode/Owned/Array/ArrayIterator) for every
-    /// type even when the user program never imports BuilderService.
+    /// type even when the user program never imports BuilderQuery.
     /// AutoWiredRegistrationPass re-registers these per-type when (and only when) the user actually
-    /// imports BuilderService, so skipping the stdlib decls here is safe.
+    /// imports BuilderQuery, so skipping the stdlib decls here is safe.
     /// </summary>
-    private static readonly HashSet<string> BuilderServiceClosureCascadingRoutines =
+    private static readonly HashSet<string> BuilderQueryClosureCascadingRoutines =
         new(comparer: StringComparer.Ordinal)
         {
             "protocol_info",
@@ -342,27 +342,27 @@ public sealed partial class StdlibLoader
             "member_variable_info"
         };
 
-    private static bool ShouldSkipBuilderServiceRoutineDecl(RoutineDeclaration routine,
+    private static bool ShouldSkipBuilderQueryRoutineDecl(RoutineDeclaration routine,
         string moduleName)
     {
-        if (!moduleName.Equals(value: "BuilderService", comparisonType: StringComparison.Ordinal))
+        if (!moduleName.Equals(value: "BuilderQuery", comparisonType: StringComparison.Ordinal))
         {
             return false;
         }
 
         // Structured owner/member (parser-captured), never a re-split of the dotted Name string.
         string memberRoutine = routine.MemberRoutineName ?? routine.Name;
-        if (BuilderServiceClosureCascadingRoutines.Contains(item: memberRoutine))
+        if (BuilderQueryClosureCascadingRoutines.Contains(item: memberRoutine))
         {
             return true;
         }
 
-        // Standalone BuilderService routines (build_mode/target_os/source_*/page_size/…) are provided
+        // Standalone BuilderQuery routines (build_mode/target_os/source_*/page_size/…) are provided
         // by the compiler: RegisterStandaloneRoutines/RegisterModuleRoutines register a single synthesized
-        // RoutineInfo (module BuilderService) whose body WiredRoutinePass folds to a build-time literal,
+        // RoutineInfo (module BuilderQuery) whose body WiredRoutinePass folds to a build-time literal,
         // and the source-location ones are folded at their call sites. The stdlib `@innate` decl is only
         // the surface signature — registering it too would create a SECOND, bodiless routine under the
-        // same BuilderService.<name> identity, and codegen would emit a call to the undefined one. So the
+        // same BuilderQuery.<name> identity, and codegen would emit a call to the undefined one. So the
         // stdlib standalone decl is skipped; the synthesized routine is the sole definition.
         return routine.MemberRoutineName is null
             && RuntimeContract.BuilderStandaloneRoutines.Contains(item: routine.Name);
@@ -376,7 +376,7 @@ public sealed partial class StdlibLoader
             switch (node)
             {
                 case RoutineDeclaration routine:
-                    if (ShouldSkipBuilderServiceRoutineDecl(routine: routine,
+                    if (ShouldSkipBuilderQueryRoutineDecl(routine: routine,
                             moduleName: moduleName))
                     {
                         break;
@@ -1047,6 +1047,7 @@ public sealed partial class StdlibLoader
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters,
             GenericConstraints = record.GenericConstraints,
+            Annotations = record.Annotations,
             BackendType = ExtractLlvmAnnotation(annotations: record.Annotations),
             CarrierKind = inheritedCarrierKind
         };
@@ -1631,7 +1632,7 @@ public sealed partial class StdlibLoader
                 continue;
             }
 
-            if (ShouldSkipBuilderServiceRoutineDecl(routine: routine, moduleName: moduleName))
+            if (ShouldSkipBuilderQueryRoutineDecl(routine: routine, moduleName: moduleName))
             {
                 continue;
             }

@@ -6,11 +6,11 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Full API tests for BuilderService -> verifies every per-type routine, standalone routine,
-/// and platform/build info routine resolves correctly with 'import BuilderService'.
+/// Full API tests for BuilderQuery -> verifies every per-type routine, standalone routine,
+/// and platform/build info routine resolves correctly with 'import BuilderQuery'.
 /// Also verifies import-gating for each category and that wired routines are unaffected.
 /// </summary>
-public class BuilderServiceApiTests
+public class BuilderQueryApiTests
 {
     #region Per-Type Routines -> Records
     /// <summary>
@@ -21,7 +21,7 @@ public class BuilderServiceApiTests
     public void Record_TypeName_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -41,7 +41,7 @@ public class BuilderServiceApiTests
     public void Record_TypeKind_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -61,7 +61,7 @@ public class BuilderServiceApiTests
     public void Record_TypeId_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -81,7 +81,7 @@ public class BuilderServiceApiTests
     public void Record_ModuleName_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -101,7 +101,7 @@ public class BuilderServiceApiTests
     public void Record_IsGeneric_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -121,7 +121,7 @@ public class BuilderServiceApiTests
     public void Record_DataSize_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -141,7 +141,7 @@ public class BuilderServiceApiTests
     public void Record_MemberVariableCount_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -161,7 +161,7 @@ public class BuilderServiceApiTests
     public void Record_GenericArgs_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -181,7 +181,7 @@ public class BuilderServiceApiTests
     public void Record_Protocols_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -201,7 +201,7 @@ public class BuilderServiceApiTests
     public void Record_RoutineNames_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -221,7 +221,7 @@ public class BuilderServiceApiTests
     public void Record_Annotations_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -241,7 +241,7 @@ public class BuilderServiceApiTests
     public void Record_Dependencies_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -261,7 +261,7 @@ public class BuilderServiceApiTests
     public void Record_OriginModule_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Point
                          x: S64
@@ -285,7 +285,7 @@ public class BuilderServiceApiTests
     public void Entity_TypeName_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        entity Counter
                          value: S64
@@ -304,7 +304,7 @@ public class BuilderServiceApiTests
     public void Entity_TypeKind_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        entity Counter
                          value: S64
@@ -323,7 +323,7 @@ public class BuilderServiceApiTests
     public void Entity_MemberVariableCount_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        entity Counter
                          value: S64
@@ -346,7 +346,7 @@ public class BuilderServiceApiTests
     public void Choice_TypeName_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        choice Color
                          RED
@@ -367,7 +367,7 @@ public class BuilderServiceApiTests
     public void Choice_TypeKind_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        choice Color
                          RED
@@ -415,7 +415,7 @@ public class BuilderServiceApiTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
     /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 
@@ -436,7 +436,7 @@ public class BuilderServiceApiTests
     public void PerTypeRoutine_WithImport_NoError(string routineName)
     {
         string source = $$"""
-                          import BuilderService
+                          import BuilderQuery
 
                           record Pair
                             a: S64
@@ -450,7 +450,7 @@ public class BuilderServiceApiTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -476,7 +476,7 @@ public class BuilderServiceApiTests
                             return
                           """;
 
-        // Standalone BuilderService routines are plain `module BuilderService` members: without the
+        // Standalone BuilderQuery routines are plain `module BuilderQuery` members: without the
         // import the bare name is simply out of scope, an ordinary UnknownIdentifier (not a bespoke
         // import-required diagnostic), consistent with every other unimported module member.
         AnalysisResult result = AnalyzeSa(source: source);
@@ -498,7 +498,7 @@ public class BuilderServiceApiTests
     public void SourceLocationRoutine_WithImport_NoError(string routineName)
     {
         string source = $$"""
-                          import BuilderService
+                          import BuilderQuery
 
                           routine test()
                             var v = {{routineName}}()
@@ -507,7 +507,7 @@ public class BuilderServiceApiTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -532,7 +532,7 @@ public class BuilderServiceApiTests
                             return
                           """;
 
-        // See SourceLocationRoutine_WithoutImport_ReportsError: standalone BuilderService routines are
+        // See SourceLocationRoutine_WithoutImport_ReportsError: standalone BuilderQuery routines are
         // ordinary module members now, so a missing import is a plain UnknownIdentifier.
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
@@ -552,7 +552,7 @@ public class BuilderServiceApiTests
     public void PlatformRoutine_WithImport_NoError(string routineName)
     {
         string source = $$"""
-                          import BuilderService
+                          import BuilderQuery
 
                           routine test()
                             var v = {{routineName}}()
@@ -561,7 +561,7 @@ public class BuilderServiceApiTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -593,7 +593,7 @@ public class BuilderServiceApiTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.BuilderQueryImportRequired);
     }
 
     #endregion
@@ -607,7 +607,7 @@ public class BuilderServiceApiTests
     public void AllPerTypeRoutines_OnRecord_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Pair
                          x: S64
@@ -639,7 +639,7 @@ public class BuilderServiceApiTests
     public void AllStandaloneRoutines_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        routine test()
                          var a = source_file()
@@ -670,7 +670,7 @@ public class BuilderServiceApiTests
     public void MixedPerTypeAndStandalone_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        record Pair
                          a: S64
@@ -699,7 +699,7 @@ public class BuilderServiceApiTests
     public void Entity_AllMetadata_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        entity Node
                          value: S64
@@ -725,7 +725,7 @@ public class BuilderServiceApiTests
     public void Choice_AllMetadata_Available()
     {
         AssertAnalyzesSa("""
-                       import BuilderService
+                       import BuilderQuery
 
                        choice Direction
                          NORTH

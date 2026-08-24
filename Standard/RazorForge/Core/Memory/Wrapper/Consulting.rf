@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents temporary thread-safe read-only access to data guarded by a {Shared[T, P]}.
 ### `Consulting[T]` is the non-Assignable token produced by `Shared.consult()` for shared (multi-reader)

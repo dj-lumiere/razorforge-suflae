@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
 ### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.

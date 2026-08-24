@@ -580,7 +580,7 @@ public partial class LlvmCodeGenerator
     private void EmitDefinitionBody(RoutineDeclaration routine, RoutineInfo info,
         StringBuilder bodyBuilder)
     {
-        // Stub routines (declared without a body, e.g. BuilderService.page_size()) get their
+        // Stub routines (declared without a body, e.g. BuilderQuery.page_size()) get their
         // synthesized body from WiredRoutinePass via _synthesizedBodies. The parser produces an
         // empty BlockStatement for missing bodies, so check both null and empty.
         Statement? effectiveBody = routine.Body;

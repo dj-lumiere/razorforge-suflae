@@ -25,7 +25,7 @@ public enum CallLoweringKind
     /// <summary>Collection construction using literal-style lowering semantics.</summary>
     CollectionConstruction,
 
-    /// <summary>BuilderService/compiler metadata intrinsic.</summary>
+    /// <summary>BuilderQuery/compiler metadata intrinsic.</summary>
     BuilderIntrinsic,
 
     /// <summary>LLVM intrinsic template call.</summary>

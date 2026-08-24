@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ###

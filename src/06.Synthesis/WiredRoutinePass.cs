@@ -102,8 +102,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                                                           !r.IsSynthesized))
                 continue;
 
-            // BuilderService constant routines apply to all owner types -> check by name first.
-            if (routine.OwnerType != null && TryHandleBuilderServiceConstant(routine: routine,
+            // BuilderQuery constant routines apply to all owner types -> check by name first.
+            if (routine.OwnerType != null && TryHandleBuilderQueryConstant(routine: routine,
                     textType: textType,
                     u64Type: u64Type,
                     s64Type: s64Type,
@@ -113,8 +113,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     byteSizeType: byteSizeType))
                 continue;
 
-            // Standalone BuilderService constants (no owner type): page_size, target_os, etc.
-            if (routine.OwnerType == null && TryHandleStandaloneBuilderServiceConstant(
+            // Standalone BuilderQuery constants (no owner type): page_size, target_os, etc.
+            if (routine.OwnerType == null && TryHandleStandaloneBuilderQueryConstant(
                     routine: routine,
                     textType: textType,
                     u64Type: u64Type,
@@ -264,11 +264,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
 
         // GetAllRoutines() filters out generic-definition owner types to prevent T/K,V placeholders
-        // in LLVM. However, BuilderService routines on generic defs return only fixed literals or
+        // in LLVM. However, BuilderQuery routines on generic defs return only fixed literals or
         // empty collections — they never reference the generic parameters. GMP needs these bodies
         // to emit the generic-def LLVM function (e.g. @Collections.BTreeDictNode.member_variable_count)
         // so that wrapper forwarders for Hijacked[BTreeDictNode] have a valid callee.
-        RunForGenericDefBuilderServiceRoutines(textType: textType,
+        RunForGenericDefBuilderQueryRoutines(textType: textType,
             u64Type: u64Type,
             s64Type: s64Type,
             boolType: boolType,
@@ -282,7 +282,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         RunForGenericDefWiredRoutines(textType: textType, boolType: boolType, s32Type: s32Type);
     }
 
-    private void RunForGenericDefBuilderServiceRoutines(TypeInfo textType, TypeInfo? u64Type,
+    private void RunForGenericDefBuilderQueryRoutines(TypeInfo textType, TypeInfo? u64Type,
         TypeInfo? s64Type, TypeInfo? boolType, TypeInfo? typeKindType,
         TypeInfo? listTextType, TypeInfo? byteSizeType)
     {
@@ -292,9 +292,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             foreach (RoutineInfo routine in ctx.Registry.GetMemberRoutinesForType(type))
             {
                 if (!routine.IsSynthesized) continue;
-                if (!BuilderInfoProvider.IsBuilderServiceRoutine(name: routine.Name)) continue;
+                if (!BuilderInfoProvider.IsBuilderQueryRoutine(name: routine.Name)) continue;
                 if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
-                TryHandleBuilderServiceConstant(routine: routine,
+                TryHandleBuilderQueryConstant(routine: routine,
                     textType: textType,
                     u64Type: u64Type,
                     s64Type: s64Type,
@@ -2416,15 +2416,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         return new ReturnStatement(Value: fstring, Location: _synthLoc);
     }
 
-    //  BuilderService constant routines
+    //  BuilderQuery constant routines
 
     /// <summary>
-    /// Synthesizes AST bodies for BuilderService routines that return a single compile-time
+    /// Synthesizes AST bodies for BuilderQuery routines that return a single compile-time
     /// constant value (Text, U64, S64, Bool). Called before the owner-type switch so it handles
     /// all types uniformly.
     /// Returns <c>true</c> if the routine was handled, <c>false</c> otherwise.
     /// </summary>
-    private bool TryHandleBuilderServiceConstant(RoutineInfo routine, TypeInfo textType,
+    private bool TryHandleBuilderQueryConstant(RoutineInfo routine, TypeInfo textType,
         TypeInfo? u64Type, TypeInfo? s64Type, TypeInfo? boolType,
         TypeInfo? typeKindType, TypeInfo? listTextType,
         TypeInfo? byteSizeType = null) // NOSONAR S3776
@@ -2437,14 +2437,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             or TypeCategory.ProtocolSelf or TypeCategory.ConstGenericValue)
             return false;
 
-        // Fold-only constants (type_name/data_size/type_id/...): BuilderServiceInliningPass
+        // Fold-only constants (type_name/data_size/type_id/...): BuilderQueryInliningPass
         // and GenericAstRewriter fold EVERY call site to a literal computed from TypeInfo, so
         // a synthesized body is pure dead weight in the emitted IR — and for generic-def
         // owners it would bake the unparameterized name ("List" instead of "List[S64]").
         // Register no body: nothing related to these may survive the inlining pass. An
         // unfolded call site surfacing as a linker error indicates a folding bug to fix
         // at the pass layer, not a missing definition.
-        if (BuilderServiceInliningPass.IsFoldable(routineName: routine.Name))
+        if (BuilderQueryInliningPass.IsFoldable(routineName: routine.Name))
             return true;
 
         switch (routine.Name)
@@ -2546,55 +2546,148 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
 
             case "annotations" when listTextType != null:
-                // Type-level annotations are not yet tracked on TypeInfo -> return empty list
-                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
-                    [],
+                // Type-level annotations are plumbed onto TypeInfo.Annotations from the declaration
+                // (records/protocols can be annotated; entities/choices/etc. carry none -> empty list).
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(
+                    values: owner.Annotations ?? [],
                     textType: textType,
                     listTextType: listTextType);
                 return true;
 
             case "dependencies" when listTextType != null:
-                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
-                    [],
+                // Modules the owner type's declaring module imports (recorded after the Phase-3
+                // declaration sweep). Empty for stdlib/builtin owners whose module has no tracked imports.
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(
+                    values: ctx.Registry.GetModuleDependencies(module: owner.Module).ToList(),
                     textType: textType,
                     listTextType: listTextType);
                 return true;
 
-            case "protocol_info" when listTextType != null:
-                // Full ProtocolInfo entity allocation deferred -> return empty list
-                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
-                    [],
-                    textType: textType,
-                    listTextType: listTextType);
-                return true;
+            // protocol_info / routine_info build entities whose fields include an OWNED nested collection
+            // (ProtocolInfo.routine_names, RoutineInfo.param_types/param_names — all List[Text]). The
+            // hoisted nested-list temp is MOVED into the entity creator; ScopeTeardownLoweringPass's
+            // entity-creator move-detection (added for exactly this) keeps it from being double-freed.
+            case "protocol_info"
+                when owner is RecordTypeInfo or EntityTypeInfo && boolType != null && listTextType != null:
+            {
+                if (ResolveEntityListType(elementTypeName: "ProtocolInfo") is not { } piList)
+                    return false;
+                (TypeInfo protocolInfoType, TypeInfo listProtocolInfo) = piList;
 
-            case "routine_info" when listTextType != null:
-                // TODO: not yet implemented — full RoutineInfo entity allocation deferred; returns empty list
-                ctx.VariantBodies[key: routine.RegistryKey] = MakeListReturn(values:
-                    [],
-                    textType: textType,
-                    listTextType: listTextType);
+                List<TypeInfo> protocols = owner switch
+                {
+                    RecordTypeInfo r => r.ImplementedProtocols,
+                    EntityTypeInfo e => e.ImplementedProtocols,
+                    _ => []
+                };
+
+                var rows = protocols
+                    .Select(p => new List<(string, Expression)>
+                    {
+                        (Name: "name", MakeTextLit(value: p.Name, textType: textType)),
+                        (Name: "routine_names",
+                            MakeTextListLiteral(
+                                values: p is ProtocolTypeInfo pt
+                                    ? pt.MemberRoutines.Select(m => m.Name)
+                                    : System.Linq.Enumerable.Empty<string>(),
+                                textType: textType, listTextType: listTextType)),
+                        (Name: "is_generated", MakeBoolLit(value: false, boolType: boolType))
+                    })
+                    .ToList();
+
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeEntityInfoListReturn(
+                    entityTypeName: "ProtocolInfo", entityType: protocolInfoType,
+                    listEntityType: listProtocolInfo, rows: rows);
                 return true;
+            }
+
+            case "routine_info"
+                when owner is RecordTypeInfo or EntityTypeInfo && boolType != null && listTextType != null:
+            {
+                if (ResolveEntityListType(elementTypeName: "RoutineInfo") is not { } riList)
+                    return false;
+                (TypeInfo routineInfoType, TypeInfo listRoutineInfo) = riList;
+
+                var rows = ctx.Registry.GetMemberRoutinesForType(type: owner)
+                    .Select(r => new List<(string, Expression)>
+                    {
+                        (Name: "name", MakeTextLit(value: r.Name, textType: textType)),
+                        (Name: "param_types",
+                            MakeTextListLiteral(values: r.Parameters.Select(p => p.Type.ShortTypeName),
+                                textType: textType, listTextType: listTextType)),
+                        (Name: "param_names",
+                            MakeTextListLiteral(values: r.Parameters.Select(p => p.Name),
+                                textType: textType, listTextType: listTextType)),
+                        (Name: "return_type",
+                            MakeTextLit(value: r.ReturnType?.ShortTypeName ?? "None", textType: textType)),
+                        (Name: "is_crashable", MakeBoolLit(value: r.IsFailable, boolType: boolType)),
+                        (Name: "is_generated", MakeBoolLit(value: r.IsSynthesized, boolType: boolType)),
+                        (Name: "visibility", MakeVisibilityLiteral(visibility: r.Visibility))
+                    })
+                    .ToList();
+
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeEntityInfoListReturn(
+                    entityTypeName: "RoutineInfo", entityType: routineInfoType,
+                    listEntityType: listRoutineInfo, rows: rows);
+                return true;
+            }
 
             case "member_variable_info"
-                when owner is RecordTypeInfo or EntityTypeInfo or CrashableTypeInfo:
+                when owner is RecordTypeInfo or EntityTypeInfo:
             {
-                TypeInfo? fieldInfoType = ctx.Registry.LookupType(name: "FieldInfo");
-                TypeInfo? ownedDef =
-                    ctx.Registry.LookupType(name: Resolution.RuntimeContract.Owned);
-                TypeInfo? listDef = ctx.Registry.LookupType(name: "List");
-                if (fieldInfoType == null || ownedDef == null || listDef == null) return false;
-                TypeInfo ownedFieldInfo = ctx.Registry.GetOrCreateResolution(genericDef: ownedDef,
-                    typeArguments: [fieldInfoType]);
-                TypeInfo listOwnedFieldInfo = ctx.Registry.GetOrCreateResolution(
-                    genericDef: listDef,
-                    typeArguments: [ownedFieldInfo]);
-                ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
-                    Value: new ListLiteralExpression(Elements:
-                        [],
-                        ElementType: null,
-                        Location: _synthLoc) { ResolvedType = listOwnedFieldInfo },
-                    Location: _synthLoc);
+                if (u64Type == null) return false;
+                if (ResolveEntityListType(elementTypeName: "FieldInfo") is not { } fieldList)
+                    return false;
+                (TypeInfo fieldInfoType, TypeInfo listFieldInfo) = fieldList;
+
+                List<MemberVariableInfo> fields = owner switch
+                {
+                    RecordTypeInfo r => r.MemberVariables,
+                    EntityTypeInfo e => e.MemberVariables,
+                    _ => []
+                };
+
+                // Cumulative C-ABI offsets: align the running cursor to each field's alignment before
+                // placing it, then advance by its size — the layout codegen emits. Layout is not always
+                // computable at synth time (a generic-def owner's field is an unsized parameter T; some
+                // backend types throw in the size walk), so offsets are BEST-EFFORT: any failure zeroes
+                // the remaining offsets rather than aborting the whole build (offset is documented as
+                // "byte offset when available").
+                var offsets = new ulong[fields.Count];
+                ulong cursor = 0;
+                for (int i = 0; i < fields.Count; i++)
+                {
+                    try
+                    {
+                        var align = (ulong)System.Math.Max(val1: 1,
+                            val2: fields[index: i].Type.Alignment(pointerSize: 8));
+                        cursor = (cursor + align - 1) / align * align;
+                        offsets[i] = cursor;
+                        cursor += (ulong)System.Math.Max(val1: 0,
+                            val2: fields[index: i].Type.SizeBytes(pointerSize: 8));
+                    }
+                    catch
+                    {
+                        offsets[i] = 0;
+                    }
+                }
+
+                var rows = new List<List<(string, Expression)>>(capacity: fields.Count);
+                for (int i = 0; i < fields.Count; i++)
+                {
+                    MemberVariableInfo f = fields[index: i];
+                    rows.Add(item:
+                    [
+                        (Name: "name", MakeTextLit(value: f.Name, textType: textType)),
+                        (Name: "type_name", MakeTextLit(value: f.Type.ShortTypeName, textType: textType)),
+                        (Name: "visibility", MakeVisibilityLiteral(visibility: f.Visibility)),
+                        (Name: "offset", MakeU64Lit(value: offsets[i], u64Type: u64Type))
+                    ]);
+                }
+
+                ctx.VariantBodies[key: routine.RegistryKey] = MakeEntityInfoListReturn(
+                    entityTypeName: "FieldInfo", entityType: fieldInfoType,
+                    listEntityType: listFieldInfo, rows: rows);
                 return true;
             }
 
@@ -2604,10 +2697,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Handles standalone (non-owner) BuilderService constants derived from
+    /// Handles standalone (non-owner) BuilderQuery constants derived from
     /// <see cref="DesugaringContext.Target"/> / <see cref="DesugaringContext.BuildMode"/>.
     /// </summary>
-    private bool TryHandleStandaloneBuilderServiceConstant(RoutineInfo routine, TypeInfo textType,
+    private bool TryHandleStandaloneBuilderQueryConstant(RoutineInfo routine, TypeInfo textType,
         TypeInfo? u64Type, TypeInfo? byteSizeType)
     {
         switch (routine.Name)
@@ -2701,7 +2794,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         }
 
         ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
-            Value: BuilderServiceInliningPass.MakeByteSizeCreatorPublic(value: value,
+            Value: BuilderQueryInliningPass.MakeByteSizeCreatorPublic(value: value,
                 u64Type: u64Type,
                 byteSizeType: byteSizeType,
                 loc: _synthLoc),
@@ -2716,16 +2809,93 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private static ReturnStatement MakeListReturn(List<string> values, TypeInfo textType,
         TypeInfo listTextType)
     {
-        var elements = values.Select(v =>
-                                  (Expression)new LiteralExpression(Value: v,
-                                      LiteralType: TokenType.TextLiteral,
-                                      Location: _synthLoc) { ResolvedType = textType })
+        var elements = values.Select(v => (Expression)MakeTextLit(value: v, textType: textType))
                              .ToList();
         return new ReturnStatement(
             Value: new ListLiteralExpression(Elements: elements,
                 ElementType: null,
                 Location: _synthLoc) { ResolvedType = listTextType },
             Location: _synthLoc);
+    }
+
+    //  BuilderQuery entity-list metadata helpers (member_variable_info / protocol_info / routine_info)
+
+    /// <summary>Builds a <c>Text</c> literal expression carrying <paramref name="value"/>.</summary>
+    private static LiteralExpression MakeTextLit(string value, TypeInfo textType) =>
+        new(Value: value, LiteralType: TokenType.TextLiteral, Location: _synthLoc)
+        { ResolvedType = textType };
+
+    /// <summary>Builds a <c>U64</c> literal expression carrying <paramref name="value"/>.</summary>
+    private static LiteralExpression MakeU64Lit(ulong value, TypeInfo u64Type) =>
+        new(Value: value, LiteralType: TokenType.U64Literal, Location: _synthLoc)
+        { ResolvedType = u64Type };
+
+    /// <summary>Builds a <c>Bool</c> literal expression carrying <paramref name="value"/>.</summary>
+    private static LiteralExpression MakeBoolLit(bool value, TypeInfo boolType) =>
+        new(Value: value, LiteralType: value ? TokenType.True : TokenType.False, Location: _synthLoc)
+        { ResolvedType = boolType };
+
+    /// <summary>Builds an inline <c>List[Text]</c> literal (for nested <c>routine_names</c>/<c>param_*</c> fields).</summary>
+    private static ListLiteralExpression MakeTextListLiteral(IEnumerable<string> values,
+        TypeInfo textType, TypeInfo listTextType) =>
+        new(Elements: values.Select(v => (Expression)MakeTextLit(value: v, textType: textType)).ToList(),
+            ElementType: null, Location: _synthLoc) { ResolvedType = listTextType };
+
+    /// <summary>
+    /// Maps a compiler <see cref="VisibilityModifier"/> to the corresponding <c>Visibility</c> choice
+    /// case, emitted as the BARE case-name identifier (<c>OPEN</c>/<c>POSTED</c>/<c>SECRET</c>) exactly
+    /// as source would write it — <see cref="AnalyzeCompilerGeneratedBody"/> re-analyzes variant bodies,
+    /// resolving the case via <c>LookupChoiceCase</c> (a preset S32/S64 literal typed as the choice would
+    /// be re-derived to its backing int and mismatch the <c>Visibility</c> field, silently breaking the
+    /// body). The case names are globally unique, so the bare form resolves unambiguously.
+    /// </summary>
+    private static Expression MakeVisibilityLiteral(VisibilityModifier visibility)
+    {
+        string caseName = visibility switch
+        {
+            VisibilityModifier.Open => "OPEN",
+            VisibilityModifier.Posted => "POSTED",
+            VisibilityModifier.Secret => "SECRET",
+            _ => "OPEN"
+        };
+        return new IdentifierExpression(Name: caseName, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds a <c>return [E(...), E(...), …]</c> body for a BuilderQuery entity-list metadata routine:
+    /// each row becomes an <c>E(field: value, …)</c> creator, collected into a <c>List[Owned[E]]</c>
+    /// literal (the surface <c>List[E]</c> for an entity <c>E</c>). Element-wrap-in-Owned and the
+    /// create()+add_last lowering are handled downstream exactly as for a user-written list literal.
+    /// </summary>
+    private static ReturnStatement MakeEntityInfoListReturn(string entityTypeName,
+        TypeInfo entityType, TypeInfo listEntityType,
+        List<List<(string Name, Expression Value)>> rows)
+    {
+        var elements = rows
+            .Select(row => (Expression)new CreatorExpression(TypeName: entityTypeName,
+                TypeArguments: null, MemberVariables: row, Location: _synthLoc)
+            { ResolvedType = entityType })
+            .ToList();
+        return new ReturnStatement(
+            Value: new ListLiteralExpression(Elements: elements, ElementType: null,
+                Location: _synthLoc) { ResolvedType = listEntityType },
+            Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Resolves <c>List[<paramref name="elementTypeName"/>]</c> for an entity element type, returning
+    /// <c>null</c> if either def is unavailable. Shared by the entity-list metadata routines. A list of
+    /// entities is typed <c>List[E]</c> directly (no <c>Owned</c> wrapper appears in the surface type —
+    /// see the desugared form of a source <c>List[FieldInfo]</c> literal).
+    /// </summary>
+    private (TypeInfo entityType, TypeInfo listEntity)? ResolveEntityListType(string elementTypeName)
+    {
+        TypeInfo? entityType = ctx.Registry.LookupType(name: elementTypeName);
+        TypeInfo? listDef = ctx.Registry.LookupType(name: "List");
+        if (entityType == null || listDef == null) return null;
+        TypeInfo listEntity =
+            ctx.Registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [entityType]);
+        return (entityType, listEntity);
     }
 
     /// <summary>

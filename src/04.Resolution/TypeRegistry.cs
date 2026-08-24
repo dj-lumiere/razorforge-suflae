@@ -413,6 +413,40 @@ public sealed partial class TypeRegistry
         _userPrograms.Add(item: (program, filePath, module));
 
     /// <summary>
+    /// Per-module import list (module path → the module paths it imports), populated once after the
+    /// multi-file Phase-3 declaration sweep. Backs the BuilderQuery <c>T.dependencies()</c> reflection
+    /// routine, which reports the modules a type's declaring module depends on.
+    /// </summary>
+    private readonly Dictionary<string, List<string>> _moduleDependencies =
+        new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Returns the sorted module import list for <paramref name="module"/>, or an empty list.</summary>
+    public IReadOnlyList<string> GetModuleDependencies(string? module) =>
+        module != null && _moduleDependencies.TryGetValue(key: module, value: out List<string>? deps)
+            ? deps
+            : [];
+
+    /// <summary>Records (accumulating + de-duplicating) the modules <paramref name="module"/> imports.</summary>
+    public void AddModuleDependencies(string module, IEnumerable<string> imports)
+    {
+        if (!_moduleDependencies.TryGetValue(key: module, value: out List<string>? deps))
+        {
+            deps = [];
+            _moduleDependencies[key: module] = deps;
+        }
+
+        foreach (string imp in imports)
+        {
+            if (imp.Length > 0 && imp != module && !deps.Contains(item: imp))
+            {
+                deps.Add(item: imp);
+            }
+        }
+
+        deps.Sort(comparer: StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// Every MODULE registered under the namespace <paramref name="prefix"/> (strict descendants:
     /// `prefix/Sub`, `prefix/Sub/Deep`, …), for the prefix/package import `import A/B`. Empty when the
     /// resolver isn't injected or the prefix is a leaf module with no submodules.
@@ -466,7 +500,7 @@ public sealed partial class TypeRegistry
 
         // Bare module name (e.g. `import Collections`) — load every file declaring `module <Name>`
         // via the multi-file overload. Filesystem fallback can't handle directory-as-module unless
-        // the directory contains a same-named anchor file (e.g. BuilderService/BuilderService.rf).
+        // the directory contains a same-named anchor file (e.g. BuilderQuery/BuilderQuery.rf).
         bool isBareModuleName = !importPath.Contains(value: '/') && !importPath.Contains(value: '.');
         if (isBareModuleName && _stdlibLoader.LoadModule(registry: this, moduleName: importPath))
         {

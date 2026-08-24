@@ -1564,7 +1564,7 @@ public sealed partial class TypeRegistry
             : _routines.Values.Distinct().Where(r => !_prunedGenericBases.Contains(r.BaseName));
         // Exclude:
         // - @innate routines: compile-time-only stubs (type_name, module_name, etc.) that
-        //   BuilderServiceInliningPass folds to literals; they have no body and must never reach codegen.
+        //   BuilderQueryInliningPass folds to literals; they have no body and must never reach codegen.
         // - Routines on generic-definition owner types: bodies are synthesised per concrete instance;
         //   emitting them for the definition produces [T]/[K,V] placeholders in LLVM.
         // - Routines on None owners: None -> LLVM void, illegal as a parameter type.

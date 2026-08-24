@@ -12,7 +12,7 @@ using TypeModel.Types;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Global pass that folds compile-time-constant BuilderService per-type calls to literal
+/// Global pass that folds compile-time-constant BuilderQuery per-type calls to literal
 /// expressions, eliminating runtime function calls to synthesized stubs.
 ///
 /// <para>Runs in three contexts:</para>
@@ -31,7 +31,7 @@ namespace Compiler.Postprocessing.Passes;
 /// monomorphization), <see cref="GenericAstRewriter"/> folds these during its substitution
 /// rewrite. This pass handles the concrete-type residue left in instantiated or non-generic bodies.</para>
 /// </summary>
-internal sealed class BuilderServiceInliningPass
+internal sealed class BuilderQueryInliningPass
 {
     private readonly TypeRegistry _registry;
 
@@ -44,7 +44,7 @@ internal sealed class BuilderServiceInliningPass
     private string _currentRoutineModule = "";
 
     /// <summary>Creates a pass instance backed by a full <see cref="DesugaringContext"/>.</summary>
-    internal BuilderServiceInliningPass(DesugaringContext ctx)
+    internal BuilderQueryInliningPass(DesugaringContext ctx)
     {
         _ctx = ctx;
         _registry = ctx.Registry;
@@ -54,7 +54,7 @@ internal sealed class BuilderServiceInliningPass
     /// Creates a pass instance from a <see cref="TypeRegistry"/> alone (no desugaring context).
     /// Supports <see cref="Run"/> and <see cref="RunOnVariantBodies"/> only.
     /// </summary>
-    internal BuilderServiceInliningPass(TypeRegistry registry,
+    internal BuilderQueryInliningPass(TypeRegistry registry,
         Dictionary<string, Statement>? variantBodies = null)
     {
         _registry = registry;
@@ -82,7 +82,7 @@ internal sealed class BuilderServiceInliningPass
     };
 
     /// <summary>
-    /// Returns true if <paramref name="routineName"/> is a BuilderService constant routine that
+    /// Returns true if <paramref name="routineName"/> is a BuilderQuery constant routine that
     /// can be folded to a literal. Used by <see cref="GenericAstRewriter"/> to gate its own fold.
     /// </summary>
     internal static bool IsFoldable(string routineName) =>
@@ -358,7 +358,7 @@ internal sealed class BuilderServiceInliningPass
             if (slFolded != null) return slFolded;
         }
 
-        //  BuilderService constant-call folding
+        //  BuilderQuery constant-call folding
         if (expr is CallExpression
             {
                 Callee: MemberExpression { MemberName: var routineName } bsCallee,
@@ -712,7 +712,7 @@ internal sealed class BuilderServiceInliningPass
     //  Constant computation
 
     /// <summary>
-    /// Returns a folded <see cref="LiteralExpression"/> for the given BuilderService constant
+    /// Returns a folded <see cref="LiteralExpression"/> for the given BuilderQuery constant
     /// routine on <paramref name="type"/>, or null if the routine is not supported or required
     /// types are not yet registered.
     /// </summary>
@@ -797,7 +797,7 @@ internal sealed class BuilderServiceInliningPass
                     TypeCategory.Routine => "ROUTINE",
                     TypeCategory.Protocol => "PROTOCOL",
                     _ => throw new InvalidOperationException(
-                        $"Unhandled TypeCategory '{kindType.Category}' in type_kind BuilderService mapping.")
+                        $"Unhandled TypeCategory '{kindType.Category}' in type_kind BuilderQuery mapping.")
                 };
                 ChoiceCaseInfo? found = tkChoice.Cases.FirstOrDefault(c => c.Name == caseName);
                 if (found == null) return null;
