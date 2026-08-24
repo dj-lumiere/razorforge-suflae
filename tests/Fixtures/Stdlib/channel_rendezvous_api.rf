@@ -23,11 +23,11 @@ suspended routine consume(inbox: Receiver[S64]) -> S64
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 0)   # rendezvous: no buffered slots
 
-  var p = produce(out: steal feeder)
-  var c = consume(inbox: steal hop)
-
   danger
-    var sum = c.retrieve()
-    discard p.retrieve()
+    # LAZY model: the producer runs in the BACKGROUND (`execute`), the consumer is awaited (`retrieve`).
+    # Capacity-0 rendezvous: each send parks until the consumer takes it, so driving the consumer hands
+    # the two coroutines back and forth until the producer's Sender drops and the channel closes.
+    produce(out: steal feeder).execute()
+    var sum = consume(inbox: steal hop).retrieve()
     show(f"sum={sum}")
   return

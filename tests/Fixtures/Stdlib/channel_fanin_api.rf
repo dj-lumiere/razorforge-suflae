@@ -31,13 +31,12 @@ suspended routine consume(inbox: Receiver[S64]) -> S64
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 2)
 
-  var p1 = produce(out: steal feeder.duplicate(), lo: 1, hi: 6)     # 1+2+3+4+5     = 15
-  var p2 = produce(out: steal feeder, lo: 10, hi: 15)           # 10+11+12+13+14 = 60
-  var c = consume(inbox: steal hop)
-
   danger
-    var sum = c.retrieve()     # drives the scheduler: producers + consumer ping-pong to completion
-    discard p1.retrieve()      # already finished (the channel could not close otherwise)
-    discard p2.retrieve()
+    # LAZY model: launch the two producers in the BACKGROUND (`execute` — fire-and-forget, we don't
+    # need their counts), then await the consumer (`retrieve`). All three run concurrently on the
+    # scheduler, ping-ponging under backpressure until both Feeders drop and the channel closes.
+    produce(out: steal feeder.duplicate(), lo: 1, hi: 6).execute()     # 1+2+3+4+5     = 15
+    produce(out: steal feeder, lo: 10, hi: 15).execute()          # 10+11+12+13+14 = 60
+    var sum = consume(inbox: steal hop).retrieve()
     show(f"sum={sum}")
   return

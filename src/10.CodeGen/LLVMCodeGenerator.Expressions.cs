@@ -311,11 +311,7 @@ public partial class LlvmCodeGenerator
         else
         {
             b.Append(value: $"  %r = call {retType} {realRef}({argList})\n");
-            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
-            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
-            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
-            b.Append(value: $"  store {retType} %r, ptr %box\n");
-            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+            AppendThunkCompleteResult(b: b, routine: routine, retType: retType);
         }
 
         if (routine.Parameters.Count > 0)
@@ -564,11 +560,12 @@ public partial class LlvmCodeGenerator
         string coro = NextTemp();
         EmitLine(sb: sb, line: $"  {coro} = call ptr @rf_coro_create(ptr {thunk}, ptr {ud}, i64 0)");
 
-        // Spawn it onto this thread's implicit scheduler immediately, so siblings spawned earlier
-        // run concurrently while one handle is retrieved. retrieve!() then drives the loop until
-        // just this coroutine finishes (run-until-this-handle).
-        _rfRoutineDeclarations[key: "rf_sched_spawn_default"] = "declare void @rf_sched_spawn_default(ptr)";
-        EmitLine(sb: sb, line: $"  call void @rf_sched_spawn_default(ptr {coro})");
+        // LAZY: create the coroutine but do NOT spawn it here. rf_coro_create only allocates the
+        // context; nothing runs until a verb launches it (`retrieve`/`gather`/`race` → launch();
+        // `execute` → detached spawn). `suspended`/`threaded` MARK a deferred, schedulable unit — so a
+        // call captures the recipe and the verb expresses "start it". Deferring the spawn also lets
+        // `execute` mark the coroutine detached BEFORE it can run (no complete-before-detach race).
+        // rf_sched_spawn_default is now called from Agent.rf (Agent[T].launch / execute).
 
         // Build Agent[T] (kind CORO): { kind=0, coro: CPtr@1 (ptr), agent: Address@2 (i64) }. kind
         // stays 0 (CORO) from the zeroinitializer; coro and the result block fill fields 1 and 2.
@@ -583,6 +580,64 @@ public partial class LlvmCodeGenerator
         string r1 = NextTemp();
         EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {rCoro}, i64 {taskInt}, 2");
         return r1;
+    }
+
+    /// <summary>
+    /// Emits the entry-thunk tail that completes the task with the routine's result (in <c>%r</c>,
+    /// task in <c>%task</c>). For a fire-and-forget (<c>execute()</c>) task the result must be DESTROYED,
+    /// not boxed, or an owned return leaks: when the type has a real destroy this branches on
+    /// <c>rf_task_is_detached</c> — detached → run the typed destroy + complete null; else → heap-box +
+    /// complete. A trivially-destructible return keeps the plain box (a detached raw-free is exact for it).
+    /// Shared by the coroutine and thread entry thunks.
+    /// </summary>
+    private void AppendThunkCompleteResult(StringBuilder b, RoutineInfo routine, string retType)
+    {
+        RoutineInfo? destroy = routine.ReturnType is { } rt
+            ? _registry.LookupMemberRoutine(type: rt, memberRoutineName: "destroy")
+            : null;
+        bool needsDiscard = destroy != null && routine.ReturnType != null
+            && !_registry.IsTriviallyDestructible(type: routine.ReturnType);
+
+        if (needsDiscard)
+        {
+            _rfRoutineDeclarations[key: "rf_task_is_detached"] = "declare i8 @rf_task_is_detached(ptr)";
+            GenerateRoutineDeclaration(routine: destroy!);
+            string dm = MangleRoutineName(routine: destroy!);
+            b.Append(value: "  %det = call i8 @rf_task_is_detached(ptr %task)\n");
+            b.Append(value: "  %detb = icmp ne i8 %det, 0\n");
+            b.Append(value: "  br i1 %detb, label %rf_discard, label %rf_box\n");
+            b.Append(value: "rf_discard:\n");
+            // Run the typed destroy on the result (fire-and-forget: nobody reads it). By-ref-me
+            // receivers (aggregates/entities) take a pointer; by-value receivers take the value.
+            if (IsByRefMeReceiver(routine: destroy!))
+            {
+                b.Append(value: $"  %rslot = alloca {retType}\n");
+                b.Append(value: $"  store {retType} %r, ptr %rslot\n");
+                b.Append(value: $"  call void @{dm}(ptr %rslot)\n");
+            }
+            else
+            {
+                b.Append(value: $"  call void @{dm}({retType} %r)\n");
+            }
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr null)\n");
+            b.Append(value: "  br label %rf_done\n");
+            b.Append(value: "rf_box:\n");
+            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
+            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
+            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
+            b.Append(value: $"  store {retType} %r, ptr %box\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+            b.Append(value: "  br label %rf_done\n");
+            b.Append(value: "rf_done:\n");
+            return;
+        }
+
+        // Trivially-destructible (or no destroy) return: plain heap-box; a detached raw-free is exact.
+        b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
+        b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
+        b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
+        b.Append(value: $"  store {retType} %r, ptr %box\n");
+        b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
     }
 
     /// <summary>
@@ -630,11 +685,7 @@ public partial class LlvmCodeGenerator
         else
         {
             b.Append(value: $"  %r = call {retType} {realRef}({argList})\n");
-            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
-            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
-            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
-            b.Append(value: $"  store {retType} %r, ptr %box\n");
-            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+            AppendThunkCompleteResult(b: b, routine: routine, retType: retType);
         }
 
         if (routine.Parameters.Count > 0)

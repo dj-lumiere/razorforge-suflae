@@ -523,8 +523,11 @@ public partial class Parser
         {
             asyncStatus = AsyncStatus.Threaded;
         }
-        // Concurrency modifier: suspended routine foo() — a stackful coroutine (v0.2 async).
-        else if (_language == Language.RazorForge && Match(type: TokenType.Suspended))
+        // Concurrency modifier: suspended routine foo() — a stackful coroutine. SHARED between RF and
+        // SF (SUFLAE-FOR-AI §2.8 lists `suspended` as an identical keyword; only `threaded` is RF-only,
+        // since SF's Roamed/cycle-collected model has no raw shared-memory threading). SF's single-
+        // thread/REPL model is exactly where cooperative coroutines fit.
+        else if (Match(type: TokenType.Suspended))
         {
             asyncStatus = AsyncStatus.Suspended;
         }

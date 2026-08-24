@@ -125,6 +125,18 @@ struct rf_coro {
                                     * st==COMPLETED branch of rf_sched_run_coro). Closes the owner-free vs
                                     * worker-pop use-after-free (the M:N libco migration crash).          */
     int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
+    int initial_spawned;           /* 1 once rf_sched_spawn has queued this coroutine for the FIRST time.
+                                    * Makes the initial spawn IDEMPOTENT: the lazy model lets a set be
+                                    * pre-launched (gather/race launch the whole set) and THEN driven via
+                                    * retrieve!, whose own spawn would otherwise double-enqueue + double-
+                                    * count s->live (→ the pool never reaches idle → hang). Re-queues
+                                    * (park→wake) go through make_ready, not rf_sched_spawn, so this only
+                                    * guards the one-time initial enqueue.                              */
+    int detached;                  /* 1 for a fire-and-forget `execute()` coroutine: no consumer will
+                                    * retrieve it, so the worker that completes it frees it itself (like
+                                    * owner_released, but set at SPAWN time — before any worker can touch
+                                    * it — so there is no complete-before-detach race). The matching task
+                                    * is flagged rf_task_set_detached, which self-frees the result box.  */
     struct rf_coro* awaiter;       /* a coroutine parked in retrieve! awaiting THIS one's completion;
                                     * the pool worker wakes it (pushes to the injector) when this
                                     * coroutine completes. NULL = no coroutine is awaiting. Single
@@ -653,6 +665,17 @@ void rf_coro_delete(rf_coro* coro)
 #endif
     __rf_stack_coro_destroy(coro->shadow_stack); /* free the migrating call-chain stack */
     free(coro);
+}
+
+// Marks a coroutine as fire-and-forget (`execute()`): the worker that completes it frees it, with no
+// consumer. MUST be called BEFORE rf_sched_spawn_default so the flag is published before any worker can
+// reach the completion path (no complete-before-detach race). The matching result task must also be
+// flagged (rf_task_set_detached) so its result box self-frees.
+void rf_coro_set_detached(rf_coro* coro)
+{
+    if (coro != NULL) {
+        coro->detached = 1;
+    }
 }
 
 /* ---- Cancellation shadow stack (Phase 3) -------------------------------------------------- */
@@ -1207,6 +1230,13 @@ void rf_sched_spawn(rf_sched* s, rf_coro* c)
         return;
     }
     rf_mutex_lock(&s->lock);
+    if (c->initial_spawned) {
+        // Already launched once (e.g. gather/race pre-launched the whole set, and retrieve! is now
+        // re-spawning the same coroutine). Idempotent: do not double-enqueue or double-count live.
+        rf_mutex_unlock(&s->lock);
+        return;
+    }
+    c->initial_spawned = 1;
     rf_sched_enqueue_ready(s, c);
     s->live++;
     /* Signal ONE idle worker (not broadcast): this is one unit of work, so one worker suffices — a
@@ -1396,7 +1426,11 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
         // If the owning Agent handle was $destroy'd WHILE we (a worker) still held this coroutine,
         // rf_sched_dispose deferred the free to us — we are the last toucher, so free it now. (The result
         // block is a separate rf_task the owner already freed; the coro struct + stack is ours to reclaim.)
-        int free_now = c->owner_released;
+        // owner_released: the owning Agent gave this coroutine up while we held it (deferred free).
+        // detached: a fire-and-forget `execute()` coroutine with no consumer — we are its sole owner,
+        // so free it here on completion. Both are set under s->lock (detached at spawn, before any
+        // worker could reach this), so the read is race-free.
+        int free_now = c->owner_released || c->detached;
         rf_cond_signal(&s->cond);          // an enqueued awaiter coroutine / the legacy driver
         rf_cond_broadcast(&s->block_cond); // top-level blockers re-check their target's completion
         rf_mutex_unlock(&s->lock);
@@ -1549,7 +1583,10 @@ static int rf_sched_step(rf_sched* s)
             rf_mutex_unlock(&s->lock);
             __rf_throw("DeadlockError",
                        "all coroutines are parked and none is runnable — no send, receive, or wake "
-                       "can ever make progress (deadlock)");
+                       "can ever make progress (deadlock). If coroutines communicate (a channel, a "
+                       "SignalCaster), they must all be LAUNCHED before you wait on one: retrieving a "
+                       "consumer before its producer is started parks it forever. Launch background "
+                       "feeders with `.execute()` and await the rest with `.retrieve()`/`.gather()`.");
             return 0; // unreachable: __rf_throw exits
         }
         // A cross-thread wake is outstanding (threaded await / async I/O / signal / race), or other

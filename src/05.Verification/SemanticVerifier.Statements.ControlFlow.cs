@@ -661,7 +661,25 @@ public sealed partial class SemanticVerifier
 
         // Analyze the expression - this validates the expression and checks for errors
         // The result is intentionally discarded
-        AnalyzeExpression(expression: discard.Expression);
+        TypeSymbol discardedType = AnalyzeExpression(expression: discard.Expression);
+
+        // `discard foo()` on an Agent is the lazy-async footgun: `discard` only throws away the value,
+        // it does NOT run the routine — an un-launched Agent's body never executes. (In the old eager
+        // model `discard foo()` still ran the work.) So warn even though the value was explicitly ignored.
+        if (discardedType is RecordTypeInfo dag && (dag.GenericDefinition?.Name ?? dag.Name) == "Agent")
+        {
+            string routineName = discard.Expression switch
+            {
+                CallExpression { Callee: IdentifierExpression id } => id.Name,
+                CallExpression { Callee: MemberExpression m } => m.MemberName,
+                _ => "routine"
+            };
+            ReportWarning(code: SemanticWarningCode.AsyncAgentNeverLaunched,
+                message: $"`discard {routineName}()` does NOT run the routine — `discard` only ignores " +
+                         "the value, and an un-launched Agent never executes. Call `.execute()` to run " +
+                         "it in the background, or `.retrieve()` to run it and await the value.",
+                location: discard.Location);
+        }
     }
 
     private void AnalyzeDangerStatement(DangerStatement danger)

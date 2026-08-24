@@ -19,17 +19,27 @@ choice AgentKind
 ### `retrieve()` and `waitfor()` branch on `kind`, reusing the coroutine-park and thread-wait paths.
 ### The metaphor: you delegate to an agent, it runs on its own, you only fetch the result.
 ###
-### Teardown is status-based (NOT done in `retrieve!`): a completed Agent is freed; one still in
-### flight is abandoned — a parked coroutine runs its cancellation shadow stack, while a running
-### worker thread (which cannot be killed) is joined before its block is freed, so the worker never
-### writes into freed memory. `retrieve!` only extracts the value; `destroy` always does the freeing.
+### LAZY model: a `suspended routine` call CREATES the coroutine but does NOT start it — the coroutine
+### is inert (rf_coro_create allocates the context; nothing runs) until a verb spawns it. A `threaded
+### routine` call spawns its OS thread at the call site (a thread cannot be created "inert"). The verb
+### is what STARTS a coroutine: `retrieve()`/`gather()`/`race()` spawn it and drive it, `execute()`
+### spawns it DETACHED (background, self-freeing) and returns immediately. `suspended`/`threaded` MARK a
+### deferred, schedulable unit, so "run it in the background" (`execute`) is a distinct, explicit choice
+### from "run it and wait" (`retrieve`) — neither happens implicitly on the call.
+###
+### Teardown: `destroy` is a NO-OP. The single consuming verb (`retrieve!`/`execute!`/`race!`/`gather!`)
+### owns the whole lifecycle — it spawns, then reaps (coroutine deleted/abandoned, result block freed).
+### A handle copy (from `waitfor`, or a `List[Agent]` element read as a temporary) tearing down frees
+### nothing → no double-free even when the same coroutine/worker is aliased across copies. A coroutine
+### created but never spawned (a recipe you never invoke) leaks its context — rare, and the routine
+### body never runs, which is the point of laziness.
 record Agent[T] obeys Assignable
   ### CORO = coroutine-backed (suspended routine); THREAD = thread-backed (threaded routine).
   secret kind: AgentKind
-  ### The opaque coroutine handle (rf_coro*), valid only for kind CORO.
+  ### The coroutine handle (rf_coro*) — created INERT at the call site (kind CORO), spawned by a verb.
   secret coro: CPtr
-  ### The task control block holding the produced value: the coroutine's result block (CORO) or the
-  ### worker's rf_task* handle (THREAD).
+  ### The task control block that holds the produced value (the coroutine's result block, or the
+  ### worker's rf_task* for kind THREAD).
   secret agent: Address
   ### The wait deadline; only meaningful when `has_deadline` is true (THREAD).
   secret deadline: Duration
@@ -117,6 +127,9 @@ routine Agent[T].retrieve!() -> T
     if me.coro.is_none()
       throw TaskSpawnError()
     danger
+      # LAZY: the recipe's coroutine was created inert at the call site — launch it now, then drive
+      # this thread's pool until it finishes.
+      C::rf_sched_spawn_default(coro: me.coro)
       C::rf_sched_run_until_default(coro: me.coro)
       var payload = C::rf_task_result_payload(task: me.agent)
       var value = Hijacked[T](from: payload).peek()
@@ -167,6 +180,40 @@ routine Agent[T].retrieve!() -> T
     # `waitfor`) never reach here — their `destroy` is a no-op — so the worker is freed exactly once.
     me.reap()
     return value
+
+### Drives the work to completion and DISCARDS its produced value — the recipe model's `execute` verb,
+### the twin of `retrieve!` (which returns the value). Use it for fire-and-forget work whose COMPLETION
+### and side effects you want but whose return value you don't. Same uncolored drive as `retrieve!`: a
+### coroutine agent runs this thread's implicit scheduler until it finishes, a thread agent parks (inside
+### a scheduler-driven coroutine) or blocks (on a plain thread); a deadline still races the timer. This
+### is a CONSUMING operation exactly like `retrieve!` — it drives to completion and reaps, so the agent
+### is finished (not abandoned, which is what merely dropping an un-consumed handle does). The produced
+### value is torn down like any dropped local (its `destroy` runs), so an owned result frees cleanly.
+### :throws: {TaskSpawnError} if the work could not be spawned.
+### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
+routine Agent[T].execute!()
+  if me.kind is AgentKind.CORO
+    if me.coro.is_none()
+      throw TaskSpawnError()
+    danger
+      # Fire-and-forget: mark the INERT coroutine + its result task detached BEFORE spawning, so the
+      # pool worker that completes it frees both itself (no consumer, and no complete-before-detach
+      # race — nothing runs until the spawn below). Then spawn and return immediately: the work runs
+      # to completion in the background. An owned return value's box is freed as raw memory (its typed
+      # destroy does not run yet — a discard thunk is the follow-up; None/trivial returns are exact).
+      C::rf_coro_set_detached(coro: me.coro)
+      C::rf_task_set_detached(task: me.agent)
+      C::rf_sched_spawn_default(coro: me.coro)
+    return
+  # THREAD: the OS thread is already running (spawned eagerly at the call site). Mark its task detached
+  # and return immediately — the worker frees the task + unread result box itself on exit, no consumer.
+  # rf_task_set_detached coordinates under the task lock with the worker's self-reap, so it is race-safe
+  # even if the worker completes before (or during) this call.
+  if not me.spawned
+    throw TaskSpawnError()
+  danger
+    C::rf_task_set_detached(task: me.agent)
+  return
 
 ### Reaps this agent's work — the SOLE freeing path, called EXACTLY ONCE by the consumer that is done
 ### with it (`retrieve!` after reading the value or a deadline give-up; `race!` over its whole set).
@@ -238,6 +285,8 @@ routine List[Agent[V]].race!() -> V
     var i = 0_u64
     while i < n
       if me[i].is_coro()
+        # LAZY: spawn each recipe's inert coroutine so the whole set runs CONCURRENTLY, then race.
+        C::rf_sched_spawn_default(coro: me[i].coro_handle())
         C::rf_race_add_coro(race: race, coro: me[i].coro_handle())
       else
         C::rf_race_add_task(race: race, task: me[i].task_handle())
@@ -272,8 +321,17 @@ routine List[Agent[V]].race!() -> V
 routine List[Agent[V]].gather!() -> List[V]
   danger
     var n = me.count()
-    var results = List[V]()
+    # LAZY: launch the WHOLE set FIRST so the children run CONCURRENTLY, then retrieve each. Driving
+    # one-by-one would serialize timing-heavy children (park/resume) into N× the wall-clock. retrieve!'s
+    # own spawn is IDEMPOTENT (rf_sched_spawn guards the initial enqueue), so its re-spawn below is a
+    # no-op on these already-launched coroutines. (THREAD recipes are spawned at the call site.)
     var i = 0_u64
+    while i < n
+      if me[i].is_coro()
+        C::rf_sched_spawn_default(coro: me[i].coro_handle())
+      i = i + 1
+    var results = List[V]()
+    i = 0_u64
     while i < n
       var value = me[i].retrieve()
       results.add_last(value: value)
@@ -296,7 +354,13 @@ routine List[Agent[V]].cancel_all!() -> List[V]
     while i < n
       me[i].request_cancel()
       i = i + 1
-    # Wait out the wind-down (same uncolored drive as gather!), collecting each final value.
+    # LAZY: launch the whole set CONCURRENTLY (so they run + observe the cancel together), then drive
+    # each to its wind-down. retrieve!'s spawn is idempotent, so re-spawning these is a no-op.
+    i = 0u64
+    while i < n
+      if me[i].is_coro()
+        C::rf_sched_spawn_default(coro: me[i].coro_handle())
+      i = i + 1
     var results = List[V]()
     i = 0u64
     while i < n

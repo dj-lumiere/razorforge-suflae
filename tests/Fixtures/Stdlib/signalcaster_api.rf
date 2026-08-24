@@ -21,11 +21,10 @@ suspended routine caster(sig: SignalCaster) -> S64
 routine start()
   var sig = SignalCaster()
 
-  var w = waiter(sig: steal sig.duplicate())
-  var c = caster(sig: steal sig)
-
   danger
-    var wr = w.retrieve()   # waiter parks -> caster casts -> waiter wakes and returns
-    var cr = c.retrieve()
-    show(f"waiter={wr} caster={cr}")
+    # LAZY: launch waiter + caster TOGETHER (`gather`) so the waiter can park on `wait` and the caster
+    # can `cast_one` to wake it. Retrieving the waiter ALONE would hang — the caster would never be
+    # launched to cast. gather returns results in input order: [waiter, caster].
+    var results = [waiter(sig: steal sig.duplicate()), caster(sig: steal sig)].gather()
+    show(f"waiter={results[0]} caster={results[1]}")
   return

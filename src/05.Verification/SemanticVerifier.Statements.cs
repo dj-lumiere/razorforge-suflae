@@ -828,10 +828,24 @@ public sealed partial class SemanticVerifier
                 _ => "routine"
             };
 
-            ReportWarning(code: SemanticWarningCode.UnusedRoutineReturnValue,
-                message: $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
-                         "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
-                location: call.Location);
+            // An `Agent[T]` result dropped on the floor is the lazy-async footgun: a `suspended`/
+            // `threaded` call only builds a recipe — dropping it means the routine BODY never runs
+            // (in the old eager model it would have). Point at the verbs that actually start it.
+            if (exprType is RecordTypeInfo ag && (ag.GenericDefinition?.Name ?? ag.Name) == "Agent")
+            {
+                ReportWarning(code: SemanticWarningCode.AsyncAgentNeverLaunched,
+                    message: $"Agent from '{routineName}()' is never launched — the routine will NOT " +
+                             "run. Call `.execute()` to run it in the background, or `.retrieve()` to " +
+                             "run it and await the value.",
+                    location: call.Location);
+            }
+            else
+            {
+                ReportWarning(code: SemanticWarningCode.UnusedRoutineReturnValue,
+                    message: $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
+                             "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
+                    location: call.Location);
+            }
         }
     }
 

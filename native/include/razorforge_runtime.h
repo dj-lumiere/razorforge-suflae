@@ -108,6 +108,12 @@ const char* rf_task_completion_name(rf_task_completion_kind kind);
 rf_task* rf_task_create(rf_task_kind kind);
 void rf_task_destroy(rf_task* task);
 void rf_task_release(rf_task* task);
+/* Mark a result task as fire-and-forget (`execute()`): rf_task_complete_value frees it + its result
+ * box, no consumer. Set before the coroutine/thread runs (no complete-before-detach race). */
+void rf_task_set_detached(rf_task* task);
+/* Whether a task is fire-and-forget (`execute()`). Read by the generated entry thunk to destroy the
+ * result instead of boxing it when detached (so an owned return does not leak). */
+uint8_t rf_task_is_detached(rf_task* task);
 
 uint64_t rf_task_id(rf_task* task);
 
@@ -252,6 +258,10 @@ rf_coro_status rf_coro_status_get(rf_coro* coro);
 /* Free the coroutine and its stack. Caller must not delete a coroutine that is currently
  * running, nor one parked with live cancellation frames — use rf_coro_abandon for that. */
 void rf_coro_delete(rf_coro* coro);
+
+/* Mark a coroutine as fire-and-forget (`execute()`): the worker that completes it frees it, no
+ * consumer. Call BEFORE rf_sched_spawn_default so it is published before any worker runs it. */
+void rf_coro_set_detached(rf_coro* coro);
 
 /* Cancellation shadow stack (Phase 3). Push/pop are called by code running INSIDE the
  * coroutine (scope entry / normal scope exit); abandon is called by the host on a parked or

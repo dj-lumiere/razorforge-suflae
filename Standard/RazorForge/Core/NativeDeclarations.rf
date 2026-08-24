@@ -73,6 +73,9 @@ dangerous routine C::rf_task_result_payload(task: Address) -> Address
 dangerous routine C::rf_task_status_get(task: Address) -> U32
 ### Releases a task control block.
 dangerous routine C::rf_task_destroy(task: Address)
+### Marks a result task as fire-and-forget (`execute()`): its completion self-frees the task + result
+### box, no consumer. Set before the coroutine/thread runs.
+dangerous routine C::rf_task_set_detached(task: Address)
 ### Consumer side of the threaded-task self-reap rendezvous: called once by the driving `retrieve!`
 ### (after reading the value, or on a deadline give-up). Frees the task iff the worker already exited;
 ### else the worker frees it. An Agent handle copy's `destroy` never calls this — so no double-free.
@@ -158,6 +161,9 @@ dangerous routine C::rf_coro_resume(coro: CPtr) -> U32
 routine C::rf_coro_yield()
 ### Reads a coroutine's status (0 new, 1 running, 2 parked, 3 completed, 4 cancelled).
 dangerous routine C::rf_coro_status_get(coro: CPtr) -> U32
+### Marks a coroutine as fire-and-forget (`execute()`): the completing worker frees it, no consumer.
+### Call before rf_sched_spawn_default so it is published before any worker runs it.
+dangerous routine C::rf_coro_set_detached(coro: CPtr)
 ### Abandons a parked (or never-started) coroutine: walks its cancellation shadow stack
 ### innermost-first, runs each teardown thunk once, then frees the coroutine and its stack.
 dangerous routine C::rf_coro_abandon(coro: CPtr)

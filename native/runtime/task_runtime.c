@@ -22,6 +22,10 @@ extern void __rf_throw(const char* error_type, const char* message);
  * thread's self-reap hook in rf_threaded_task_main calls it before its definition. */
 static void rf_task_free_internal(struct rf_task* task);
 
+/* Frees a heap block from rf_allocate_dynamic (memory.c) — used to reclaim a detached task's unread
+ * result box. */
+extern void rf_invalidate(void* ptr);
+
 /* Stable identifier for the calling OS thread. The exact value is opaque — only equality across
  * calls on the same thread matters (lock re-entrancy detection). */
 uint64_t rf_current_thread_id(void)
@@ -67,6 +71,11 @@ struct rf_task
 
     rf_Bool cancel_requested;
     rf_Bool result_consumed;
+
+    /* 1 for a fire-and-forget `execute()` task: no consumer will retrieve the value, so
+     * rf_task_complete_value frees the result box AND the task itself. Set at spawn time (before the
+     * coroutine/thread runs), so there is no complete-before-detach race. */
+    rf_Bool detached;
 
     /* Threaded-task self-reap rendezvous (task_runtime "lifetime inversion"): a THREADED task is
      * freed by the LAST of two parties — the worker thread (sets worker_exited as its final act) and
@@ -414,9 +423,15 @@ static void* rf_threaded_task_main(void* raw)
         {
             rf_mutex_lock(&t->coro_lock);
             t->worker_exited = true;
-            rf_Bool reap = t->consumer_released && !t->reaped;
+            // A DETACHED thread task (`execute()`) has no consumer — the worker is its sole owner and
+            // frees it here (plus the unread result box). Otherwise the normal rendezvous: reap iff the
+            // consuming retrieve! already released.
+            rf_Bool reap = (t->consumer_released || t->detached) && !t->reaped;
             if (reap) t->reaped = true;
+            rf_Bool free_box = reap && t->detached;
+            void* box = free_box ? t->completion.value_payload : NULL;
             rf_mutex_unlock(&t->coro_lock);
+            if (box != NULL) rf_invalidate(box);
             if (reap) rf_task_free_internal(t);
         }
     }
@@ -746,11 +761,53 @@ void rf_task_complete_value(rf_task* task, void* result_payload)
 {
     if (task == NULL) return;
 
+    // Fire-and-forget (`execute()`): no consumer will read the value, so the result box + task are
+    // freed as raw memory (the typed destroy does NOT run — trivial/None returns leak nothing; owned
+    // returns are the discard-thunk follow-up). WHO frees depends on the substrate:
+    //   - SUSPENDED (coroutine): no worker-thread rendezvous, so free directly here.
+    //   - THREADED: fall through to store the value; the worker's self-reap hook (rf_threaded_task_main)
+    //     is the sole owner of a detached thread task and frees it there — freeing here would leave the
+    //     still-running worker's self-reap touching freed memory.
+    if (task->detached && task->kind == RF_TASK_SUSPENDED) {
+        if (result_payload != NULL) rf_invalidate(result_payload);
+        rf_task_free_internal(task);
+        return;
+    }
+
     task->status = RF_TASK_COMPLETED;
     task->completion.kind = RF_TASK_COMPLETION_VALUE;
     task->completion.value_payload = result_payload;
     task->completion.error_payload = NULL;
     rf_task_signal_completion(task);
+}
+
+// Marks a result task as fire-and-forget (`execute()`): its completion frees it + the unread result box,
+// no consumer. For a SUSPENDED (coroutine) task the coroutine is inert until spawned, so setting the flag
+// before the spawn is race-free. For a THREADED task the worker is ALREADY running, so coordinate under
+// coro_lock with its self-reap: if the worker already exited (completed) before we detached it, WE are
+// the last toucher and free it now; otherwise the worker frees it on exit (it checks `detached`).
+void rf_task_set_detached(rf_task* task)
+{
+    if (task == NULL) return;
+    rf_mutex_lock(&task->coro_lock);
+    task->detached = 1;
+    rf_Bool reap = task->kind == RF_TASK_THREADED && task->worker_exited && !task->reaped;
+    if (reap) task->reaped = true;
+    rf_mutex_unlock(&task->coro_lock);
+    if (reap) {
+        if (task->completion.value_payload != NULL) rf_invalidate(task->completion.value_payload);
+        rf_task_free_internal(task);
+    }
+}
+
+// Whether this task is fire-and-forget (`execute()`). The generated entry thunk reads this at
+// completion: when detached it DESTROYS the result (runs the typed destroy) and completes with null
+// instead of boxing it — so a detached owned return does not leak. For a coroutine this is race-free
+// (detached is set before the inert coro is spawned); for a thread there is a narrow window (the worker
+// completes before execute() detaches) where it still boxes and the box is freed raw.
+uint8_t rf_task_is_detached(rf_task* task)
+{
+    return (task != NULL && task->detached) ? 1u : 0u;
 }
 
 void rf_task_complete_error(rf_task* task, void* error_payload)

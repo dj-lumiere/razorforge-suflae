@@ -1,0 +1,28 @@
+module Tests/StdlibSf/CoroSuspendedApi
+
+import IO/Console
+
+# SF twin of Stdlib/coro_suspended_api.rf. `suspended` is a SHARED keyword (SUFLAE-FOR-AI §2.8) — SF's
+# single-thread/cooperative model is exactly where stackful coroutines fit. Calling a `suspended routine`
+# yields a Coroutine[T] handle; `retrieve()` drives it to completion (pumping through every yield) and
+# returns its value. SF spells the yield through the `yield_now()` surface (RF's fixture uses the raw
+# `C::rf_coro_yield()`, which SF hides); the driven result is identical, so the expected output matches.
+
+suspended routine compute(x: S64) -> S64
+  return x * 2
+
+suspended routine counter() -> S64
+  var n = 10_s64
+  yield_now()
+  n = n + 5_s64
+  yield_now()
+  n = n + 5_s64
+  return n
+
+routine start()
+  var c = compute(x: 21)
+  show(f"compute => {c.retrieve()}")
+
+  var k = counter()
+  show(f"counter => {k.retrieve()}")
+  return

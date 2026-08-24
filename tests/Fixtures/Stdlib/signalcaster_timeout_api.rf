@@ -26,16 +26,16 @@ suspended routine caster(sig: SignalCaster) -> S64
   return 0
 
 routine start()
+  # A: waits alone with nobody to cast -> times out. A single coroutine, so a plain retrieve.
   var sig_a = SignalCaster()
-  var wa = wait_alone(sig: steal sig_a)
+  var timed_out = wait_alone(sig: steal sig_a).retrieve()
 
+  # B: LAZY — launch the waiter + caster TOGETHER (`gather`, input order). The waiter is launched first
+  # so it parks on `wait_within` before the caster runs `cast_one` (a cast to no parked waiter is lost);
+  # retrieving the waiter alone would leave the caster un-launched -> the wait would time out (woken=0).
   var sig_b = SignalCaster()
-  var wb = wait_for_cast(sig: steal sig_b.duplicate())
-  var cb = caster(sig: steal sig_b)
-
   danger
-    var timed_out = wa.retrieve()
-    var woken = wb.retrieve()
-    discard cb.retrieve()
+    var results = [wait_for_cast(sig: steal sig_b.duplicate()), caster(sig: steal sig_b)].gather()
+    var woken = results[0]
     show(f"timed_out={timed_out} woken={woken}")
   return
