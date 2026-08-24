@@ -175,6 +175,15 @@ public partial class Parser
                     continue;
                 }
 
+                // Skip trailing doc comments (### lines) that are not followed by a declaration.
+                // A module file may end with a block of documentation (e.g. the BuilderExpansion
+                // capability-gate module, which declares nothing) — those must not drive
+                // ParseDeclaration into an EOF "Unexpected token" error.
+                if (Match(type: TokenType.DocComment))
+                {
+                    continue;
+                }
+
                 // Handle dedent tokens (should not occur at top level, but be safe)
                 if (Check(type: TokenType.Dedent))
                 {

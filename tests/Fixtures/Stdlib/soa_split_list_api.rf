@@ -1,5 +1,6 @@
 module Tests/Stdlib/SoaSplitListApi
 import IO/Console
+import BuilderExpansion
 import Collections
 
 # Exercises the growable struct-of-arrays `SplitList[T]` (Standard/RazorForge/Collections/SplitList.rf):

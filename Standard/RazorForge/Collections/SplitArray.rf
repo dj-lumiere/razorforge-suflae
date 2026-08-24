@@ -1,6 +1,7 @@
 module Collections
 
 import BuilderQuery
+import BuilderExpansion
 
 ### A fixed-size, struct-of-arrays (SoA) array of `N` records with value semantics.
 ###

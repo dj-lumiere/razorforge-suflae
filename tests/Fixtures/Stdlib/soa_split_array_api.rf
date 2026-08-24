@@ -1,5 +1,6 @@
 module Tests/Stdlib/SoaSplitArrayApi
 import IO/Console
+import BuilderExpansion
 import Collections
 
 # Exercises decl-position `expand m in allmemvarof(T)` (struct-of-arrays): `SplitArray[T, N]` turns each

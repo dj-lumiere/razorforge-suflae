@@ -107,6 +107,12 @@ public sealed partial class SemanticVerifier
             && IsMetadataIntrinsic(name: ofName)
             && call.Arguments is { Count: 1 })
         {
+            // BuilderExpansion gate: the reflection intrinsics live in the BuilderExpansion module
+            // (siblings of the `expand` sources); using one requires the opt-in import.
+            if (!_importedModules.Contains(item: "BuilderExpansion"))
+                ReportError(code: SemanticDiagnosticCode.BuilderExpansionImportRequired,
+                    message: $"'{ofName}(...)' requires 'import BuilderExpansion'.",
+                    location: call.Location);
             return AnalyzeMetadataIntrinsic(name: ofName);
         }
 

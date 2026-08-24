@@ -1,6 +1,6 @@
 module Tests/Stdlib/ExpandMtypeExprApi
 import IO/Console
-import BuilderQuery
+import BuilderExpansion
 
 # Exercises `$typeof(m)` in EXPRESSION position: inside an `expand m in allmemvarof(T)` loop, the comptime
 # member type splices into a typewise receiver for a static/universal method — here `$typeof(m).data_size()`

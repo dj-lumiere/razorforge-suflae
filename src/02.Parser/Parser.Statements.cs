@@ -262,44 +262,22 @@ public partial class Parser
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand loop");
 
-        // Statement-position expand sources: `openmemvarof(T)`/`allmemvarof(T)` (record/entity/tuple
-        // fields) or `caseof(T)` (choice/flags cases). (`branchof(T)` is parsed separately — it only
-        // appears inside a `when`.)
-        ExpandSourceKind sourceKind;
-        string sourceName;
-        if (Match(type: TokenType.CaseOf))
-        {
-            sourceKind = ExpandSourceKind.Cases;
-            sourceName = "caseof";
-        }
-        else if (Match(type: TokenType.OpenMemVarOf))
-        {
-            sourceKind = ExpandSourceKind.OpenMemberVariables;
-            sourceName = "openmemvarof";
-        }
-        else if (Match(type: TokenType.AllMemVarOf))
-        {
-            sourceKind = ExpandSourceKind.AllMemberVariables;
-            sourceName = "allmemvarof";
-        }
-        else
-        {
-            Consume(type: TokenType.OpenMemVarOf,
-                errorMessage:
-                "Expected 'openmemvarof', 'allmemvarof' or 'caseof' after 'in' in expand loop");
-            sourceKind = ExpandSourceKind.OpenMemberVariables;
-            sourceName = "openmemvarof";
-        }
-
+        // The source is an ordinary BuilderExpansion intrinsic call `<name>(T)` — the parser does NOT
+        // know the intrinsic names (they are module routines, siblings of `nameof`/`typeof`, no longer
+        // keywords). It reads the source NAME + TYPE syntactically; SemanticVerifier classifies the name
+        // into an ExpandSourceKind (`allmemvarof`/`openmemvarof`/`caseof`) and gates it on
+        // `import BuilderExpansion`.
+        string sourceName = ConsumeIdentifier(errorMessage:
+            "Expected an expand source (e.g. 'allmemvarof', 'openmemvarof', 'caseof') after 'in'");
         Consume(type: TokenType.LeftParen, errorMessage: $"Expected '(' after '{sourceName}'");
         TypeExpression sourceType = ParseType();
-        Consume(type: TokenType.RightParen, errorMessage: $"Expected ')' after {sourceName} type");
+        Consume(type: TokenType.RightParen, errorMessage: $"Expected ')' after {sourceName}(...) type");
 
         Statement body = ParseBody();
 
         return new ExpandStatement(HandleName: handle,
+            SourceName: sourceName,
             SourceType: sourceType,
-            SourceKind: sourceKind,
             Body: body,
             Location: location);
     }
@@ -603,7 +581,9 @@ public partial class Parser
         Consume(type: TokenType.Expand, errorMessage: "Expected 'expand'");
         string handle = ConsumeIdentifier(errorMessage: "Expected expand handle name");
         Consume(type: TokenType.In, errorMessage: "Expected 'in' in expand");
-        Consume(type: TokenType.BranchOf, errorMessage: "Expected 'branchof' after 'in' in a when-expand");
+        // Name-agnostic: the source intrinsic (a when-expand's is always `branchof`) is read as a plain
+        // identifier — the parser does not know the BuilderExpansion intrinsic names.
+        ConsumeIdentifier(errorMessage: "Expected 'branchof' after 'in' in a when-expand");
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'branchof'");
         TypeExpression sourceType = ParseType();
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after branchof type");

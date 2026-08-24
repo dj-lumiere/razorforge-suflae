@@ -1,5 +1,6 @@
 module Tests/Stdlib/ExpandCaseofApi
 import IO/Console
+import BuilderExpansion
 
 # Exercises `expand c in caseof(T)`: unrolls once per choice case (S32 discriminant) or per flags
 # member (U64 bit value), exposing nameof(c) / orderof(c) / valueof(c) (the numeric constant).

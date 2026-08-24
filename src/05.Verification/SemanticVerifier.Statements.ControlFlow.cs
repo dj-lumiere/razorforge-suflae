@@ -146,6 +146,22 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void AnalyzeExpandStatement(ExpandStatement expandStmt)
     {
+        // BuilderExpansion gate: `expand` and its sources (allmemvarof/openmemvarof/caseof/branchof) are
+        // comptime intrinsics housed in the BuilderExpansion module — no longer keywords, siblings of
+        // nameof/typeof. Using them requires the opt-in import (mirrors `import BuilderQuery`).
+        if (!_importedModules.Contains(item: "BuilderExpansion"))
+            ReportError(code: SemanticDiagnosticCode.BuilderExpansionImportRequired,
+                message: "'expand' requires 'import BuilderExpansion'.",
+                location: expandStmt.Location);
+
+        // The parser is name-agnostic (it stored whatever identifier followed `in`); validate here that it
+        // is a real reflection source.
+        if (!ExpandSources.IsSource(name: expandStmt.SourceName))
+            ReportError(code: SemanticDiagnosticCode.UnknownExpandSource,
+                message:
+                $"'{expandStmt.SourceName}' is not a valid expand source — use 'allmemvarof', 'openmemvarof', 'caseof', or 'branchof'.",
+                location: expandStmt.Location);
+
         // Expansion is single-level: a member walk cannot itself contain a member walk.
         if (_inExpandBody)
             ReportError(code: SemanticDiagnosticCode.NestedExpandNotAllowed,

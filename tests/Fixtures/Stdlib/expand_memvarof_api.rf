@@ -1,5 +1,6 @@
 module Tests/Stdlib/ExpandMemvarofApi
 import IO/Console
+import BuilderExpansion
 
 # Exercises the comptime `expand m in allmemvarof(T)` loop + `$nameof(m)` splice: a single generic
 # `dump_fields[T]` reflects over any record's member variables, unrolled per field at

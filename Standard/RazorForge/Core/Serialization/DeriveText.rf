@@ -1,6 +1,7 @@
 module Core
 
 import BuilderQuery
+import BuilderExpansion
 import Collections
 
 ### The auto-derived default `represent()` for any record: `TypeName(field: value, …)`. Written as a

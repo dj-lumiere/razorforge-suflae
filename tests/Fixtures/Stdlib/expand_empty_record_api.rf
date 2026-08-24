@@ -1,5 +1,6 @@
 module Tests/Stdlib/ExpandEmptyRecordApi
 import IO/Console
+import BuilderExpansion
 
 # Edge case: `expand m in allmemvarof(T)` over a zero-field record unrolls to ZERO iterations, so the
 # loop body is elided entirely and only the surrounding statements remain.

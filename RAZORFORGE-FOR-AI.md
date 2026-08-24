@@ -539,7 +539,7 @@ you are writing another language.
 - **Bindings**: `var` `preset` `lateinit`
 - **Visibility / receiver**: `secret` `posted` `common`
 - **Self**: `me` `Me`
-- **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`†
+- **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`
 - **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
   `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
 - **Iteration / range / ownership**: `in` `notin` `to` `til` `by` `steal`†
@@ -549,15 +549,15 @@ you are writing another language.
 - **Literals**: `true` `false` `None` `none`
 - **Concurrency**: `suspended` `threaded`†
 - **Danger**†: `danger` (block) `dangerous` (modifier)
-- **Comptime reflection**†: `expand` (loop) plus the reflection **sources**
-  `openmemvarof` `allmemvarof` `branchof` `caseof` — these are reserved. There is no
-  `memvarof`.
+- **Comptime reflection**†: `expand` (loop) — the ONLY reflection keyword.
 
-The metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof` `typeidof`
-`valueof` `visibilityof` are **comptime builtin intrinsics, NOT reserved keywords** — they
-tokenize as ordinary identifiers and are recognized contextually (bare `nameof(m)` or
-`$`-spliced `me.$nameof(m)`), each reading a comptime property off the active `expand`
-handle or a type.
+The reflection **sources** `openmemvarof` `allmemvarof` `branchof` `caseof` (there is no
+`memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof`
+`typeidof` `valueof` `visibilityof` are **comptime builtin intrinsics, NOT reserved
+keywords** — they tokenize as ordinary identifiers and are recognized in SA only when
+`import BuilderExpansion` is in effect (bare `nameof(m)` or `$`-spliced `me.$nameof(m)`),
+each reading a comptime property off the active `expand` handle or a type. Without that
+import, using `expand` or any source/accessor is a compile error (RF-S952).
 
 `$` (wired-routine marker / `${…}` comptime splice) and `!` (failable marker) are
 **structural sigils on a name, not keywords** — the name stays bare (RoutineInfo

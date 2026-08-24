@@ -1,5 +1,6 @@
 module Tests/Stdlib/ExpandBranchofApi
 import IO/Console
+import BuilderExpansion
 
 # Exercises `expand m in branchof(T)` — the variant-arm sibling of caseof. Inside a comptime `when` over
 # a `T is VariantType`, the arm template `is $typeof(m) v => …` is unrolled once per payload arm at

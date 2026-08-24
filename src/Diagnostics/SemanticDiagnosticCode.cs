@@ -946,6 +946,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
     UnresolvedRoutineBody = 951,
 
+    /// <summary><c>expand</c> or a reflection intrinsic (nameof/typeof/…) used without 'import BuilderExpansion'.</summary>
+    BuilderExpansionImportRequired = 952,
+
+    /// <summary>Unknown <c>expand</c> source — not allmemvarof/openmemvarof/caseof/branchof.</summary>
+    UnknownExpandSource = 953,
+
     /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
     BareEntityInCarrierType = 953,
 

@@ -133,6 +133,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
         return false;
     }
 
+
     /// <summary>
     /// Skips Newline tokens only if the specified token type follows them.
     /// Returns true always (to be used in while loop conditions).

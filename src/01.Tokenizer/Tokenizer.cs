@@ -223,6 +223,14 @@ public partial class Tokenizer
 
             // Concurrency (SF has cooperative coroutines; `threaded` stays RF-only)
             [key: "suspended"] = TokenType.Suspended,
+
+            // `needs P everywhere` — the structural-conferral gate of the protocol model (a `needs`-clause
+            // modifier, NOT a reflection construct). It lives with `needs`/`obeys`/`protocol`, which SF
+            // shares, so it is a SHARED keyword. The derive TEMPLATES it gates (e.g. `routine T.eq` with an
+            // `expand` body) are RF stdlib that SF reuses wholesale; authoring such a template needs
+            // `expand` (RF-only), but the gate itself and the built-in structural protocols apply to SF
+            // types just as well.
+            [key: "everywhere"] = TokenType.Everywhere,
         };
 
         // RF-only keywords
@@ -232,15 +240,13 @@ public partial class Tokenizer
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "steal"] = TokenType.Steal;
             _keywords[key: "threaded"] = TokenType.Threaded;
-            // Comptime reflection is RF's model (monomorph unroll). Suflae's reflection is the
-            // runtime ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via
-            // wholesale Core reuse, so it never needs the `expand`/`allmemvarof` keywords itself.
+            // Comptime reflection is RF's model (monomorph unroll). Suflae's reflection is the runtime
+            // ObjectHacker (later); SF inherits the RF-mode-compiled stdlib derives via wholesale Core
+            // reuse, so it never needs `expand` itself. `expand` is the ONLY reflection keyword; the sources
+            // (`openmemvarof`/`allmemvarof`/`caseof`/`branchof`) and accessors (`nameof`/`typeof`/…)
+            // tokenize as plain identifiers and are classified in SA (see ExpandSources / the
+            // BuilderExpansion import gate), not here.
             _keywords[key: "expand"] = TokenType.Expand;
-            _keywords[key: "openmemvarof"] = TokenType.OpenMemVarOf;
-            _keywords[key: "allmemvarof"] = TokenType.AllMemVarOf;
-            _keywords[key: "branchof"] = TokenType.BranchOf;
-            _keywords[key: "caseof"] = TokenType.CaseOf;
-            _keywords[key: "everywhere"] = TokenType.Everywhere;
         }
 
         // Numeric suffix map - shared between both languages except "j" default

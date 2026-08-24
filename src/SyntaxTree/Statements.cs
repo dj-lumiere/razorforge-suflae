@@ -491,16 +491,55 @@ public enum ExpandSourceKind
 /// <param name="Location">Source location information.</param>
 public record ExpandStatement(
     string HandleName,
+    string SourceName,
     TypeExpression SourceType,
-    ExpandSourceKind SourceKind,
     Statement Body,
     SourceLocation Location) : Statement(Location: Location)
 {
+    /// <summary>
+    /// The reflection kind, classified from the source intrinsic NAME (`allmemvarof`/`openmemvarof`/
+    /// `caseof`). The parser is name-agnostic — it stores whatever identifier follows `in` as
+    /// <see cref="SourceName"/> (the sources are BuilderExpansion module intrinsics, not keywords); this
+    /// maps it to the kind the unroller branches on. SemanticVerifier validates the name + import-gates
+    /// on <c>import BuilderExpansion</c> before the unroll runs.
+    /// </summary>
+    public ExpandSourceKind SourceKind => ExpandSources.KindOf(name: SourceName);
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
         return visitor.VisitExpandStatement(node: this);
     }
+}
+
+/// <summary>
+/// Classifies a BuilderExpansion reflection-source intrinsic name (<c>allmemvarof</c>/<c>openmemvarof</c>/
+/// <c>caseof</c>/<c>branchof</c>) into an <see cref="ExpandSourceKind"/>. Lives in the AST layer (not the
+/// parser grammar, which is name-agnostic) so both <see cref="ExpandStatement"/> and the analyzer agree on
+/// the mapping. Unknown names fall back to <see cref="ExpandSourceKind.AllMemberVariables"/>; the analyzer
+/// rejects them first (a name that is not a real source is a semantic error, gated on the module import).
+/// </summary>
+public static class ExpandSources
+{
+    /// <summary>The recognized reflection-source intrinsic names.</summary>
+    public static readonly System.Collections.Generic.IReadOnlySet<string> Names =
+        new System.Collections.Generic.HashSet<string>(comparer: System.StringComparer.Ordinal)
+        {
+            "openmemvarof", "allmemvarof", "caseof", "branchof"
+        };
+
+    /// <summary>True if <paramref name="name"/> is a recognized reflection-source intrinsic.</summary>
+    public static bool IsSource(string name) => Names.Contains(item: name);
+
+    /// <summary>Maps a source intrinsic name to its <see cref="ExpandSourceKind"/>.</summary>
+    public static ExpandSourceKind KindOf(string name) => name switch
+    {
+        "openmemvarof" => ExpandSourceKind.OpenMemberVariables,
+        "allmemvarof" => ExpandSourceKind.AllMemberVariables,
+        "caseof" => ExpandSourceKind.Cases,
+        "branchof" => ExpandSourceKind.Arms,
+        _ => ExpandSourceKind.AllMemberVariables
+    };
 }
 
 /// <summary>

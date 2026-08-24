@@ -97,11 +97,9 @@ public partial class Parser
         // A decl-position expand lays a column per member and always covers EVERY field, so it accepts
         // `allmemvarof(T)` (which yields all members). `openmemvarof` (a public-only filter) has no
         // decl-position use case and would need visibility threading.
-        if (!Match(TokenType.AllMemVarOf))
-        {
-            throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedToken,
-                message: "A decl-position expand only supports 'allmemvarof(T)'.");
-        }
+        // Name-agnostic: a decl-position expand's source (always `allmemvarof`) is read as a plain
+        // identifier — the parser does not know the BuilderExpansion intrinsic names.
+        ConsumeIdentifier(errorMessage: "A decl-position expand only supports 'allmemvarof(T)'.");
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' after 'allmemvarof'");
         TypeExpression sourceType = ParseType();
         Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after allmemvarof type");
