@@ -2735,13 +2735,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             case "builder_version":
             {
-                Version version = typeof(WiredRoutinePass).Assembly.GetName()
-                                                          .Version ??
-                                  throw new InvalidOperationException(
-                                      "Unable to resolve the RazorForge assembly version for builder_version().");
+                // Language-specific: a Suflae compile reports the Suflae version line, a RazorForge compile
+                // the RazorForge one — both sourced from the csproj PropertyGroup via AssemblyMetadata
+                // (Resolution.BuildInfo), the single source of truth. Folded to a build-time literal.
+                string version = ctx.Registry.Language == TypeModel.Enums.Language.Suflae
+                    ? Resolution.BuildInfo.SuflaeVersion
+                    : Resolution.BuildInfo.RazorForgeVersion;
                 ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: version.ToString(fieldCount: 3),
-                        returnType: textType);
+                    MakeLiteralReturn(value: version, returnType: textType);
                 return true;
             }
 

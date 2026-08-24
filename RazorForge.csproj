@@ -9,6 +9,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
     <Version>0.4.0</Version>
+    <RazorForgeVersion>0.4.0</RazorForgeVersion>
+    <SuflaeVersion>0.1.0</SuflaeVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PackAsTool>true</PackAsTool>
     <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
@@ -36,8 +38,8 @@
     <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\bin')"/>
     <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\lib')"/>
     <Content Include="Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
-    <Content Include="RazorForge-Wiki\.gitea\workflows\deploy.yaml" />
-    <Content Include="Suflae-Wiki\.gitea\workflows\deploy.yaml" />
+    <Content Include="RazorForge-Wiki\.gitea\workflows\deploy.yaml"/>
+    <Content Include="Suflae-Wiki\.gitea\workflows\deploy.yaml"/>
     <Content Update="Standard\RazorForge\Core\Types\SipHash.rf">
       <LinkBase>Standard\</LinkBase>
     </Content>
@@ -45,14 +47,17 @@
       <LinkBase>Standard\</LinkBase>
     </Content>
   </ItemGroup>
-
   <ItemGroup>
-    <Compile Remove="native\**\*.cs" />
+    <AssemblyMetadata Include="RazorForgeVersion" Value="$(RazorForgeVersion)"/>
+    <AssemblyMetadata Include="SuflaeVersion" Value="$(SuflaeVersion)"/>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="native\**\*.cs"/>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="DebugUtils.CSharp" Version="1.8.0"/>
-    <PackageReference Include="dotnet-framework-sonarscanner" Version="9.2.0" />
+    <PackageReference Include="dotnet-framework-sonarscanner" Version="9.2.0"/>
     <PackageReference Include="LLVMSharp" Version="20.1.2"/>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
     <PackageReference Include="Tomlyn" Version="0.17.0"/>
@@ -62,19 +67,19 @@
        publish never ships test code or test/tooling assemblies. Keep tests\ out of the
        compiler's default Compile glob. -->
   <ItemGroup>
-    <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="tests\**\*.cs"/>
   </ItemGroup>
 
   <!-- The test assembly accesses internal compiler members. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="RazorForge.Tests" />
+    <InternalsVisibleTo Include="RazorForge.Tests"/>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="src\" />
+    <Folder Include="src\"/>
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="Standard\RazorForge\Core\CSubsystem\CTypes.rf" />
+    <None Remove="Standard\RazorForge\Core\CSubsystem\CTypes.rf"/>
   </ItemGroup>
 </Project>

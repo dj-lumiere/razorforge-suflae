@@ -28,9 +28,9 @@ internal partial class Program
     private const string SuflaeLanguageName = "Suflae";
     private const string RazorForgeLanguageName = "RazorForge";
 
-    /// <summary>Suflae's own version line. Suflae versions separately from RazorForge (the shared
-    /// compiler binary carries the RazorForge <c>&lt;Version&gt;</c>); bump this on a Suflae release.</summary>
-    private const string SuflaeVersion = "0.1.0";
+    /// <summary>Suflae's own version line — the <c>&lt;SuflaeVersion&gt;</c> PropertyGroup entry (via
+    /// <see cref="Compiler.Resolution.BuildInfo"/>). Bump it in the csproj, NOT here.</summary>
+    private static string SuflaeVersion => Compiler.Resolution.BuildInfo.SuflaeVersion;
 
     /// <summary>True when the binary was invoked under a Suflae alias (<c>suflae</c>/<c>sf</c>)
     /// rather than <c>razorforge</c>/<c>rf</c>. Selects Suflae branding (version/usage) and makes
@@ -535,13 +535,15 @@ internal partial class Program
     }
 
     /// <summary>
-    /// Returns the compiler version string from assembly metadata, preferring the
-    /// informational version (e.g. "0.0.1-alpha") and stripping any "+commit" suffix.
+    /// Returns the RazorForge compiler version string, preferring the <c>&lt;RazorForgeVersion&gt;</c>
+    /// PropertyGroup value (via <see cref="Compiler.Resolution.BuildInfo"/>), then the assembly
+    /// informational version (e.g. "0.0.1-alpha"), stripping any "+commit" suffix and prefixing <c>v</c>.
     /// </summary>
     private static string GetVersionString()
     {
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-        string version = assembly
+        string version = Compiler.Resolution.BuildInfo.AssemblyMetadata(key: "RazorForgeVersion")
+                     ?? assembly
                         .GetCustomAttributes(
                              attributeType: typeof(System.Reflection.AssemblyInformationalVersionAttribute),
                              inherit: false)
