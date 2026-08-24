@@ -227,6 +227,25 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                     rebuild: rhs => es with { Expression = bin with { Right = rhs } },
                     owned: owned);
 
+            // Roamed[T] entity-FIELD reassignment (`me.f = EXPR`). Unlike a local, a field is torn down
+            // by its CONTAINER's teardown, not scope exit, so overwriting it orphans the old co-owned
+            // handle — it must be released HERE or it leaks. (This is the one job of the deleted
+            // RcRetainLoweringPass.ReassignRelease; the retain-NEW on the RHS is SF's implicit `.share()`
+            // from SuflaeEntityLoweringPass, which runs before this pass, so `rhs` already carries it.)
+            case AssignmentStatement a when a.Target is MemberExpression mt:
+                return LowerRoamedFieldReassign(original: a, target: mt, rhs: a.Value,
+                    rebuild: rhs => a with { Value = rhs });
+
+            case ExpressionStatement
+            {
+                Expression: BinaryExpression
+                {
+                    Operator: BinaryOperator.Assign, Left: MemberExpression mt
+                } bin
+            } es:
+                return LowerRoamedFieldReassign(original: es, target: mt, rhs: bin.Right,
+                    rebuild: rhs => es with { Expression = bin with { Right = rhs } });
+
             default:
                 return stmt;
         }
@@ -392,6 +411,43 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         return new BlockStatement(Statements: stmts, Location: original.Location);
     }
 
+    /// <summary>
+    /// Rewrites <c>me.f = EXPR</c> on an owned <c>Roamed[T]</c> field to
+    /// <c>var __li_N = EXPR ; me.f.destroy() ; me.f = __li_N</c> so the overwritten (old) handle drops
+    /// its co-owned count exactly once. The RHS is spilled BEFORE the destroy so it may still read the
+    /// old field value and so a self-assignment (<c>me.f = me.f.share()</c>) bumps before it drops and
+    /// never transiently reaches zero. Only fires for a Roamed field (the exact scope of the deleted
+    /// <c>RcRetainLoweringPass.ReassignRelease</c>); any other member write passes through unchanged.
+    /// </summary>
+    private Statement LowerRoamedFieldReassign(Statement original, MemberExpression target,
+        Expression rhs, Func<Expression, Statement> rebuild)
+    {
+        TypeInfo? fieldType = target.ResolvedType;
+        if (fieldType is null
+            || TypeRegistry.GetRcWrapperBaseName(type: fieldType) != RuntimeContract.Roamed
+            || !TryResolveDestroy(type: fieldType, out RoutineInfo? destroy) || destroy is null)
+            return original;
+
+        var stmts = new List<Statement>();
+        Expression finalRhs = rhs;
+
+        // A bare-identifier RHS is a move of an existing binding — no spill needed.
+        if (rhs is not IdentifierExpression)
+        {
+            string tmp = $"__li_{_spillCounter++}";
+            var decl = new VariableDeclaration(Name: tmp, Type: null, Initializer: rhs,
+                Visibility: VisibilityModifier.Secret, Location: original.Location);
+            stmts.Add(item: new DeclarationStatement(Declaration: decl, Location: original.Location));
+            finalRhs = new IdentifierExpression(Name: tmp, Location: original.Location)
+                { ResolvedType = rhs.ResolvedType };
+        }
+
+        stmts.Add(item: MakeMemberDestroyStmt(receiver: target, destroy: destroy,
+            loc: original.Location));
+        stmts.Add(item: rebuild(finalRhs));
+        return new BlockStatement(Statements: stmts, Location: original.Location);
+    }
+
     private bool WillDestroyAny(List<Owned> live, int from, string? skip)
     {
         for (int i = from; i < live.Count; i++)
@@ -410,6 +466,22 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             ResolvedRoutine = owned.Destroy,
             ResolvedType = _blankType,
             LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: owned.Destroy)
+        };
+        return new ExpressionStatement(Expression: call, Location: loc);
+    }
+
+    /// <summary>Builds <c>receiver.destroy()</c> for an arbitrary lvalue receiver (a member access
+    /// <c>me.f</c>) — the field-reassignment counterpart of <see cref="MakeDestroyStmt"/>.</summary>
+    private ExpressionStatement MakeMemberDestroyStmt(Expression receiver, RoutineInfo destroy,
+        SourceLocation loc)
+    {
+        var callee = new MemberExpression(Object: receiver, MemberName: "destroy", Location: loc)
+            { ResolvedType = _blankType };
+        var call = new CallExpression(Callee: callee, Arguments: [], Location: loc)
+        {
+            ResolvedRoutine = destroy,
+            ResolvedType = _blankType,
+            LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: destroy)
         };
         return new ExpressionStatement(Expression: call, Location: loc);
     }

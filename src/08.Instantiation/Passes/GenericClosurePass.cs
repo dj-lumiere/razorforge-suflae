@@ -130,11 +130,9 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // GetLifecycle sees the concrete field types and injects the balancing store.
         new RecordCopyLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
-        // Post-mono RC-wrapper copy-verb bumps (moved out of codegen): a binding of an RC-field
-        // record inside a monomorphized body needs its per-field retain injected here too, matching
-        // the old codegen bump that fired at codegen time (post-mono).
-        new RcRetainLoweringPass(ctx: postCtx)
-            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        // NOTE: RcRetainLoweringPass deleted. The per-field retain on a record copy lives in the type's
+        // own assign/copy derive (post-mono, RecordCopyLoweringPass above routes the copy through it);
+        // the pass bumping on top double-counted → teardown double-free. Decrement = scope-exit teardown.
 
         // Track-C tripwire (C1): after all instantiated-body lowering, assert every fully-concrete
         // monomorphized body is free of residual generics. This replaces the codegen-time guards —

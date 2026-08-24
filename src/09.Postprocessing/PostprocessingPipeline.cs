@@ -48,10 +48,13 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // Roamed[T] argument of a suspended/threaded spawn, inserts `arg.promote()` before the spawn.
         new RoamedSpawnPromotionLoweringPass(ctx).Run(program);
         new RecordCopyLoweringPass(ctx).Run(program);
-        // Moves the implicit RC-wrapper copy-verb bump (retain/track/share/watch/roam) out of codegen
-        // into a real AST call: one bump per RC field of a record copy, one roam per Roamed entity-
-        // field write, inserted right after the store. Runs after RecordCopyLoweringPass (store).
-        new RcRetainLoweringPass(ctx).Run(program);
+        // NOTE: RcRetainLoweringPass (the RC-simulation pass that injected a per-RC-field retain bump
+        // at every record-copy site) is DELETED. The RC increment on a value copy already lives in the
+        // type's own `assign`/`copy` DERIVE (BuildRecordCopyBody field-walks `me.f.assign()`); the pass
+        // bumped ON TOP of that → double-count → teardown double-free. The RC decrement is handled
+        // wholesale by scope-exit teardown (ScopeTeardownLoweringPass), which also destroys the old
+        // value on a local reassignment. Field-target reassignment release-old (the pass's other job)
+        // is a follow-up for ScopeTeardownLoweringPass's member-target case.
         // Moves the Roamed[E] access-lock bracket (lock_enter/lock_exit around a direct entity-field
         // read/write) out of codegen into real AST calls: one enter before / one exit after each
         // statement that touches a Roamed field. Runs after the other Roamed passes so field accesses
@@ -96,9 +99,8 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // synthesized variant bodies too.
         new RoamedSpawnPromotionLoweringPass(ctx).RunOnVariantBodies();
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
-        // See per-program Run(): move the RC-wrapper copy-verb bump into a real AST call in
-        // synthesized variant bodies too.
-        new RcRetainLoweringPass(ctx).RunOnVariantBodies();
+        // NOTE: RcRetainLoweringPass deleted (see per-program Run()): the copy-verb bump lives in the
+        // type's own assign/copy derive, and scope-exit teardown handles the decrement.
         // See per-program Run(): move the Roamed field-access lock bracket into real AST calls in
         // synthesized variant bodies too.
         new RoamedLockBracketLoweringPass(ctx).RunOnVariantBodies();

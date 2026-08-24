@@ -32,8 +32,7 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Reachability already seeds <c>lock_enter</c>/<c>lock_exit</c> for every live <c>Roamed[T]</c>
 /// via <c>ImplicitCallContract.ForLiveType</c>, so the targets are live/monomorphized. Mirrors
-/// <see cref="RoamedSpawnPromotionLoweringPass"/> (statement insertion around a site) and
-/// <see cref="RcRetainLoweringPass"/> (immutable-node construction + registration). Runs after the
+/// <see cref="RoamedSpawnPromotionLoweringPass"/> (statement insertion around a site). Runs after the
 /// other Roamed passes so the field accesses it brackets are in final form.</para>
 /// </summary>
 internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
