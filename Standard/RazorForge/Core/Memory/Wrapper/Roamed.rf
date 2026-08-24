@@ -125,6 +125,18 @@ routine Roamed[T].strong_count() -> U64
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     return ctrl.strong_count()
 
+### Mints a NON-PINNING weak observation of this entity — ObjectHacker's `watch`. The returned
+### {Watching[T]} does NOT keep the entity alive, but survives its death as a tombstone view so
+### `is_alive()`/`is_destroyed()` stay answerable. The absent handle yields an absent observation.
+### :returns: A `Watching[T]` observing this entity's controller.
+routine Roamed[T].watch() -> Watching[T]
+  danger
+    if me.controller_address() == 0_addr
+      return Watching[T](ctrl: 0_addr)
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    ctrl.observe()
+    return Watching[T](ctrl: me.controller_address())
+
 ### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
 ### `roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
 ### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)

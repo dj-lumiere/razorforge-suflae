@@ -40,6 +40,20 @@ entity RoamController[T]
 needs T is EntityType
   ### Reference count. Read/written non-atomically in LOCAL mode, atomically once ESCAPED.
   secret count: U64
+  ### EXPERIMENT (object-level liveness): weak/observer count. A weak observer does NOT keep the entity
+  ### alive; it keeps the CONTROLLER alive as a tombstone after the entity data is freed, so
+  ### `is_destroyed()` can safely answer without dangling. LOCAL-only for now (non-atomic, single-thread);
+  ### concurrency hardening (rwlock) is a follow-up.
+  secret weak_count: U64
+  ### EXPERIMENT (object-level liveness): set once the managed entity's DATA has been freed — via either
+  ### free path (RC-drop `unhold` or cycle-collect `cyclic_finalize`). This is the path-agnostic ground
+  ### truth for `is_destroyed()`: a CYCLE-collected node's `count` is NOT zero (internal cycle edges keep
+  ### it up), so liveness cannot key on the count — it keys on this flag. The controller struct itself
+  ### lives on as a tombstone while weak observers remain; only `dead` says the entity is gone.
+  ### **`Atomic[U8]`, not `Bool`** (same reasoning as `escaped`): the free path publishes the flip and
+  ### `is_destroyed()`/`is_alive()` read it from any thread — a plaintext `Bool` would be a data race and
+  ### could be cached. `0` = live, `1` = dead. (`Bool` also lowers to `i1`, which has no HW atomic.)
+  secret dead: Atomic[U8]
   ### `0` = LOCAL, `1` = ESCAPED. Flipped once by `promote()`. Every handle observes it.
   ### **`Atomic[U8]`, not `Bool`:** `promote()` publishes the flip cross-thread at the escape site
   ### and non-owner threads read it from `retain`/`release`/`guard_enter` — a plaintext `Bool` would
@@ -74,6 +88,8 @@ needs T is EntityType
 dangerous routine RoamController[T](data: Hijacked[T]) -> RoamController[T]
   return RoamController[T](
     count: 1_u64,
+    weak_count: 0_u64,
+    dead: Atomic[U8](initial: 0_u8),
     escaped: Atomic[U8](initial: 0_u8),
     data: data,
     locked: Atomic[U8](initial: 0_u8),
@@ -119,7 +135,12 @@ routine RoamController[T].unhold()
         if me.buffered
           C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
-        me.destroy()
+        me.dead.store(desired: 1_u8)
+        # Keep the controller as a tombstone while weak observers remain, so `is_destroyed()` can safely
+        # report the death (ESCAPED: atomic weak read). Freed only when weak also hits zero. This whole
+        # branch runs under the SHARED lock, so it cannot race the collector's EXCLUSIVE pass.
+        if LLVM::atomic_load[U64](ptr: me.weak_count.hijack()) == 0_u64
+          me.destroy()
       else
         me.mark_cycle_candidate()
     else
@@ -128,7 +149,10 @@ routine RoamController[T].unhold()
         if me.buffered
           C::rf_cyclic_roots_remove(ptr: me.hijack().get_address())
         me.drop_data()
-        me.destroy()
+        me.dead.store(desired: 1_u8)
+        # Tombstone while weak observers remain (LOCAL: plain weak read; see the ESCAPED branch above).
+        if me.weak_count == 0_u64
+          me.destroy()
       else
         me.mark_cycle_candidate()
     C::rf_cyclic_unlock_shared()
@@ -221,6 +245,75 @@ routine RoamController[T].strong_count() -> U64
       return LLVM::atomic_load[U64](ptr: me.count.hijack())
     else
       return me.count
+
+# ============================================================================
+# EXPERIMENT — object-level liveness (weak observation + tombstone). LOCAL/single-thread only.
+# A weak observer keeps the CONTROLLER alive after the entity data is freed, so `is_destroyed()`
+# can safely answer without dangling. `observe`/`unobserve` mirror `hold`/`unhold` for the weak count.
+# ============================================================================
+
+### Registers a weak observer (does NOT keep the entity alive; keeps the controller as a tombstone).
+### Bracketed in the collector's SHARED lock and atomic once ESCAPED — mirrors `hold`, so a concurrent
+### collection pass (EXCLUSIVE) can never race the weak count or free a controller mid-`cyclic_finalize`.
+### SAFE PRECONDITION: only ever called through an already-kept reference (a live strong handle or another
+### weak observer), so the controller is guaranteed alive at entry — no observe-races-free window.
+dangerous routine RoamController[T].observe()
+  C::rf_cyclic_lock_shared()
+  if me.escaped.load() == 1_u8
+    discard LLVM::atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
+  else
+    me.weak_count = me.weak_count + 1
+  C::rf_cyclic_unlock_shared()
+  return
+
+### Drops a weak observer. When the LAST observer leaves a DEAD (tombstoned) controller, the controller
+### struct is finally freed. If the entity is still alive, only the observer count drops. Bracketed +
+### atomic like `unhold` (last-drop detected by the atomic-sub's previous value in ESCAPED mode).
+dangerous routine RoamController[T].unobserve()
+  C::rf_cyclic_lock_shared()
+  var last = false
+  if me.escaped.load() == 1_u8
+    var previous = LLVM::atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
+    if previous == 1_u64
+      last = true
+  else
+    me.weak_count = me.weak_count - 1
+    if me.weak_count == 0_u64
+      last = true
+  if last and me.dead.load() == 1_u8
+    me.destroy()
+  C::rf_cyclic_unlock_shared()
+  return
+
+### Whether the observed entity is still alive. Safe on a tombstone (reads the atomic `dead` flag, never
+### `data`). A lock-free snapshot, like `strong_count`. :returns: `true` until the entity's data is freed.
+routine RoamController[T].is_alive() -> Bool
+  danger
+    return me.dead.load() == 0_u8
+
+### Whether the observed entity has been destroyed. Path-agnostic: true once the entity DATA is freed by
+### the RC-drop (`unhold`) OR the cycle-collect (`cyclic_finalize`) path — NOT keyed on the strong count,
+### which a cycle-collected node keeps non-zero via its internal edges. :returns: `true` once it is gone.
+routine RoamController[T].is_destroyed() -> Bool
+  danger
+    return me.dead.load() == 1_u8
+
+### Cycle-collect finalizer counterpart to the RC-drop tombstone in `unhold`: the collector calls this
+### AFTER the free hook has torn down the entity data. Marks the controller dead and frees the controller
+### struct only when no weak observer remains — otherwise it lives on as a tombstone so `is_destroyed()`
+### stays answerable. Runs UNDER the collector's EXCLUSIVE lock (the finalizer path), so it takes NO
+### shared lock (that would self-deadlock, per the §2 `rf_in_collector` rule) and the weak read needs no
+### bracket — no mutator runs concurrently. :remarks: T-independent fields only → sound via the erased view.
+dangerous routine RoamController[T].cyclic_finalize()
+  me.dead.store(desired: 1_u8)
+  var w = 0_u64
+  if me.escaped.load() == 1_u8
+    w = LLVM::atomic_load[U64](ptr: me.weak_count.hijack())
+  else
+    w = me.weak_count
+  if w == 0_u64
+    me.destroy()
+  return
 
 # ============================================================================
 # Escape — one-way LOCAL -> ESCAPED promotion.

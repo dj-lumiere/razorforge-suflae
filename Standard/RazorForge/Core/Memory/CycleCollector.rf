@@ -180,7 +180,9 @@ routine cyclic_free(addr: Address)
     var hook = c.cyclic_free_hook()
     var target = c.cyclic_data_addr()
     C::rf_cyclic_invoke_free(free_hook: hook.get_address(), controller: target)
-    Hijacked[RoamController[RoamErased]](addr).as_entity().destroy()
+    # Tombstone-aware finalize: marks the controller dead and frees the controller struct only when no
+    # weak observer remains (else it lives on so `is_destroyed()` stays answerable). Was a bare destroy().
+    Hijacked[RoamController[RoamErased]](addr).as_entity().cyclic_finalize()
   return
 
 ### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →
