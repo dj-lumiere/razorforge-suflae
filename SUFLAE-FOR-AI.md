@@ -1,9 +1,10 @@
 # Suflae — Reference for AI Assistants
 
 You are reading this because Suflae (`.sf`, 2026) is **not in your training
-data**. Suflae is RazorForge's approachable sibling: same grammar, same standard
-library, but a beginner-/scripting-friendly surface that **hides the low-level
-machinery RazorForge exposes**. Read `RAZORFORGE-FOR-AI.md` first — everything
+data**. Suflae is RazorForge's approachable sibling: same grammar, and a Core
+stdlib that shares RazorForge's value types while wrapping its entity collections
+— a beginner-/scripting-friendly surface that **hides the low-level machinery
+RazorForge exposes**. Read `RAZORFORGE-FOR-AI.md` first — everything
 there is true for Suflae too **except** where this file overrides it. Do not
 guess syntax from Python/Ruby intuitions; this file lists exactly where Suflae
 differs from RazorForge.
@@ -12,18 +13,32 @@ When unsure, consult ground truth in the repo:
 
 - `tests/Fixtures/StdlibSf/*.sf` — Suflae programs with expected output (the `.sf` cookbook).
 - `tests/Fixtures/Stdlib/*.rf` — the RazorForge twins (same behavior, RF surface).
-- `Standard/RazorForge/` — the shared standard library (Suflae has **no** stdlib of its own).
+- `Standard/Suflae/**/*.sf` — the **SF-realm Core surface** (the entity-collection wrappers).
+- `Standard/RazorForge/**/*.rf` — the RF-realm Core; SF value types (records) are shared from here
+  directly, and SF entity wrappers delegate to it via `RF::…`.
 
 ---
 
 ## 1. What Suflae IS (and how it relates to RazorForge)
 
-- **`.sf` files are analyzed in RazorForge mode over the shared RF `Core`
-  stdlib.** There is no separate Suflae standard library — SF consumes RF's
-  `Core` directly (`Standard/RazorForge/**`). SF ≡ RF grammar; only the semantic
-  lowering differs.
-- The compiler selects Suflae by the `.sf` extension. Every `Standard/RazorForge`
-  Core type/routine is available. `import IO/Console` + `show(...)` work as in RF.
+- **Suflae and RazorForge each have their OWN `module Core`, distinguished by
+  REALM.** A `.sf` file receives the **Suflae-realm** `Core`; a `.rf` file receives
+  the **RazorForge-realm** `Core`. Both are literally `module Core` and coexist in
+  one compilation. SF ≡ RF grammar; only the semantic lowering + surface differ.
+- **The SF-realm Core is thin, and split by kind (this is the key model):**
+  - **`record` (value types) are SHARED — not re-wrapped.** SF sees RF's `Text`,
+    `Integer`, `Decimal`, `Bytes`, `Maybe`/`Result`, `Range`, etc. as the SAME
+    types (value semantics are realm-identical, so there is nothing to differ). No
+    `RF::` needed; a bare `Text` in a `.sf` just works.
+  - **`entity` collections are WRAPPED** (`Standard/Suflae/Collections/*.sf`): a
+    thin `entity X { secret inner: RF::…X }` roam-boundary wrapper — `List`, `Dict`,
+    `Set`, `Deque`, `PriorityQueue`, `SortedDict`, `SortedList`, `SortedSet`,
+    `SplitList`. Every method is auto-forwarded to `inner`; you use them exactly
+    like the RF twins, but an SF `entity` slot roams them (§4).
+  - The "approachable surface" (hide `dangerous`/`steal`/fixed-width) is enforced
+    by **realm-scoped access rules on the shared types** (§5, §7), not by wrapping.
+- The compiler selects Suflae by the `.sf` extension. `import IO/Console` +
+  `show(...)` work as in RF.
 - SF's identity vs RF: **RF is precision/width-strict; SF is approachable,
   correct-by-default.** The differences below all follow from that.
 
@@ -142,9 +157,12 @@ Concretely, none of these appear at the SF surface:
 - **Access tokens** (`Viewing`/`Modifying`/`Consulting`/`Amending`) and the
   `using ... as` lock ceremony — SF reads/writes entities directly.
 - **`danger` blocks / `dangerous` routines / `Hijacked`** — SF users cannot reach
-  unsafe operations at all (the danger gate rejects `danger!` in SF code). The
-  shared stdlib still uses `Hijacked`/`danger` internally — that is fine, because
-  the stdlib is always analyzed in RF mode.
+  unsafe operations at all: a `danger` block is rejected, and CALLING any
+  `dangerous` routine (member OR free, e.g. `hollow[T]()`) from `.sf` user code is
+  rejected (**RF-S800**, "unsafe surface, not available in Suflae"). Entity
+  wrappers additionally omit their `dangerous` members from the forwarded surface.
+  The RF-realm Core still uses `Hijacked`/`danger` internally — fine, because RF
+  Core is analyzed in RF mode.
 - **`@reshaping` / iterator invalidation / `migrate`** — never surfaced. See below.
 
 **Iterate-and-mutate a collection is BLOCKED, not silently reinterpreted.**
@@ -187,10 +205,16 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
 ## 7. Number model quick reference
 
 - **Prelude defaults (no import):** `Integer` (arbitrary-precision signed),
-  `Decimal` (exact, base-10), `Bool`.
-- **Import-only:** `Real`/`Complex` (arbitrary-precision *binary*) via
-  `import Numeric/*`; all fixed-width `S8..U256`, `F16..F128`, `D32/D64/D128` via
-  `import Core/Numerics/*`.
+  `Decimal` (exact, base-10), `Bool`, plus `Text`/`Bytes`. A bare `42` is an
+  `Integer`, a bare `3.14` is a `Decimal`.
+- **Import-gated behind `import Numerics`:** the whole fixed-width / complex /
+  quaternion zoo — `S8..U1024`, `F16..F512`, `D32/D64/D128`, `C32/C64/C128`,
+  `Q32/Q64` — plus `Real`/`Complex` (arbitrary-precision *binary*). Naming one of
+  these in a `.sf` **without** a whole-module `import Numerics` is **RF-S636**
+  ("add `import Numerics`"). The prelude quietly imports just `Numerics { Integer }`
+  so the default vocabulary resolves; a user's own `import Numerics` unlocks the
+  rest. (The gate fires on explicit type NAMES in annotations/generic args; a
+  literal suffix like `5_s32` is not yet gated.)
 - Mixing `Integer` ↔ a fixed-width type is an explicit, range-checked (throwing)
   conversion. `//` is floor division, `/` is true division — same as RF.
 
@@ -209,10 +233,24 @@ current directory, so a repo-external `.sf` still finds `Core`.
 
 ## Status note (do not generate as if shipped)
 
-Suflae is at v0.1. The core loop works end-to-end: entity→`Roamed` lowering,
-nullability (`E?` + `None` narrowing + RF-S619 deref guard), single-thread cycle
-collection (now multithread-safe via a stop-the-world rwlock), script mode, and
-bare-invocation run. **Not yet real:** the runtime `IterGuard` backstop for
-indirect loop-mutation, `ObjectHacker` runtime reflection, and hot reload. When
-generating Suflae, prefer the closest `tests/Fixtures/StdlibSf/*.sf` fixture,
-keep arguments named, and lean on the shared RF Core.
+Suflae is at v0.1, and the core is now standing end-to-end:
+
+- **Language model:** entity→`Roamed` lowering (aliasing, fields, methods,
+  params/returns, chaining — teardown-safe), nullability (`E?` + `None` narrowing
+  + RF-S619 deref guard), single-thread cycle collection (multithread-safe via a
+  stop-the-world rwlock), script mode, bare-invocation run.
+- **Number model:** `Integer`/`Decimal` defaults + the `import Numerics` gate (RF-S636).
+- **Realm-scoped Core stdlib:** value records shared from RF; entity collections
+  wrapped under `Standard/Suflae/Collections/*.sf` (List/Dict/Set/Deque/
+  PriorityQueue/Sorted{Dict,List,Set}/SplitList), auto-forwarded + re-wrapped.
+- **Approachable-surface gates:** `danger`/`extern` rejected; `dangerous` calls
+  rejected (RF-S800); `@readonly`/`@reshaping` absent; fixed-width import-gated.
+- **Verified:** the `StdlibSf/*.sf` fixtures run in the main harness (StdlibApiTests)
+  with an RF-twin output-equivalence lock.
+
+**Not yet real:** the runtime `IterGuard` backstop for indirect loop-mutation;
+`BitList` (its SF wrapper hits a non-generic-wrapper codegen bug — deferred);
+literal-suffix number gating; `ObjectHacker` runtime reflection; hot reload; the
+REPL / fast-rebuild loop. When generating Suflae, prefer the closest
+`tests/Fixtures/StdlibSf/*.sf` fixture, keep arguments named, use bare `Integer`
+numbers (add `import Numerics` only for fixed-width), and lean on the shared Core.
