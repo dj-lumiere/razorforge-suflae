@@ -272,13 +272,16 @@ public sealed partial class SemanticVerifier
             // on different types: prefer the one that actually has the candidate memberRoutine.
             string bareLookupName = TypeInfo.StripTypeArgs(name: ownerTypeName);
 
-            // Own-module FIRST: a member decl `routine List[T].add_last` in `module Suflae` owns
-            // `Suflae.List`, not the earlier-registered context-free `Core.List`. Resolving bare first
-            // collected candidates only from `Core.List`, so the Suflae overlay's memberRoutine body was keyed
-            // under (and monomorphized as) Core.List's — the wrapper forwarder body was lost, and the
-            // Suflae instantiation ran Core.List's `add_last` (with its `reserve` call) instead.
+            // Own-module + own-REALM FIRST: a member decl `routine List[T].add_last` in an SF-realm
+            // `Standard/Suflae/…` file owns the SF-realm `Core.List`, not the RazorForge-realm one that
+            // shares the bare key. The decl's source-file extension (.sf → SF) gives its realm; a realm-
+            // blind lookup would type `me` as the RF list (which lacks the SF wrapper's `inner`) → RF-S450.
+            string declRealm = decl.Location?.FileName is { } df
+                               && df.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ? "SF" : "RF";
             TypeSymbol? bareOwner = (moduleName != null
-                                        ? _registry.LookupType(name: $"{moduleName}.{bareLookupName}")
+                                        ? _registry.LookupType(name: $"{moduleName}.{bareLookupName}", realm: declRealm)
+                                          ?? _registry.LookupType(name: $"{moduleName}.{bareLookupName}")
                                         : null)
                                     ?? _registry.LookupType(name: bareLookupName);
             if (bareOwner == null)

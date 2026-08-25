@@ -1,4 +1,5 @@
 module Tests/StdlibSf/MaybeApi
+import Numerics
 import IO/Console
 import BuilderQuery
 

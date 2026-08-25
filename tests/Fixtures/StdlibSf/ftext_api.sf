@@ -1,4 +1,5 @@
 module Tests/StdlibSf/FTextApi
+import Numerics
 import IO/Console
 
 # F-string formatting — covers the {value} / {value:?} forms and conversion paths.

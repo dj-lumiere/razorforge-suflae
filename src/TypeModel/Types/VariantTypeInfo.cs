@@ -107,7 +107,8 @@ public sealed class VariantTypeInfo : RecordTypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 

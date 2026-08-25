@@ -46,7 +46,7 @@ public sealed class WrapperTypeInfo : TypeInfo
 
         return new WrapperTypeInfo(wrapperName: Name,
             innerType: typeArguments[index: 0],
-            isReadOnly: IsReadOnly) { Module = Module };
+            isReadOnly: IsReadOnly) { Module = Module, Realm = Realm };
     }
 
     /// <summary>

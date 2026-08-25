@@ -1,4 +1,5 @@
 module Tests/StdlibSf/FStringFormatSpecsApi
+import Numerics
 import IO/Console
 
 # Exercises the four f-string format specs:

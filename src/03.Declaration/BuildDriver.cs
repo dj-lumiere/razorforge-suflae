@@ -515,13 +515,21 @@ public sealed class BuildDriver
             // slot roams directly, so the wrapper is obsolete. See [[realm-scoped-core]] pivot.)
             if (isSuflae && !isStdlibFile)
             {
-                string[] preludeModules = ["Numerics", "IO/Console", "IO/File"];
+                // (module, specificSymbols|null). `Numerics` is brought in as the SPECIFIC symbol `Integer`
+                // ONLY — Suflae's bare numeric vocabulary is Integer/Decimal (Decimal is in Core), so bare
+                // `6` defaults to Integer and bare `Integer` resolves, WITHOUT opening the whole Numerics
+                // module. The fixed-width / complex / quaternion zoo (and Real/Complex) stay behind an
+                // explicit whole-module `import Numerics` — which the prelude skips injecting when present,
+                // so a whole-module import is the distinguishable "unlock" signal for the number gate
+                // (see TypeResolver.EnforceSuflaeNumberGate). I/O stays whole-module for `show(...)`.
+                (string Module, string[]? Symbols)[] preludeModules =
+                    [("Numerics", ["Integer"]), ("IO/Console", null), ("IO/File", null)];
                 int insertAt = 1; // Module declaration is guaranteed at index 0 by now.
-                foreach (string preludeModule in preludeModules)
+                foreach ((string preludeModule, string[]? symbols) in preludeModules)
                 {
                     if (imports.Any(predicate: i => i.ModulePath == preludeModule)) continue;
                     var preludeImport = new ImportDeclaration(ModulePath: preludeModule, Alias: null,
-                        SpecificImports: null,
+                        SpecificImports: symbols?.ToList(),
                         Location: new SourceLocation(FileName: filePath, Line: 1, Column: 1, Position: 0));
                     imports.Add(item: preludeImport);
                     ast.Declarations.Insert(index: insertAt++, item: preludeImport);

@@ -39,7 +39,10 @@ public sealed partial class TypeRegistry
     /// <summary>Registers a routine by its <see cref="RoutineInfo.RegistryKey"/> (overload-exact) and <see cref="RoutineInfo.BaseName"/> (first-match unqualified).</summary>
     public void RegisterRoutine(RoutineInfo routine) // NOSONAR S3776
     {
-        string registryKey = routine.RegistryKey;
+        // Realm-aware storage key: ambient-realm routines key bare (unchanged); a bridged-realm routine
+        // (e.g. the RF-realm Core.List reached via RF:: inside an SF compile) is `{realm}::`-prefixed so it
+        // never collides with / shadows the ambient same-signature routine — the two world-lines coexist.
+        string registryKey = RealmRoutineKey(routine: routine);
         string baseName = routine.BaseName;
 
         // Register under RegistryKey for exact overload matching.
@@ -97,7 +100,7 @@ public sealed partial class TypeRegistry
         {
             string ownerKey = routine.OwnerType is GenericParameterTypeInfo
                 ? GenericOwnerKey
-                : routine.OwnerType.FullName;
+                : RealmRegistryKey(type: routine.OwnerType);
             if (!_routinesByOwner.TryGetValue(key: ownerKey, value: out Dictionary<string, List<RoutineInfo>>? byName))
             {
                 byName = new Dictionary<string, List<RoutineInfo>>(comparer: StringComparer.Ordinal);
@@ -743,7 +746,7 @@ public sealed partial class TypeRegistry
         }
 
         // First check the type's own memberRoutines (O(1) by name via the nested store)
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? ownByName)
+        if (_routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type), value: out Dictionary<string, List<RoutineInfo>>? ownByName)
             && ownByName.TryGetValue(key: memberRoutineName, value: out List<RoutineInfo>? memberRoutines))
         {
             List<RoutineInfo> nameMatches = memberRoutines.Where(predicate: m =>
@@ -1445,7 +1448,7 @@ public sealed partial class TypeRegistry
 
     internal void CollectMemberRoutineCandidates(TypeInfo type, string memberRoutineName, List<RoutineInfo> candidates)
     {
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+        if (_routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type), value: out Dictionary<string, List<RoutineInfo>>? byName)
             && byName.TryGetValue(key: memberRoutineName, value: out List<RoutineInfo>? memberRoutines))
         {
             candidates.AddRange(memberRoutines);
@@ -1646,7 +1649,7 @@ public sealed partial class TypeRegistry
     /// <returns>An enumerable of all memberRoutines for the type.</returns>
     public IEnumerable<RoutineInfo> GetMemberRoutinesForType(TypeInfo type)
     {
-        return _routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+        return _routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type), value: out Dictionary<string, List<RoutineInfo>>? byName)
             ? OwnerMemberRoutines(byName: byName)
             : [];
     }
@@ -1669,7 +1672,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     public IEnumerable<RoutineInfo> GetOwnMemberRoutinesResolved(TypeInfo type)
     {
-        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out Dictionary<string, List<RoutineInfo>>? ownByName))
+        if (_routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type), value: out Dictionary<string, List<RoutineInfo>>? ownByName))
             return OwnerMemberRoutines(byName: ownByName);
 
         if (!type.IsGenericResolution ||
@@ -1677,7 +1680,10 @@ public sealed partial class TypeRegistry
             type.TypeArguments.Any(predicate: a => a is GenericParameterTypeInfo or ErrorTypeInfo || a.IsNone))
             return [];
 
-        if (_memberRoutinesForTypeCache.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? cached))
+        // Cache key is realm-QUALIFIED: RF and SF resolutions share a realm-free FullName
+        // (`Core.List[Core.U64]`), so a FullName key would cross-contaminate — the first-computed realm's
+        // member set (e.g. SF List's `inner`-forwarders) would be served for the other realm's instance.
+        if (_memberRoutinesForTypeCache.TryGetValue(key: type.RealmQualifiedName, value: out List<RoutineInfo>? cached))
             return cached;
 
         var result = new List<RoutineInfo>();
@@ -1690,7 +1696,7 @@ public sealed partial class TypeRegistry
             _ => null
         };
         if (genericDef != null && !ReferenceEquals(objA: genericDef, objB: type) &&
-            _routinesByOwner.TryGetValue(key: genericDef.FullName, value: out Dictionary<string, List<RoutineInfo>>? defByName))
+            _routinesByOwner.TryGetValue(key: RealmRegistryKey(type: genericDef), value: out Dictionary<string, List<RoutineInfo>>? defByName))
         {
             foreach (RoutineInfo m in OwnerMemberRoutines(byName: defByName))
             {
@@ -1702,7 +1708,7 @@ public sealed partial class TypeRegistry
             }
         }
 
-        _memberRoutinesForTypeCache[key: type.FullName] = result;
+        _memberRoutinesForTypeCache[key: type.RealmQualifiedName] = result;
         return result;
     }
 
@@ -2088,7 +2094,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     public List<RoutineInfo> GetMemberRoutinesForOwner(TypeInfo ownerType)
     {
-        return _routinesByOwner.TryGetValue(key: ownerType.FullName, value: out Dictionary<string, List<RoutineInfo>>? byName)
+        return _routinesByOwner.TryGetValue(key: RealmRegistryKey(type: ownerType), value: out Dictionary<string, List<RoutineInfo>>? byName)
             ? OwnerMemberRoutines(byName: byName).ToList()
             : [];
     }

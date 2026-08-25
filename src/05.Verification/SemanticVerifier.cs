@@ -123,7 +123,7 @@ public sealed partial class SemanticVerifier
         new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Tracks imported symbol names for collision detection (#105).</summary>
-    private readonly HashSet<string> _importedSymbolNames = new(comparer: StringComparer.Ordinal);
+    internal readonly HashSet<string> _importedSymbolNames = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Per-file import snapshots used when re-analyzing compiler-generated bodies.</summary>
     private readonly Dictionary<string, HashSet<string>> _importSnapshots =
@@ -983,6 +983,10 @@ public sealed partial class SemanticVerifier
         // danger/extern gates, generic-call resolution — matches how the stdlib was authored. Under
         // Suflae mode the RF stdlib's generic calls fail to resolve and survive lowering (RF-S954).
         Language savedLanguage = _registry.Language;
+        // Capture the user's TARGET language before toggling to RF for stdlib body analysis, so
+        // RazorForge-only diagnostics (@readonly/@reshaping) can be gated OFF for a Suflae build even
+        // while analyzing the borrowed RF stdlib in RF mode.
+        _registry.CompilationLanguage = savedLanguage;
         _registry.Language = Language.RazorForge;
         _registry.BeginStdlibAnalysis();
         try
@@ -998,6 +1002,11 @@ public sealed partial class SemanticVerifier
             stdlibIdx++;
             _currentFilePath = filePath;
             _currentModuleName = module;
+            // Prefer this file's own realm when resolving its bare type names: an SF-realm (`.sf`) stdlib
+            // file's bare `List` resolves to the SF-realm `Core.List` (bridged) it declares, while an RF file
+            // keeps the ambient RF resolution. Zero effect on RF (resolution realm == ambient there).
+            _registry.ResolutionRealm =
+                filePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase) ? "SF" : "RF";
             _importedModules.Clear();
             _importedSymbolNames.Clear();
 
@@ -1033,6 +1042,7 @@ public sealed partial class SemanticVerifier
 
         _currentFilePath = previousFilePath;
         _currentModuleName = previousModuleName;
+        _registry.ResolutionRealm = _registry.AmbientRealm;
         _importedModules.Clear();
         foreach (string ns in previousImports)
         {
@@ -1043,6 +1053,7 @@ public sealed partial class SemanticVerifier
         finally
         {
             _registry.EndStdlibAnalysis();
+            _registry.ResolutionRealm = _registry.AmbientRealm;
             _registry.Language = savedLanguage;
         }
     }
@@ -1243,6 +1254,11 @@ public sealed partial class SemanticVerifier
 
             AnalyzeBodies(program: program);
         }
+        // Per-file resolution realm is a body-analysis convenience only; global passes (synthesis,
+        // instantiation, GMP) re-resolve concrete instantiations and must run at the ambient realm so
+        // an explicit `RF::` inside an SF-realm body (the wrapper's `inner: RF::Core.List[T]()`) keeps
+        // its RF binding instead of being re-resolved under a leaked SF resolution realm.
+        _registry.ResolutionRealm = _registry.AmbientRealm;
         Mark(label: "Phase 5 per-file -> AnalyzeBodies (user)");
 
         // Phase 5 global: synthesized body analysis, modification inference
@@ -1508,6 +1524,15 @@ public sealed partial class SemanticVerifier
         _importedModules.Clear();
         _importedSymbolNames.Clear();
         _currentModuleName = null;
+
+        // Prefer this file's own realm when resolving its bare type names. A user `.sf` file's bare
+        // `List` resolves to the SF-realm (bridged) `Core.List` — the approachable SF wrapper — while an
+        // `.rf` file keeps ambient RF resolution. Mirrors the stdlib-body loop; zero effect on RF
+        // (resolution realm == ambient there). Restored to AmbientRealm by the caller after the phase.
+        _registry.ResolutionRealm =
+            filePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+                ? "SF"
+                : _registry.AmbientRealm;
 
         if (importSnapshots.TryGetValue(key: filePath, value: out HashSet<string>? imports))
         {

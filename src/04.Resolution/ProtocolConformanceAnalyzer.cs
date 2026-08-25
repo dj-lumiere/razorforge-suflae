@@ -322,22 +322,28 @@ internal sealed class ProtocolConformanceAnalyzer
     /// </summary>
     private void UpdateTypeProtocols(TypeSymbol type, List<TypeSymbol> protocols)
     {
+        // Key by the type's REALM-AWARE registry key, not its realm-free FullName. Two coexisting shells of
+        // the same module-qualified name — an RF `.rf` type and its SF `.sf` wrapper (e.g. `Collections.BitList`
+        // in an SF compile) — would otherwise both resolve to the ambient (RF) shell by FullName, so analyzing
+        // the SF wrapper (which auto-derives only Equatable/EntityType) OVERWROTE the RF shell's declared
+        // Iterable/MutableIndexable/Sized → RF-S205 "BitList is not iterable" in its own display body.
+        string key = type is TypeInfo ti ? _sa._registry.RealmRegistryKey(type: ti) : type.FullName;
         switch (type)
         {
             case ChoiceTypeInfo:
-                _sa._registry.UpdateChoiceProtocols(choiceName: type.FullName, protocols: protocols);
+                _sa._registry.UpdateChoiceProtocols(choiceName: key, protocols: protocols);
                 break;
             case FlagsTypeInfo:
-                _sa._registry.UpdateFlagsProtocols(flagsName: type.FullName, protocols: protocols);
+                _sa._registry.UpdateFlagsProtocols(flagsName: key, protocols: protocols);
                 break;
             case RecordTypeInfo:
-                _sa._registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
+                _sa._registry.UpdateRecordProtocols(recordName: key, protocols: protocols);
                 break;
             case CrashableTypeInfo:
-                _sa._registry.UpdateCrashableProtocols(typeName: type.FullName, protocols: protocols);
+                _sa._registry.UpdateCrashableProtocols(typeName: key, protocols: protocols);
                 break;
             case EntityTypeInfo:
-                _sa._registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
+                _sa._registry.UpdateEntityProtocols(entityName: key, protocols: protocols);
                 break;
         }
     }

@@ -77,6 +77,13 @@ public sealed class RoutineInfo
     /// Stable key for registry lookup: "BaseName[TypeArgs]#Param1,Param2".
     /// For non-generic or unresolved routines, the type-argument segment is omitted.
     /// For zero-parameter routines, the key is just "BaseName" or "BaseName[TypeArgs]".
+    /// <para>REALM: a routine whose owner belongs to a NON-ambient (bridged) realm is prefixed
+    /// <c>{realm}::</c> so the two world-lines' same-signature routines are distinct EVERYWHERE this key
+    /// is used in lockstep — the routine registry, <c>InstantiatedGenericBodies</c>, reachability's
+    /// <c>LiveRoutineKeys</c>, and codegen's body lookup. The ambient realm is <c>RF</c> (bare), so every
+    /// RazorForge routine's key is byte-identical to before; only a Suflae-realm (SF) routine gains the
+    /// prefix. Keeping this on the ONE identity all consumers already share is what makes the realm split
+    /// consistent without desyncing the handshake between reachability, monomorphization, and codegen.</para>
     /// </summary>
     public string RegistryKey
     {
@@ -94,11 +101,12 @@ public sealed class RoutineInfo
                 baseName = $"{baseName}[{typeArgs}]";
             }
 
-            if (Parameters.Count == 0) return baseName;
+            string key = Parameters.Count == 0
+                ? baseName
+                : $"{baseName}#{string.Join(separator: ",", values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)))}";
 
-            string paramTypes = string.Join(separator: ",",
-                values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)));
-            return $"{baseName}#{paramTypes}";
+            // Bridged-realm owner → realm-prefixed key (ambient realm "RF" stays bare = RF byte-identical).
+            return OwnerType is { Realm: not "RF" and { } r } ? $"{r}::{key}" : key;
         }
     }
 

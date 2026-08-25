@@ -999,7 +999,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             expectedParamTypeNames: paramTypeNames,
             expectedOwnerModule: genDef.FullName is { } gdFn
                 ? TypeInfo.StripTypeArgs(name: gdFn)
-                : null);
+                : null,
+            expectedOwnerRealm: genDef.Realm);
 
         if (astDecl == null)
         {
@@ -1576,7 +1577,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// </summary>
     private RoutineDeclaration? FindInStdlib(string genericAstName, int expectedParamCount = -1,
         Dictionary<string, TypeInfo>? typeSubs = null, List<string>? expectedParamNames = null,
-        List<string?>? expectedParamTypeNames = null, string? expectedOwnerModule = null)
+        List<string?>? expectedParamTypeNames = null, string? expectedOwnerModule = null,
+        string? expectedOwnerRealm = null)
     {
         bool requireGenericSuffix = genericAstName.EndsWith("[generic]");
         string baseName = requireGenericSuffix
@@ -1607,6 +1609,19 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                                        && TypeInfo.StripTypeArgs(name: fn) == expectedOwnerModule)
                 .ToList();
             if (moduleMatched.Count > 0) candidates = moduleMatched;
+        }
+
+        // Realm-scoped disambiguation: `Core.List` FullName is realm-FREE, so an SF-realm `List[T].m`
+        // wrapper and the RF-realm `List[T].m` share owner FullName — the module filter above keeps BOTH,
+        // and the first (RF) would win, cloning RF's body (e.g. `return me.count`) for the SF wrapper whose
+        // real body is `return me.inner.count()`. Prefer the candidate whose owner realm matches the
+        // requested owner; fall back to the full set when none match (RF compiles never narrow — RF-only).
+        if (expectedOwnerRealm != null)
+        {
+            var realmMatched = candidates
+                .Where(predicate: d => (d.ResolvedInfo?.OwnerType?.Realm ?? "RF") == expectedOwnerRealm)
+                .ToList();
+            if (realmMatched.Count > 0) candidates = realmMatched;
         }
 
         RoutineDeclaration? countOnlyMatch = null;

@@ -1,4 +1,5 @@
 module Tests/StdlibSf/SetApi
+import Numerics
 import IO/Console
 
 # Set uses SipHash keyed with a per-instance secret; iterates in insertion order.

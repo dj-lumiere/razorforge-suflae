@@ -176,13 +176,25 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Realm-marked mangle base (option-b, ambient-bare): the ambient RF realm renders BARE
+    /// (<see cref="TypeInfo.FullName"/>) so pure-RF IR is byte-identical (zero golden regold); a
+    /// non-ambient realm (the SF wrapper world-line) gets a <c>{Realm}::</c> prefix so an SF
+    /// <c>Core.List[S32]</c> (layout <c>{ inner }</c>) never collides with the RF <c>Core.List[S32]</c>
+    /// (real element storage) — they are DISTINCT LLVM structs/symbols in a mixed binary (bare `List`
+    /// in a `.sf` file → SF wrapper delegating to an RF inner, both live at once). Generic args stay in
+    /// FullName (ambient/bare) — only the owner's own realm is marked.
+    /// </summary>
+    private static string RealmMangleBase(TypeInfo t)
+        => t.Realm == "RF" ? t.FullName : $"{t.Realm}::{t.FullName}";
+
+    /// <summary>
     /// Gets the LLVM struct type name for a record.
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
     {
         // Module-qualified (TypeInfo.FullName) so same-named records in different modules never
         // collide into one LLVM struct name (which LLVM would silently rename to `.0`).
-        return $"%{Q(name: $"Record.{record.FullName}")}";
+        return $"%{Q(name: $"Record.{RealmMangleBase(t: record)}")}";
     }
 
     /// <summary>The LLVM struct name for an entity — no generation side effect. Used INSIDE
@@ -191,11 +203,11 @@ public partial class LlvmCodeGenerator
     /// <c>Entity.Core.List[Core.S64]</c>) so same-named entities in different modules never collide
     /// into one LLVM struct name (which LLVM would silently rename to <c>.0</c> and miscompile).</summary>
     private static string RawEntityTypeName(EntityTypeInfo entity)
-        => $"%{Q(name: $"Entity.{entity.FullName}")}";
+        => $"%{Q(name: $"Entity.{RealmMangleBase(t: entity)}")}";
 
     /// <summary>The bare LLVM struct name for a crashable — no generation side effect.</summary>
     private static string RawCrashableTypeName(CrashableTypeInfo crashable)
-        => $"%{Q(name: $"Crashable.{crashable.FullName}")}";
+        => $"%{Q(name: $"Crashable.{RealmMangleBase(t: crashable)}")}";
 
     /// <summary>
     /// Gets the LLVM struct type name for an entity, ensuring its struct definition is emitted on

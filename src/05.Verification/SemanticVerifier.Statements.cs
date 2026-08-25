@@ -959,8 +959,10 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            // Check if we're in a @readonly memberRoutine trying to mutate 'me'
-            if (_currentRoutine is { IsReadOnly: true } &&
+            // Check if we're in a @readonly memberRoutine trying to mutate 'me' (RazorForge-only; Suflae
+            // hides @readonly/@reshaping).
+            if (_registry.CompilationLanguage != Language.Suflae &&
+                _currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
                 ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,

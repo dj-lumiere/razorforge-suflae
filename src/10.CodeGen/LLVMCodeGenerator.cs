@@ -60,6 +60,34 @@ public partial class LlvmCodeGenerator
     private readonly HashSet<string> _referencedKeys = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// Strips a leading realm prefix (<c>SF::</c>/<c>RF::</c>) from a routine RegistryKey. Routine
+    /// mangling is realm-FREE (option-b, ambient-bare), so an SF-realm body and its RF-realm twin emit
+    /// under ONE symbol; but their RegistryKeys differ by the realm prefix. The emission gate compares
+    /// against callers' referenced keys, which are recorded from whatever realm the CALL resolved to
+    /// (often the ambient RF form). Comparing realm-stripped closes that gap: same emitted symbol =
+    /// same emission decision, regardless of which world-line the caller vs the body was keyed under.
+    /// </summary>
+    private static string StripRealmPrefix(string registryKey)
+    {
+        int sep = registryKey.IndexOf("::", StringComparison.Ordinal);
+        // Realm prefix is a bare word at the very start (e.g. "SF::[member] …"); the "::" never
+        // appears elsewhere in a key. Guard on the prefix being alphanumeric so a stray "::" deeper
+        // in the string can't truncate a real key.
+        if (sep > 0 && registryKey.AsSpan(0, sep).IndexOfAny(" .[]") < 0)
+            return registryKey[(sep + 2)..];
+        return registryKey;
+    }
+
+    /// <summary>
+    /// Emission gate: is this routine's body referenced by some emitted call? Realm-insensitive —
+    /// see <see cref="StripRealmPrefix"/> — so an SF-realm body whose caller referenced the ambient
+    /// RF-keyed symbol is still emitted (they are the same mangled symbol).
+    /// </summary>
+    private bool IsRoutineReferenced(string registryKey) =>
+        _referencedKeys.Contains(item: registryKey)
+        || _referencedKeys.Contains(item: StripRealmPrefix(registryKey));
+
+    /// <summary>
     /// True while emitting a routine body (inside <c>GenerateRoutineBody</c>). Reference recording
     /// is gated on this so the broad declaration pre-pass doesn't pollute <see cref="_referencedKeys"/>.
     /// </summary>
@@ -974,7 +1002,7 @@ public partial class LlvmCodeGenerator
                     // from pulling in entire stdlib subgraphs (SortedList, BTreeNode, etc.)
                     // that the user program never invokes.
                     if (_liveRoutineKeys.Count > 0
-                        && !_referencedKeys.Contains(item: routineInfo.RegistryKey))
+                        && !IsRoutineReferenced(registryKey: routineInfo.RegistryKey))
                     {
                         continue;
                     }
@@ -999,7 +1027,7 @@ public partial class LlvmCodeGenerator
                 string instFuncName = MangleRoutineName(routine: body.Info);
                 if (_generatedRoutineDefs.Contains(item: instFuncName)) continue;
                 if (_liveRoutineKeys.Count > 0
-                    && !_referencedKeys.Contains(item: body.Info.RegistryKey))
+                    && !IsRoutineReferenced(registryKey: body.Info.RegistryKey))
                     continue;
 
                 // No swallow (see Phase A): a monomorphized body that fails codegen is an upstream
@@ -1041,7 +1069,7 @@ public partial class LlvmCodeGenerator
                     && synthInfo.OwnerType?.IsGenericDefinition == true;
                 if (!isWrapperForwarderGenDef
                     && _liveRoutineKeys.Count > 0
-                    && !_referencedKeys.Contains(item: synthInfo.RegistryKey))
+                    && !IsRoutineReferenced(registryKey: synthInfo.RegistryKey))
                     continue;
                 // Skip routines whose owner type still has unresolved generic parameters
                 // (e.g. represent/hash on DictEntry[K, V] — the generic definition).
@@ -1089,7 +1117,7 @@ public partial class LlvmCodeGenerator
                                 type: candidateOwner, memberRoutineName: synthInfo.Name);
                             if (concreteMemberRoutine == null) continue;
                             if (_liveRoutineKeys.Count > 0
-                                && !_referencedKeys.Contains(item: concreteMemberRoutine.RegistryKey))
+                                && !IsRoutineReferenced(registryKey: concreteMemberRoutine.RegistryKey))
                                 continue;
                             string monoFuncName = MangleRoutineName(routine: concreteMemberRoutine);
                             if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;

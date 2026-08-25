@@ -1,0 +1,11 @@
+module Core
+
+### Suflae SF-realm Core dict — roam-boundary wrapper over a bare RF::Core.Dict[K, V].
+### Only the entity + default constructor are hand-written; every other method is auto-forwarded to
+### `inner` by SynthesizeSuflaeForwarders (StdlibLoader.SuflaeForwarders), which also re-wraps any
+### method that returns a wrapped entity (`copy` → Dict, `keys`/`values`/`entries` → List).
+entity Dict[K, V]
+  secret inner: RF::Core.Dict[K, V]
+
+routine Dict[K, V]() -> Dict[K, V]
+  return Dict[K, V](inner: RF::Core.Dict[K, V]())

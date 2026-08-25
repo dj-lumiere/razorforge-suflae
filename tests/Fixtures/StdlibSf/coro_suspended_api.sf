@@ -1,4 +1,5 @@
 module Tests/StdlibSf/CoroSuspendedApi
+import Numerics
 
 import IO/Console
 

@@ -18,14 +18,16 @@ namespace Compiler.Declaration;
 /// </summary>
 public sealed partial class StdlibLoader
 {
-    /// <summary>The stdlib root directory path (e.g., stdlib/razorforge or stdlib/suflae).</summary>
-    private readonly string _stdlibPath;
+    /// <summary>
+    /// The stdlib scan roots — each a (directory, glob) pair scanned in order. RazorForge is always
+    /// present (the RF-realm Core, and — for a Suflae compile — the bridged delegation backend reached via
+    /// <c>RF::</c>). A Suflae compile ALSO scans <c>Standard/Suflae/*.sf</c> (the SF-realm Core surface).
+    /// Realm is stamped per file from its extension at registration (see StdlibLoader.Registration).
+    /// </summary>
+    private readonly List<(string Dir, string Glob)> _scanRoots;
 
     /// <summary>The language being built.</summary>
     private readonly Language _language;
-
-    /// <summary>The file extension to scan (.rf or .sf).</summary>
-    private readonly string _fileExtension;
 
     /// <summary>Parsed Core module programs with their file paths and module.</summary>
     private readonly List<(Program Program, string FilePath, string Module)> _corePrograms = [];
@@ -73,13 +75,19 @@ public sealed partial class StdlibLoader
     public StdlibLoader(string stdlibRoot, Language language)
     {
         _language = language;
-        // EXPERIMENT: Suflae has no authored Standard/Suflae/ Core yet, and SF's Core IS RF's Core
-        // (SF ≡ RF grammar / semantic-lowering-only difference). So SF borrows the RazorForge stdlib.
-        // The Suflae OVERLAY (Standard/Suflae/*.sf wrappers) is registered separately by the
-        // BuildDriver (PreRegisterStdlib → RegisterStdlibDirectory("Suflae", "*.sf")), so it is NOT
-        // re-scanned here — that would double-register the overlay's routines.
-        _fileExtension = "*.rf";
-        _stdlibPath = Path.Combine(path1: stdlibRoot, path2: "RazorForge");
+        // RazorForge is always scanned: it is the RF-realm Core, and — under a Suflae compile — the bridged
+        // delegation backend an SF wrapper reaches via `RF::Core.X`. A Suflae compile ALSO scans
+        // Standard/Suflae/*.sf, the SF-realm Core surface (types there declare `module Core` too; they are
+        // stamped Realm="SF" at registration, so they key distinctly from the RF-realm `Core.*`). Each file's
+        // realm is derived from its extension (`.sf`→SF, `.rf`→RF) — see StdlibLoader.Registration.RealmOf.
+        _scanRoots =
+        [
+            (Path.Combine(path1: stdlibRoot, path2: "RazorForge"), "*.rf")
+        ];
+        if (language == Language.Suflae)
+        {
+            _scanRoots.Add(item: (Path.Combine(path1: stdlibRoot, path2: "Suflae"), "*.sf"));
+        }
     }
 
     /// <summary>
@@ -92,10 +100,16 @@ public sealed partial class StdlibLoader
         // Scan all stdlib files and categorize by module
         ScanStdlibFiles();
 
+        // Suflae wrapper stdlib: append transparent inner-forwarders to each SF `entity X { inner: RF::Y }`
+        // so the wrapper presents Y's COMPLETE surface. Must run before registration so the synthesized
+        // forwarders flow through the ordinary register/analyze/monomorph/codegen path as authored source.
+        SynthesizeSuflaeForwarders();
+
         // Three-pass registration ensures protocols exist before types reference them in 'obeys' clauses.
         // Pass 1a: Register all protocol type shells first (names + generic params, no memberRoutines yet)
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string filePath, string ns) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
@@ -126,8 +140,9 @@ public sealed partial class StdlibLoader
         }
 
         // Pass 1b: Register all type shells (record, entity, choice, variant)
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string filePath, string ns) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramTypes(registry: registry, program: program, moduleName: ns);
         }
 
@@ -166,46 +181,58 @@ public sealed partial class StdlibLoader
         // Pass 1c: Re-resolve member variables now that all types are registered.
         // The initial registration may have empty member lists due to forward references
         // (e.g., Bytes needs List which needs U64, but files are processed alphabetically).
-        foreach ((Program program, string _, string _) in _corePrograms)
+        // Each deferred pass RE-STAMPS `_registeringRealm` per program — the shell-registration loop left it
+        // at the last program's realm, which mis-scopes an RF program's deferred lookups to a coexisting SF
+        // wrapper's shell (see the LoadModule siblings + the BitList not-iterable bug).
+        foreach ((Program program, string filePath, string _) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProgramMemberVariables(registry: registry, program: program);
         }
 
         // Pass 1d: Re-resolve protocol conformances now that all types are registered.
         // Protocol arguments may reference types not yet registered during Pass 1b
         // (e.g., EnumerateIterator[T] obeys Iterable[Tuple[S64, T]] needs S64).
-        foreach ((Program program, string _, string _) in _corePrograms)
+        foreach ((Program program, string filePath, string _) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
 
         // Pass 1e: Re-resolve protocol memberRoutine return types that failed in pass 1a.1 due to
         // forward references (e.g., Crashable.crash_message() -> Text where Text was not yet
         // registered when protocols were first processed in pass 1a.1).
-        foreach ((Program program, string _, string _) in _corePrograms)
+        foreach ((Program program, string filePath, string _) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProtocolMemberRoutineReturnTypes(registry: registry, program: program);
             ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
         // Pass 2: Register all routines (now all types are available for return type resolution)
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string filePath, string ns) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramRoutines(registry: registry, program: program, moduleName: ns);
         }
 
         // Pass 2.1: Refresh any routine signatures that were still partially unresolved during
         // initial registration and later collapsed to None via semantic finalization.
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string filePath, string ns) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
         }
 
         // Pass 3: Register all presets (module-level constants accessible across files)
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string filePath, string ns) in _corePrograms)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramPresets(registry: registry, program: program, moduleName: ns);
         }
+
+        // Clear the thread-static realm so it never leaks into a later (on-demand) load pass on this thread.
+        _registeringRealm = null;
     }
 
     /// <summary>
@@ -215,20 +242,26 @@ public sealed partial class StdlibLoader
     /// </summary>
     private void ScanStdlibFiles()
     {
-        if (_stdlibScanned || !Directory.Exists(path: _stdlibPath))
+        if (_stdlibScanned)
         {
             return;
         }
 
         _stdlibScanned = true;
 
-        // Recursively find all files with the appropriate extension. Sort by ordinal path so the
-        // scan/registration order is identical on every OS (Directory.GetFiles order is
-        // OS-dependent) — otherwise memberRoutine resolution becomes order-dependent across platforms.
-        foreach (string filePath in Directory.GetFiles(path: _stdlibPath,
-                     searchPattern: _fileExtension,
-                     searchOption: SearchOption.AllDirectories)
-                 .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
+        // Scan every root (RazorForge always; Suflae too under an SF compile). Recursively find files
+        // matching each root's glob. Sort by ordinal path so the scan/registration order is identical on
+        // every OS (Directory.GetFiles order is OS-dependent) — otherwise memberRoutine resolution becomes
+        // order-dependent across platforms. RazorForge sorts before Suflae so the RF-realm Core registers
+        // first (the SF-realm Core keys distinctly by realm, so order does not cause collision either way).
+        IEnumerable<string> allFiles = _scanRoots
+            .Where(predicate: r => Directory.Exists(path: r.Dir))
+            .SelectMany(selector: r => Directory.GetFiles(path: r.Dir,
+                searchPattern: r.Glob,
+                searchOption: SearchOption.AllDirectories))
+            .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal);
+
+        foreach (string filePath in allFiles)
         {
             // File-granularity conditional compilation applies to the stdlib too: a platform-specific
             // stdlib file (e.g. the LP64/LLP64 C-type width files) carries a `#@target(...)` directive
@@ -338,10 +371,14 @@ public sealed partial class StdlibLoader
             }
 
             string normalizedFileDir = Path.GetFullPath(path: fileDir);
-            string normalizedStdlibPath = Path.GetFullPath(path: _stdlibPath);
+            // The file may live under any scan root (RazorForge or, in an SF compile, Suflae). Find the
+            // root that contains it and derive the module path relative to THAT root.
+            string? normalizedStdlibPath = _scanRoots
+                .Select(selector: r => Path.GetFullPath(path: r.Dir))
+                .FirstOrDefault(predicate: root => normalizedFileDir.StartsWith(value: root,
+                    comparisonType: StringComparison.OrdinalIgnoreCase));
 
-            if (!normalizedFileDir.StartsWith(value: normalizedStdlibPath,
-                    comparisonType: StringComparison.OrdinalIgnoreCase))
+            if (normalizedStdlibPath == null)
             {
                 return "Core";
             }
@@ -393,8 +430,9 @@ public sealed partial class StdlibLoader
 
         // Three-pass registration: protocols first, then other types, then routines
         // Register protocol shells across all files first, then fill in memberRoutines
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string filePath, string ns) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
@@ -422,47 +460,60 @@ public sealed partial class StdlibLoader
             ResolveProtocolParents(registry: registry, program: program);
         }
 
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string filePath, string ns) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramTypes(registry: registry, program: program, moduleName: ns);
         }
 
         // Re-resolve member variables now that all type shells in this module are registered.
         // Initial registration may have empty member lists due to forward references
         // (e.g., Set needs SortedSet which may not be registered yet during alphabetical processing).
-        foreach ((Program program, string _, string _) in programs)
+        // Each deferred pass must RE-STAMP `_registeringRealm` per program (the registration loop above
+        // left it at the LAST program's realm — and with an RF `.rf` + SF `.sf` wrapper for the same type
+        // both loaded, that trailing realm is SF, so an RF program's deferred lookups would hit the SF
+        // shell and mis-apply its protocols/members to the wrong realm — the `BitList` not-iterable bug).
+        foreach ((Program program, string filePath, string _) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProgramMemberVariables(registry: registry, program: program);
         }
 
-        foreach ((Program program, string _, string _) in programs)
+        foreach ((Program program, string filePath, string _) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
 
         // Re-resolve protocol memberRoutine return types that failed due to forward references
-        foreach ((Program program, string _, string _) in programs)
+        foreach ((Program program, string filePath, string _) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveProtocolMemberRoutineReturnTypes(registry: registry, program: program);
             ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string filePath, string ns) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramRoutines(registry: registry, program: program, moduleName: ns);
         }
 
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string filePath, string ns) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
         }
 
         // Register presets for the module
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string filePath, string ns) in programs)
         {
+            _registeringRealm = RealmOf(filePath: filePath);
             RegisterProgramPresets(registry: registry, program: program, moduleName: ns);
         }
 
+        // Clear the thread-static realm so it never leaks into a later load pass on this thread.
+        _registeringRealm = null;
         return true;
     }
 

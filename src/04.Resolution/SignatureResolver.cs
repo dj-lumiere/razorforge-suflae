@@ -101,8 +101,13 @@ internal sealed class SignatureResolver
         // so that routines see the correct member variable list at body-analysis time (Phase 5).
         // For stdlib types the Phase 3 object is mutated in-place, so the lookup returns the
         // same object — no behaviour change there.
+        // Realm-aware refresh: keep the owner in ITS OWN realm. A realm-blind lookup by FullName would
+        // rebind an SF-realm `Core.List` routine's owner to the RazorForge-realm `Core.List` (same bare
+        // key) → the routine keys bare → collides with / shadows the RF routine (RF-S406). For ambient-realm
+        // owners `LookupType(name, realm)` reduces to the plain lookup, so RF is unaffected.
         TypeSymbol? refreshedOwnerType = pending.OwnerType != null
-            ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
+            ? (_sa._registry.LookupType(name: pending.OwnerType.FullName, realm: pending.OwnerType.Realm)
+               ?? pending.OwnerType)
             : null;
 
         // Suflae representation unification: in a Suflae USER file, an `entity` is a `Roamed[E]` handle,
@@ -630,8 +635,9 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // Re-lookup the owner type to get the updated version with protocols
-        TypeSymbol? currentOwnerType = _sa._registry.LookupType(name: routineInfo.OwnerType.FullName);
+        // Re-lookup the owner type to get the updated version with protocols (realm-aware: keep the
+        // owner in its own world-line so an SF-realm owner isn't rebound to the RF-realm same-name type).
+        TypeSymbol? currentOwnerType = _sa._registry.LookupType(name: routineInfo.OwnerType.FullName, realm: routineInfo.OwnerType.Realm);
         if (currentOwnerType == null)
         {
             return;
@@ -910,8 +916,9 @@ internal sealed class SignatureResolver
             return; // Not an operator memberRoutine or no protocol required
         }
 
-        // Re-lookup the owner type to get the updated version with protocols
-        TypeSymbol? currentOwnerType = _sa._registry.LookupType(name: routineInfo.OwnerType.FullName);
+        // Re-lookup the owner type to get the updated version with protocols (realm-aware: keep the
+        // owner in its own world-line so an SF-realm owner isn't rebound to the RF-realm same-name type).
+        TypeSymbol? currentOwnerType = _sa._registry.LookupType(name: routineInfo.OwnerType.FullName, realm: routineInfo.OwnerType.Realm);
         if (currentOwnerType == null)
         {
             return;

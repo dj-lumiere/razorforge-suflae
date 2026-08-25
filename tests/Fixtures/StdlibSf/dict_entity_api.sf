@@ -1,4 +1,5 @@
 module Tests/StdlibSf/DictEntityApi
+import Numerics
 import IO/Console
 
 # SF entities held as Dict values lower to `Roamed[Node]`. The cycle collector's auto roam-trace must

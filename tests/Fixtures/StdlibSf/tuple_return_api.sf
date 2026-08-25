@@ -1,4 +1,5 @@
 module Tests/StdlibSf/TupleReturn
+import Numerics
 import IO/Console
 
 # Case #3 of the struct-ABI byval coverage: routines that RETURN a tuple by value.

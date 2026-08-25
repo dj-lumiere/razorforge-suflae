@@ -94,6 +94,37 @@ public sealed partial class SemanticVerifier
 
     private TypeSymbol AnalyzeCallExpression(CallExpression call, TypeSymbol? expectedType = null)
     {
+        TypeSymbol result = AnalyzeCallExpressionCore(call: call, expectedType: expectedType);
+        EnforceSuflaeUnsafeCall(resolved: call.ResolvedRoutine, location: call.Location);
+        return result;
+    }
+
+    /// <summary>
+    /// Suflae unsafe-call gate: whatever overload a call finally resolved to, a <c>dangerous</c> routine is
+    /// not part of Suflae's safe surface. Entity wrappers already hide their dangerous members (the
+    /// auto-forwarder denylist), but dangerous FREE routines auto-preluded from Core (<c>hollow[T]()</c>,
+    /// <c>roamed_from_addr</c>, …) and any dangerous method on a SHARED record slip past wrapping — this is
+    /// the one unified choke point (called from both the plain- and generic-call analyzers) that closes them.
+    /// Runs only for user Suflae source: stdlib <c>.rf</c> bodies analyze in RF mode, and SF stdlib wrappers
+    /// are exempt (a forwarder may still chain a builder-internal). Suflae has no <c>danger</c> block, so
+    /// there is no in-Suflae opt-in — the surface is simply unavailable.
+    /// </summary>
+    private void EnforceSuflaeUnsafeCall(RoutineInfo? resolved, SourceLocation location)
+    {
+        if (_registry.Language == Language.Suflae
+            && !IsStdlibFile(filePath: _currentFilePath)
+            && !InDangerBlock
+            && resolved is { IsDangerous: true } dangerousRoutine)
+        {
+            ReportError(code: SemanticDiagnosticCode.FeatureNotInSuflae,
+                message: $"'{dangerousRoutine.Name}' is unsafe (dangerous) surface and is not available in "
+                         + "Suflae — Suflae hides memory-unsafe operations.",
+                location: location);
+        }
+    }
+
+    private TypeSymbol AnalyzeCallExpressionCore(CallExpression call, TypeSymbol? expectedType = null)
+    {
         // Comptime `expand` gate: a member-routine call on a comptime member value (me.$nameof(m).cmp()/
         // .hash()/…) is a wired op — a GATED one (cmp/hash/…) needs the enclosing template's `needs P
         // everywhere` guarantee; a universal one (represent/serialize) passes freely.
@@ -130,6 +161,16 @@ public sealed partial class SemanticVerifier
                 // `LookupTypeWithImports("U32!")` returns null and the call falls through to
                 // non-creator paths, eventually mis-picking a non-failable overload by name.
                 TypeSymbol? callableType = LookupTypeWithImports(name: callName);
+                // Honor an explicit `RF::`/`SF::` realm on a constructor call (`RF::Core.List[T]()`): the
+                // lookup above is realm-blind (prefers the file's resolution realm), so inside an SF file
+                // `RF::Core.List[T]()` would resolve to the SF-realm list and the SF wrapper's constructor
+                // `return List[T](inner: RF::Core.List[T]())` would self-recurse. Swap to the qualified realm.
+                if (id.Realm is { } calleeRealm && callableType is TypeInfo calleeDef
+                    && calleeDef.Realm != calleeRealm
+                    && _registry.ReResolveInRealm(type: calleeDef, realm: calleeRealm) is { } realmDef)
+                {
+                    callableType = realmDef;
+                }
                 // Module-scoped ambiguity for a bare construction `T(...)`: T declared in 2+ imported
                 // modules (own module not shadowing) is ambiguous. Mirrors the type-annotation check in
                 // TypeResolver.ResolveTypeCore; still constructs (first-match) so no null cascade.
@@ -1371,8 +1412,11 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // @readonly enforcement: cannot call mutating memberRoutines on 'me'
-                    if (_currentRoutine is { IsReadOnly: true } &&
+                    // @readonly enforcement: cannot call mutating memberRoutines on 'me'. RazorForge-only —
+                    // Suflae hides @readonly/@reshaping, so a Suflae build never enforces it (even on the
+                    // borrowed RF stdlib, whose readonly discipline is RazorForge's own concern).
+                    if (_registry.CompilationLanguage != Language.Suflae &&
+                        _currentRoutine is { IsReadOnly: true } &&
                         member.Object is IdentifierExpression { Name: "me" } && !memberRoutine.IsReadOnly)
                     {
                         ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,

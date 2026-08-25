@@ -1,4 +1,5 @@
 module Tests/StdlibSf/VariantApi
+import Numerics
 import IO/Console
 
 # User-defined tagged union. Members are types; `None` is the absent arm.

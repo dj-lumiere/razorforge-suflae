@@ -808,7 +808,8 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Check if we're in a @readonly memberRoutine trying to modify 'me'
-                if (_currentRoutine is { IsReadOnly: true } &&
+                if (_registry.CompilationLanguage != Language.Suflae &&
+                    _currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,
@@ -967,7 +968,8 @@ public sealed partial class SemanticVerifier
                     memberVariableName: member.MemberName,
                     location: compound.Location);
 
-                if (_currentRoutine is { IsReadOnly: true } &&
+                if (_registry.CompilationLanguage != Language.Suflae &&
+                    _currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
                     ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMemberRoutine,

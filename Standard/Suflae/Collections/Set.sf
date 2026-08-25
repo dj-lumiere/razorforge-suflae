@@ -1,0 +1,11 @@
+module Core
+
+### Suflae SF-realm Core set — roam-boundary wrapper over a bare RF::Core.Set[T].
+### Only the entity + default constructor are hand-written; every other method is auto-forwarded to
+### `inner` by SynthesizeSuflaeForwarders, which also re-wraps any method that returns a wrapped
+### entity (`copy` → Set, element-list returns → List).
+entity Set[T]
+  secret inner: RF::Core.Set[T]
+
+routine Set[T]() -> Set[T]
+  return Set[T](inner: RF::Core.Set[T]())

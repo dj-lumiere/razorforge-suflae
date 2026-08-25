@@ -1,4 +1,5 @@
 module Tests/StdlibSf/WhenExpressionApi
+import Numerics
 import IO/Console
 
 # Verifies subjectless (condition-based) `when` in expression and statement positions.

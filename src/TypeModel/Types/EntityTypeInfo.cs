@@ -121,7 +121,13 @@ public class EntityTypeInfo : TypeInfo
         // of one (triggered while substituting a field of the other) hits the "already in progress"
         // branch and returns the WRONG module's in-progress entity. The entity's own Name stays bare
         // (it drives LLVM mangling and the resolution-cache short alias).
-        string cycleKey = string.IsNullOrEmpty(value: Module) ? resolvedName : $"{Module}.{resolvedName}";
+        // …and REALM-qualified too: `Core.List` exists in BOTH the RazorForge realm (real list) and the
+        // Suflae realm (the `{ inner }` wrapper). They share module AND bare resolved name, so a realm-free
+        // cycleKey lets an in-progress SF `Core.List[S32]` be handed back for an RF `Core.List[S32]`
+        // CreateInstance (and vice versa) — the wrapper's `RF::Core.List[T]()` inner would then resolve to
+        // the SF entity and self-recurse. Prefix the non-ambient realm to keep the two world-lines distinct.
+        string moduleQualified = string.IsNullOrEmpty(value: Module) ? resolvedName : $"{Module}.{resolvedName}";
+        string cycleKey = Realm == "RF" ? moduleQualified : $"{Realm}::{moduleQualified}";
 
         // Build the substitution map up front so it can be applied to ImplementedProtocols
         // as well as member-variable types. Without substituting protocols, an obeys-clause
@@ -166,7 +172,8 @@ public class EntityTypeInfo : TypeInfo
                     GenericDefinition = this,
                     Visibility = Visibility,
                     Location = Location,
-                    Module = Module
+                    Module = Module,
+                    Realm = Realm
                 };
         }
 
@@ -182,7 +189,8 @@ public class EntityTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
         _inProgressEntities[key: cycleKey] = entity;
 

@@ -122,6 +122,7 @@ public partial class LlvmCodeGenerator
         // ONLY as a value (e.g. a synthesized `roam_*_impl` cycle-collector hook) fails the Phase-C
         // `_referencedKeys` emission gate and links against an undefined symbol.
         _referencedKeys.Add(item: routine.RegistryKey);
+        _referencedKeys.Add(item: StripRealmPrefix(routine.RegistryKey));
         string thunkSym = EnsureRoutineValueThunk(routine: routine);
 
         // Closure is just { ptr } — no captures. Allocate 8 bytes and store the thunk pointer.

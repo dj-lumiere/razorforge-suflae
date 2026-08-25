@@ -1,4 +1,5 @@
 module Tests/StdlibSf/PatternMatchingApi
+import Numerics
 import IO/Console
 
 # `when` patterns: literal, type, range, else fallthrough, binding.

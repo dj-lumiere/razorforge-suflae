@@ -1,4 +1,5 @@
 module Tests/StdlibSf/NamedArgumentsApi
+import Numerics
 import IO/Console
 
 # Multi-parameter calls REQUIRE named arguments (S510). Single-param + universal

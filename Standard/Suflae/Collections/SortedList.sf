@@ -1,0 +1,9 @@
+module Collections
+
+### Suflae SF-realm Collections sorted list — wrapper over RF::Collections.SortedList[T].
+### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
+entity SortedList[T]
+  secret inner: RF::Collections.SortedList[T]
+
+routine SortedList[T]() -> SortedList[T]
+  return SortedList[T](inner: RF::Collections.SortedList[T]())

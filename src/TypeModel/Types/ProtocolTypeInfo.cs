@@ -114,7 +114,8 @@ public sealed class ProtocolTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 }

@@ -37,6 +37,37 @@ public sealed partial class TypeRegistry
     /// analyzed in RazorForge mode during a Suflae compile — see SemanticVerifier.AnalyzeStdlibBodies.</summary>
     public Language Language { get; set; }
 
+    /// <summary>
+    /// The AMBIENT realm of the compilation — the world-line a bare (unqualified) type name resolves to:
+    /// <c>"RF"</c> for a RazorForge compile, <c>"SF"</c> for a Suflae compile. A compilation-global
+    /// constant (like <see cref="Language"/>): types of this realm key BARE (realm-free
+    /// <see cref="TypeInfo.FullName"/>) so the whole name-resolution hot path stays realm-blind; only the
+    /// NON-ambient (bridged via <c>RF::</c>/<c>SF::</c>) realm gets a realm-marked
+    /// <see cref="TypeInfo.RealmQualifiedName"/> registry key. Settable so stdlib bodies of each realm are
+    /// analyzed under their own realm — see SemanticVerifier.AnalyzeStdlibBodies. Defaults to <c>"RF"</c>.
+    /// </summary>
+    public string AmbientRealm { get; set; } = "RF";
+
+    /// <summary>
+    /// The user's TARGET compile language — unlike <see cref="Language"/>, this is NOT toggled to
+    /// RazorForge while stdlib bodies are analyzed (see SemanticVerifier.AnalyzeStdlibBodies), so it
+    /// reliably answers "is this ultimately a Suflae build?" even mid-stdlib-analysis. Used to gate
+    /// RazorForge-ONLY surface diagnostics (@readonly / @reshaping enforcement) OFF for a Suflae build:
+    /// Suflae hides those concepts, and the borrowed RF stdlib's RF-internal checks are RF's own concern.
+    /// </summary>
+    public Language CompilationLanguage { get; set; } = Language.RazorForge;
+
+    /// <summary>
+    /// The realm whose types a bare (unqualified) name should PREFER during the CURRENT file's analysis —
+    /// set per-file (a <c>.sf</c> file ⇒ <c>"SF"</c>, a <c>.rf</c> file ⇒ <c>"RF"</c>). When it differs
+    /// from <see cref="AmbientRealm"/> (i.e. analyzing an SF file while RF stays the ambient/bare realm),
+    /// <see cref="LookupType(string)"/> first tries the <c>{ResolutionRealm}::</c>-keyed type before the
+    /// bare ambient one, so a bare <c>List</c> in a Suflae file resolves to the SF-realm <c>Core.List</c>
+    /// (bridged, keyed <c>SF::Core.List</c>) yet still falls back to the RF-realm type for anything the SF
+    /// surface has not (re)declared. Defaults to <c>"RF"</c> ⇒ equal to the ambient ⇒ zero effect on RF.
+    /// </summary>
+    public string ResolutionRealm { get; set; } = "RF";
+
     #region Type Storage
 
     /// <summary>All registered types by their full name.</summary>
@@ -326,7 +357,12 @@ public sealed partial class TypeRegistry
         // that LookupMemberRoutine never checks when resolving memberRoutines on Maybe[S64].
         RegisterErrorHandlingTypes();
 
-        // Load Core module eagerly - Core types are fundamental to every program
+        // Load Core module eagerly - Core types are fundamental to every program.
+        // NOTE: user-code bare names still resolve to the RF-realm Core (world-line) — a `.sf` file's bare
+        // `List` is the RF `Core.List` roamed, which WORKS end-to-end. Flipping the user resolution realm to
+        // SF (so bare `List` → the SF wrapper) is DEFERRED: it triggers a pipeline-wide realm cascade
+        // (construction create-binding, reachability create-seeding, codegen emission) not yet complete —
+        // see [[sf-real-stdlib-direction]]. The SF wrapper is reachable explicitly via `SF::List`.
         LoadCoreModule();
     }
 
@@ -625,13 +661,34 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// The registry key for a type: the realm-free <see cref="TypeInfo.FullName"/> when the type belongs to
+    /// the ambient realm (the common case — keeps the name-resolution hot path realm-blind), or the
+    /// realm-marked <see cref="TypeInfo.RealmQualifiedName"/> when it is a BRIDGED (non-ambient) realm type,
+    /// so a bridged <c>RF::Core.List</c> never collides with the ambient <c>Core.List</c> when both
+    /// world-lines coexist in one compilation. When <see cref="AmbientRealm"/> is the default <c>"RF"</c> and
+    /// every type is <c>Realm="RF"</c>, this is exactly <see cref="TypeInfo.FullName"/> (no behavior change).
+    /// </summary>
+    internal string RealmRegistryKey(TypeInfo type) =>
+        type.Realm == AmbientRealm ? type.FullName : type.RealmQualifiedName;
+
+    /// <summary>
+    /// The routine-index key for <paramref name="routine"/>: its realm-free
+    /// <see cref="RoutineInfo.RegistryKey"/> when its owner is ambient-realm (the common case — RF routines
+    /// in an RF compile, SF routines in an SF compile keep bare keys), or that key prefixed with
+    /// <c>{ownerRealm}::</c> when the owner is a BRIDGED realm, so a bridged <c>RF::Core.List.add_last</c>
+    /// never collides with / shadows the ambient <c>Core.List.add_last</c> (the RF-S406 creator clash).
+    /// Owner-less (free) routines are never realm-bridged, so they use the bare key.
+    /// </summary>
+    public string RealmRoutineKey(RoutineInfo routine) => routine.RegistryKey;
+
+    /// <summary>
     /// Registers a type in the registry.
     /// </summary>
     /// <param name="type">The type to register.</param>
     /// <exception cref="InvalidOperationException">Thrown if the type is already registered.</exception>
     public void RegisterType(TypeInfo type)
     {
-        string key = type.FullName;
+        string key = RealmRegistryKey(type: type);
 
         if (_types.ContainsKey(key: key))
         {
@@ -649,7 +706,7 @@ public sealed partial class TypeRegistry
     /// <param name="newType">The new type to register.</param>
     public void UpdateType(TypeInfo oldType, TypeInfo newType)
     {
-        string key = oldType.FullName;
+        string key = RealmRegistryKey(type: oldType);
         if (_types.ContainsKey(key: key))
         {
             _types[key: key] = newType;
@@ -978,11 +1035,53 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Looks up a type by name.
+    /// Looks up a type by name IN A SPECIFIC REALM — the realm-aware sibling of <see cref="LookupType(string)"/>.
+    /// The ambient realm keys bare (delegates to the realm-blind lookup); a bridged realm is keyed by
+    /// <see cref="TypeInfo.RealmQualifiedName"/> (<c>{realm}::{FullName}</c>), so this reaches the SF-realm
+    /// <c>Core.List</c> even while the RazorForge-realm <c>Core.List</c> occupies the bare key (and vice
+    /// versa). Returns null when no type of that realm is registered (caller decides whether to fall back).
     /// </summary>
-    /// <param name="name">The name of the type to look up.</param>
-    /// <returns>The type info if found, null otherwise.</returns>
-    public TypeInfo? LookupType(string name) // NOSONAR S3776
+    public TypeInfo? LookupType(string name, string realm)
+    {
+        if (realm == AmbientRealm)
+        {
+            return LookupTypeInAmbient(name: name);
+        }
+        // Bridged realm: registered under the realm-marked key. Try the name as given, and — for a bare
+        // name whose ambient hit reveals the module-qualified FullName — the realm-prefixed FullName.
+        if (_types.TryGetValue(key: $"{realm}::{name}", value: out TypeInfo? direct))
+        {
+            return direct;
+        }
+        return LookupTypeInAmbient(name: name) is { } ambient
+               && _types.TryGetValue(key: $"{realm}::{ambient.FullName}", value: out TypeInfo? viaFull)
+            ? viaFull
+            : null;
+    }
+
+    /// <summary>
+    /// Looks up a type by name, PREFERRING the current <see cref="ResolutionRealm"/> (per-file) over the
+    /// bare ambient realm. When resolution realm == ambient (every RF compile, and RF files in an SF
+    /// compile) this is exactly the plain ambient lookup — zero behavioral change. When analyzing an SF
+    /// file (resolution realm SF, ambient RF) a bare name that has an SF-realm (bridged) type resolves to
+    /// it first, else falls through to the RF-realm type.
+    /// </summary>
+    public TypeInfo? LookupType(string name)
+    {
+        TypeInfo? hit = LookupTypeInAmbient(name: name);
+        if (ResolutionRealm != AmbientRealm && hit != null
+            && _types.TryGetValue(key: $"{ResolutionRealm}::{hit.FullName}", value: out TypeInfo? preferred))
+        {
+            return preferred;
+        }
+        return hit;
+    }
+
+    /// <summary>
+    /// Looks up a type by name in the AMBIENT realm only (the realm-blind workhorse). Callers that must
+    /// honor the per-file <see cref="ResolutionRealm"/> use <see cref="LookupType(string)"/> instead.
+    /// </summary>
+    private TypeInfo? LookupTypeInAmbient(string name) // NOSONAR S3776
     {
         // Try exact match first
         if (_types.TryGetValue(key: name, value: out TypeInfo? type))
@@ -1015,6 +1114,12 @@ public sealed partial class TypeRegistry
             string suffix = $".{name}";
             foreach ((string key, TypeInfo value) in _types)
             {
+                // Skip realm-qualified (bridged) keys like `SF::Core.List` — this is the AMBIENT scan;
+                // the per-file ResolutionRealm preference is applied by the LookupType(name) wrapper.
+                if (key.Contains(value: "::"))
+                {
+                    continue;
+                }
                 if (key.EndsWith(value: suffix))
                 {
                     _typesByShortName[key: name] = value; // cache for subsequent lookups
@@ -1035,6 +1140,47 @@ public sealed partial class TypeRegistry
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Re-resolves <paramref name="type"/> into the <paramref name="realm"/> world-line — the mechanism
+    /// behind an explicit <c>RF::</c>/<c>SF::</c> qualifier. Name resolution is realm-blind and always yields
+    /// the AMBIENT-realm type (keyed bare); this swaps it to the bridged realm's equivalent, which the
+    /// registry keys by <see cref="TypeInfo.RealmQualifiedName"/> (<c>{realm}::{FullName}</c>). Returns null
+    /// when no such bridged type is registered (caller keeps the ambient resolution — for a pure-ambient
+    /// compile this path is never meaningfully hit, so behavior is unchanged).
+    /// </summary>
+    public TypeInfo? ReResolveInRealm(TypeInfo type, string realm)
+    {
+        if (type.Realm == realm)
+        {
+            return type;
+        }
+
+        // A generic RESOLUTION (e.g. List[T]): find the target-realm generic DEFINITION (keyed
+        // `{realm}::{def.FullName}`) and re-resolve the same arguments against it.
+        TypeInfo? genericDef = type switch
+        {
+            EntityTypeInfo { GenericDefinition: { } gd } => gd,
+            RecordTypeInfo { GenericDefinition: { } gd } => gd,
+            ProtocolTypeInfo { GenericDefinition: { } gd } => gd,
+            _ => null
+        };
+        if (genericDef != null && type.TypeArguments is { Count: > 0 } args)
+        {
+            // The target realm's DEFINITION is keyed BARE when it is the ambient realm (RF types under an
+            // RF-ambient compile), or `{realm}::`-marked when bridged. Using the ambient (bare) lookup for
+            // the ambient case is what lets `RF::Core.List` reach the RF-realm list (keyed bare `Core.List`).
+            TypeInfo? tDef = realm == AmbientRealm
+                ? LookupTypeInAmbient(name: genericDef.FullName)
+                : _types.TryGetValue(key: $"{realm}::{genericDef.FullName}", value: out TypeInfo? d) ? d : null;
+            return tDef != null ? GetOrCreateResolution(genericDef: tDef, typeArguments: [.. args]) : null;
+        }
+
+        // A non-generic type or a bare generic definition: bare key for the ambient realm, else realm-marked.
+        return realm == AmbientRealm
+            ? LookupTypeInAmbient(name: type.FullName)
+            : _types.TryGetValue(key: $"{realm}::{type.FullName}", value: out TypeInfo? t) ? t : null;
     }
 
     /// <summary>
@@ -1064,9 +1210,12 @@ public sealed partial class TypeRegistry
         string shortKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: GetShortName))}]";
         // Module-qualified full key: used when @llvm_ir type args are rewritten to fully-qualified
-        // names by GenericAstRewriter (e.g. "Collections.BTreeSetNode[Core.S64]").
+        // names by GenericAstRewriter (e.g. "Collections.BTreeSetNode[Core.S64]"). A BRIDGED (non-ambient)
+        // realm def gets a leading `RF::`/`SF::` so a bridged `RF::Core.List[S64]` keys distinctly from the
+        // ambient `Core.List[S64]`; the ambient realm adds no prefix (unchanged for a single-realm compile).
+        string realmPrefix = genericDef.Realm != AmbientRealm ? $"{genericDef.Realm}::" : "";
         string? moduleFullKey = genericDef.FullName != genericDef.Name
-            ? $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
+            ? $"{realmPrefix}{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
             : null;
 
         // The module-qualified key is DISTINCT across modules/realms (RazorForge `Core.List` vs the
@@ -1270,9 +1419,13 @@ public sealed partial class TypeRegistry
             ProtocolTypeInfo p => p.GenericDefinition,
             _ => null
         };
+        // Realm must ALSO match: `FullName`/`BareName` are realm-FREE, so a Suflae-realm `Core.List[S32]`
+        // would otherwise satisfy a request for the RazorForge-realm `Core.List` def via the module-blind
+        // bare alias — handing back the SF wrapper for an `RF::Core.List[T]()` construction, whose `create`
+        // then self-recurses. Comparing realm keeps the two world-lines' resolutions distinct.
         return resolvedDef == null
-            ? resolved.BareName == genericDef.BareName
-            : resolvedDef.FullName == genericDef.FullName;
+            ? resolved.BareName == genericDef.BareName && resolved.Realm == genericDef.Realm
+            : resolvedDef.FullName == genericDef.FullName && resolvedDef.Realm == genericDef.Realm;
     }
 
     /// <summary>
@@ -1284,9 +1437,11 @@ public sealed partial class TypeRegistry
     {
         string fullKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]";
-        // Module-qualified key first (distinct across modules/realms); mirrors GetOrCreateResolution.
+        // Module-qualified key first (distinct across modules/realms); mirrors GetOrCreateResolution
+        // incl. the bridged-realm `RF::`/`SF::` prefix (ambient realm adds none).
+        string realmPrefix = genericDef.Realm != AmbientRealm ? $"{genericDef.Realm}::" : "";
         string? moduleFullKey = genericDef.FullName != genericDef.Name
-            ? $"{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
+            ? $"{realmPrefix}{genericDef.FullName}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]"
             : null;
         if (moduleFullKey != null && _resolutions.TryGetValue(key: moduleFullKey, value: out TypeInfo? existing))
             return existing;

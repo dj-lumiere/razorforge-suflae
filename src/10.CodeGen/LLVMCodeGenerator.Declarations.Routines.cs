@@ -19,7 +19,12 @@ public partial class LlvmCodeGenerator
         // must itself be emitted. Gated on _emittingRoutineBody so the broad declaration pre-pass
         // (which declares much of the registry up front) does not mark everything referenced.
         if (_emittingRoutineBody)
+        {
             _referencedKeys.Add(item: routine.RegistryKey);
+            // Also record the realm-stripped form: mangling is realm-free, so a body keyed under a
+            // different world-line (SF:: vs ambient) is the SAME emitted symbol and must pass the gate.
+            _referencedKeys.Add(item: StripRealmPrefix(routine.RegistryKey));
+        }
 
         string funcName = nameOverride ?? MangleRoutineName(routine: routine);
 
@@ -982,14 +987,14 @@ public partial class LlvmCodeGenerator
         // Common (type-level static) routines: `[member, common, …] Module.Type.name(label: Type, …)`.
         if (routine.IsCommon)
         {
-            string typeName = routine.OwnerType.FullName;
+            string typeName = RealmMangleBase(t: routine.OwnerType);
             return Q(name: $"{AttrPrefix(r: routine)}{typeName}.{name}{LabeledParams(r: routine)}");
         }
 
         // memberRoutine: `[member, wired?, crashable?, …] Module.OwnerType.name(label: Type, …)`
         // (OwnerType.FullName includes module). The `$`/`!` are gone from the name — they are in the
         // attribute prefix.
-        string ownerTypeName = routine.OwnerType.FullName;
+        string ownerTypeName = RealmMangleBase(t: routine.OwnerType);
         string baseName = AttrPrefix(r: routine) + $"{ownerTypeName}.{name}";
 
         // memberRoutine-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).

@@ -227,7 +227,8 @@ public class RecordTypeInfo : TypeInfo
                     typeArguments: typeArguments),
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 

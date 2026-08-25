@@ -1,4 +1,5 @@
 module Tests/StdlibSf/EntityReprApi
+import Numerics
 import IO/Console
 
 # SF twin of Stdlib/entity_repr_api.rf. The `Point` local lowers to `Roamed[Point]`, but `f"{p}"`

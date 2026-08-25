@@ -1635,19 +1635,23 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             string genericKey = $"{RoutineInfo.GetTypeIdentity(type: genDef)}.{callee.Name}";
             // Stdlib decl name is the SHORT form like "List[T].insertion_sort" / "Iterable[T].Set".
             string shortKey = $"{genDef.Name}[{string.Join(separator: ", ", values: genDef.GenericParameters!)}].{callee.Name}";
+            // REALM-SCOPED: the decl key is realm-FREE (`List[T].create`), so the RazorForge-realm
+            // `Core.List` and the Suflae-realm wrapper both index here. Without realm scoping the
+            // first-registered (RF) body is walked for the SF wrapper create — so the wrapper's inner
+            // `RF::Core.List[T]()` create is never seeded (over-prune). Prefer the callee-realm decl.
             if (_stdlibByName.TryGetValue(key: shortKey, value: out List<RoutineDeclaration>? gd))
-                return MatchOverload(decls: gd, callee: callee);
+                return MatchOverload(decls: RealmScoped(decls: gd, callee: callee), callee: callee);
             if (_stdlibByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gd2))
-                return MatchOverload(decls: gd2, callee: callee);
+                return MatchOverload(decls: RealmScoped(decls: gd2, callee: callee), callee: callee);
             // User-defined generic memberRoutines (e.g. `LinkedList[T].add_last` in playground code)
             // are keyed under the gendef shape in _userByName, NOT under the monomorphised
             // concrete-owner key. Without this lookup, FindDecl returns null for every
             // user-generic instantiation, so its body is never walked and calls inside it
             // (e.g. `node.retain()`) never reach the live set.
             if (_userByName.TryGetValue(key: shortKey, value: out List<RoutineDeclaration>? gdu))
-                return MatchOverload(decls: gdu, callee: callee);
+                return MatchOverload(decls: RealmScoped(decls: gdu, callee: callee), callee: callee);
             if (_userByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gdu2))
-                return MatchOverload(decls: gdu2, callee: callee);
+                return MatchOverload(decls: RealmScoped(decls: gdu2, callee: callee), callee: callee);
         }
         // Concrete owner: e.g. "S32.add" or "Bytes.split". Match over BOTH stdlib AND user decls
         // combined: a user program may define a NEW overload of a stdlib-type memberRoutine (e.g.
@@ -1672,7 +1676,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             List<RoutineDeclaration> scoped = combined
                 .Where(predicate: d => d.ResolvedInfo?.OwnerType?.FullName == owner.FullName)
                 .ToList();
-            return MatchOverload(decls: scoped.Count > 0 ? scoped : combined, callee: callee);
+            // FullName is realm-free, so the module scope above keeps BOTH world-lines' decls for a
+            // wrapped Core type — narrow further to the callee's realm (RF vs SF).
+            return MatchOverload(decls: RealmScoped(decls: scoped.Count > 0 ? scoped : combined, callee: callee), callee: callee);
         }
 
         // Universal-memberRoutine instance: callee was produced by SubstituteMemberRoutineForOwner from a
@@ -1687,6 +1693,24 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Narrows a realm-free-keyed decl list to the ones whose registered owner realm matches the
+    /// callee's owner realm. The reachability decl indices key on the realm-FREE owner name, so a
+    /// wrapped Core type (RazorForge `Core.List` + the Suflae `Core.List` wrapper) lands both realms'
+    /// decls under one key. Walking the wrong realm's body (RF's real create vs the SF wrapper's
+    /// `RF::Core.List[T]()` forwarder) leaves the other realm's callees unseeded → over-prune. Falls
+    /// back to the full list when no decl matches the realm (RF-only compiles are unaffected: every
+    /// decl is RF and the callee is RF, so the filter is a no-op).
+    /// </summary>
+    private static List<RoutineDeclaration> RealmScoped(List<RoutineDeclaration> decls, RoutineInfo callee)
+    {
+        string calleeRealm = callee.OwnerType?.Realm ?? "RF";
+        List<RoutineDeclaration> matched = decls
+            .Where(predicate: d => (d.ResolvedInfo?.OwnerType?.Realm ?? "RF") == calleeRealm)
+            .ToList();
+        return matched.Count > 0 ? matched : decls;
     }
 
     /// <summary>

@@ -152,7 +152,20 @@ internal sealed class TypeResolver
             return ErrorTypeInfo.Instance;
         }
 
+        EnforceSuflaeNumberGate(typeExpr: typeExpr);
+
         TypeSymbol resolved = ResolveTypeCore(typeExpr: typeExpr);
+        // Effective realm = the explicit `RF::`/`SF::` qualifier, else the compilation's ambient realm.
+        // Name resolution above is realm-blind and yields the ambient-realm type; when an explicit qualifier
+        // names the BRIDGED (non-ambient) realm, swap to that realm's equivalent so `RF::Core.List` in a
+        // `.sf` reaches the RazorForge-realm list. No-op when the effective realm IS the ambient one (the
+        // common case, and every pure-RF/pure-SF bare reference), and null-safe if no bridged type exists.
+        string effectiveRealm = typeExpr.Realm ?? _sa._registry.AmbientRealm;
+        if (resolved is TypeInfo ti && effectiveRealm != ti.Realm
+            && _sa._registry.ReResolveInRealm(type: ti, realm: effectiveRealm) is { } bridged)
+        {
+            resolved = bridged;
+        }
         // An `RF::Name` qualifier is an explicit RazorForge/bare-realm reference — it deliberately opts OUT
         // of Suflae's `entity -> Roamed[entity]` lowering (that is the whole point: an SF wrapper entity
         // holds a BARE `RF::Core.List` inside, without re-roaming it into an infinite `Roamed[List]`). Any
@@ -163,6 +176,74 @@ internal sealed class TypeResolver
         }
         typeExpr.ResolvedType = resolved;
         return resolved;
+    }
+
+    /// <summary>
+    /// Suflae's approachable number model: the bare numeric vocabulary is <c>Integer</c>/<c>Decimal</c>
+    /// (plus <c>Text</c>/<c>Bytes</c>); the fixed-width / complex / quaternion zoo (<c>S32</c>, <c>U64</c>,
+    /// <c>F128</c>, <c>D64</c>, <c>C32</c>, <c>Q64</c>, …) is import-gated behind <c>import Numerics</c>.
+    /// This is an SF-mode VISIBILITY rule layered on the shared types (they physically stay in
+    /// <c>module Core</c>, RF's auto-prelude — moving them would break every RF program); RF is unaffected.
+    /// <para>Fires ONLY on a USER-source <c>.sf</c> TypeExpression (the compiler's own eager resolution of
+    /// these types during SF analysis carries stdlib/synthetic locations and is exempt), and never on an
+    /// explicit realm qualifier (<c>RF::S32</c> opts in deliberately). Reports and continues — the real type
+    /// still resolves, so no cascade; the diagnostic just fails the compile.</para>
+    /// </summary>
+    private void EnforceSuflaeNumberGate(TypeExpression typeExpr)
+    {
+        // "Fixed-width unlocked" = the user imported the WHOLE `Numerics` module. The SF prelude injects a
+        // SPECIFIC `import Numerics { Integer }` (so bare Integer/literal-default works) and SKIPS that
+        // injection when the user already imports Numerics — so a whole-module import is exactly the case
+        // where `Numerics` is imported but the prelude's `Integer` symbol was NOT added.
+        // The reliable "SF user source" signal is the TypeExpression's own location: a non-stdlib `.sf`
+        // file. (The `_registry.CompilationLanguage` flag is NOT yet "Suflae" when a user annotation is
+        // resolved — it toggles around stdlib analysis — so it cannot gate this.) A stdlib `.rf`/`.sf`
+        // resolution of the same fixed-width type is excluded by IsStdlibFile.
+        string file = typeExpr.Location.FileName;
+        if (typeExpr.Realm != null
+            || !IsImportGatedNumeric(name: typeExpr.Name)
+            || !file.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+            || _sa.IsStdlibFile(filePath: file))
+        {
+            return;
+        }
+        // "Fixed-width unlocked" = the user imported the WHOLE `Numerics` module. The SF prelude injects a
+        // SPECIFIC `import Numerics { Integer }` (so bare Integer/literal-default works) and SKIPS that
+        // injection when the user already imports Numerics — so a whole-module import is exactly the case
+        // where `Numerics` is imported but the prelude's `Integer` symbol was NOT added.
+        bool fixedWidthUnlocked = _sa._importedModules.Contains(item: "Numerics")
+                                  && !_sa._importedSymbolNames.Contains(item: "Integer");
+        if (fixedWidthUnlocked)
+        {
+            return;
+        }
+        _sa.ReportError(code: SemanticDiagnosticCode.SuflaeNumericImportRequired,
+            message: $"Fixed-width numeric type '{typeExpr.Name}' is import-gated in Suflae — add "
+                     + "`import Numerics`. Bare numbers default to Integer/Decimal (fixed-width types like "
+                     + "S32/U64/F128 stay behind the import to keep the surface approachable).",
+            location: typeExpr.Location);
+    }
+
+    /// <summary>Whether <paramref name="name"/> is a fixed-width / complex / quaternion numeric — a single
+    /// leading class letter (<c>S U F D C Q</c> = signed / unsigned / float / decimal / complex / quaternion)
+    /// followed by only digits (the bit width): <c>S8</c>, <c>U1024</c>, <c>F128</c>, <c>D64</c>, <c>C32</c>,
+    /// <c>Q64</c>. <c>Integer</c>/<c>Text</c>/<c>Decimal</c>/<c>Bytes</c>/<c>Bool</c> never match.</summary>
+    private static bool IsImportGatedNumeric(string name)
+    {
+        int dot = name.LastIndexOf(value: '.');
+        string bare = dot >= 0 ? name[(dot + 1)..] : name;
+        if (bare.Length < 2 || "SUFDCQ".IndexOf(value: bare[index: 0]) < 0)
+        {
+            return false;
+        }
+        for (int i = 1; i < bare.Length; i++)
+        {
+            if (!char.IsDigit(c: bare[index: i]))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>

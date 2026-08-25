@@ -1,0 +1,10 @@
+module Core
+
+### Suflae SF-realm Core list — roam-boundary wrapper over a bare RF::Core.List[T].
+### Only the entity + constructor are hand-written; every other method is auto-forwarded to `inner`
+### by SynthesizeSuflaeForwarders (StdlibLoader.SuflaeForwarders).
+entity List[T]
+  secret inner: RF::Core.List[T]
+
+routine List[T]() -> List[T]
+  return List[T](inner: RF::Core.List[T]())

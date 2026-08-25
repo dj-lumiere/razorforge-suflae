@@ -60,6 +60,19 @@ public sealed partial class StdlibLoader
     /// <param name="registry">The type registry to register types into.</param>
     /// <param name="program">The parsed program AST.</param>
     /// <param name="moduleName">The module for the types (from declaration or directory-derived).</param>
+    /// <summary>
+    /// The realm ("RF"/"SF") stamped onto type-definition shells built during the current registration
+    /// pass — set per-program from its source file extension (see <see cref="RealmOf"/>) before each
+    /// shell-building pass loop, read by every <c>new …TypeInfo { … Realm = _registeringRealm }</c> below.
+    /// A thread-static field avoids threading a realm parameter through the whole static registration API;
+    /// resolved generic instances inherit it from their definition via CreateInstance propagation.
+    /// </summary>
+    [ThreadStatic] private static string? _registeringRealm;
+
+    /// <summary>The realm a stdlib file belongs to: <c>"SF"</c> for a <c>.sf</c> source, else <c>"RF"</c>.</summary>
+    private static string RealmOf(string filePath) =>
+        filePath.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase) ? "SF" : "RF";
+
     private static void RegisterProgramTypes(TypeRegistry registry, Program program,
         string moduleName)
     {
@@ -213,11 +226,15 @@ public sealed partial class StdlibLoader
         // short-name index, so with two modules each declaring `record Point` it would attach one
         // module's `obeys` to the OTHER module's type (cross-module protocol contamination →
         // spurious RF-S702). The program's own module scopes the lookup to its own declaration.
+        // Scope the lookup to the CURRENTLY-REGISTERING realm (`_registeringRealm`, stamped per program by
+        // the caller): with an RF `.rf` type and its SF `.sf` wrapper both bearing the same module-qualified
+        // name, a realm-blind lookup would attach this program's `obeys` to the OTHER realm's shell.
+        string realm = _registeringRealm ?? "RF";
         string? module = program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault()?.Path;
         TypeInfo? LookupInModule(string name) =>
             (!string.IsNullOrEmpty(value: module)
-                ? registry.LookupType(name: $"{module}.{name}")
-                : null) ?? registry.LookupType(name: name);
+                ? registry.LookupType(name: $"{module}.{name}", realm: realm)
+                : null) ?? registry.LookupType(name: name, realm: realm);
 
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -598,7 +615,10 @@ public sealed partial class StdlibLoader
                 // not the earlier-registered context-free `Core.List`. Bare-first bound the Suflae
                 // overlay's List memberRoutines to Core.List, so dispatch on `Roamed[Suflae.List]` found no
                 // such memberRoutine (RF-S458). Falls back to bare for a Core type used from another module.
-                TypeInfo? baseDef = registry.LookupType(name: $"{moduleName}.{baseName}") ??
+                // Own-REALM-first (like the non-bracketed owner path): an SF-realm `Core.List[T]` member
+                // owns the SF-realm List, not the RazorForge-realm one that shares the bare key.
+                TypeInfo? baseDef = registry.LookupType(name: $"{moduleName}.{baseName}", realm: _registeringRealm ?? "RF") ??
+                                    registry.LookupType(name: $"{moduleName}.{baseName}") ??
                                     registry.LookupType(name: baseName);
 
                 // If the base is a generic definition, check if bracket args are its own params
@@ -649,7 +669,10 @@ public sealed partial class StdlibLoader
                 // `routine List[T].add_last` in `module Suflae` owns `Suflae.List`, not the earlier-
                 // registered context-free `Core.List`. Falls back to the bare context-free type for a
                 // Core type referenced from another module (e.g. `Collections` memberRoutines on `Core.List`).
-                ownerType = registry.LookupType(name: $"{moduleName}.{typeName}") ??
+                // Own-REALM-first too: SF-realm `Core.List`'s members must own the SF-realm List, not the
+                // RazorForge-realm `Core.List` that shares the bare key (both are `module Core`).
+                ownerType = registry.LookupType(name: $"{moduleName}.{typeName}", realm: _registeringRealm ?? "RF") ??
+                            registry.LookupType(name: $"{moduleName}.{typeName}") ??
                             registry.LookupType(name: typeName);
 
                 // If type not found, treat as a generic type parameter (e.g., T in "routine T.view()")
@@ -673,7 +696,11 @@ public sealed partial class StdlibLoader
             // first bound the Suflae overlay's `List()` creator to Core.List → same RegistryKey as
             // Core's own `List()` → a spurious divergent-duplicate-constructor error (RF-S406). This
             // mirrors LookupTypeWithImports's own-module-shadows rule for the stdlib registration path.
-            TypeInfo? ctorOwner = registry.LookupType(name: $"{moduleName}.{bareName}") ??
+            // Own-REALM-first: SF-realm `Core.List`'s `List()` constructor must own the SF-realm List, not
+            // the RazorForge-realm `Core.List` (same bare key, both `module Core`) — else both `List()`
+            // creators share one RegistryKey and trip the divergent-duplicate-constructor check (RF-S406).
+            TypeInfo? ctorOwner = registry.LookupType(name: $"{moduleName}.{bareName}", realm: _registeringRealm ?? "RF") ??
+                                  registry.LookupType(name: $"{moduleName}.{bareName}") ??
                                   registry.LookupType(name: bareName);
             if (ctorOwner != null)
             {
@@ -791,7 +818,12 @@ public sealed partial class StdlibLoader
                     typeExpr: recvExpr, genericParams: ctx, moduleName: moduleName);
                 if (resolvedRecv != null && resolvedRecv is not ErrorTypeInfo)
                 {
-                    meType = resolvedRecv;
+                    // `ResolveSimpleType` is realm-blind and yields the ambient-realm receiver; keep `me`
+                    // in the OWNER's realm so an SF-realm `Core.List` method's `me` isn't the RF-realm List
+                    // (which lacks the SF wrapper's `inner` field → spurious RF-S450).
+                    meType = ownerType != null && resolvedRecv.Realm != ownerType.Realm
+                        ? (registry.ReResolveInRealm(type: resolvedRecv, realm: ownerType.Realm) ?? resolvedRecv)
+                        : resolvedRecv;
                 }
             }
         }
@@ -963,7 +995,7 @@ public sealed partial class StdlibLoader
 
         // Skip if already registered (non-entity-specialization types only;
         // entity specializations need separate registration even if the base name exists)
-        if (!isEntitySpecialization && registry.LookupType(name: record.Name) != null)
+        if (!isEntitySpecialization && registry.LookupType(name: record.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1043,6 +1075,7 @@ public sealed partial class StdlibLoader
         var typeInfo = new RecordTypeInfo(name: record.Name)
         {
             Module = moduleName,
+            Realm = _registeringRealm ?? "RF",
             Visibility = record.Visibility,
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters,
@@ -1103,7 +1136,7 @@ public sealed partial class StdlibLoader
         string moduleName)
     {
         // Skip if already registered
-        if (registry.LookupType(name: crashable.Name) != null)
+        if (registry.LookupType(name: crashable.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1134,6 +1167,7 @@ public sealed partial class StdlibLoader
         var typeInfo = new CrashableTypeInfo(name: crashable.Name)
         {
             Module = moduleName,
+            Realm = _registeringRealm ?? "RF",
             Visibility = crashable.Visibility,
             Location = crashable.Location
         };
@@ -1175,7 +1209,7 @@ public sealed partial class StdlibLoader
         string qualifiedName = string.IsNullOrEmpty(value: moduleName)
             ? entity.Name
             : $"{moduleName}.{entity.Name}";
-        if (registry.LookupType(name: qualifiedName) != null)
+        if (registry.LookupType(name: qualifiedName, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1244,6 +1278,7 @@ public sealed partial class StdlibLoader
         var typeInfo = new EntityTypeInfo(name: entity.Name)
         {
             Module = moduleName,
+            Realm = _registeringRealm ?? "RF",
             Visibility = entity.Visibility,
             ImplementedProtocols = protocols,
             GenericParameters = entity.GenericParameters,
@@ -1344,7 +1379,7 @@ public sealed partial class StdlibLoader
         string moduleName)
     {
         // Skip if already registered
-        if (registry.LookupType(name: choice.Name) != null)
+        if (registry.LookupType(name: choice.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1392,7 +1427,7 @@ public sealed partial class StdlibLoader
 
         var typeInfo = new ChoiceTypeInfo(name: choice.Name)
         {
-            Module = moduleName, Visibility = choice.Visibility, Cases = cases
+            Module = moduleName, Realm = _registeringRealm ?? "RF", Visibility = choice.Visibility, Cases = cases
         };
 
         registry.RegisterType(type: typeInfo);
@@ -1404,7 +1439,7 @@ public sealed partial class StdlibLoader
     private static void RegisterFlagsType(TypeRegistry registry, FlagsDeclaration flags,
         string moduleName)
     {
-        if (registry.LookupType(name: flags.Name) != null)
+        if (registry.LookupType(name: flags.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1417,7 +1452,7 @@ public sealed partial class StdlibLoader
 
         var typeInfo = new FlagsTypeInfo(name: flags.Name)
         {
-            Module = moduleName, Visibility = flags.Visibility, Members = members
+            Module = moduleName, Realm = _registeringRealm ?? "RF", Visibility = flags.Visibility, Members = members
         };
 
         registry.RegisterType(type: typeInfo);
@@ -1430,7 +1465,7 @@ public sealed partial class StdlibLoader
         string moduleName)
     {
         // Skip if already registered
-        if (registry.LookupType(name: variant.Name) != null)
+        if (registry.LookupType(name: variant.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1441,6 +1476,7 @@ public sealed partial class StdlibLoader
         var typeInfo = new VariantTypeInfo(name: variant.Name)
         {
             Module = moduleName,
+            Realm = _registeringRealm ?? "RF",
             Members = members,
             GenericParameters = variant.GenericParameters,
             GenericConstraints = variant.GenericConstraints
@@ -1509,7 +1545,7 @@ public sealed partial class StdlibLoader
         ProtocolDeclaration protocol, string moduleName)
     {
         // Skip if already registered
-        if (registry.LookupType(name: protocol.Name) != null)
+        if (registry.LookupType(name: protocol.Name, realm: _registeringRealm ?? "RF") != null)
         {
             return;
         }
@@ -1517,6 +1553,7 @@ public sealed partial class StdlibLoader
         var typeInfo = new ProtocolTypeInfo(name: protocol.Name)
         {
             Module = moduleName,
+            Realm = _registeringRealm ?? "RF",
             Visibility = protocol.Visibility,
             MemberRoutines = [], // Filled in by FillProtocolMemberRoutines
             GenericParameters = protocol.GenericParameters,

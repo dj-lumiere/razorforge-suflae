@@ -1,4 +1,5 @@
 module Tests/StdlibSf/ComparisonOpsApi
+import Numerics
 import IO/Console
 
 # Compiler-generated lt/le/gt/ge from cmp on types that obey Ordered.

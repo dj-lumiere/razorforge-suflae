@@ -15,6 +15,15 @@ public sealed partial class SemanticVerifier
 {
     private TypeSymbol AnalyzeGenericMemberRoutineCallExpression(GenericMemberRoutineCallExpression generic)
     {
+        TypeSymbol result = AnalyzeGenericMemberRoutineCallExpressionCore(generic: generic);
+        // A generic call (`hollow[Integer]()`, `obj.method[T](..)`) resolves through a path distinct from
+        // the plain-call analyzer, so the Suflae unsafe-call gate is applied here too on its resolved routine.
+        EnforceSuflaeUnsafeCall(resolved: generic.ResolvedRoutine, location: generic.Location);
+        return result;
+    }
+
+    private TypeSymbol AnalyzeGenericMemberRoutineCallExpressionCore(GenericMemberRoutineCallExpression generic)
+    {
         TypeSymbol objectType = AnalyzeExpression(expression: generic.Object);
 
         // Resolve type arguments
@@ -41,6 +50,17 @@ public sealed partial class SemanticVerifier
                 IsGenericDefinition: true
             } typeInfo && (typeId.Name == generic.MemberRoutineName || isFailableCtor))
         {
+            // Honor an explicit `RF::`/`SF::` realm on a generic construction (`RF::Core.List[T]()`): the
+            // Object was resolved realm-blind (prefers the file's resolution realm), so inside an SF file
+            // `RF::Core.List[T]()` would resolve to the SF-realm list and the SF wrapper's constructor
+            // `return List[T](inner: RF::Core.List[T]())` would self-recurse. Swap the generic DEF to the
+            // qualified realm before resolving, so the inner construction reaches the RazorForge list.
+            if (typeId.Realm is { } genCtorRealm && typeInfo.Realm != genCtorRealm
+                && _registry.ReResolveInRealm(type: typeInfo, realm: genCtorRealm)
+                    is TypeInfo { IsGenericDefinition: true } realmCtorDef)
+            {
+                typeInfo = realmCtorDef;
+            }
             // Resolve the generic type with the provided type arguments
             TypeInfo resolvedType = _registry.GetOrCreateResolution(genericDef: typeInfo,
                 typeArguments: typeArgs
