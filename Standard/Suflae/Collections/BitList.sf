@@ -1,0 +1,9 @@
+module Collections
+
+### Suflae SF-realm Collections bit list — wrapper over RF::Collections.BitList (non-generic).
+### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
+entity BitList
+  secret inner: RF::Collections.BitList
+
+routine BitList() -> BitList
+  return BitList(inner: RF::Collections.BitList())

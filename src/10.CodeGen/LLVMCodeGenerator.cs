@@ -79,6 +79,19 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Removes an embedded realm marker (<c>SF::</c>/<c>RF::</c>) from a MANGLED symbol name (where it
+    /// sits after the attribute prefix, e.g. <c>[member] SF::Collections.BitList.hijack()</c>) — unlike
+    /// <see cref="StripRealmPrefix"/>, which strips a leading realm from a RegistryKey. Mangled names use
+    /// <c>.</c> and <c>[]</c> as separators and <c>::</c> ONLY as the realm marker, so a plain replace is
+    /// exact. Used to make the over-prune tripwire realm-INSENSITIVE, matching the emission gate
+    /// (<see cref="IsRoutineReferenced"/>): a collapsed SF wrapper emits its universal members (hijack,
+    /// destroy, …) under the ambient RF symbol, but the reference bookkeeping in the single-program
+    /// codegen path may record the SF-mangled variant — same emitted symbol, so same emission decision.
+    /// </summary>
+    private static string StripRealmMarker(string mangledName)
+        => mangledName.Replace(oldValue: "SF::", newValue: "").Replace(oldValue: "RF::", newValue: "");
+
+    /// <summary>
     /// Emission gate: is this routine's body referenced by some emitted call? Realm-insensitive —
     /// see <see cref="StripRealmPrefix"/> — so an SF-realm body whose caller referenced the ambient
     /// RF-keyed symbol is still emitted (they are the same mangled symbol).
@@ -1230,8 +1243,16 @@ public partial class LlvmCodeGenerator
         // "undefined symbol" far downstream.
         if (_liveRoutineKeys.Count > 0)
         {
+            // Realm-INSENSITIVE match (mirrors the emission gate): a collapsed SF wrapper emits its
+            // universal members under the ambient RF symbol, but the single-program codegen path can
+            // record the SF-mangled variant as expected. The .ll is realm-consistent (build/link prove
+            // it), so compare realm-stripped — else a benign SF/RF bookkeeping mismatch false-positives.
+            HashSet<string> strippedDefs = _generatedRoutineDefs
+                                          .Select(selector: StripRealmMarker)
+                                          .ToHashSet();
             List<string> overPruned = _expectedBodyNames
-                                     .Where(predicate: name => !_generatedRoutineDefs.Contains(item: name))
+                                     .Where(predicate: name => !_generatedRoutineDefs.Contains(item: name)
+                                          && !strippedDefs.Contains(item: StripRealmMarker(mangledName: name)))
                                      .OrderBy(keySelector: name => name, comparer: StringComparer.Ordinal)
                                      .ToList();
             if (overPruned.Count > 0)

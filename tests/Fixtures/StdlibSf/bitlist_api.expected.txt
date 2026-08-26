@@ -1,0 +1,7 @@
+new size: 0
+is_empty: true
+after add_last(t,f,t), size: 3
+bl[0]: true
+bl[1]: false
+bl[2]: true
+DONE
