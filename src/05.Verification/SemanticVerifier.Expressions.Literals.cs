@@ -101,8 +101,9 @@ public sealed partial class SemanticVerifier
             // Boolean
             TokenType.True or TokenType.False => "Bool",
 
-            // Text and characters
-            TokenType.TextLiteral => "Text",
+            // Text and characters — a raw string `r"..."` (RawText) is a Text too; only the escape
+            // processing differed at tokenize time, the resulting value is a plain Text.
+            TokenType.TextLiteral or TokenType.RawText => "Text",
             TokenType.BytesLiteral => "Bytes",
             TokenType.BytesRawLiteral => "Bytes",
             TokenType.ByteLetterLiteral => "Byte",
@@ -134,6 +135,27 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.UnknownLiteralType,
                 message: $"Unknown literal type '{literal.LiteralType}'.",
+                location: literal.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // Suflae number gate for a literal SUFFIX (`5_s32`, `1j64`). The type-annotation form (`var x: S32`)
+        // is gated in TypeResolver.EnforceSuflaeNumberGate, but a suffixed literal carries no TypeExpression,
+        // so it slips that gate — close the hole here. Fires ONLY on an explicit fixed-width / complex suffix
+        // (typeName is import-gated) in a non-stdlib `.sf` file; unsuffixed literals (UndecidedInteger →
+        // Integer/S64, IntegerLiteral, DecimalLiteral) are never suffixed and stay bare.
+        if (literal.LiteralType is not (TokenType.UndecidedInteger or TokenType.UndecidedDecimal
+                or TokenType.IntegerLiteral or TokenType.DecimalLiteral)
+            && Compiler.Resolution.TypeResolver.IsImportGatedNumeric(name: typeName)
+            && UsesSuflaeNumericDefaults(literal: literal)
+            && !IsStdlibFile(filePath: literal.Location.FileName ?? "")
+            && !(_importedModules.Contains(item: "Numerics")
+                 && !_importedSymbolNames.Contains(item: "Integer")))
+        {
+            ReportError(code: SemanticDiagnosticCode.SuflaeNumericImportRequired,
+                message: $"Fixed-width numeric literal suffix '{typeName}' is import-gated in Suflae — add "
+                         + "`import Numerics`. Bare numbers default to Integer/Decimal (fixed-width types like "
+                         + "S32/U64/F128 stay behind the import to keep the surface approachable).",
                 location: literal.Location);
             return ErrorTypeInfo.Instance;
         }

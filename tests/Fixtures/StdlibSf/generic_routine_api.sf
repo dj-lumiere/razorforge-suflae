@@ -1,4 +1,5 @@
 module Tests/StdlibSf/GenericRoutineApi
+import Numerics
 import IO/Console
 
 # Free generic functions with type constraints.

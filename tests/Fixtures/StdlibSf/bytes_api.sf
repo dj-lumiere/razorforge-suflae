@@ -1,4 +1,5 @@
 module Tests/StdlibSf/BytesApi
+import Numerics
 import IO/Console
 import BuilderQuery
 

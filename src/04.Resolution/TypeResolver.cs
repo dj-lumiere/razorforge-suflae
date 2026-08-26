@@ -228,7 +228,7 @@ internal sealed class TypeResolver
     /// leading class letter (<c>S U F D C Q</c> = signed / unsigned / float / decimal / complex / quaternion)
     /// followed by only digits (the bit width): <c>S8</c>, <c>U1024</c>, <c>F128</c>, <c>D64</c>, <c>C32</c>,
     /// <c>Q64</c>. <c>Integer</c>/<c>Text</c>/<c>Decimal</c>/<c>Bytes</c>/<c>Bool</c> never match.</summary>
-    private static bool IsImportGatedNumeric(string name)
+    internal static bool IsImportGatedNumeric(string name)
     {
         int dot = name.LastIndexOf(value: '.');
         string bare = dot >= 0 ? name[(dot + 1)..] : name;
