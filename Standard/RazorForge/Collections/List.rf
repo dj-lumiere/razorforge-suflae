@@ -389,7 +389,7 @@ routine List[T].represent() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "]"
   return result
@@ -401,7 +401,7 @@ routine List[T].diagnose() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return result

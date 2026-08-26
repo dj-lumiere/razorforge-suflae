@@ -958,6 +958,12 @@ internal static class GenericAstRewriter
                     : null
             },
 
+            // Comptime type test `T is X` (T a generic parameter concrete in this instantiation) folds
+            // to a bool literal — so `if T is X` selects a branch with no runtime IsPatternExpression.
+            IsPatternExpression { Pattern: TypePattern tsp } ipeType
+                when TryEvalTypeParamIs(operand: ipeType.Expression, typePattern: tsp, ctx: ctx) is bool matched =>
+                MakeBoolLiteral(value: matched ^ ipeType.IsNegated, ctx: ctx, loc: ipeType.Location),
+
             IsPatternExpression ipe => ipe with
             {
                 Expression = RewriteExpression(expr: ipe.Expression, ctx: ctx),
@@ -1785,6 +1791,11 @@ internal static class GenericAstRewriter
             WhenStatement { ArmExpansion: not null } armWhen =>
                 RewriteWhenArmExpansion(ws: armWhen, ctx: ctx),
 
+            // Comptime type-switch: `when T … is X => …` where T is this instantiation's concrete type.
+            // Fold to the matching arm (or else / no-op) so codegen never sees `T` in value position.
+            WhenStatement typeSwitch when IsTypeParamSubject(expr: typeSwitch.Expression, ctx: ctx) =>
+                FoldTypeSwitch(ws: typeSwitch, ctx: ctx),
+
             WhenStatement ws => ws with
             {
                 Expression = RewriteExpression(expr: ws.Expression, ctx: ctx),
@@ -2032,6 +2043,71 @@ internal static class GenericAstRewriter
     /// less arms (None / None) are skipped for now — a template with a binding cannot serve them;
     /// handling those is a follow-up (they need a bindingless arm form).
     /// </summary>
+    /// <summary>
+    /// True when <paramref name="expr"/> is a bare generic parameter this instantiation substitutes to
+    /// a concrete type — i.e. a comptime type-switch subject (`when T …`) we can fold here.
+    /// </summary>
+    private static bool IsTypeParamSubject(Expression expr, RewriteContext ctx) =>
+        expr is IdentifierExpression id && ctx.TypeSubs != null && ctx.TypeSubs.ContainsKey(key: id.Name);
+
+    /// <summary>
+    /// Comptime type test: <c>&lt;T&gt; is &lt;Type&gt;</c> where <c>T</c> resolves to a concrete type in
+    /// this instantiation. RF has no inheritance, so this is exact type-identity equality. Returns null
+    /// when it can't be decided here (operand not a substituted type parameter, or target unresolved).
+    /// </summary>
+    private static bool? TryEvalTypeParamIs(Expression operand, TypePattern typePattern, RewriteContext ctx)
+    {
+        if (operand is not IdentifierExpression id || ctx.TypeSubs == null ||
+            !ctx.TypeSubs.TryGetValue(key: id.Name, value: out TypeInfo? concrete))
+        {
+            return null;
+        }
+
+        // ResolveType returns null when the target needs no substitution (a fully concrete pattern
+        // type like `Text`), so fall back to the pattern's own resolved type.
+        TypeInfo? target = typePattern.Type.ResolvedType == null
+            ? null
+            : ctx.ResolveType(original: typePattern.Type.ResolvedType) ?? typePattern.Type.ResolvedType;
+        return target == null
+            ? null
+            : string.Equals(a: concrete.FullName, b: target.FullName, comparisonType: StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Folds a comptime type-switch <c>when T … is X =&gt; …</c> to the SINGLE arm whose type pattern
+    /// matches the concrete substitution for <c>T</c> (or the <c>else</c> arm, or a no-op). Non-matching
+    /// arms — which may use operations valid only for their arm type — are REMOVED, not dead-branched.
+    /// </summary>
+    private static Statement FoldTypeSwitch(WhenStatement ws, RewriteContext ctx)
+    {
+        Statement? elseBody = null;
+        foreach (WhenClause clause in ws.Clauses)
+        {
+            switch (clause.Pattern)
+            {
+                case TypePattern tp when TryEvalTypeParamIs(operand: ws.Expression, typePattern: tp, ctx: ctx) == true:
+                    return RewriteStatement(stmt: clause.Body, ctx: ctx);
+                case ElsePattern or WildcardPattern:
+                    elseBody = clause.Body;
+                    break;
+            }
+        }
+
+        return elseBody != null
+            ? RewriteStatement(stmt: elseBody, ctx: ctx)
+            : new BlockStatement(Statements: [], Location: ws.Location);
+    }
+
+    /// <summary>A folded <c>true</c>/<c>false</c> literal (with a resolved <c>Bool</c> type when available).</summary>
+    private static Expression MakeBoolLiteral(bool value, RewriteContext ctx, SourceLocation loc) =>
+        new LiteralExpression(
+            Value: value,
+            LiteralType: value ? TokenType.True : TokenType.False,
+            Location: loc)
+        {
+            ResolvedType = ctx.Registry?.LookupType(name: "Bool")
+        };
+
     private static Statement RewriteWhenArmExpansion(WhenStatement ws, RewriteContext ctx)
     {
         WhenArmExpansion arm = ws.ArmExpansion!;

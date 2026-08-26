@@ -1,5 +1,5 @@
 Routine[(S32,), S32]
 Routine[(S32,), S32]
 Routine[(S32, S32), Bool]
-SerialValue({f: SerialValue(Routine[(S32,), S32]), n: SerialValue(5)})
+SerialValue({"f": SerialValue(Routine[(S32,), S32]), "n": SerialValue(5)})
 DONE

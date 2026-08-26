@@ -460,7 +460,7 @@ routine Dict[K, V].represent() -> Text
   each entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     first = false
   result = result + "}"
   return steal result
@@ -472,7 +472,7 @@ routine Dict[K, V].diagnose() -> Text
   each entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     first = false
   result = result + "})"
   return steal result

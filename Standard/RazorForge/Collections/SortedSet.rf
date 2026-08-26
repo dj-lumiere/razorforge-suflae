@@ -994,8 +994,6 @@ routine SortedSetEmittable[T].emit!() -> T
 # Comparison
 # ============================================================================
 
-### Returns a compact display form of the set contents in ascending order.
-### :returns: The resulting `Text` value.
 @[readonly, override]
 routine SortedSet[T].represent() -> Text
   var result = me.type_name() + "({"
@@ -1003,7 +1001,7 @@ routine SortedSet[T].represent() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "})"
   return steal result
@@ -1017,7 +1015,7 @@ routine SortedSet[T].diagnose() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "})"
   return steal result

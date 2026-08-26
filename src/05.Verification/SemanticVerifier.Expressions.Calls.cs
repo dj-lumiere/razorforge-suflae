@@ -391,7 +391,13 @@ public sealed partial class SemanticVerifier
                                 argTypes: resolvedArgTypes)
                             ?? _registry.LookupRoutineOverload(baseName: routine.BaseName,
                                 argTypes: resolvedArgTypes);
-                        if (better != null && better != routine)
+                        // Only accept a CONCRETE overload here. A generic definition can leak out of the
+                        // by-argType lookup when an argument is itself a bare generic parameter whose NAME
+                        // collides with the overload's own parameter name (e.g. arg `value: T` at a call
+                        // inside `wrap[T]`, matching `tag[T](value: T)`'s registry key `tag#T`). Taking it
+                        // raw would leave `routine` an un-inferred generic def → RF-S161. Fall through to
+                        // the generic-overload + inference path below instead.
+                        if (better is { IsGenericDefinition: false } && better != routine)
                         {
                             routine = better;
                             call.ResolvedRoutine = routine;

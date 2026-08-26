@@ -355,7 +355,7 @@ public partial class LlvmCodeGenerator
             TokenType.D128Literal => "D128",
             TokenType.AddressLiteral => "Address",
             TokenType.True or TokenType.False => "Bool",
-            TokenType.TextLiteral => "Text",
+            TokenType.TextLiteral or TokenType.RawText => "Text",
             TokenType.CharacterLiteral => "Character",
             TokenType.ByteLetterLiteral => "Byte",
             _ => null

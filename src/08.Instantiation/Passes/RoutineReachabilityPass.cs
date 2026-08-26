@@ -531,6 +531,22 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                             argType: idxType);
                     }
                 }
+
+                // A slice with end-relative bounds `coll[a til ^0]` has a Range index (type Range[U64],
+                // so the BackIndex branch above is skipped), yet OperatorLoweringPass (Phase 9) still
+                // desugars each `^n` endpoint to `backIdx.resolve!(coll.count())`. Seed `count` and
+                // `BackIndex.resolve` for the range's BackIndex bounds, mirroring the scalar branch.
+                if (ixNode.Index is RangeExpression rangeIx &&
+                    (rangeIx.Start is BackIndexExpression || rangeIx.End is BackIndexExpression))
+                {
+                    EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: RuntimeContract.Collection.Count);
+                    TypeInfo? backType = (rangeIx.Start as BackIndexExpression)?.ResolvedType
+                        ?? (rangeIx.End as BackIndexExpression)?.ResolvedType;
+                    if (backType is { Name: "BackIndex" })
+                    {
+                        EnqueueMemberRoutineIfPresent(owner: backType, memberRoutineName: RuntimeContract.Resolve);
+                    }
+                }
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
                 // `expr!!` is lowered by OperatorLoweringPass (Phase 8) to `expr.unwrap()`.

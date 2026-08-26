@@ -390,7 +390,7 @@ routine Set[T].represent() -> Text
   each val in me
     if not first
       result = result + ", "
-    result = result + val.represent()
+    result = result + nested_repr(val)
     first = false
   result = result + "}"
   return steal result
@@ -402,7 +402,7 @@ routine Set[T].diagnose() -> Text
   each val in me
     if not first
       result = result + ", "
-    result = result + val.represent()
+    result = result + nested_repr(val)
     first = false
   result = result + "})"
   return steal result

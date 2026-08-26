@@ -599,8 +599,6 @@ common routine BitList.from_u32(value: U32) -> BitList
     i = i + 1u32
   return steal result
 
-### Returns a compact display form of the logical bit sequence.
-### :returns: The resulting `Text` value.
 @readonly
 routine BitList.represent() -> Text
   var result = me.type_name() + "(["
@@ -608,7 +606,7 @@ routine BitList.represent() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return result
@@ -622,7 +620,7 @@ routine BitList.diagnose() -> Text
   each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return result

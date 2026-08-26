@@ -220,7 +220,7 @@ routine BitArray[N].represent() -> Text
   while i < N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].represent()
+    result = result + nested_repr(me[i])
     i = i +% 1u64
   result = result + "])"
   return result
@@ -232,7 +232,7 @@ routine BitArray[N].diagnose() -> Text
   while i < N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].represent()
+    result = result + nested_repr(me[i])
     i = i +% 1u64
   result = result + "])"
   return result

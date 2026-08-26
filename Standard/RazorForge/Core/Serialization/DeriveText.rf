@@ -21,6 +21,20 @@ routine T.represent() -> Text
   result = result + ")"
   return result
 
+### The form a value takes as a CONTAINER ELEMENT: stringy leaves are quoted (Text/Bytes in `"…"`,
+### Character/Byte in `'…'`) so nested strings print delimited (`["a", "b"]` / `['a', 'b']`), while
+### numbers, nested containers and records stay structural. A single generic free routine — the `when T`
+### type-switch is folded at monomorphization (T is concrete there; RF has no inheritance, so `T is X` is
+### exact type-identity), so each instantiation collapses to just its arm. Containers call `nested_repr`
+### on every element; the top-level `represent()` stays bare.
+routine nested_repr[T](value: T) -> Text
+  when T
+    is Text => return "\"" + value.represent() + "\""
+    is Bytes => return "\"" + value.represent() + "\""
+    is Character => return "'" + value.represent() + "'"
+    is Byte => return "'" + value.represent() + "'"
+    else => return value.represent()
+
 ### Variant `represent()`: TYPE-dispatch on the live arm — `TypeName(payload_repr)`, or `TypeName(none)`
 ### for the absent arm. The `@override needs T is VariantType` gate makes the wired synthesizer pick this
 ### over the record default for a variant type. `expand m in branchof(T)` generates one arm clause each;

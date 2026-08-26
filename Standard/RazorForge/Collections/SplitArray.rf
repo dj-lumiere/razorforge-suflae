@@ -175,7 +175,7 @@ routine SplitArray[T, N].represent() -> Text
   each i in 0u64 til N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].represent()
+    result = result + nested_repr(me[i])
   result = result + "])"
   return result
 
@@ -185,7 +185,7 @@ routine SplitArray[T, N].diagnose() -> Text
   each i in 0u64 til N
     if i > 0u64
       result = result + ", "
-    result = result + me[i].represent()
+    result = result + nested_repr(me[i])
   result = result + "])"
   return result
 

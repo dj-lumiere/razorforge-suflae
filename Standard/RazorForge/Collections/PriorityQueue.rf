@@ -439,7 +439,7 @@ routine PriorityQueue[TPriority, TElement].represent() -> Text
   each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.represent() + ": " + entry.element.represent()
+    result = result + nested_repr(entry.priority) + ": " + nested_repr(entry.element)
     i = i +% 1u64
   result = result + "])"
   return steal result
@@ -451,7 +451,7 @@ routine PriorityQueue[TPriority, TElement].diagnose() -> Text
   each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.represent() + ": " + entry.element.represent()
+    result = result + nested_repr(entry.priority) + ": " + nested_repr(entry.element)
     i = i +% 1u64
   result = result + "])"
   return steal result
