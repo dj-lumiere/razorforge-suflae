@@ -126,6 +126,12 @@ uint64_t rf_current_thread_id(void);
  * thread — else the OS thread id. Only equality matters. See rf_current_task_id in coro_runtime.c. */
 uint64_t rf_current_task_id(void);
 
+/* §4 nested-monitor deadlock detector (opt-in via RF_DEADLOCK_DETECT=1). A contended Roamed
+ * escaped-lock acquire registers its wait (self waits for holder) then walks the wait graph; a
+ * cycle aborts loudly. wait_end clears the wait once acquired. No-ops unless enabled. */
+void rf_deadlock_wait_begin(uint64_t self, uint64_t holder);
+void rf_deadlock_wait_end(uint64_t self);
+
 // Cycle collector (Bacon-Rajan synchronous recycler) — native buffers backing the RF-side collector
 // (Core/Memory/CycleCollector.rf). See internal-wiki/v0.4.x-cycle-collector.md.
 //

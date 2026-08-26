@@ -20,6 +20,7 @@
 
 #include <stdatomic.h> /* atomic sched_state — a worker drains/steals a coroutine off s->lock (step 3) */
 #include <stdlib.h>
+#include <stdio.h> /* fprintf(stderr,…) — the deadlock detector's loud abort message */
 
 #ifdef _WIN32
 #include <windows.h>
@@ -412,6 +413,78 @@ uint64_t rf_current_task_id(void)
         return (uint64_t)(uintptr_t)g_current_coro;
     }
     return rf_current_thread_id();
+}
+
+/* ---- §4 nested-monitor deadlock DETECTOR (opt-in: RF_DEADLOCK_DETECT=1) ---------------------
+ * A Roamed escaped-mode field touch takes RoamController's task-keyed reentrant lock. A statement
+ * touching TWO escaped handles holds both locks at once (the lock entry is compiler-inserted by
+ * RoamedLockBracketLoweringPass, so it is invisible at the call site), and two tasks acquiring the
+ * same pair in opposite order deadlock — the classic nested-monitor problem. This detector keeps a
+ * task→held-by wait graph: on each CONTENDED acquire spin, the waiter registers whom it waits for,
+ * then walks the holder chain; if that chain loops back to the waiter, the wait is a cycle → LOUD
+ * abort with the offending task ids, instead of a silent hang (RF's "fail loudly" over a mystery
+ * freeze). OFF by default — zero cost unless enabled for a debugging run. Bounded fixed table; a
+ * table-full / self-wait case degrades to no detection (never a false positive). Its own lock is a
+ * statically-initialized rwlock used exclusively (no init race). */
+#define RF_DD_MAX 256
+static rf_rwlock g_dd_lock = RF_RWLOCK_INIT;
+static struct { uint64_t task; uint64_t holder; int used; } g_dd_wait[RF_DD_MAX];
+
+static int rf_dd_on(void)
+{
+    /* A benign read race (two threads both read the env once) yields the same value — no guard. */
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* e = getenv("RF_DEADLOCK_DETECT");
+        enabled = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return enabled;
+}
+
+void rf_deadlock_wait_begin(uint64_t self, uint64_t holder)
+{
+    if (!rf_dd_on() || holder == 0 || holder == self) return;
+    rf_rwlock_lock_exclusive(&g_dd_lock);
+    /* upsert self→holder */
+    int slot = -1, empty = -1;
+    for (int i = 0; i < RF_DD_MAX; i++) {
+        if (g_dd_wait[i].used && g_dd_wait[i].task == self) { slot = i; break; }
+        if (!g_dd_wait[i].used && empty < 0) empty = i;
+    }
+    if (slot < 0) slot = empty;
+    if (slot < 0) { rf_rwlock_unlock_exclusive(&g_dd_lock); return; } /* table full: skip */
+    g_dd_wait[slot].task = self;
+    g_dd_wait[slot].holder = holder;
+    g_dd_wait[slot].used = 1;
+    /* Walk the holder chain: is any task in it waiting (transitively) on `self`? */
+    uint64_t cur = holder;
+    for (int steps = 0; steps < RF_DD_MAX; steps++) {
+        int found = -1;
+        for (int i = 0; i < RF_DD_MAX; i++)
+            if (g_dd_wait[i].used && g_dd_wait[i].task == cur) { found = i; break; }
+        if (found < 0) break;                        /* cur is not blocked → no cycle */
+        if (g_dd_wait[found].holder == self) {
+            rf_rwlock_unlock_exclusive(&g_dd_lock);
+            fprintf(stderr,
+                "\n[RazorForge] FATAL: Roamed escaped-lock DEADLOCK — task %llu and task %llu "
+                "acquired the same escaped entities in opposite order (nested-monitor lock-order "
+                "inversion). Acquire shared entities in a consistent order.\n",
+                (unsigned long long)self, (unsigned long long)cur);
+            fflush(stderr);
+            abort();
+        }
+        cur = g_dd_wait[found].holder;
+    }
+    rf_rwlock_unlock_exclusive(&g_dd_lock);
+}
+
+void rf_deadlock_wait_end(uint64_t self)
+{
+    if (!rf_dd_on()) return;
+    rf_rwlock_lock_exclusive(&g_dd_lock);
+    for (int i = 0; i < RF_DD_MAX; i++)
+        if (g_dd_wait[i].used && g_dd_wait[i].task == self) { g_dd_wait[i].used = 0; break; }
+    rf_rwlock_unlock_exclusive(&g_dd_lock);
 }
 
 // ==== Cycle collector — Bacon-Rajan synchronous recycler buffers ============================

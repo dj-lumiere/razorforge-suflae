@@ -88,6 +88,13 @@ routine C::rf_current_thread_id() -> U64
 ### worker migration), else the OS thread. The key for {Roamed}'s reentrant, migration-safe lock.
 ### Safe: takes no pointers. :returns: a per-context id, equal across calls in the same coroutine/thread.
 routine C::rf_current_task_id() -> U64
+### §4 nested-monitor deadlock detector (opt-in via RF_DEADLOCK_DETECT=1). Called on a CONTENDED
+### escaped-lock spin: registers that `self` is blocked waiting for the task `holder`, then walks the
+### wait graph and LOUD-aborts if the wait forms a cycle (opposite-order lock acquisition). No-op
+### unless the env flag is set. Safe: takes no pointers, only task ids.
+routine C::rf_deadlock_wait_begin(self: U64, holder: U64)
+### Clears `self`'s registered wait once the lock is acquired (the §4 detector counterpart).
+routine C::rf_deadlock_wait_end(self: U64)
 ### Cycle collector (Bacon-Rajan) — the SOLE entry point. A {Roamed} strong-decrement that leaves the
 ### count > 0 reports the controller here as a possible cycle root (RF dedups via `buffered` first).
 ### See internal-wiki/v0.4.x-cycle-collector.md.

@@ -378,11 +378,16 @@ dangerous routine RoamController[T].reentrant_acquire()
       me.holder_task.store(desired: tid)
       me.depth = 1_u64
       break
-    # Contended by another task. Yield instead of a bare spin: under M:N the holder may be a coroutine
-    # parked on this very worker (or awaiting reschedule after migration), and a tight spin would pin
-    # the worker and livelock when workers are scarce. `rf_coro_yield` re-queues this coroutine so the
-    # holder can run; off a coroutine (top-level thread) it is a no-op and this stays a busy-spin.
+    # Contended by another task. Register the wait (waiting for the current holder) so the opt-in §4
+    # deadlock detector can spot an opposite-order lock cycle and abort LOUDLY rather than hang; a
+    # no-op unless RF_DEADLOCK_DETECT is set. Then yield instead of a bare spin: under M:N the holder
+    # may be a coroutine parked on this very worker (or awaiting reschedule after migration), and a
+    # tight spin would pin the worker and livelock when workers are scarce. `rf_coro_yield` re-queues
+    # this coroutine so the holder can run; off a coroutine (top-level thread) it is a no-op busy-spin.
+    C::rf_deadlock_wait_begin(self: tid, holder: me.holder_task.load())
     C::rf_coro_yield()
+  # Acquired (fresh or re-entrant): clear any wait we registered while contended.
+  C::rf_deadlock_wait_end(self: tid)
   return
 
 ### Releases one level of the lock. The lock is freed only when the outermost holder releases (depth
