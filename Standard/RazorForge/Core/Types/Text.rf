@@ -193,6 +193,22 @@ routine Text.getitem!(index: U64) -> Character
   danger
     return me.data.stride(count: S64(index)).peek()
 
+### Returns the sub-text spanning an index range — the slice form of indexing (`text[a til b]`).
+### A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range
+### reverses the segment. Positions at or past `count` are skipped, so `text[a til ^0]` (end bound one
+### past the last index) slices cleanly to the end of the string. `Text` is immutable, so the result
+### is a freshly allocated copy — the original is unchanged.
+### :param range: The index range to extract.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.getitem(range: Range[U64]) -> Text
+  var result = List[Character]()
+  danger
+    each i in range
+      if i < me.count
+        result.add_last(me.data.stride(count: S64(i)).peek())
+  return Text(from_list: steal result)
+
 # String operations
 
 ### Returns a new value with `other` appended.

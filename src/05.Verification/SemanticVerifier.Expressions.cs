@@ -45,7 +45,7 @@ public sealed partial class SemanticVerifier
             ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda,
                 expectedType: expectedType),
-            RangeExpression range => AnalyzeRangeExpression(range: range),
+            RangeExpression range => AnalyzeRangeExpression(range: range, expectedType: expectedType),
             CreatorExpression creator => AnalyzeCreatorExpression(creator: creator),
             ListLiteralExpression list => AnalyzeListLiteralExpression(list: list,
                 expectedType: expectedType),

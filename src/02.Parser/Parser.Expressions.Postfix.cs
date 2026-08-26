@@ -52,19 +52,10 @@ public partial class Parser
                         errorMessage: ExpectedRightParenAfterArguments);
                 }
 
-                // Slice syntax (xs[a to b]) remains unsupported for the single-arg no-call
-                // subscript form (an index).
-                if (callArgs is null && !isFailable && bracketArgs.Count == 1 &&
-                    bracketArgs[index: 0] is RangeExpression)
-                {
-                    throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
-                        message: "Slice syntax 'xs[a to b]' is not supported.",
-                        fileName: FileName,
-                        line: CurrentToken.Line,
-                        column: CurrentToken.Column,
-                        language: _language);
-                }
-
+                // Slice syntax `xs[a til b]` IS supported: a single-arg no-call subscript whose index
+                // is a RangeExpression stays an index access and lowers to `xs.getitem(range)` (a
+                // `getitem(range: Range[...])` overload). Overload resolution by index-argument type
+                // separates it from the scalar `getitem(index)`.
                 var bracketNode = new BracketAccessExpression(Object: expr,
                     Args: bracketArgs,
                     CallArgs: callArgs,

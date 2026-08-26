@@ -401,6 +401,20 @@ public sealed partial class SemanticVerifier
             : paramType;
     }
 
+    /// <summary>
+    /// The <c>Range[U64]</c> resolution — the type an index-range slice (<c>s[a til b]</c>) is forced
+    /// to, since collection indices are always <c>U64</c>. Returns null if <c>Range</c>/<c>U64</c> are
+    /// not registered (should not happen with the stdlib loaded).
+    /// </summary>
+    private TypeSymbol? MakeRangeU64Type()
+    {
+        TypeInfo? rangeDef = _registry.LookupType(name: "Range");
+        TypeInfo? u64 = _registry.LookupType(name: "U64");
+        return rangeDef != null && u64 != null
+            ? _registry.GetOrCreateResolution(genericDef: rangeDef, typeArguments: [u64])
+            : null;
+    }
+
     private TypeSymbol AnalyzeIndexExpression(IndexExpression index) // NOSONAR S3776
     {
         // Type-as-value generic instantiation: when the object is a bare type name (no
@@ -437,8 +451,27 @@ public sealed partial class SemanticVerifier
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
+        // A slice `text[a til b]` — a RangeExpression index — binds to the `getitem(range: Range[U64])`
+        // overload (returning the sub-collection), NOT the scalar `getitem(index)`. An index range is
+        // ALWAYS U64, so analyze it with `Range[U64]` expected — bare (`s[0 til 5]`) and explicit
+        // (`s[0u64 til 5u64]`) both become Range[U64] — then bind the slice overload by that arg type.
+        // SA's type then matches what OperatorLoweringPass lowers to; otherwise SA types the slice as
+        // the scalar element and codegen emits a Text, tripping an LLVM type mismatch. Falls through
+        // to the scalar lookup below.
+        RoutineInfo? getItem = null;
+        if (index.Index is RangeExpression)
+        {
+            TypeSymbol? rangeU64 = MakeRangeU64Type();
+            if (rangeU64 != null)
+            {
+                AnalyzeExpression(expression: index.Index, expectedType: rangeU64);
+                getItem = _registry.LookupMemberRoutineOverload(type: lookupType,
+                    memberRoutineName: GetItemMemberRoutineName, argTypes: [rangeU64]);
+            }
+        }
+
         // Look for getitem memberRoutine — LookupMemberRoutine handles generic resolutions
-        RoutineInfo? getItem = _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: GetItemMemberRoutineName);
+        getItem ??= _registry.LookupMemberRoutine(type: lookupType, memberRoutineName: GetItemMemberRoutineName);
         // Try failable variant if non-failable not found
         if (getItem == null)
         {
@@ -954,54 +987,60 @@ public sealed partial class SemanticVerifier
         }
     }
 
-    private TypeSymbol AnalyzeRangeExpression(RangeExpression range)
+    private TypeSymbol AnalyzeRangeExpression(RangeExpression range, TypeSymbol? expectedType = null)
     {
-        TypeSymbol startType = AnalyzeExpression(expression: range.Start);
-        TypeSymbol endType = AnalyzeExpression(expression: range.End);
+        // When the range flows into a `Range[T]` context (e.g. a subscript slice `s[a til b]`, where
+        // the element type is forced to U64), propagate T as the endpoint expected type so untyped
+        // literals (`0 til 5`) retype to it instead of defaulting to S32. The returned Range element
+        // type is the start type, so this also makes the whole range resolve to `Range[T]`.
+        TypeSymbol? endpointExpected =
+            expectedType is { TypeArguments: { Count: 1 } expArgs } && expectedType.BareName == "Range"
+                ? expArgs[index: 0]
+                : null;
+
+        TypeSymbol startType = AnalyzeExpression(expression: range.Start, expectedType: endpointExpected);
+        TypeSymbol endType = AnalyzeExpression(expression: range.End, expectedType: endpointExpected);
 
         if (range.Step != null)
         {
-            AnalyzeExpression(expression: range.Step);
+            AnalyzeExpression(expression: range.Step, expectedType: endpointExpected);
         }
 
-        // #119: BackIndex (^n) cannot be used in Range expressions — only in subscript/slice context
-        if (range.Start is BackIndexExpression)
+        // BackIndex (^n) endpoints are valid ONLY inside a subscript slice (`s[a til ^0]`), where the
+        // element type is forced (U64) — a `^n` there lowers to `count - n` (see OperatorLoweringPass).
+        // `inSubscript` is exactly "an expected Range[T] flowed in", which only the subscript path does.
+        // Outside a subscript a `^n` bound is meaningless (there is no collection to count from).
+        bool inSubscript = endpointExpected != null;
+        bool startIsBack = range.Start is BackIndexExpression;
+        bool endIsBack = range.End is BackIndexExpression;
+        if ((startIsBack || endIsBack) && !inSubscript)
         {
             ReportError(code: SemanticDiagnosticCode.BackIndexOutsideSubscript,
                 message:
-                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
-                location: range.Start.Location);
+                "BackIndex (^n) can only be used in a subscript [^n] or slice [a til b], not a bare range.",
+                location: (startIsBack ? range.Start : range.End).Location);
         }
 
-        if (range.End is BackIndexExpression)
-        {
-            ReportError(code: SemanticDiagnosticCode.BackIndexOutsideSubscript,
-                message:
-                "BackIndex (^n) cannot be used in Range expressions. Use it in subscript [^n] or slice [a to b] context instead.",
-                location: range.End.Location);
-        }
-
-        // Range types must be compatible. Const-generic parameters (e.g., `N`
-        // declared as `needs N is U64`) and numeric-constrained generic parameters
-        // are also acceptable as range bounds since they hold a numeric value at
-        // each monomorphization.
-        bool startNumeric = IsNumericType(type: startType) ||
-                            IsNumericGenericParam(type: startType);
-        bool endNumeric = IsNumericType(type: endType) ||
-                          IsNumericGenericParam(type: endType);
-        if (!startNumeric || !endNumeric)
+        // Range bound types must be numeric — const-generic parameters (e.g. `N is U64`) and numeric-
+        // constrained generic params qualify (they hold a numeric value at each monomorphization). A
+        // BackIndex bound is exempt: it is a `^n` marker that resolves to a numeric `count - n`.
+        bool startOk = startIsBack || IsNumericType(type: startType) || IsNumericGenericParam(type: startType);
+        bool endOk = endIsBack || IsNumericType(type: endType) || IsNumericGenericParam(type: endType);
+        if (!startOk || !endOk)
         {
             ReportError(code: SemanticDiagnosticCode.RangeBoundsNotNumeric,
                 message: "Range bounds must be numeric types.",
                 location: range.Location);
         }
 
-        // Return resolved Range[T] type with concrete element type
+        // Element type: a subscript forces it (U64); otherwise the non-BackIndex start (or end) drives
+        // it. Return the resolved `Range[T]`.
+        TypeSymbol elementType = endpointExpected ?? (startIsBack ? endType : startType);
         TypeInfo? rangeGenericDef = _registry.LookupType(name: "Range");
-        if (rangeGenericDef != null && startType is not ErrorTypeInfo)
+        if (rangeGenericDef != null && elementType is not ErrorTypeInfo)
         {
             return _registry.GetOrCreateResolution(genericDef: rangeGenericDef,
-                typeArguments: new List<TypeInfo> { startType });
+                typeArguments: new List<TypeInfo> { elementType });
         }
 
         return rangeGenericDef ?? ErrorTypeInfo.Instance;

@@ -357,6 +357,26 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
 
+                // End-relative SLICE bounds: `xs[a til ^0]`. By this pass the range index is already a
+                // `Range[U64]` CreatorExpression (ExpressionLoweringPass ran first), so a `^n` bound is
+                // baked in as a raw `BackIndex(offset: n)` — which reinterprets to the i64 `n` (so `^0`
+                // -> 0, flipping `7 til ^0` into a descending `7 til 0`). Rewrite each BackIndex-typed
+                // start/end member to the forward position `count - n` via `BackIndex.resolve!(count)`
+                // (returns `count` for `^0`; throws only when the offset n exceeds count).
+                if (targetType != null && loweredIdx is CreatorExpression { TypeName: "Range" } rangeCtor &&
+                    rangeCtor.MemberVariables.Any(predicate: mv =>
+                        mv.Name is "start" or "end" && mv.Value.ResolvedType is { Name: "BackIndex" }))
+                {
+                    // ONLY the start/end bounds carry a `^n`; the step/inclusive members must be left
+                    // untouched (wrapping a numeric `step` in resolve! would corrupt the stride).
+                    var rewrittenMembers = rangeCtor.MemberVariables.Select(selector: mv =>
+                        mv.Name is "start" or "end" && mv.Value.ResolvedType is { Name: "BackIndex" }
+                            ? (mv.Name, BuildBackIndexResolve(loweredObj: loweredObj, backIndex: mv.Value,
+                                targetType: targetType, location: mv.Value.Location))
+                            : mv).ToList();
+                    loweredIdx = rangeCtor with { MemberVariables = rewrittenMembers };
+                }
+
                 // Back-index desugaring: `coll[^n]` has a BackIndex-typed index. Collections only
                 // expose `getitem!(index: U64)`, so rewrite the index to a forward U64 position
                 // via `backIdx.resolve!(coll.count())` (which throws on out-of-range, matching the
