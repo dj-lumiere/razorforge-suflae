@@ -31,6 +31,18 @@ public partial class LlvmCodeGenerator
             : "void";
         if (earlyType == "void")
         {
+            // A `return <expr>` in a None-returning routine still EVALUATES a side-effecting <expr>
+            // for its effects — only the RESULT is dropped. Skipping this silently swallows a crash:
+            // `routine f!()` with `return a // b` (b == 0) desugars to `-> None` + `return
+            // a.floordiv(b)`, and the failing division must still fire. After lowering, side effects
+            // live in calls (checked arithmetic, failable/floordiv, etc.); a bare `None`/identifier/
+            // literal has no effect to preserve and `None` is not an emittable value, so evaluate
+            // only a call. The SSA result is discarded.
+            if (ret.Value is CallExpression)
+            {
+                EmitExpression(sb: sb, expr: ret.Value);
+            }
+
             EmitNoneExpressionReturn(sb: sb);
             return;
         }
@@ -222,9 +234,27 @@ public partial class LlvmCodeGenerator
                 ? ResolveRecordFieldIndex(record: textRecord, memberVariableName: "count")
                 : 1;
 
+            // crash_message() returns a Text (24 bytes) — ABI-Indirect on every target, so it comes
+            // back through a hidden sret pointer (definition, declaration, and this call must all agree,
+            // see ReturnsViaSret). Calling it with the by-value return ABI binds the receiver as the sret
+            // result pointer and reads `me` from an uninitialized slot, producing a Text with a garbage
+            // count — rf_crash then walks a wild UTF-32 range and the crash REPORT itself garbles or
+            // AccessViolation-crashes. Mirror the sret call form the normal call path uses.
             string textVal = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {textVal} = call {textLlvm} @{mangledCrash}({llvmReceiverType} {errorVal})");
+            if (ReturnsViaSret(routine: resolvedCrash.Routine))
+            {
+                string sretPtr = NextTemp();
+                EmitEntryAlloca(llvmName: sretPtr, llvmType: textLlvm);
+                EmitLine(sb: sb,
+                    line:
+                    $"  call void @{mangledCrash}(ptr sret({textLlvm}) {sretPtr}, {llvmReceiverType} {errorVal})");
+                EmitLine(sb: sb, line: $"  {textVal} = load {textLlvm}, ptr {sretPtr}");
+            }
+            else
+            {
+                EmitLine(sb: sb,
+                    line: $"  {textVal} = call {textLlvm} @{mangledCrash}({llvmReceiverType} {errorVal})");
+            }
             dataPtr = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {dataPtr} = extractvalue {textLlvm} {textVal}, {dataIdx}");

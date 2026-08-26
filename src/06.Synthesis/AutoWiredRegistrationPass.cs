@@ -326,6 +326,15 @@ internal sealed class AutoWiredRegistrationPass
                             name: "crash_title",
                             returnType: textType,
                             existingMemberRoutines: existingMemberRoutines);
+                        // crash_message() has a default too — a crashable that declares no explicit
+                        // crash_message (e.g. `crashable BareErr`) still needs a concrete body, or the
+                        // throw path resolves to the abstract `Crashable.crash_message()` protocol
+                        // requirement and codegen over-prunes it ("declared and called but never
+                        // defined"). Default body is `return me.crash_title()` (synthesized below).
+                        MaybeRegisterWired(owner: type,
+                            name: RuntimeContract.CrashMessage,
+                            returnType: textType,
+                            existingMemberRoutines: existingMemberRoutines);
                     }
 
                     // Synthesize create(field1: T1, ...) -> CrashableType for construction via throw

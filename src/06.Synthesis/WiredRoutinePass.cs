@@ -766,6 +766,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         Location: _synthLoc) { ResolvedType = textType },
                     Location: _synthLoc);
                 break;
+
+            case Resolution.RuntimeContract.CrashMessage:
+                // Default crash_message for a crashable that declared none: fall back to the
+                // always-synthesized title. A user-declared crash_message overrides this (the wired
+                // routine is only registered when absent — see AutoWiredRegistrationPass).
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildCrashableCrashMessageBody(crashable: crashable);
+                break;
         }
     }
 
@@ -2353,6 +2361,24 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         };
         var call = new CallExpression(Callee: new MemberExpression(Object: meRef,
                 MemberName: Resolution.RuntimeContract.CrashMessage,
+                Location: _synthLoc),
+            Arguments: [],
+            Location: _synthLoc);
+        return new ReturnStatement(Value: call, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the DEFAULT crash_message body — <c>return me.crash_title()</c> — used for a crashable
+    /// that declares no explicit crash_message. Overridden by a user-declared one.
+    /// </summary>
+    private static ReturnStatement BuildCrashableCrashMessageBody(CrashableTypeInfo crashable)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = crashable
+        };
+        var call = new CallExpression(Callee: new MemberExpression(Object: meRef,
+                MemberName: "crash_title",
                 Location: _synthLoc),
             Arguments: [],
             Location: _synthLoc);
