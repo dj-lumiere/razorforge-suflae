@@ -1,4 +1,4 @@
-module Tests/Stdlib/SharedAccessApi
+module Tests/Stdlib/GuardedAccessApi
 import IO/Console
 import BuilderQuery
 

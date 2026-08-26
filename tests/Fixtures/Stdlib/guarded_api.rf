@@ -1,4 +1,4 @@
-module Tests/Stdlib/SharedApi
+module Tests/Stdlib/GuardedApi
 import IO/Console
 
 # Atomic Arc/Weak lifecycle: Guarded[T, P] (strong) + Witnessed[T, P] (weak) over one
