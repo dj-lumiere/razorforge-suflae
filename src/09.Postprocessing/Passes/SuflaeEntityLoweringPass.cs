@@ -66,6 +66,51 @@ internal sealed class SuflaeEntityLoweringPass
         }
     }
 
+    /// <summary>
+    /// Post-resolve invariant (the "unification tail" guard): after <see cref="Compiler.Resolution.TypeResolver"/>
+    /// centralized entity→<c>Roamed[E]</c> substitution at every signature slot
+    /// (<see cref="Compiler.Resolution.TypeResolver.RoamSuflaeEntitySlot"/>), NO parameter or return in a
+    /// SUFLAE USER routine may still be a BARE <see cref="EntityTypeInfo"/> — an entity is always the
+    /// <c>Roamed[E]</c> handle. A bare entity here means a resolution site slipped the choke point (the
+    /// class of bug the centralization was meant to eliminate), so fail LOUDLY at build time rather than
+    /// mis-codegen a raw controller access at runtime.
+    /// <para>Carve-outs: the stdlib is borrowed RazorForge source (bare single-owner entities — correct);
+    /// a <c>create</c> constructor legitimately builds and returns the bare entity before any controller
+    /// exists (its <c>me</c>/return stay bare per <see cref="SignatureResolver"/>), so its RETURN is
+    /// exempt — but its PARAMETERS (passed-in entity values) must still be <c>Roamed</c>.</para>
+    /// </summary>
+    private void AssertNoBareEntityInSignature(RoutineDeclaration r)
+    {
+        string? file = r.Location.FileName;
+        if (file == null
+            || !file.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+            || IsStdlibPath(file: file))
+        {
+            return;
+        }
+
+        foreach (Parameter p in r.Parameters)
+            if (p.Type?.ResolvedType is EntityTypeInfo bareParam)
+                throw new InvalidOperationException(
+                    $"SF representation-unification invariant violated: parameter '{p.Name}' of routine "
+                    + $"'{r.Name}' ({file}:{r.Location.Line}) resolved to a BARE entity '{bareParam.Name}' "
+                    + "instead of Roamed[E]. An entity slot slipped TypeResolver.RoamSuflaeEntitySlot.");
+
+        if (r.Name is not "create"
+            && r.ReturnType?.ResolvedType is EntityTypeInfo bareReturn)
+            throw new InvalidOperationException(
+                $"SF representation-unification invariant violated: return type of routine '{r.Name}' "
+                + $"({file}:{r.Location.Line}) resolved to a BARE entity '{bareReturn.Name}' instead of "
+                + "Roamed[E]. An entity slot slipped TypeResolver.RoamSuflaeEntitySlot.");
+    }
+
+    private bool IsStdlibPath(string file)
+    {
+        string? root = _registry.StdlibPath;
+        return root != null
+               && file.StartsWith(value: root, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int i = 0; i < members.Count; i++)
@@ -75,6 +120,7 @@ internal sealed class SuflaeEntityLoweringPass
 
     private RoutineDeclaration LowerRoutine(RoutineDeclaration r)
     {
+        AssertNoBareEntityInSignature(r);
         _roamedLocals.Clear();
         _borrowNames.Clear();
         _borrowNames.Add(item: "me");
