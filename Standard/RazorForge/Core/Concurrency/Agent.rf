@@ -244,6 +244,12 @@ dangerous routine Agent[T].reap()
         if C::rf_sched_dispose_default(coro: me.coro) == 1_u32
           C::rf_coro_abandon(coro: me.coro)
       C::rf_task_destroy(task: me.agent)
+      # The coroutine + task are freed; NULL the handle so a post-consume query on this Agent
+      # (`is_done()` / `is_running()`) reports "done" via the is_none short-circuit instead of reading
+      # the freed rf_coro's status — that read is a use-after-free whose result is platform-dependent
+      # (Windows fibers happen to still read COMPLETED; libco's free() scribbles it → false). `me` is a
+      # by-reference receiver (as for iterator `me.index` mutation), so this reaches the caller's handle.
+      me.coro = cptr_none()
     return
 
   # Threaded: hand the free to the worker↔consumer rendezvous. A completed worker's block is freed here
