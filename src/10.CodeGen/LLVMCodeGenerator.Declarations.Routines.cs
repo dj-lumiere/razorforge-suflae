@@ -1251,7 +1251,7 @@ public partial class LlvmCodeGenerator
     /// cross-thread sharing). This mirrors the by-ref <c>me</c> convention — the parameter doubles
     /// as the field/memberRoutine-access base, no alloca/store copy.
     /// <para>
-    /// Only types that carry their own synchronization (<c>Atomic</c>/<c>Shared</c>/<c>Watched</c>)
+    /// Only types that carry their own synchronization (<c>Atomic</c>/<c>Guarded</c>/<c>Witnessed</c>)
     /// are shared this way. Every OTHER record falls through to the normal by-value parameter path
     /// (an independent copy is materialised in the worker's prologue), so unsynchronized state can
     /// never silently alias across the thread boundary. Plain scalar value types
@@ -1266,13 +1266,13 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// True when a type carries its own cross-thread synchronization — the atomic / shared-ownership
-    /// wrappers <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c>. These may be passed by
+    /// wrappers <c>Atomic[T]</c>, <c>Guarded[T,P]</c>, <c>Witnessed[T,P]</c>. These may be passed by
     /// reference across a thread boundary; everything else is copied. Mirrors the SA-side
     /// <c>IsThreadShareable</c>.
     /// </summary>
     private static bool IsThreadShareableType(TypeInfo? type) =>
         type != null &&
-        GetGenericBaseNameStatic(type: type) is Resolution.RuntimeContract.Atomic or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Watched;
+        GetGenericBaseNameStatic(type: type) is Resolution.RuntimeContract.Atomic or Resolution.RuntimeContract.Guarded or Resolution.RuntimeContract.Witnessed;
 
     /// <summary>
     /// Gets the zero/default value for a type.

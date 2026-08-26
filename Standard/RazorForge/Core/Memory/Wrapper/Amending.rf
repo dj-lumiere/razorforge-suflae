@@ -2,22 +2,22 @@ module Core
 
 import BuilderQuery
 
-### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Shared[T, P]}.
-### `Amending[T]` is the non-Assignable token produced by `Shared.amend()` for exclusive access. It holds
-### the shared {ShareController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
+### Represents temporary thread-safe exclusive (read/write) access to data guarded by a {Guarded[T, P]}.
+### `Amending[T]` is the non-Assignable token produced by `Guarded.amend()` for exclusive access. It holds
+### the shared {GuardController[T, P]} pointer; entering its `using` scope (`enter`) acquires the
 ### exclusive amender hold on the controller's access-discipline lock and exiting (`exit`) releases it,
 ### so the lock spans exactly the `using` block. At most one amender may exist, with no concurrent
 ### {Consulting[T]}; the readers-XOR-writer access discipline enforces this. Must be opened with `using` —
 ### a bare/inline `amend()` would never acquire the lock.
 ### :typeparam T: The entity type being amended.
-### :typeparam P: The access-discipline lock policy of the originating `Shared`.
-### :see: {Consulting[T]}, {Modifying[T]}, {Shared[T, P]}, {Access-Types}
+### :typeparam P: The access-discipline lock policy of the originating `Guarded`.
+### :see: {Consulting[T]}, {Modifying[T]}, {Guarded[T, P]}, {Access-Types}
 @llvm("ptr")
 record Amending[T, P] obeys Controlling[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
-# NOTE: No creators, no manual methods — the token is produced only by `Shared.amend()`, which
+# NOTE: No creators, no manual methods — the token is produced only by `Guarded.amend()`, which
 # constructs it from the controller pointer. Users never create one.
 
 # ============================================================================
@@ -30,7 +30,7 @@ needs T is EntityType, P obeys LockPolicy
 ### :returns: This token as `Amending[T, P]`.
 routine Amending[T, P].enter() -> Amending[T, P]
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     ctrl.add_claimer()
   return me
 
@@ -40,13 +40,13 @@ routine Amending[T, P].enter() -> Amending[T, P]
 ### :returns: `true` if the exclusive hold was acquired, `false` otherwise.
 routine Amending[T, P].try_enter() -> Bool
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.try_add_claimer()
 
 ### Called on exit from the `using` block (and on every escape): releases the amender hold.
 routine Amending[T, P].exit()
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     ctrl.remove_claimer()
   return
 
@@ -60,7 +60,7 @@ routine Amending[T, P].exit()
 @[readonly, inline]
 routine Amending[T, P].access() -> T
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.raw_data().as_entity()
 
 ### Yields the guarded entity as an in-flight `T` reference for read/write access.
@@ -69,7 +69,7 @@ routine Amending[T, P].access() -> T
 @inline
 routine Amending[T, P].control() -> T
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.raw_data().as_entity()
 
 # ============================================================================
@@ -81,7 +81,7 @@ routine Amending[T, P].control() -> T
 @readonly
 routine Amending[T, P].represent() -> Text
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.raw_data().as_entity().represent()
 
 ### Returns the diagnostic form of the amended entity.
@@ -89,7 +89,7 @@ routine Amending[T, P].represent() -> Text
 @readonly
 routine Amending[T, P].diagnose() -> Text
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return me.type_name() + "(" + ctrl.raw_data().as_entity().diagnose() + ")"
 
 ### No-op: the token owns no heap (it only aliases the controller), and the amender hold is

@@ -3,7 +3,7 @@ using TypeModel.Symbols;
 namespace Verification;
 
 /// <summary>
-/// Shared call-classification logic used by both the semantic verifier (during SA) and
+/// Guarded call-classification logic used by both the semantic verifier (during SA) and
 /// <see cref="Compiler.Postprocessing.Passes.CallOverloadResolutionPass"/> (post-instantiation).
 /// Centralised here so the two phases always agree on which <see cref="CallLoweringKind"/>
 /// a resolved routine maps to.

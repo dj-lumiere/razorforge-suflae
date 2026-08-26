@@ -94,7 +94,7 @@ internal sealed class ProtocolConformanceAnalyzer
         // SPLIT (2026-08-23) — structural vs semantic:
         // * Assignable/Copyable are STRUCTURAL (memory/value semantics): a record is assignable by default,
         //   EXCLUDING the 9 non-assignable wrapper/token types (Viewing/Modifying/Amending/Consulting/
-        //   Retained/Roamed/Shared/Tracked/Watched) and any record transitively containing one. Entities are
+        //   Retained/Roamed/Guarded/Tracked/Witnessed) and any record transitively containing one. Entities are
         //   NEVER assignable (identity). This is auto-conferred (no `obeys` needed) by the two passes below.
         // * Equatable/Comparable/Hashable are SEMANTIC (opt-in): equality/ordering is an assertion, so they
         //   are NOT auto-conferred — the generic `ApplyEverywhereConformance` is deliberately NOT run, so a
@@ -279,7 +279,7 @@ internal sealed class ProtocolConformanceAnalyzer
         }
     }
 
-    // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) deliberately do NOT obey `Assignable` — an RC
+    // RC wrappers (Retained/Tracked/Guarded/Witnessed/Roamed) deliberately do NOT obey `Assignable` — an RC
     // handle is not implicitly copyable (that would silently mint a co-owner). Duplication is the explicit
     // `.share()` member routine, and a bare `var b = rc` is rejected (RF-S420). A record that HOLDS an RC
     // field is likewise NON-Assignable (its MemberVariableAssignable fails on the RC field) — copying it would silently

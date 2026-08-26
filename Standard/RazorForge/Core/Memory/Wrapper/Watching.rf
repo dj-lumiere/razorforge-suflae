@@ -8,7 +8,7 @@ module Core
 ### concept. Holds only the controller address (the weak edge); `0` = the absent observation.
 ### :typeparam T: The observed entity type.
 ###
-### NOTE (experiment): balanced copy semantics (observe-on-copy, like `Watched[T, P].share`) are a
+### NOTE (experiment): balanced copy semantics (observe-on-copy, like `Witnessed[T, P].share`) are a
 ### follow-up. `Watching` currently carries only a scalar address (no hand-written `store`), so a
 ### return is a bitwise MOVE — mint (`watch`) observes once, the single live handle's `destroy`
 ### unobserves once. Do not COPY a `Watching` yet (a bitwise copy would unbalance the weak count).

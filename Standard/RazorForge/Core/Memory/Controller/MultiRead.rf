@@ -4,7 +4,7 @@ module Core
 ### writer (`Amending[T]`). A spinlock read-write lock: readers bump an atomic count after checking
 ### no writer is active (rechecking to close the race); a writer claims a flag then waits for the
 ### reader count to drain. Spin-based, like {Exclusive}.
-### :see: {LockPolicy}, {Exclusive}, {Shared}, {Atomic}
+### :see: {LockPolicy}, {Exclusive}, {Guarded}, {Atomic}
 record MultiRead obeys LockPolicy
   ### Number of active readers.
   secret readers: Atomic[S32]

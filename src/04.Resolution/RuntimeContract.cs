@@ -60,7 +60,7 @@ public static class RuntimeContract
         /// <summary><c>RetainController[T].raw_data()</c> — read the controlled payload.</summary>
         public const string RawData = "raw_data";
         /// <summary>The UNIFIED RC copy verb: a same-strength co-owner mint on any RC wrapper handle
-        /// (Retained/Tracked/Shared/Watched/Roamed) — strong→strong, weak→weak, biased→biased. This is the
+        /// (Retained/Tracked/Guarded/Witnessed/Roamed) — strong→strong, weak→weak, biased→biased. This is the
         /// user-facing `.share()` and the verb codegen/lowering inserts implicitly for RC copy sites.</summary>
         public const string Share = "share";
     }
@@ -214,9 +214,9 @@ public static class RuntimeContract
     /// <summary>Weak-reference single-threaded handle.</summary>
     public const string Tracked = "Tracked";
     /// <summary>Reference-counted multi-threaded handle.</summary>
-    public const string Shared = "Shared";
+    public const string Guarded = "Guarded";
     /// <summary>Weak-reference multi-threaded handle.</summary>
-    public const string Watched = "Watched";
+    public const string Witnessed = "Witnessed";
     /// <summary>Unmanaged raw-pointer handle.</summary>
     public const string Hijacked = "Hijacked";
     /// <summary>Biased-reference-counted, auto-promoting handle (Suflae `entity` backing). Registered
@@ -240,13 +240,13 @@ public static class RuntimeContract
     /// and LLVMCodeGenerator.WrapperTypeNames.</summary>
     public static readonly IReadOnlySet<string> WrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Viewing, Modifying, Consulting, Amending, Shared, Watched, Retained, Tracked, Hijacked, Roamed };
+            { Viewing, Modifying, Consulting, Amending, Guarded, Witnessed, Retained, Tracked, Hijacked, Roamed };
 
     /// <summary>Wrapper types that transparently forward inner-type memberRoutines — every wrapper EXCEPT
     /// <see cref="Hijacked"/> (the raw-pointer escape hatch). Mirrors WrapperForwardingPass.ForwardingWrapperTypes.</summary>
     public static readonly IReadOnlySet<string> ForwardingWrapperTypes =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Viewing, Modifying, Consulting, Amending, Shared, Watched, Retained, Tracked, Roamed };
+            { Viewing, Modifying, Consulting, Amending, Guarded, Witnessed, Retained, Tracked, Roamed };
 
     /// <summary>Read-only borrow tokens (only <c>@readonly</c> memberRoutines reachable). Mirrors
     /// WrapperForwardingPass.ReadOnlyWrapperTypes.</summary>
@@ -263,7 +263,7 @@ public static class RuntimeContract
     /// TemporaryTeardownPass.RcWrapperBaseNames.</summary>
     public static readonly IReadOnlySet<string> RcWrapperBaseNames =
         new HashSet<string>(comparer: StringComparer.Ordinal)
-            { Retained, Tracked, Shared, Watched, Roamed };
+            { Retained, Tracked, Guarded, Witnessed, Roamed };
 
     // =====================================================================================
     // BuilderQuery intrinsic names — reflection-style routines folded at compile time

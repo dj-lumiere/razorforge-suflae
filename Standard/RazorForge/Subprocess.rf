@@ -32,7 +32,7 @@ routine term_signal_value!(raw: S32) -> S32
   return raw
 
 ### Assembles a `ProcessResult` from the just-run child's exit code plus the runtime's captured-stream
-### and signal accessors. Shared by both `run_process` forms.
+### and signal accessors. Guarded by both `run_process` forms.
 ### :param code: The child's exit code, as returned by the native run.
 ### :returns: The assembled `ProcessResult`.
 routine proc_result_of(code: S64) -> ProcessResult

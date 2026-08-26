@@ -10,7 +10,7 @@ using static TestHelpers;
 /// and — under M:N — a `suspended routine` yields a coroutine that may migrate to any worker in
 /// parallel with its siblings, so BOTH boundaries enforce the same crossing rule: an argument is
 /// safe when it is `steal`-moved (exclusive transfer), trivially-copyable value data (passed BY
-/// VALUE), or a thread-shareable wrapper (Atomic/Shared/Watched/Consulting/Amending — carries its
+/// VALUE), or a thread-shareable wrapper (Atomic/Guarded/Witnessed/Consulting/Amending — carries its
 /// own synchronization). Anything else passed by copy — a bare entity, or a record/tuple that
 /// transitively owns a single-threaded RC wrapper (Retained/Tracked) or single-threaded token
 /// (Viewing/Modifying) — would silently alias unsynchronized state across parallel coroutines and
@@ -86,13 +86,13 @@ public class ThreadArgShareabilityTests
     [Fact]
     public void Analyze_SharedThreadArg_Ok()
     {
-        // Shared is an atomic Arc — explicitly shareable across threads.
+        // Guarded is an atomic Arc — explicitly shareable across threads.
         string source = Prelude + """
-                                  threaded routine work(s: Shared[Node, ReadOnly]) -> S64
+                                  threaded routine work(s: Guarded[Node, ReadOnly]) -> S64
                                     return 0_s64
 
                                   routine start()
-                                    var s = Shared[Node, ReadOnly](from: Node(value: 1))
+                                    var s = Guarded[Node, ReadOnly](from: Node(value: 1))
                                     var t = work(s: s.share())
                                     discard t.retrieve!()
                                     return
@@ -126,7 +126,7 @@ public class ThreadArgShareabilityTests
     public void Analyze_RecordOwningRetainedThreadArg_Errors()
     {
         // A record that transitively owns a single-threaded RC wrapper (Retained) would alias its
-        // interior across threads — must use Shared instead.
+        // interior across threads — must use Guarded instead.
         string source = Prelude + """
                                   record Holder
                                     posted node: Retained[Node]
@@ -216,7 +216,7 @@ public class ThreadArgShareabilityTests
         // A `Retained` is a reference-counted handle — SHARED ownership, not unique. `steal` (an
         // exclusive-transfer marker) is a category error on it: moving one handle proves nothing
         // about sibling handles racing the non-atomic count. So `steal r` is rejected at the steal
-        // itself (RF-S617), independent of the async boundary — the honest fix is `Shared`/`Watched`.
+        // itself (RF-S617), independent of the async boundary — the honest fix is `Guarded`/`Witnessed`.
         string source = Prelude + """
                                   suspended routine work(r: Retained[Node]) -> S64
                                     return r.value
@@ -240,7 +240,7 @@ public class ThreadArgShareabilityTests
         // `steal` on a plain record IS allowed (no-op), but stealing a record that transitively owns
         // a Retained does NOT make it safe to cross: moving the record doesn't make its interior
         // non-atomic refcount exclusive. The boundary credits `steal` ONLY for a bare entity, so this
-        // is still rejected (RF-S632) — must use `Shared`/`Watched`.
+        // is still rejected (RF-S632) — must use `Guarded`/`Witnessed`.
         string source = Prelude + """
                                   record Holder
                                     posted node: Retained[Node]

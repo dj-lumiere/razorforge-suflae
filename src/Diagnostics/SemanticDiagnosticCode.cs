@@ -696,7 +696,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Hijacked[T] memberRoutine calls require danger block.</summary>
     HijackedRequiresDanger = 627,
 
-    /// <summary>.hijack() on Shared/Watched requires danger block.</summary>
+    /// <summary>.hijack() on Guarded/Witnessed requires danger block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>A multi-threaded access token (Consulting/Amending from consult()/amend()) must be
@@ -704,11 +704,11 @@ public enum SemanticDiagnosticCode
     MtTokenRequiresUsing = 629,
 
     /// <summary>Readers-XOR-writer violation: an `amend()` (writer) coexists with another `amend()`
-    /// or an `consult()` (reader) on the same Shared handle in an overlapping `using` scope.</summary>
+    /// or an `consult()` (reader) on the same Guarded handle in an overlapping `using` scope.</summary>
     ReadersXorWriter = 630,
 
     /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
-    /// thread-shareable wrapper (Atomic/Shared/Watched); passing it would silently alias
+    /// thread-shareable wrapper (Atomic/Guarded/Witnessed); passing it would silently alias
     /// unsynchronized state across the thread boundary.</summary>
     ThreadArgNotShareable = 632,
 
@@ -958,7 +958,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Unknown <c>expand</c> source — not allmemvarof/openmemvarof/caseof/branchof.</summary>
     UnknownExpandSource = 953,
 
-    /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
+    /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Guarded[T], or use Owned[T?] for unique ownership.</summary>
     BareEntityInCarrierType = 953,
 
     /// <summary>Residual high-level AST node survived backend-entry lowering validation.</summary>

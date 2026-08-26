@@ -2,7 +2,7 @@ module Core
 
 import BuilderQuery
 
-### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Shared[T, P]}.
+### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Guarded[T, P]}.
 ### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
 ### like {Retained[T]} (non-atomic, unlocked, fast) while it stays on one thread, and — the moment it
 ### escapes across a concurrency boundary — promotes itself to atomic reference counting plus a

@@ -181,7 +181,7 @@ public sealed partial class SemanticVerifier
     private readonly List<(string Handle, int Identity, bool IsWriter, SourceLocation Location)>
         _activeAccessHolds = [];
 
-    /// <summary>Maps a Shared/Watched handle path (`s`, `s.a`) to the identity of the controller
+    /// <summary>Maps a Guarded/Witnessed handle path (`s`, `s.a`) to the identity of the controller
     /// (the atomic Arc cell) it refers to. A fresh `T.share[P]()` mints a new identity;
     /// `.share()`/`.watch()` clones and plain copies INHERIT the source handle's identity, so all
     /// handles to one controller share an identity. Lets the readers-XOR-writer check key on the

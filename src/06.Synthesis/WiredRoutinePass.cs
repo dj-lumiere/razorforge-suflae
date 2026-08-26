@@ -95,7 +95,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // Skip if an explicit (non-synthesized) implementation already exists in the registry.
             // This prevents synthesized bodies from overriding custom stdlib implementations
-            // such as Watched[T,P].represent / diagnose defined in Watched.rf.
+            // such as Witnessed[T,P].represent / diagnose defined in Witnessed.rf.
             if (routine.OwnerType != null && ctx.Registry
                                                 .GetMemberRoutinesForType(type: routine.OwnerType)
                                                 .Any(r => r.Name == routine.Name &&
@@ -2911,7 +2911,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Resolves <c>List[<paramref name="elementTypeName"/>]</c> for an entity element type, returning
-    /// <c>null</c> if either def is unavailable. Shared by the entity-list metadata routines. A list of
+    /// <c>null</c> if either def is unavailable. Guarded by the entity-list metadata routines. A list of
     /// entities is typed <c>List[E]</c> directly (no <c>Owned</c> wrapper appears in the surface type —
     /// see the desugared form of a source <c>List[FieldInfo]</c> literal).
     /// </summary>

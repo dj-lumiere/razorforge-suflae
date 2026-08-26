@@ -1,8 +1,8 @@
 module Tests/Stdlib/SharedApi
 import IO/Console
 
-# Atomic Arc/Weak lifecycle: Shared[T, P] (strong) + Watched[T, P] (weak) over one
-# ShareController[T, P]. The access discipline P is explicit at creation (`share[ReadOnly]()`).
+# Atomic Arc/Weak lifecycle: Guarded[T, P] (strong) + Witnessed[T, P] (weak) over one
+# GuardController[T, P]. The access discipline P is explicit at creation (`share[ReadOnly]()`).
 # Cloning is the explicit verb `.share()` / `.watch()` (these wrappers are not implicitly
 # copyable); dropping is automatic at scope exit. The entity is destroyed when the last strong
 # handle drops; the controller outlives it until the last weak handle drops too.
@@ -15,7 +15,7 @@ dangerous routine Node.destroy()
   return
 
 routine start()
-  var a = Shared[Node, ReadOnly](from: Node(id: 7))
+  var a = Guarded[Node, ReadOnly](from: Node(id: 7))
   show(f"strong: {a.strong_count()}")
 
   var b = a.share()
@@ -26,6 +26,6 @@ routine start()
   show(f"alive: {w.is_alive()}")
 
   # Exclusive discipline carries a real lock in the controller (an atomic flag).
-  var ex = Shared[Node, Exclusive](from: Node(id: 9))
+  var ex = Guarded[Node, Exclusive](from: Node(id: 9))
   show(f"ex strong: {ex.strong_count()}")
   return

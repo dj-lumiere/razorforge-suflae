@@ -235,7 +235,7 @@ public sealed partial class SemanticVerifier
                 return memberVariable.Type;
             }
         }
-        // Wrapper type forwarding: Viewing<T>, Modifying<T>, Shared<T>, etc.
+        // Wrapper type forwarding: Viewing<T>, Modifying<T>, Guarded<T>, etc.
         else if (IsWrapperType(type: lookupType))
         {
             // Try to forward member variable access to the inner type
@@ -770,7 +770,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.LambdaCaptureToken,
                 message: $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
                          $"scope-bound tokens cannot escape their scope. " +
-                         $"Use a handle type (Shared[T] or Watched[T]) instead.",
+                         $"Use a handle type (Guarded[T] or Witnessed[T]) instead.",
                 location: location);
             return;
         }
@@ -782,7 +782,7 @@ public sealed partial class SemanticVerifier
                 message:
                 $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
                 $"raw entities cannot be captured. " +
-                $"Wrap in a handle type (Shared[T] or Watched[T]) before capturing.",
+                $"Wrap in a handle type (Guarded[T] or Witnessed[T]) before capturing.",
                 location: location);
         }
     }
@@ -1067,8 +1067,8 @@ public sealed partial class SemanticVerifier
                 typeArgs.Add(item: ResolveType(typeExpr: typeArg));
             }
 
-            // Arity guard: a wrong count of explicit type args (e.g. `Shared[ReadOnly](from: n)` — one arg
-            // for a two-param `Shared[T, P]`) must be a clean diagnostic. Without the early return,
+            // Arity guard: a wrong count of explicit type args (e.g. `Guarded[ReadOnly](from: n)` — one arg
+            // for a two-param `Guarded[T, P]`) must be a clean diagnostic. Without the early return,
             // GetOrCreateResolution → RecordTypeInfo.CreateInstance zips params↔args and crashes.
             if (type.GenericParameters is { } creatorParams && creatorParams.Count != typeArgs.Count)
             {

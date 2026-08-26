@@ -269,7 +269,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Tracks a variable whose type IS an RC wrapper (Retained[T], Shared[T], …): registers it for
+    /// Tracks a variable whose type IS an RC wrapper (Retained[T], Guarded[T], …): registers it for
     /// release, zero-inits the alloca, and drops the moved-from entity from cleanup on a retain/roam.
     /// </summary>
     private void TrackRcWrapperVariable(VariableDeclaration varDecl, RecordTypeInfo rcWrapRecord,

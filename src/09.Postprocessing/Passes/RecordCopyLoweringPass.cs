@@ -85,7 +85,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         return od >= 0 ? owner[(od + 1)..] : owner;
     }
 
-    // True when the routine is a memberRoutine of an RC wrapper (Retained/Tracked/Shared/Watched/Roamed). Inside ANY
+    // True when the routine is a memberRoutine of an RC wrapper (Retained/Tracked/Guarded/Witnessed/Roamed). Inside ANY
     // such memberRoutine `me` is the primitive handle — retain-copying it makes the memberRoutine call the wrapper's copy verb
     // (`roam`), and the copy verb itself calls other wrapper memberRoutines (controller_address, …) which would ALSO
     // get `me.roam()` injected → mutual recursion (StackOverflow). So suppress all injection in EVERY RC-wrapper
@@ -106,7 +106,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     private static bool OwnerTypeIsRcWrapper(TypeInfo? owner) =>
         owner is not null && TypeRegistry.GetRcWrapperBaseName(type: owner) is not null;
 
-    // True when the type is an RC wrapper record (Retained/Tracked/Shared/Watched/Roamed). A field of such a
+    // True when the type is an RC wrapper record (Retained/Tracked/Guarded/Witnessed/Roamed). A field of such a
     // type has its release-old/retain-new RC owned by codegen (isRoamedField), so the copy pass must NOT also
     // retain a field-write RHS of this type (double-count). Delegates to the registry's canonical
     // structural check (matches on GenericDefinition/WrapperTypeInfo) — no ad-hoc name parsing here.

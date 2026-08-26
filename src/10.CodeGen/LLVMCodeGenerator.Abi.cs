@@ -177,7 +177,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// The GP-integer-register form of a by-value struct: ≤ 8 bytes → one <c>iN</c> chunk; 9–16 bytes →
-    /// an inline <c>{ i64, iM }</c> pair; &gt; 16 bytes → <see cref="AbiKind.Indirect"/>. Shared by the
+    /// an inline <c>{ i64, iM }</c> pair; &gt; 16 bytes → <see cref="AbiKind.Indirect"/>. Guarded by the
     /// all-integer SysV path and every non-HFA AAPCS64 composite.
     /// </summary>
     private static AbiPassing IntegerChunks(int size)

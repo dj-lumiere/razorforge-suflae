@@ -10,7 +10,7 @@ routine Counter.bump(inc: S64)
   return
 
 routine start()
-  var s = Shared[Counter, MultiRead](from: Counter(value: 10))
+  var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
 
   # shared (multi-reader) access
   using s.consult() as v

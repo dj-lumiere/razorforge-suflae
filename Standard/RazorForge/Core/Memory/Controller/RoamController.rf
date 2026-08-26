@@ -26,7 +26,7 @@ routine T.roam_free_ref() -> CPtr
   return cptr_none()
 
 ### Biased reference-counting controller for {Roamed[T]} — the hybrid of {RetainController[T]}
-### (non-atomic, single-thread) and {ShareController[T, P]} (atomic + lock). Starts in LOCAL mode:
+### (non-atomic, single-thread) and {GuardController[T, P]} (atomic + lock). Starts in LOCAL mode:
 ### one non-atomic `count`, no lock, owner only. On the first escape across a concurrency boundary
 ### `promote()` flips it — irreversibly — to ESCAPED mode: `count` becomes atomic and a reentrant,
 ### TASK-keyed exclusive lock is armed. The mode flag lives here, at the one address every {Roamed}

@@ -882,7 +882,7 @@ public sealed partial class TypeRegistry
             return null;
         }
 
-        // WrapperTypeInfo (Viewing/Modifying/Consulting/Amending/Shared/Watched)
+        // WrapperTypeInfo (Viewing/Modifying/Consulting/Amending/Guarded/Witnessed)
         // is the parallel representation to the substituted RecordTypeInfo of the same wrapper.
         // The RecordTypeInfo path finds memberRoutines via its substituted `Controlling[InnerT]` /
         // `Accessing[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
@@ -897,7 +897,7 @@ public sealed partial class TypeRegistry
         // fields. The forwarder-synthesis path emits the correct double-indirection body
         // (Hijacked[RetainController[T]](me).as_entity().raw_data().as_entity().MemberRoutine(...)).
         if (type is WrapperTypeInfo { Name: RuntimeContract.Viewing
-                or RuntimeContract.Modifying or RuntimeContract.Consulting or RuntimeContract.Amending or RuntimeContract.Shared or RuntimeContract.Watched
+                or RuntimeContract.Modifying or RuntimeContract.Consulting or RuntimeContract.Amending or RuntimeContract.Guarded or RuntimeContract.Witnessed
             } forwardingWrapper)
         {
             return LookupMemberRoutine(type: forwardingWrapper.InnerType,
@@ -1170,7 +1170,7 @@ public sealed partial class TypeRegistry
                 memberRoutineOnlyGenericParams = null;
 
             // Keep constraints on the memberRoutine's own generic params, PLUS `in [...]` (TypeEquality)
-            // constraints on the OWNER's params (e.g. `Shared[T, P].amend() needs P in [...]`). The
+            // constraints on the OWNER's params (e.g. `Guarded[T, P].amend() needs P in [...]`). The
             // owner param is already substituted on the resolved instance, but the constraint is not
             // validated here — it is preserved so the call-site verifier can check it against the
             // receiver's bound argument (otherwise a memberRoutine constraint on an inherited param vanishes
@@ -1358,7 +1358,7 @@ public sealed partial class TypeRegistry
             memberRoutineOnlyGenericParams2 = null;
 
         // Keep memberRoutine-level constraints PLUS owner-param `in [...]` (TypeEquality) constraints, so a
-        // memberRoutine constraint on an inherited param (e.g. `Shared[T, P].amend() needs P in [...]`)
+        // memberRoutine constraint on an inherited param (e.g. `Guarded[T, P].amend() needs P in [...]`)
         // survives to be validated at the call site against the receiver's bound argument.
         List<GenericConstraintDeclaration>? memberRoutineOnlyConstraints2 = memberRoutine
             .GenericConstraints?
@@ -1734,7 +1734,7 @@ public sealed partial class TypeRegistry
         type is GenericParameterTypeInfo or ProtocolTypeInfo;
 
     /// <summary>
-    /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Shared/Watched/Roamed) — matched
+    /// If <paramref name="type"/> is an RC wrapper (Retained/Tracked/Guarded/Witnessed/Roamed) — matched
     /// by its generic base name — returns that base name, else null. Used to redirect the abstract
     /// <c>store</c> hook to the wrapper's concrete refcount copy verb (see
     /// <c>RuntimeContract.RcCopyVerb</c>).
@@ -1814,7 +1814,7 @@ public sealed partial class TypeRegistry
         // field-walk copy — but a variant is a { tag, payload } union whose deep copy needs tag
         // dispatch (BuildVariantCopyBody). Using the record copy on a variant double-frees / corrupts
         // its heap arm (the nested_serialize regression).
-        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) define no literal `store` memberRoutine — their
+        // RC wrappers (Retained/Tracked/Guarded/Witnessed/Roamed) define no literal `store` memberRoutine — their
         // retaining copy IS the refcount verb (retain/track/share/watch/roam). LookupMemberRoutine redirects
         // `store`→that verb, but GetOwnMemberRoutinesResolved (below) never surfaces a `store` for them, so the
         // record branch's name=="assign" filter would miss it → Store=null → no retain injected. A container
@@ -1969,7 +1969,7 @@ public sealed partial class TypeRegistry
                 return tuple.ElementTypes.All(predicate: e => IsTriviallyDestructible(type: e, visited: visited));
         }
 
-        // RC wrappers (Retained/Tracked/Shared/Watched/Roamed) release a refcounted controller.
+        // RC wrappers (Retained/Tracked/Guarded/Witnessed/Roamed) release a refcounted controller.
         if (GetRcWrapperBaseName(type: type) is not null)
             return false;
 

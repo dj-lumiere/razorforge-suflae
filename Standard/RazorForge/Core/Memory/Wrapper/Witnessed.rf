@@ -2,13 +2,13 @@ module Core
 
 import BuilderQuery
 
-### Multi-threaded weak reference. Thin pointer to the same {ShareController[T, P]} as {Shared[T, P]}.
+### Multi-threaded weak reference. Thin pointer to the same {GuardController[T, P]} as {Guarded[T, P]}.
 ### The atomic-refcount twin of {Tracked[T]} — equivalent to `Weak[T]` in Rust. Does not keep the
-### entity alive. Use {recover()} to attempt an upgrade to a strong {Shared[T, P]}.
+### entity alive. Use {recover()} to attempt an upgrade to a strong {Guarded[T, P]}.
 ### :typeparam T: The exclusively owned entity type.
-### :typeparam P: The access-discipline lock policy (carried so the upgraded `Shared` keeps it).
+### :typeparam P: The access-discipline lock policy (carried so the upgraded `Guarded` keeps it).
 @llvm("ptr")
-record Watched[T, P]
+record Witnessed[T, P]
 needs T is EntityType, P obeys LockPolicy
   pass
 
@@ -18,9 +18,9 @@ needs T is EntityType, P obeys LockPolicy
 
 ### Returns a new weak reference to the same controller, atomically incrementing the weak count.
 ### :returns: A new weak handle to the same entity's controller.
-routine Watched[T, P].share() -> Watched[T, P]
+routine Witnessed[T, P].share() -> Witnessed[T, P]
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     ctrl.observe()
   return me
 
@@ -28,13 +28,13 @@ routine Watched[T, P].share() -> Watched[T, P]
 ### Attempts to upgrade to a strong reference.
 ### :returns: A new strong handle to the entity if it is still alive.
 ### :absent: Returns absent when the entity has already been destroyed.
-routine Watched[T, P].hold!() -> Shared[T, P]
+routine Witnessed[T, P].hold!() -> Guarded[T, P]
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     if ctrl.strong_count() == 0_u64
       absent
     ctrl.hold()
-    return LLVM::reinterpret_bits[Watched[T, P], Shared[T, P]](me)
+    return LLVM::reinterpret_bits[Witnessed[T, P], Guarded[T, P]](me)
 
 # ============================================================================
 # Inspection
@@ -42,23 +42,23 @@ routine Watched[T, P].hold!() -> Shared[T, P]
 
 ### Returns true if the entity is still alive (strong count > 0).
 ### :returns: `true` if at least one strong handle still exists.
-routine Watched[T, P].is_alive() -> Bool
+routine Witnessed[T, P].is_alive() -> Bool
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     return ctrl.strong_count() > 0_u64
 
 ### Returns the current strong reference count.
 ### :returns: The number of live strong handles to the entity this tracker points at.
-routine Watched[T, P].strong_count() -> U64
+routine Witnessed[T, P].strong_count() -> U64
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     return ctrl.strong_count()
 
 ### Returns the current weak reference count.
 ### :returns: The number of live weak handles sharing this controller.
-routine Watched[T, P].weak_count() -> U64
+routine Witnessed[T, P].weak_count() -> U64
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     return ctrl.weak_count()
 
 # ============================================================================
@@ -68,22 +68,22 @@ routine Watched[T, P].weak_count() -> U64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Watched[T, P].represent() -> Text
+routine Witnessed[T, P].represent() -> Text
   return me.type_name()
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Watched[T, P].diagnose() -> Text
+routine Witnessed[T, P].diagnose() -> Text
   danger
-    var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+    var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", alive: " + (rc > 0_u64).represent() + ")"
 
 ### Decrements the weak count, tearing down the controller when both counts reach zero. This IS the
 ### decrement — no separate `release` verb; `destroy` is the teardown.
-dangerous routine Watched[T, P].destroy()
-  var ctrl = hijacked_from[ShareController[T, P]](me.get_address()).as_entity()
+dangerous routine Witnessed[T, P].destroy()
+  var ctrl = hijacked_from[GuardController[T, P]](me.get_address()).as_entity()
   ctrl.unobserve()
   return

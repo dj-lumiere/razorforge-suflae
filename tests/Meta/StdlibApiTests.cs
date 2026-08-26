@@ -125,7 +125,7 @@ public sealed class StdlibApiTests
         }
 
         Assert.True(mismatches.Count == 0,
-            "Shared RF/SF fixtures have divergent expected output (equivalence broken): " +
+            "Guarded RF/SF fixtures have divergent expected output (equivalence broken): " +
             string.Join(", ", mismatches) +
             ". Reconcile the snapshots, or rename the SF fixture stem to exempt it.");
     }
@@ -134,7 +134,7 @@ public sealed class StdlibApiTests
     /// Generates a single-program harness from every fixture in <paramref name="fixturesDir"/> matching
     /// <paramref name="glob"/> (importing each by its declared module, calling its <c>start()</c> via the
     /// module leaf), compiles + runs the ONE program, splits combined stdout on the
-    /// <c>##### stem #####</c> delimiters, and diffs each section against its <c>.expected.txt</c>. Shared
+    /// <c>##### stem #####</c> delimiters, and diffs each section against its <c>.expected.txt</c>. Guarded
     /// by the RazorForge (.rf) and Suflae (.sf) harnesses — the language is selected by the entry file's
     /// extension, so the only per-language inputs are the fixtures dir, glob, module name, and paths.
     /// Returns the number of fixtures discovered and bundled (0 = nothing ran).

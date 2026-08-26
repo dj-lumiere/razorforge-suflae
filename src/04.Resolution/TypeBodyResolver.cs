@@ -163,7 +163,7 @@ internal sealed class TypeBodyResolver
 
                 // Records can contain: value types, entity/crashable REFERENCE fields (entities are
                 // pointer-shaped reference types, so the field stores a reference), generic parameters,
-                // and Assignable wrappers (Hijacked, Retained, Shared, Tracked, Watched). Scoped access
+                // and Assignable wrappers (Hijacked, Retained, Guarded, Tracked, Witnessed). Scoped access
                 // tokens (Viewing, Modifying, Consulting, Amending) are wrappers NOT in the Assignable set.
                 bool isReferenceTyped =
                     memberVariableType?.Category == TypeCategory.Entity ||
@@ -179,7 +179,7 @@ internal sealed class TypeBodyResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
                         $"Record member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not a value type. " +
-                        "Records can only contain value types, Hijacked[T], and RC wrappers (Retained, Shared, Tracked, Watched).",
+                        "Records can only contain value types, Hijacked[T], and RC wrappers (Retained, Guarded, Tracked, Witnessed).",
                         location: memberVariable.Location);
                 }
 
@@ -892,8 +892,8 @@ internal sealed class TypeBodyResolver
     [
         RuntimeContract.Hijacked, // Unmanaged raw pointer handle
         RuntimeContract.Retained, // Reference-counted handle
-        RuntimeContract.Shared,   // Reference-counted multi-threaded handle
+        RuntimeContract.Guarded,   // Reference-counted multi-threaded handle
         RuntimeContract.Tracked,  // Weak reference handle
-        RuntimeContract.Watched,  // Weak reference multi-threaded handle
+        RuntimeContract.Witnessed,  // Weak reference multi-threaded handle
     ];
 }

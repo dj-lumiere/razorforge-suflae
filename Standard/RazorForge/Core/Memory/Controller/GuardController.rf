@@ -1,7 +1,7 @@
 module Core
 
 ### Multi-threaded reference-counting controller — the atomic twin of {RetainController[T]}.
-### Owns the managed entity; shared between {Shared[T, P]} (strong) and {Watched[T, P]} (weak). All
+### Owns the managed entity; shared between {Guarded[T, P]} (strong) and {Witnessed[T, P]} (weak). All
 ### count mutations go through SeqCst atomic intrinsics driven on the live field address
 ### (`me.<field>.hijack()`), so cloning/dropping a handle is safe across threads.
 ###
@@ -11,11 +11,11 @@ module Core
 ### their atomic flags.
 ### :typeparam T: The exclusively owned entity type.
 ### :typeparam P: The access-discipline lock policy.
-entity ShareController[T, P]
+entity GuardController[T, P]
 needs T is EntityType, P obeys LockPolicy
-  ### Strong reference count (live `Shared` handles). Atomic.
+  ### Strong reference count (live `Guarded` handles). Atomic.
   secret strong_count: U64
-  ### Weak reference count (live `Watched` handles). Atomic.
+  ### Weak reference count (live `Witnessed` handles). Atomic.
   secret weak_count: U64
   ### Raw pointer to the managed entity.
   secret data: Hijacked[T]
@@ -24,24 +24,24 @@ needs T is EntityType, P obeys LockPolicy
 
 ### Creates a new controller with one strong reference, no weak references, and a fresh lock.
 ### :param data: The raw pointer to the entity; ownership transfers to this controller.
-### :returns: The resulting `ShareController[T, P]` value.
-dangerous routine ShareController[T, P](data: Hijacked[T]) -> ShareController[T, P]
-  return ShareController[T, P](
+### :returns: The resulting `GuardController[T, P]` value.
+dangerous routine GuardController[T, P](data: Hijacked[T]) -> GuardController[T, P]
+  return GuardController[T, P](
     strong_count: 1_u64,
     weak_count: 0_u64,
     data: data,
     lock: P()
   )
 
-### Atomically increments the strong count when a `Shared` handle is cloned.
-routine ShareController[T, P].hold()
+### Atomically increments the strong count when a `Guarded` handle is cloned.
+routine GuardController[T, P].hold()
   danger
     discard LLVM::atomic_add[U64](ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong count. When it reaches zero the managed entity is dropped,
 ### and the controller itself is freed if no weak handles remain.
-routine ShareController[T, P].unhold()
+routine GuardController[T, P].unhold()
   danger
     var previous = LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
     if previous == 1_u64
@@ -50,14 +50,14 @@ routine ShareController[T, P].unhold()
         me.destroy()
   return
 
-### Atomically increments the weak count when a `Watched` handle is cloned.
-routine ShareController[T, P].observe()
+### Atomically increments the weak count when a `Witnessed` handle is cloned.
+routine GuardController[T, P].observe()
   danger
     discard LLVM::atomic_add[U64](ptr: me.weak_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the weak count, freeing the controller when both counts reach zero.
-routine ShareController[T, P].unobserve()
+routine GuardController[T, P].unobserve()
   danger
     var previous = LLVM::atomic_sub[U64](ptr: me.weak_count.hijack(), value: 1_u64)
     if previous == 1_u64
@@ -65,67 +65,67 @@ routine ShareController[T, P].unobserve()
         me.destroy()
   return
 
-### Returns the current number of live strong (`Shared`) handles. Snapshot only.
+### Returns the current number of live strong (`Guarded`) handles. Snapshot only.
 ### :returns: The strong reference count.
-routine ShareController[T, P].strong_count() -> U64
+routine GuardController[T, P].strong_count() -> U64
   danger
     return LLVM::atomic_load[U64](ptr: me.strong_count.hijack())
 
-### Returns the current number of live weak (`Watched`) handles. Snapshot only.
+### Returns the current number of live weak (`Witnessed`) handles. Snapshot only.
 ### :returns: The weak reference count.
-routine ShareController[T, P].weak_count() -> U64
+routine GuardController[T, P].weak_count() -> U64
   danger
     return LLVM::atomic_load[U64](ptr: me.weak_count.hijack())
 
 ### Returns a non-owning pointer to the managed data.
 ### :returns: The resulting `Hijacked[T]` value.
-routine ShareController[T, P].raw_data() -> Hijacked[T]
+routine GuardController[T, P].raw_data() -> Hijacked[T]
   return me.data
 
 # ============================================================================
-# Access-discipline lock — drives `Shared.consult()` / `Shared.amend()`. The lock state lives
+# Access-discipline lock — drives `Guarded.consult()` / `Guarded.amend()`. The lock state lives
 # here, at the single address every handle shares, so synchronization is correct across threads.
 # Each call delegates to the monomorphized policy `P` (no runtime dispatch).
 # ============================================================================
 
 ### Admits an inspector (shared reader) through the access-discipline lock.
-routine ShareController[T, P].add_inspector()
+routine GuardController[T, P].add_inspector()
   me.lock.add_inspector()
   return
 
 ### Removes an inspector through the access-discipline lock.
-routine ShareController[T, P].remove_inspector()
+routine GuardController[T, P].remove_inspector()
   me.lock.remove_inspector()
   return
 
 ### Admits the claimer (exclusive writer) through the access-discipline lock.
-routine ShareController[T, P].add_claimer()
+routine GuardController[T, P].add_claimer()
   me.lock.add_claimer()
   return
 
 ### Removes the claimer through the access-discipline lock.
-routine ShareController[T, P].remove_claimer()
+routine GuardController[T, P].remove_claimer()
   me.lock.remove_claimer()
   return
 
-### Non-blocking inspector admission through the lock (drives `Shared.try_consult`).
+### Non-blocking inspector admission through the lock (drives `Guarded.try_consult`).
 ### :returns: `true` if a read hold was taken without waiting.
-routine ShareController[T, P].try_add_inspector() -> Bool
+routine GuardController[T, P].try_add_inspector() -> Bool
   return me.lock.try_add_inspector()
 
-### Non-blocking claimer admission through the lock (drives `Shared.try_amend`).
+### Non-blocking claimer admission through the lock (drives `Guarded.try_amend`).
 ### :returns: `true` if the exclusive hold was taken without waiting.
-routine ShareController[T, P].try_add_claimer() -> Bool
+routine GuardController[T, P].try_add_claimer() -> Bool
   return me.lock.try_add_claimer()
 
 ### Destroys the managed entity. Call only when the strong count reaches zero.
 ### Runs the entity's own `destroy` (the sole free under unified teardown); does not also
 ### `invalidate`, which would double-free a self-freeing entity.
-dangerous routine ShareController[T, P].drop_data()
+dangerous routine GuardController[T, P].drop_data()
   me.data.as_entity().destroy()
   return
 
-dangerous routine ShareController[T, P].destroy()
+dangerous routine GuardController[T, P].destroy()
   me.strong_count.destroy()
   me.weak_count.destroy()
   me.hijack().invalidate()

@@ -70,7 +70,7 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
 
     /// <summary>Borrow/view wrapper names whose value points INTO another value, so a memberRoutine
     /// returning one may alias its receiver — freeing the receiver would then dangle it. The owning
-    /// RC wrappers (Retained/Tracked/Shared/Watched) are NOT here: they carry a refcounted controller,
+    /// RC wrappers (Retained/Tracked/Guarded/Witnessed) are NOT here: they carry a refcounted controller,
     /// so an aliasing owned result is balanced by refcount.</summary>
     private static readonly IReadOnlySet<string> BorrowWrapperNames =
         RuntimeContract.ReferringWrapperNAmes;

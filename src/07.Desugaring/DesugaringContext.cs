@@ -11,7 +11,7 @@ using TypeModel.Types;
 namespace Compiler.Desugaring;
 
 /// <summary>
-/// Shared context for all desugaring passes.
+/// Guarded context for all desugaring passes.
 /// </summary>
 public sealed class DesugaringContext
 {

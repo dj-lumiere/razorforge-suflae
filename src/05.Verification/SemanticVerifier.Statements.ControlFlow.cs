@@ -743,7 +743,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol resourceType = AnalyzeExpression(expression: usingStmt.Resource);
         _usingResourceNode = previousUsingResource;
 
-        // Readers-XOR-writer (RF-S630): if this `using` opens an MT access token on a named Shared
+        // Readers-XOR-writer (RF-S630): if this `using` opens an MT access token on a named Guarded
         // handle, check it against the holds already live in the enclosing `using` scopes on the SAME
         // handle. A writer (`amend`) conflicts with any other hold; readers (`consult`) coexist.
         // The hold is pushed for the duration of the body and popped on exit, so only OVERLAPPING
@@ -859,7 +859,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Extracts a path key for the Shared handle of an `consult`/`amend` access expression — the
+    /// Extracts a path key for the Guarded handle of an `consult`/`amend` access expression — the
     /// receiver of `s.consult()` / `s.amend()`, as a dotted path so distinct fields are distinct
     /// handles: `s` → "s", `s.a` → "s.a". This makes `s.a.amend()` and `s.b.amend()` independent
     /// (both amendable in one scope) while `s.a` amended twice still conflicts. Returns null for
@@ -894,7 +894,7 @@ public sealed partial class SemanticVerifier
         };
     }
 
-    /// <summary>Returns the controller identity for a Shared/Watched handle path. A path bound to a
+    /// <summary>Returns the controller identity for a Guarded/Witnessed handle path. A path bound to a
     /// tracked handle (recorded at its <c>var</c> declaration, see
     /// <see cref="RecordSharedHandleIdentity"/>) reuses its identity; an untracked path is assigned a
     /// fresh unique identity on first use and remembered, so repeated uses of the same path match
@@ -909,12 +909,12 @@ public sealed partial class SemanticVerifier
         return id;
     }
 
-    /// <summary>Records the controller identity of a freshly declared Shared/Watched handle from its
+    /// <summary>Records the controller identity of a freshly declared Guarded/Witnessed handle from its
     /// initializer, so later aliases and access-token receivers resolve to the same controller:
     /// <list type="bullet">
     /// <item>a clone (<c>s.share()</c> RC copy / <c>s.observe()</c> strong→weak) or a plain copy
     /// (<c>var s2 = s</c>) INHERITS the source handle's identity;</item>
-    /// <item>anything else — including a fresh Arc construction <c>Shared[T, P](from: n)</c> — gets a
+    /// <item>anything else — including a fresh Arc construction <c>Guarded[T, P](from: n)</c> — gets a
     /// fresh identity (conservative — a missed alias only weakens the check, never a false positive).</item>
     /// </list></summary>
     private void RecordSharedHandleIdentity(string name, Expression? initializer)

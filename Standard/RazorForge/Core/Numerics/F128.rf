@@ -438,7 +438,7 @@ routine F128.rint() -> F128
     return me
   return F128.from_bits(bits: f128_round_to_int(bits: me.to_bits(), half_even: true))
 
-### Shared round-to-integer core for round/rint over packed (finite) bits.
+### Guarded round-to-integer core for round/rint over packed (finite) bits.
 ### :param bits: The raw encoding (assumed finite).
 ### :param half_even: Break ties to even when `true`, else away from zero.
 ### :returns: The rounded encoding.

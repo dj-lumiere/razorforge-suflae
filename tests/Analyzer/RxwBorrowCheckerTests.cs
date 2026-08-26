@@ -7,9 +7,9 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the readers-XOR-writer borrow checker (RF-S630). Within overlapping (nested) `using`
-/// scopes on the SAME Shared handle, an `amend()` (writer) conflicts with any other hold; `consult()`
+/// scopes on the SAME Guarded handle, an `amend()` (writer) conflicts with any other hold; `consult()`
 /// readers may coexist with other readers. Non-overlapping (sequential) scopes and distinct handles
-/// never conflict. Detection is name-based on the Shared handle (v1).
+/// never conflict. Detection is name-based on the Guarded handle (v1).
 /// </summary>
 public class RxwBorrowCheckerTests
 {
@@ -27,7 +27,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     using s.amend() as c1
                                       using s.amend() as c2
                                         show("nested")
@@ -45,7 +45,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     using s.amend() as c
                                       using s.consult() as v
                                         show("nested")
@@ -63,7 +63,7 @@ public class RxwBorrowCheckerTests
     {
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     using s.consult() as v
                                       using s.amend() as c
                                         show("nested")
@@ -82,7 +82,7 @@ public class RxwBorrowCheckerTests
         // Readers coexist — multiple consult holds on the same handle are allowed.
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     using s.consult() as v1
                                       using s.consult() as v2
                                         show(f"{v1.value} {v2.value}")
@@ -99,8 +99,8 @@ public class RxwBorrowCheckerTests
         // Distinct handles do not conflict (name-based).
         string source = Prelude + """
                                   routine start()
-                                    var s1 = Shared[Counter, MultiRead](from: Counter(value: 1))
-                                    var s2 = Shared[Counter, MultiRead](from: Counter(value: 2))
+                                    var s1 = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                                    var s2 = Guarded[Counter, MultiRead](from: Counter(value: 2))
                                     using s1.amend() as c1
                                       using s2.amend() as c2
                                         show("two handles")
@@ -121,7 +121,7 @@ public class RxwBorrowCheckerTests
                                     return
 
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     using s.amend() as c1
                                       c1.bump(inc: 1)
                                     using s.amend() as c2
@@ -141,7 +141,7 @@ public class RxwBorrowCheckerTests
         // the handle names differ.
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.amend() as c1
                                       using s2.amend() as c2
@@ -161,7 +161,7 @@ public class RxwBorrowCheckerTests
         // A reader on a clone still conflicts with a writer on the original (same controller).
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.amend() as c
                                       using s2.consult() as v
@@ -181,7 +181,7 @@ public class RxwBorrowCheckerTests
         // Two readers coexist even on the same controller — readers-XOR-writer permits shared reads.
         string source = Prelude + """
                                   routine start()
-                                    var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                                    var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                                     var s2 = s.share()
                                     using s.consult() as v1
                                       using s2.consult() as v2

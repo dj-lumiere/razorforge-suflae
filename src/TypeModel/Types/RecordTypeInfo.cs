@@ -131,7 +131,7 @@ public class RecordTypeInfo : TypeInfo
 
     /// <summary>RC wrapper base names that need retain-on-copy / release-on-drop.</summary>
     private static readonly HashSet<string> RCWrapperBaseNames =
-        [RuntimeContract.Retained, RuntimeContract.Shared, RuntimeContract.Tracked, RuntimeContract.Watched];
+        [RuntimeContract.Retained, RuntimeContract.Guarded, RuntimeContract.Tracked, RuntimeContract.Witnessed];
 
     /// <summary>Whether this record has RC wrapper fields needing retain-on-copy / release-on-drop.</summary>
     public bool HasRCMemberVariables => MemberVariables.Any(predicate: f =>

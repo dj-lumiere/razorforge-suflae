@@ -224,7 +224,7 @@ public partial class LlvmCodeGenerator
     private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
         _localRcRecordVars = [];
 
-    /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.).</summary>
+    /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Guarded[T], etc.).</summary>
     private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
         _localRetainedVars = [];
 
@@ -457,7 +457,7 @@ public partial class LlvmCodeGenerator
     private static string? GetGenericBaseName(TypeInfo type) =>
         GetGenericBaseNameStatic(type: type);
 
-    /// <summary>Shared helper for resolved-generic base-name lookups.</summary>
+    /// <summary>Guarded helper for resolved-generic base-name lookups.</summary>
     internal static string? GetGenericBaseNameStatic(TypeInfo type) =>
         GetGenericBaseStatic(type: type)
           ?.Name;

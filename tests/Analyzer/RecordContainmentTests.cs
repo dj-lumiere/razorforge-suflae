@@ -131,7 +131,7 @@ public class RecordContainmentTests
                         entity Node
                           value: S32
                         record Handle
-                          ref: Shared[Node]
+                          ref: Guarded[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

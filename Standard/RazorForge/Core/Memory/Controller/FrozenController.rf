@@ -8,17 +8,17 @@ module Core
 ###   - strong-only (no weak refs) — immutable shared data has no need for `Tracked`.
 ###   - atomic counter — safe to copy/drop across threads.
 ###   - no `data` field — the payload lives in the owning handle struct alongside
-###     a `Hijacked[ImmutableSharedController]` controller pointer. The handle
+###     a `Hijacked[FrozenController]` controller pointer. The handle
 ###     decides what to deallocate when the count hits zero.
-entity ImmutableSharedController
+entity FrozenController
   ### Stores the strong reference count. Accessed via SeqCst atomic intrinsics
   ### driven directly on the field's live heap address (see note below).
   secret strong_count: U64
 
 ### Creates a new controller with one strong reference.
-### :returns: The resulting `ImmutableSharedController` value.
-dangerous routine ImmutableSharedController() -> ImmutableSharedController
-  return ImmutableSharedController(
+### :returns: The resulting `FrozenController` value.
+dangerous routine FrozenController() -> FrozenController
+  return FrozenController(
     strong_count: 1_u64
   )
 
@@ -31,24 +31,24 @@ dangerous routine ImmutableSharedController() -> ImmutableSharedController
 # intrinsics mutate the genuine shared counter.
 
 ### Atomically increments the strong reference count when a handle is cloned.
-dangerous routine ImmutableSharedController.hold()
+dangerous routine FrozenController.hold()
   discard LLVM::atomic_add(ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong reference count when a handle is dropped.
 ### :returns: The previous count. The caller deallocates the payload + controller
 ###          when this returns `1` (i.e. the cell is now zero).
-dangerous routine ImmutableSharedController.unhold() -> U64
+dangerous routine FrozenController.unhold() -> U64
   return LLVM::atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
 
 ### Returns the current number of live strong handles.
 ### Snapshot only — value may have changed by the time the caller observes it.
 ### :returns: The current strong reference count.
 @readonly
-dangerous routine ImmutableSharedController.strong_count() -> U64
+dangerous routine FrozenController.strong_count() -> U64
   return LLVM::atomic_load[U64](ptr: me.strong_count.hijack())
 
-dangerous routine ImmutableSharedController.destroy()
+dangerous routine FrozenController.destroy()
   if me.strong_count() == 0
     me.hijack().invalidate()
     return

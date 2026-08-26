@@ -658,7 +658,7 @@ internal sealed class TypeResolver
         SourceLocation location)
     {
         // Arity guard: a caller that skips ResolveGenericType's own count check (e.g. the creator path
-        // `Shared[ReadOnly](from: n)` — one type arg for a two-param `Shared[T, P]`) must get a clean
+        // `Guarded[ReadOnly](from: n)` — one type arg for a two-param `Guarded[T, P]`) must get a clean
         // WrongTypeArgumentCount diagnostic, NOT an IndexOutOfRange crash in the param↔arg zip below.
         if (genericDef.GenericParameters is { } arityParams && arityParams.Count != typeArgs.Count)
         {

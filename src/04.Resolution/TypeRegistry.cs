@@ -154,7 +154,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Wrapper type resolutions cache for synthesized scoped/RC wrappers
-    /// (Viewing, Modifying, Consulting, Amending, Hijacked, Retained, Shared, Tracked, Watched).
+    /// (Viewing, Modifying, Consulting, Amending, Hijacked, Retained, Guarded, Tracked, Witnessed).
     /// Kept separate from <see cref="_resolutions"/> to prevent key collisions when both
     /// <see cref="GetOrCreateWrapperType"/> and <see cref="GetOrCreateResolution"/> produce
     /// the same FullName-based key (e.g., "Hijacked[Core.Byte]").

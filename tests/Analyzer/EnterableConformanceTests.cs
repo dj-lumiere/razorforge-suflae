@@ -127,7 +127,7 @@ public class EnterableConformanceTests
                           return
 
                         routine start()
-                          var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                           peek(s.consult())
                           return
                         """;
@@ -149,7 +149,7 @@ public class EnterableConformanceTests
                           value: S64
 
                         routine start()
-                          var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                           using s.consult() as v
                             show(f"{v.value}")
                           return
@@ -170,7 +170,7 @@ public class EnterableConformanceTests
                           value: S64
 
                         routine start()
-                          var s = Shared[Counter, MultiRead](from: Counter(value: 1))
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
                           var v = s.consult()
                           return
                         """;

@@ -898,7 +898,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // memberRoutine-level generic params carry their type arguments on the RoutineInfo when
         // instantiated by SubstituteRoutine. The body references the params as receiver/argument
         // types — e.g. free `show[T]`'s body has `value.represent()` where value: T, and
-        // `T.share[P]()`'s body constructs `ShareController[T, P](...)`. Without `T → ConcreteType`
+        // `T.share[P]()`'s body constructs `GuardController[T, P](...)`. Without `T → ConcreteType`
         // / `P → ConcretePolicy` in the frame's TypeSubs, the body walker can't resolve those
         // types, leaving the concrete memberRoutine/constructor out of the live set. Codegen then emits a
         // call to it but never the definition → linker error. This applies to BOTH free functions
@@ -1202,7 +1202,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         TypeInfo? ct = cre.ConstructedType;
         if (ct == null) return null;
         // In a monomorphized frame the constructed type may be a generic parameter (e.g. `P()`
-        // inside `ShareController[T, P].create`'s body, with P bound to a concrete LockPolicy).
+        // inside `GuardController[T, P].create`'s body, with P bound to a concrete LockPolicy).
         // Substitute through the active frame subs so we enqueue the concrete policy's `create`
         // (and emit its body) rather than a bogus `P.create`.
         ct = RoutineInfo.SubstituteType(type: ct, substitution: _currentFrameSubs);
@@ -1284,7 +1284,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         if (ce.Arguments.Count != 0) return null;
         TypeInfo? ct = ce.ConstructedType;
-        // A no-arg construction of a generic parameter (e.g. `P()` inside `ShareController[T, P]
+        // A no-arg construction of a generic parameter (e.g. `P()` inside `GuardController[T, P]
         // .create`'s body) is parsed as a CallExpression whose callee is an IdentifierExpression
         // naming the param, and SA leaves ConstructedType null (the param has no concrete type yet).
         // In a monomorphized frame the param is bound, so recover the concrete type from the frame

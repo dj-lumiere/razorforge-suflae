@@ -679,7 +679,7 @@ public sealed class RoutineInfo
                     : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
-            // WrapperTypeInfo (Retained[T], Shared[T], etc.) — if the registry has a RecordTypeInfo
+            // WrapperTypeInfo (Retained[T], Guarded[T], etc.) — if the registry has a RecordTypeInfo
             // for the same base name, prefer that so the concrete type stays RecordTypeInfo everywhere.
             // This avoids the WrapperTypeInfo -> "ptr" codegen mapping mismatch when the actual LLVM
             // function definition uses the struct layout from the RecordTypeInfo.

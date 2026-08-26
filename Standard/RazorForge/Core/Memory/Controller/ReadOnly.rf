@@ -1,9 +1,9 @@
 module Core
 
 ### Immutable-share discipline. The guarded data is never mutated, so no lock is needed: a
-### `Shared[T, ReadOnly]` grants only read access (`Consulting[T]`), and `ReadOnly` is a zero-sized
+### `Guarded[T, ReadOnly]` grants only read access (`Consulting[T]`), and `ReadOnly` is a zero-sized
 ### record, so the controller's `lock` field adds no overhead. This is the default discipline.
-### :see: {LockPolicy}, {Shared}
+### :see: {LockPolicy}, {Guarded}
 record ReadOnly obeys LockPolicy
   pass
 

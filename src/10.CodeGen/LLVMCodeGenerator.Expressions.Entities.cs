@@ -665,15 +665,15 @@ public partial class LlvmCodeGenerator
                 wrapperRecord.TypeArguments is { Count: > 1 })
             {
                 // Consulting[T, P] / Amending[T, P] are `@llvm("ptr")` tokens whose pointer targets
-                // the shared ShareController[T, P], NOT the entity. The entity ptr lives in the
+                // the shared GuardController[T, P], NOT the entity. The entity ptr lives in the
                 // controller's `data` field (offset after the two atomic counts). Project through it,
                 // exactly like Retained/Tracked, so `v.value` reads the guarded entity rather than
                 // controller.strong_count (offset 0).
                 string policyName = wrapperRecord.TypeArguments[index: 1].FullName;
                 TypeInfo? controllerType = _registry.LookupType(
-                    name: $"ShareController[{innerEntity.FullName}, {policyName}]")
+                    name: $"GuardController[{innerEntity.FullName}, {policyName}]")
                     ?? _registry.LookupType(
-                        name: $"Core.ShareController[{innerEntity.FullName}, {policyName}]");
+                        name: $"Core.GuardController[{innerEntity.FullName}, {policyName}]");
                 if (controllerType is EntityTypeInfo controllerEntity)
                 {
                     innerPtr = EmitEntityMemberVariableRead(sb: sb,
@@ -1176,7 +1176,7 @@ public partial class LlvmCodeGenerator
         {
             if (genericArgs.Count == 1 &&
                 typeExpr.Name is Resolution.RuntimeContract.Hijacked or Resolution.RuntimeContract.Viewing or Resolution.RuntimeContract.Modifying or Resolution.RuntimeContract.Consulting or
-                    Resolution.RuntimeContract.Amending or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Shared or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Watched)
+                    Resolution.RuntimeContract.Amending or Resolution.RuntimeContract.Retained or Resolution.RuntimeContract.Guarded or Resolution.RuntimeContract.Tracked or Resolution.RuntimeContract.Witnessed)
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,

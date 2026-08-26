@@ -1377,7 +1377,7 @@ internal partial class Program
     /// <summary>
     /// Compiles <paramref name="entryFile"/> all the way to a native executable
     /// (codegen → opt → link → stage runtime DLLs) but does NOT run it. On success returns 0 and
-    /// sets <paramref name="exeFile"/> to the produced executable path. Shared by the <c>buildexe</c>
+    /// sets <paramref name="exeFile"/> to the produced executable path. Guarded by the <c>buildexe</c>
     /// verb (stop here) and <c>buildandrun</c> (run it next) so the slow optimize+link is identical.
     /// </summary>
     /// <summary>

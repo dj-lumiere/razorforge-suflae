@@ -2,22 +2,22 @@ module Core
 
 import BuilderQuery
 
-### Represents temporary thread-safe read-only access to data guarded by a {Shared[T, P]}.
-### `Consulting[T]` is the non-Assignable token produced by `Shared.consult()` for shared (multi-reader)
-### observation. It holds the shared {ShareController[T, P]} pointer; entering its `using` scope
+### Represents temporary thread-safe read-only access to data guarded by a {Guarded[T, P]}.
+### `Consulting[T]` is the non-Assignable token produced by `Guarded.consult()` for shared (multi-reader)
+### observation. It holds the shared {GuardController[T, P]} pointer; entering its `using` scope
 ### (`enter`) acquires the reader hold on the controller's access-discipline lock and exiting
 ### (`exit`) releases it, so the lock spans exactly the `using` block. Many consultants may coexist;
 ### the readers-XOR-writer access discipline forbids a consultant from coexisting with a {Amending[T]}.
 ### Must be opened with `using` — a bare/inline `consult()` would never acquire the lock.
 ### :typeparam T: The entity type being consulted.
-### :typeparam P: The access-discipline lock policy of the originating `Shared`.
-### :see: {Amending[T]}, {Viewing[T]}, {Shared[T, P]}, {Access-Types}
+### :typeparam P: The access-discipline lock policy of the originating `Guarded`.
+### :see: {Amending[T]}, {Viewing[T]}, {Guarded[T, P]}, {Access-Types}
 @llvm("ptr")
 record Consulting[T, P] obeys Accessing[T], Enterable
 needs T is EntityType, P obeys LockPolicy
   pass
 
-# NOTE: No creators, no manual methods — the token is produced only by `Shared.consult()`, which
+# NOTE: No creators, no manual methods — the token is produced only by `Guarded.consult()`, which
 # acquires the reader hold and constructs it from the controller pointer. Users never create one.
 
 # ============================================================================
@@ -30,7 +30,7 @@ needs T is EntityType, P obeys LockPolicy
 ### :returns: This token as `Consulting[T, P]`.
 routine Consulting[T, P].enter() -> Consulting[T, P]
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     ctrl.add_inspector()
   return me
 
@@ -40,13 +40,13 @@ routine Consulting[T, P].enter() -> Consulting[T, P]
 ### :returns: `true` if the reader hold was acquired, `false` otherwise.
 routine Consulting[T, P].try_enter() -> Bool
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.try_add_inspector()
 
 ### Called on exit from the `using` block (and on every escape): releases the reader hold.
 routine Consulting[T, P].exit()
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     ctrl.remove_inspector()
   return
 
@@ -61,7 +61,7 @@ routine Consulting[T, P].exit()
 @[readonly, inline]
 routine Consulting[T, P].access() -> T
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.raw_data().as_entity()
 
 # ============================================================================
@@ -73,7 +73,7 @@ routine Consulting[T, P].access() -> T
 @readonly
 routine Consulting[T, P].represent() -> Text
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return ctrl.raw_data().as_entity().represent()
 
 ### Returns the diagnostic form of the consulted entity.
@@ -81,7 +81,7 @@ routine Consulting[T, P].represent() -> Text
 @readonly
 routine Consulting[T, P].diagnose() -> Text
   danger
-    var ctrl = Hijacked[ShareController[T, P]](me).as_entity()
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
     return me.type_name() + "(" + ctrl.raw_data().as_entity().diagnose() + ")"
 
 ### No-op: the token owns no heap (it only aliases the controller), and the reader hold is

@@ -10,7 +10,7 @@ routine Counter.bump(inc: S64)
   return
 
 routine start()
-  var s = Shared[Counter, Exclusive](from: Counter(value: 10))
+  var s = Guarded[Counter, Exclusive](from: Counter(value: 10))
 
   # Fallible exclusive access. Uncontended, so `try_enter` succeeds and the body runs;
   # the `fallback` branch is skipped.

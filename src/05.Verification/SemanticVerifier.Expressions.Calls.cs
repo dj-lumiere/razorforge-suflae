@@ -1555,7 +1555,7 @@ public sealed partial class SemanticVerifier
                     // rule: the pointer-value ops (address/type_name/is_none/cmp/hash/represent) read
                     // an integer without dereferencing and are safe outside danger (danger-audit).
 
-                    // #98: .hijack() on Shared/Watched requires danger block
+                    // #98: .hijack() on Guarded/Witnessed requires danger block
                     if (member.MemberName == Compiler.Resolution.RuntimeContract.RawPointer.Hijack && !InDangerBlock &&
                         (IsSharedType(type: objectType) || IsWatchedType(type: objectType)))
                     {
@@ -1566,17 +1566,17 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // NOTE: `consult()` / `amend()` are ordinary `Shared[T, P]` memberRoutines now —
+                    // NOTE: `consult()` / `amend()` are ordinary `Guarded[T, P]` memberRoutines now —
                     // resolution + the `needs P in [...]` type-equality constraint (RF-S160) enforce
                     // policy legality (consult not on Exclusive, amend not on ReadOnly), and the
                     // scoped-token / `using`-binding rules enforce lifetime. The earlier ad-hoc
                     // consult!/amend! validation (a variable→policy side-table that did not recognize
-                    // the 2-arg `Shared[T, P]`) was removed in favour of the type system.
+                    // the 2-arg `Guarded[T, P]`) was removed in favour of the type system.
 
                     // Enforce a memberRoutine's `needs P in [...]` (TypeEquality) constraint when the
                     // constrained parameter is INHERITED FROM THE RECEIVER (e.g.
-                    // `Shared[T, P].amend() needs P in [Exclusive, MultiRead]`, with P bound by the
-                    // receiver `Shared[Counter, ReadOnly]`). The general constraint validator only
+                    // `Guarded[T, P].amend() needs P in [Exclusive, MultiRead]`, with P bound by the
+                    // receiver `Guarded[Counter, ReadOnly]`). The general constraint validator only
                     // fires for explicitly-instantiated generics, so a receiver-bound param — which
                     // carries no explicit type args at the call site — is validated here instead.
                     ValidateReceiverInheritedTypeEqualityConstraints(memberRoutine: memberRoutine,
@@ -2056,8 +2056,8 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Validates a called memberRoutine's <c>needs P in [...]</c> (<see cref="ConstraintKind.TypeEquality"/>)
     /// constraints when the constrained parameter is inherited from the receiver type rather than
-    /// supplied as an explicit type argument — e.g. <c>Shared[T, P].amend() needs P in [Exclusive,
-    /// MultiRead]</c> called on a <c>Shared[Counter, ReadOnly]</c>. The standard constraint validator
+    /// supplied as an explicit type argument — e.g. <c>Guarded[T, P].amend() needs P in [Exclusive,
+    /// MultiRead]</c> called on a <c>Guarded[Counter, ReadOnly]</c>. The standard constraint validator
     /// (<c>TypeResolver.ValidateTypeEqualityConstraint</c>) only fires when a generic type/memberRoutine is
     /// explicitly instantiated, so receiver-bound parameters would otherwise go unchecked.
     /// </summary>

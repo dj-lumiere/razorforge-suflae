@@ -61,19 +61,19 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type is a Shared&lt;T&gt; handle type.
+    /// Checks if a type is a Guarded&lt;T&gt; handle type.
     /// </summary>
     private static bool IsSharedType(TypeSymbol type)
     {
-        return type.Name == Compiler.Resolution.RuntimeContract.Shared;
+        return type.Name == Compiler.Resolution.RuntimeContract.Guarded;
     }
 
     /// <summary>
-    /// Checks if a type is a Watched&lt;T&gt; handle type.
+    /// Checks if a type is a Witnessed&lt;T&gt; handle type.
     /// </summary>
     private static bool IsWatchedType(TypeSymbol type)
     {
-        return type.Name == Compiler.Resolution.RuntimeContract.Watched;
+        return type.Name == Compiler.Resolution.RuntimeContract.Witnessed;
     }
 
     /// <summary>
@@ -92,7 +92,7 @@ public sealed partial class SemanticVerifier
         Compiler.Resolution.RuntimeContract.ReadOnlyWrapperTypes;
 
     /// <summary>
-    /// Checks if a type is a wrapper type (Viewing, Modifying, Shared, etc.).
+    /// Checks if a type is a wrapper type (Viewing, Modifying, Guarded, etc.).
     /// </summary>
     /// <param name="type">The type to check.</param>
     /// <returns>True if the type is a wrapper type.</returns>
@@ -219,8 +219,8 @@ public sealed partial class SemanticVerifier
         {
             [Compiler.Resolution.RuntimeContract.Retained] = "a.share()",
             [Compiler.Resolution.RuntimeContract.Tracked] = "a.share()",
-            [Compiler.Resolution.RuntimeContract.Shared] = "a.share()",
-            [Compiler.Resolution.RuntimeContract.Watched] = "a.share()",
+            [Compiler.Resolution.RuntimeContract.Guarded] = "a.share()",
+            [Compiler.Resolution.RuntimeContract.Witnessed] = "a.share()",
             [ViewingWrapperName] = ScopedNoEscapeHint,
             [ModifyingWrapperName] = ScopedNoEscapeHint,
             [ConsultingWrapperName] = ScopedNoEscapeHint,
@@ -240,7 +240,7 @@ public sealed partial class SemanticVerifier
     /// True when a type carries its own cross-thread synchronization and may therefore cross an
     /// async spawn boundary (<c>threaded</c> OR <c>suspended</c> under M:N — both are potentially
     /// parallel) by reference, aliasing the spawner's cell safely. These are the atomic /
-    /// shared-ownership wrappers — <c>Atomic[T]</c>, <c>Shared[T,P]</c>, <c>Watched[T,P]</c> (atomic
+    /// shared-ownership wrappers — <c>Atomic[T]</c>, <c>Guarded[T,P]</c>, <c>Witnessed[T,P]</c> (atomic
     /// refcount) — plus the <em>multi-threaded</em> lock-backed tokens <c>Consulting[T,P]</c>
     /// (read-only) and <c>Claiming[T,P]</c> (exclusive), whose mutex/rwlock makes concurrent access
     /// sound. The single-threaded tokens <c>Viewing</c>/<c>Modifying</c> are deliberately NOT here —
@@ -250,7 +250,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type) =>
         type.BareName is Compiler.Resolution.RuntimeContract.Atomic
-            or Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched
+            or Compiler.Resolution.RuntimeContract.Guarded or Compiler.Resolution.RuntimeContract.Witnessed
             or Compiler.Resolution.RuntimeContract.Consulting or Compiler.Resolution.RuntimeContract.Amending;
 
     private static bool IsTriviallyAssignable(TypeSymbol type)

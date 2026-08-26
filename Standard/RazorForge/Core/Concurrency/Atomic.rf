@@ -12,7 +12,7 @@ module Core
 ### `Hijacked[Atomic[T]]` is a plain `ptr` (a copyable value), so it marshals into a
 ### `threaded routine` while still pointing every worker at the one cell. The cell
 ### must outlive every worker — join them before its storage goes out of scope, or
-### put it behind a `Shared[Atomic[T]]` (atomic-RC heap ownership) when no single
+### put it behind a `Guarded[Atomic[T]]` (atomic-RC heap ownership) when no single
 ### frame is guaranteed to outlive the workers.
 ###
 ### **Valid `T`.** `T` must lower to a byte-or-larger hardware-atomic integer: the
@@ -24,7 +24,7 @@ module Core
 ### unchecked — instantiating `Atomic[T]` on a non-integer `T` is a misuse.
 ###
 ### :typeparam T: The cell's element type (an atomic-capable scalar).
-### :see: {Shared}, {Hijacked}, {ImmutableSharedController}
+### :see: {Guarded}, {Hijacked}, {FrozenController}
 record Atomic[T]
 needs T obeys AtomicType
   ### The payload. Driven through SeqCst atomic intrinsics on its live address;

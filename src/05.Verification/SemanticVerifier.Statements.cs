@@ -791,11 +791,11 @@ public sealed partial class SemanticVerifier
         }
 
 
-        // RF-S630: track the controller identity of a Shared/Watched handle so the
+        // RF-S630: track the controller identity of a Guarded/Witnessed handle so the
         // readers-XOR-writer check keys on the shared DATA, not the variable name — a clone
         // (`var s2 = s.share()`) inherits `s`'s identity and so conflicts with it.
         if (_registry.Language == Language.RazorForge &&
-            varType.BareName is Compiler.Resolution.RuntimeContract.Shared or Compiler.Resolution.RuntimeContract.Watched)
+            varType.BareName is Compiler.Resolution.RuntimeContract.Guarded or Compiler.Resolution.RuntimeContract.Witnessed)
         {
             RecordSharedHandleIdentity(name: varDecl.Name, initializer: varDecl.Initializer);
         }

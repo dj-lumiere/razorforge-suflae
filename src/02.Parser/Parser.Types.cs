@@ -54,7 +54,7 @@ public partial class Parser
     /// <summary>Parses the target of an <c>is</c> generic constraint after the <c>is</c> keyword has
     /// been consumed. A known <c>-Type</c> kind-group name (<c>is RecordType</c>) becomes a
     /// compiler-classified kind constraint; any other type identifier (<c>N is U64</c>) is a
-    /// const-generic / identity constraint. Shared by the inline (<c>[T is …]</c>) and <c>needs</c> sites
+    /// const-generic / identity constraint. Guarded by the inline (<c>[T is …]</c>) and <c>needs</c> sites
     /// so both accept exactly the same surface. NOTE: the runtime <c>is Crashable e</c> error-catch
     /// PATTERN is a different parse site (expression position) and is unaffected.</summary>
     private GenericConstraintDeclaration ParseIsConstraint(string paramName, SourceLocation location)

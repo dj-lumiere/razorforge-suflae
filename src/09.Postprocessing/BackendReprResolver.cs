@@ -153,8 +153,8 @@ public static class BackendReprResolver
             RuntimeContract.Amending => PointerFlavor.Amending,
             RuntimeContract.Retained => PointerFlavor.Retained,
             RuntimeContract.Tracked => PointerFlavor.Tracked,
-            RuntimeContract.Shared => PointerFlavor.Shared,
-            RuntimeContract.Watched => PointerFlavor.Watched,
+            RuntimeContract.Guarded => PointerFlavor.Guarded,
+            RuntimeContract.Witnessed => PointerFlavor.Witnessed,
             RuntimeContract.Hijacked => PointerFlavor.Hijacked,
             _ => PointerFlavor.Raw
         };

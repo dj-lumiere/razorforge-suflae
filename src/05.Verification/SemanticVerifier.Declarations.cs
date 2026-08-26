@@ -836,7 +836,7 @@ public sealed partial class SemanticVerifier
     {
         Compiler.Resolution.RuntimeContract.Retained, Compiler.Resolution.RuntimeContract.Viewing, Compiler.Resolution.RuntimeContract.Modifying, Compiler.Resolution.RuntimeContract.Hijacked, Compiler.Resolution.RuntimeContract.Tracked,
         // Deferred concurrency wrappers (planned for v0.2+):
-        Compiler.Resolution.RuntimeContract.Shared, Compiler.Resolution.RuntimeContract.Watched, Compiler.Resolution.RuntimeContract.Consulting, Compiler.Resolution.RuntimeContract.Amending,
+        Compiler.Resolution.RuntimeContract.Guarded, Compiler.Resolution.RuntimeContract.Witnessed, Compiler.Resolution.RuntimeContract.Consulting, Compiler.Resolution.RuntimeContract.Amending,
     };
 
     private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)

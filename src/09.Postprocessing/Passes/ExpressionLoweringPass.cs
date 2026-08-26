@@ -1382,7 +1382,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// variant (an <c>S32</c> value into a <c>Shape</c> param/slot, <c>none</c> into a variant that
     /// has a None arm). Returns null when the target isn't a variant, the value already IS the
     /// variant (passthrough — including a different variant that is itself an arm must still wrap),
-    /// or it matches no arm. Shared by the declaration auto-wrap and the call-argument auto-wrap.
+    /// or it matches no arm. Guarded by the declaration auto-wrap and the call-argument auto-wrap.
     /// </summary>
     private Expression? TryWrapVariantArm(TypeInfo? targetType, Expression init)
     {

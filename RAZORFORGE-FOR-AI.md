@@ -261,14 +261,14 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
   - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
     entity. Produced by `a.view()` / `a.modify()`.
   - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
-    a `Shared[T,P]`, lock-guarded by the policy `P`. Produced by `s.consult()` /
+    a `Guarded[T,P]`, lock-guarded by the policy `P`. Produced by `s.consult()` /
     `s.amend()`, always via a `using` block; `s.try_amend()` is the failable form.
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (copy verb `.retain()`);
     forwards direct access to the retained entity.
-  - **`Shared[T,P]`** — multi-thread strong handle (atomic, copy verb `.share()`);
+  - **`Guarded[T,P]`** — multi-thread strong handle (atomic, copy verb `.share()`);
     reaching its inner value goes through a `Consulting`/`Amending` token.
-  - **`Tracked[T]`** (single-thread) / **`Watched[T]`** (multi-thread) — weak handles.
+  - **`Tracked[T]`** (single-thread) / **`Witnessed[T]`** (multi-thread) — weak handles.
 - **`Hijacked[T]`** — a non-owning raw handle (no-op destroy); the stdlib's
   internal buffer/pointer mechanism, used inside `danger`.
 - Records never use tokens or `as_entity` — those are entity concepts.

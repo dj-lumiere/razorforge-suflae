@@ -42,7 +42,7 @@ public partial class Tokenizer
 
     /// <summary>
     /// Dictionary mapping keywords to their corresponding token types.
-    /// Shared keywords are always present; RF-only keywords are added conditionally.
+    /// Guarded keywords are always present; RF-only keywords are added conditionally.
     /// </summary>
     private readonly Dictionary<string, TokenType> _keywords;
 
@@ -134,7 +134,7 @@ public partial class Tokenizer
             language: language);
         _language = language;
 
-        // Shared keywords (both RF and SF)
+        // Guarded keywords (both RF and SF)
         _keywords = new Dictionary<string, TokenType>
         {
             // Type declarations

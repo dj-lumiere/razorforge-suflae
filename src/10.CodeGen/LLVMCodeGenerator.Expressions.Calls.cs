@@ -769,7 +769,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Consulting[T, P] / Amending[T, P] are `@llvm("ptr")` tokens whose pointer targets the shared
-        // ShareController[T, P], NOT the guarded entity. When the resolved memberRoutine is a FORWARDED entity
+        // GuardController[T, P], NOT the guarded entity. When the resolved memberRoutine is a FORWARDED entity
         // memberRoutine (owned by the inner T — e.g. `c.bump()`), the callee's `me` must be the entity, so
         // project the receiver through `controller.data`. Token-own memberRoutines (enter/exit/refer/
         // control/represent/diagnose/destroy, owned by the token itself) keep the controller ptr.
@@ -782,9 +782,9 @@ public partial class LlvmCodeGenerator
         {
             string policyName = tokenRec.TypeArguments[index: 1].FullName;
             TypeInfo? ctrlType =
-                _registry.LookupType(name: $"ShareController[{tokenInner.FullName}, {policyName}]")
+                _registry.LookupType(name: $"GuardController[{tokenInner.FullName}, {policyName}]")
                 ?? _registry.LookupType(
-                    name: $"Core.ShareController[{tokenInner.FullName}, {policyName}]");
+                    name: $"Core.GuardController[{tokenInner.FullName}, {policyName}]");
             if (ctrlType is EntityTypeInfo ctrlEntity)
             {
                 receiver = EmitEntityMemberVariableRead(sb: sb,
@@ -1255,7 +1255,7 @@ public partial class LlvmCodeGenerator
     /// BODIES), so this applies the same normalizations a body expression would have received from
     /// the pipeline: construct empty collection literals inline, inline preset-named defaults, stamp
     /// the parameter type onto bare literals, and normalize Undecided* literal tokens to the concrete
-    /// form (EmitLiteral deliberately refuses Undecided* tokens). Shared by the free-routine and
+    /// form (EmitLiteral deliberately refuses Undecided* tokens). Guarded by the free-routine and
     /// member-call default fill.
     /// </summary>
     private string EmitParameterDefault(StringBuilder sb, ParameterInfo param)

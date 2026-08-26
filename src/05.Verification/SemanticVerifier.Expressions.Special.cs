@@ -242,8 +242,8 @@ public sealed partial class SemanticVerifier
     /// - Amending[T]   (thread-safe exclusive wrapper, scope-bound)
     /// - Retained[T]  (shared-ownership wrapper)
     /// - Tracked[T]   (reference-counted wrapper)
-    /// - Shared[T, P] (shared-ownership wrapper)
-    /// - Watched[T, P] (reference-counted wrapper)
+    /// - Guarded[T, P] (shared-ownership wrapper)
+    /// - Witnessed[T, P] (reference-counted wrapper)
     /// - Hijacked[T]  (internal ownership wrapper)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
@@ -311,8 +311,8 @@ public sealed partial class SemanticVerifier
         // Check for a single-threaded reference-counted handle (Retained/Tracked). These are SHARED
         // ownership, not unique — multiple handles to the same non-atomic control block can coexist,
         // so `steal` (an exclusive-transfer marker) is a category error: moving one handle proves
-        // nothing about the others. Clone with `.retain()`/`.track()`, or convert to `Shared`/
-        // `Watched` (atomic Arc) to move ownership across a coroutine/thread boundary.
+        // nothing about the others. Clone with `.retain()`/`.track()`, or convert to `Guarded`/
+        // `Witnessed` (atomic Arc) to move ownership across a coroutine/thread boundary.
         if (operandType.BareName is
             Compiler.Resolution.RuntimeContract.Retained or Compiler.Resolution.RuntimeContract.Tracked)
         {
@@ -320,7 +320,7 @@ public sealed partial class SemanticVerifier
                 message:
                 $"Cannot steal '{operandType.Name}' - a reference-counted handle is shared ownership, " +
                 "not unique, so it cannot be exclusively moved. Copy it with `.assign()`, " +
-                "or use `Shared`/`Watched` to move ownership across a coroutine/thread boundary.",
+                "or use `Guarded`/`Witnessed` to move ownership across a coroutine/thread boundary.",
                 location: steal.Location);
             steal.ResolvedType = operandType;
             return operandType;

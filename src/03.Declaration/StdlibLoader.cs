@@ -724,7 +724,7 @@ public sealed partial class StdlibLoader
             // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
                 typeName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
-                    or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched)
+                    or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Guarded or RuntimeContract.Witnessed)
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],

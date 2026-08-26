@@ -97,7 +97,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Packs a flat list of bool-literal elements into <c>(N+7)/8</c> bytes, LSB-first (bit 0 = element
-    /// 0 of each group of 8). Shared by both BitArray[N] emission sites — the compile-time preset
+    /// 0 of each group of 8). Guarded by both BitArray[N] emission sites — the compile-time preset
     /// initializer (<see cref="BuildBitArrayPresetInitializer"/>) and the inline literal fast path in
     /// <c>EmitCollectionLiteralConstructor</c>.
     /// <para><paramref name="allLiteral"/> is set false as soon as a non-<c>true</c>/<c>false</c>-literal

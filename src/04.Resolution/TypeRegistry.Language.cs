@@ -33,7 +33,7 @@ public sealed partial class TypeRegistry
     private static bool IsMemoryWrapperType(string typeName)
     {
         return typeName is RuntimeContract.Viewing or RuntimeContract.Modifying or RuntimeContract.Consulting or RuntimeContract.Amending or RuntimeContract.Hijacked
-            or RuntimeContract.Shared or RuntimeContract.Watched or RuntimeContract.Retained or RuntimeContract.Tracked;
+            or RuntimeContract.Guarded or RuntimeContract.Witnessed or RuntimeContract.Retained or RuntimeContract.Tracked;
     }
 
     #endregion

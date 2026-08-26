@@ -1711,7 +1711,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private static readonly HashSet<string> BorrowWrapperNames = new(StringComparer.Ordinal)
     {
         RuntimeContract.Accessing, RuntimeContract.Viewing, RuntimeContract.Controlling, RuntimeContract.Modifying, RuntimeContract.Hijacked,
-        RuntimeContract.Consulting, RuntimeContract.Amending, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Shared
+        RuntimeContract.Consulting, RuntimeContract.Amending, RuntimeContract.Retained, RuntimeContract.Tracked, RuntimeContract.Guarded
     };
 
     /// <summary>Base type name for overload matching: strips generic args and unwraps a leading

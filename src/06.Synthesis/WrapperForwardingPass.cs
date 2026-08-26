@@ -762,7 +762,7 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Checks if a type is a forwarding wrapper (Viewing, Modifying, Shared, etc.).
+    /// Checks if a type is a forwarding wrapper (Viewing, Modifying, Guarded, etc.).
     /// Hijacked is intentionally excluded — its API is the explicit extract/as_entity/inject
     /// surface, not transparent forwarding of T's memberRoutines.
     /// </summary>

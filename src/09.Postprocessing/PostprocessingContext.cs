@@ -6,7 +6,7 @@ using SyntaxTree;
 namespace Compiler.Postprocessing;
 
 /// <summary>
-/// Shared context for Phase 8 postprocessing work.
+/// Guarded context for Phase 8 postprocessing work.
 /// </summary>
 public sealed class PostprocessingContext
 {

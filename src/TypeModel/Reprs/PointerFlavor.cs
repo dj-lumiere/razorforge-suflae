@@ -25,10 +25,10 @@ public enum PointerFlavor
     Retained,
     /// <summary>Tracked ownership pointer (Tracked[T]).</summary>
     Tracked,
-    /// <summary>Shared ownership pointer (deferred concurrency use).</summary>
-    Shared,
-    /// <summary>Watched wrapper pointer (marker-protocol conformance).</summary>
-    Watched,
+    /// <summary>Guarded ownership pointer (deferred concurrency use).</summary>
+    Guarded,
+    /// <summary>Witnessed wrapper pointer (marker-protocol conformance).</summary>
+    Witnessed,
     /// <summary>Unsafe hijack borrow (Hijacked[T]).</summary>
     Hijacked,
     /// <summary>Untyped raw pointer (CPtr / Address).</summary>

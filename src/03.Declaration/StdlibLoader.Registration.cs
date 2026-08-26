@@ -985,7 +985,7 @@ public sealed partial class StdlibLoader
                     // so no bracket-strip is needed.
                     string baseName = m.Type!.Name;
                     return baseName is RuntimeContract.Hijacked or RuntimeContract.Viewing or RuntimeContract.Modifying
-                        or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Shared or RuntimeContract.Watched;
+                        or RuntimeContract.Retained or RuntimeContract.Tracked or RuntimeContract.Guarded or RuntimeContract.Witnessed;
                 });
             if (allMembersPtrWrapper)
             {
@@ -1342,7 +1342,7 @@ public sealed partial class StdlibLoader
 
     /// <summary>
     /// Resolves <c>relates Concrete as Name</c> bindings from a declaration's AST and populates the
-    /// target type's binding map (slot name → concrete <see cref="TypeInfo"/>). Shared by entity
+    /// target type's binding map (slot name → concrete <see cref="TypeInfo"/>). Guarded by entity
     /// and record registration.
     /// </summary>
     private static void RegisterAssociatedTypeBindings(TypeRegistry registry,

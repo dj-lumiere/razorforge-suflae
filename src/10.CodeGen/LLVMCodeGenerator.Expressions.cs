@@ -589,7 +589,7 @@ public partial class LlvmCodeGenerator
     /// not boxed, or an owned return leaks: when the type has a real destroy this branches on
     /// <c>rf_task_is_detached</c> — detached → run the typed destroy + complete null; else → heap-box +
     /// complete. A trivially-destructible return keeps the plain box (a detached raw-free is exact for it).
-    /// Shared by the coroutine and thread entry thunks.
+    /// Guarded by the coroutine and thread entry thunks.
     /// </summary>
     private void AppendThunkCompleteResult(StringBuilder b, RoutineInfo routine, string retType)
     {

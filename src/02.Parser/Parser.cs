@@ -76,7 +76,7 @@ public partial class Parser
 
     #endregion
 
-    #region Shared Parser State
+    #region Guarded Parser State
 
     /// <summary>
     /// Prevents nested inline conditionals (if-then-else expressions).

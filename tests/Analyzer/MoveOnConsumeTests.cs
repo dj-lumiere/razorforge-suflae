@@ -9,7 +9,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the move-on-consume rule:
 /// - `a.retain()` / `a.track()` on a raw entity or `T` source consumes the receiver.
-/// - `.retain()` on an already-RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump
+/// - `.retain()` on an already-RC handle (`Retained[T]`, `Guarded[T]`, ...) is a refcount bump
 ///   and the source remains valid.
 /// Use-after-consume is reported as <c>S615 UseAfterSteal</c>.
 /// </summary>

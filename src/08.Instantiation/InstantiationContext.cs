@@ -8,7 +8,7 @@ using SyntaxTree;
 namespace Compiler.Instantiation;
 
 /// <summary>
-/// Shared context for Phase 7 generic instantiation work.
+/// Guarded context for Phase 7 generic instantiation work.
 /// This is scaffold-only for now; existing monomorphization still lives elsewhere.
 /// </summary>
 public sealed class InstantiationContext
