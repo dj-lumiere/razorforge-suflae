@@ -59,17 +59,39 @@ routine create_dir_all!(path: Text)
 # File operations (failable)
 # ============================================================================
 
-### Copies a filesystem entry to a new location.
+### Copies a single filesystem entry (a file) to a new location.
 ### Existing destination handling follows the runtime's native copy semantics.
+### Named `copy_path!` (not `copy!`) because a bare `copy` collides with the
+### structural `copy` derive verb. Use `copy_path_all!` for a directory tree.
 ### :param source: The source path.
 ### :param destination: The destination path.
 ### :throws: May throw {IOError}.
-routine copy!(source: Text, destination: Text)
+routine copy_path!(source: Text, destination: Text)
   var src_cstr = CStr(from: source)
   var dst_cstr = CStr(from: destination)
   var result = rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
   if result == -1
     throw IOError(description: f"Cannot copy '{source}' to '{destination}'")
+  return
+
+### Recursively copies a file or directory tree to a new location.
+### When `source` is a file this is a single copy; when it is a directory the tree
+### is recreated under `destination` (created if missing), copying every descendant.
+### This is the recursive counterpart to `copy_path!`, mirroring `delete_path_all!`.
+### Symlinks are NOT followed, so this cannot loop on link cycles. Existing
+### destination files are overwritten following `copy_path!`'s native semantics.
+### :param source: The source path.
+### :param destination: The destination path.
+### :throws: May throw {IOError} when any entry cannot be copied.
+routine copy_path_all!(source: Text, destination: Text)
+  if is_directory(path: source)
+    create_dir_all!(path: destination)
+    each entry in list_dir_entries!(path: source)
+      var src_child = join_path(a: source, b: entry.name)
+      var dst_child = join_path(a: destination, b: entry.name)
+      copy_path_all!(source: src_child, destination: dst_child)
+  else
+    copy_path!(source: source, destination: destination)
   return
 
 ### Moves or renames a filesystem entry.
