@@ -591,6 +591,52 @@ public sealed partial class SemanticVerifier
         TryRegisterType(type: typeInfo, location: protocol.Location);
     }
 
+    /// <summary>
+    /// Suflae: a bare <c>RF::</c> RazorForge entity may NOT be a routine parameter or (non-constructor)
+    /// return. An RF entity has no reference count, so passing it by value across an SF routine boundary
+    /// lets SF's scope-exit teardown destroy the same object multiple times (caller + callee + return)
+    /// → heap corruption. It is fine as a LOCAL or as a FIELD of an SF entity (the container owns it);
+    /// only the by-value boundary crossing is unsafe. Reports RF-S439 with the safe alternatives. The
+    /// build-time invariant <c>AssertNoBareEntityInSignature</c> still guards the OTHER bare-entity case
+    /// (an SF entity that slipped roaming — a compiler bug, no <c>RF::</c> tag).
+    /// </summary>
+    private void CheckSuflaeSignatureHasNoBareRfEntity(RoutineDeclaration routine, RoutineKind kind)
+    {
+        string? file = routine.Location.FileName;
+        if (_registry.Language != Language.Suflae || file == null
+            || !file.EndsWith(value: ".sf", comparisonType: StringComparison.OrdinalIgnoreCase)
+            || IsStdlibFile(filePath: file))
+        {
+            return;
+        }
+
+        const string advice = " A RazorForge entity has no reference count, so passing it by value "
+            + "across a Suflae routine would let scope-exit teardown free the same object more than once. "
+            + "Hold it as a field of a Suflae entity, or hand it across as 'Retained[T]' (to keep it) or "
+            + "'Consulting[T]'/'Amending[T]' (to read/write it during the call).";
+
+        foreach (Parameter p in routine.Parameters)
+        {
+            if (p.Type is { Realm: "RF" } pType && ResolveType(typeExpr: pType) is EntityTypeInfo pe)
+            {
+                ReportError(code: SemanticDiagnosticCode.SuflaeBareRfEntityInSignature,
+                    message: $"Parameter '{p.Name}' is a bare RazorForge entity '{pe.Name}' (via 'RF::')."
+                             + advice,
+                    location: pType.Location);
+            }
+        }
+
+        // A constructor's return is the freshly-built entity the CALLER takes ownership of, not a
+        // by-value hand-off of an already-live object, so it is exempt (mirrors the invariant's carve-out).
+        if (kind != RoutineKind.Creator && routine.ReturnType is { Realm: "RF" } rType
+            && ResolveType(typeExpr: rType) is EntityTypeInfo re)
+        {
+            ReportError(code: SemanticDiagnosticCode.SuflaeBareRfEntityInSignature,
+                message: $"The return type is a bare RazorForge entity '{re.Name}' (via 'RF::')." + advice,
+                location: rType.Location);
+        }
+    }
+
     private void CollectRoutineDeclaration(RoutineDeclaration routine)
     {
         // Determine the kind of routine
@@ -645,6 +691,8 @@ public sealed partial class SemanticVerifier
                 kind = RoutineKind.Function;
             }
         }
+
+        CheckSuflaeSignatureHasNoBareRfEntity(routine: routine, kind: kind);
 
         // Validate that choice types cannot define any operator wired member routines
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine &&

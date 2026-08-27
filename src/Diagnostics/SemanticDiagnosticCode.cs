@@ -504,6 +504,13 @@ public enum SemanticDiagnosticCode
     /// other (or a global references itself) in their initializers, so none can initialize first.</summary>
     ModuleGlobalCircularInit = 436,
 
+    /// <summary>A Suflae routine's parameter or return type is a bare <c>RF::</c> RazorForge entity. An
+    /// RF entity has no reference count, so passing it by value across an SF routine boundary would let
+    /// SF's scope-exit teardown destroy the same object more than once (caller + callee + return) →
+    /// heap corruption. Hold it as a field of an SF entity, or hand it across as <c>Retained[T]</c>
+    /// (persistent) / <c>Consulting[T]</c>·<c>Amending[T]</c> (in-call access) instead.</summary>
+    SuflaeBareRfEntityInSignature = 439,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════
