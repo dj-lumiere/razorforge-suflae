@@ -206,6 +206,12 @@ public sealed partial class SemanticVerifier
 
         if (varInfo != null)
         {
+            // Suflae `global`: stamp the reference so GlobalEntityRewritePass can retarget it to the
+            // hidden __ModuleGlobals singleton field (thread-safe storage). LookupVariable checked local
+            // scopes first, so a local shadowing a global returns the local (IsGlobal=false) and is NOT
+            // stamped — the flag is shadowing-exact.
+            id.IsModuleGlobal = varInfo.IsGlobal;
+
             // #11: Deadref tracking — report error if steal invalidated variable
             if (_deadrefVariables.Contains(item: id.Name))
             {

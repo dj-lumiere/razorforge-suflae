@@ -84,21 +84,20 @@ When unsure, consult ground truth in the repo:
    can `import Mod.the_global` and read AND write it (it is one shared storage cell). **Use it
    for process-singular state** (a logger, config, an asset registry); per-frame / per-world
    context (delta time, input, the current world) belongs in engine-injected parameters, not a
-   global. **Thread-safety depends on the global's type.** The scheduler is M:N (real per-core
-   worker threads), so parallel agents can touch a global at the same time. An **entity/object
-   global is thread-safe**: it is backed by `Roamed`, promoted to ESCAPED at init, and every
-   statement that touches it is wrapped in the task-keyed access lock — so a single-statement
-   read-modify-write (`box.count = box.count + 1`) is atomic across workers (measured: 8 agents ×
-   5000 → exactly 40 000). An **atomic-width scalar global** — integers `S8`…`S64`/`U8`…`U64` and
-   floats `F32`/`F64` — is **also thread-safe for `g = g + d` / `g = g - d`**: that single-statement
-   RMW lowers to one lock-free `atomicrmw` (`add`/`sub` for ints, `fadd`/`fsub` for floats; measured
-   40 000/40 000). `Bool` needs nothing extra — a byte store/load is already atomic. The atomic RMW
-   **wraps on overflow** (like every language's atomics), unlike the checked `+` — opting a global
-   into concurrent mutation opts into wrapping atomics. Everything wider or heavier — `S128`/`S256`,
-   `F16`/`F128`, `Text`, `Decimal`, records — is currently only **single-writer-safe** (plain
-   load/store; concurrent mutation races), pending the planned single global-entity backing (all
-   such globals become fields of one `Roamed` object, so each access takes the task-keyed lock).
-   Either way, a
+   global. **Every global is thread-safe** — the scheduler is M:N (real per-core worker threads),
+   so parallel agents can touch a global at the same time, and the compiler backs ALL globals with
+   one hidden `Roamed` object: each module's globals become fields of a single synthesized
+   `__ModuleGlobals` entity, held behind one promoted-to-ESCAPED `Roamed` singleton, and every bare
+   global reference `g` is rewritten to a field access `__globals.g`. So a single-statement
+   read-modify-write (`box.count = box.count + 1`, `name = name + "!"`) is atomic across workers
+   (measured: 8 agents × 5000 → exactly 40 000). **Atomic-width scalar fields** — integers
+   `S8`…`S64`/`U8`…`U64` and floats `F32`/`F64` — take a lock-free fast path: `g = g + d` / `g = g - d`
+   lowers to one `atomicrmw` on the field address (`add`/`sub` for ints, `fadd`/`fsub` for floats), no
+   lock taken. **Everything wider or heavier** — `S128`/`S256`, `F16`/`F128`, `Text`, `Decimal`,
+   records — serializes through the entity's per-statement task-keyed access lock instead (correct,
+   just not lock-free). `Bool` needs nothing extra — a byte store/load is already atomic. The atomic
+   RMW **wraps on overflow** (like every language's atomics), unlike the checked `+` — opting a global
+   into concurrent mutation opts into wrapping atomics. A
    *multi-statement* logical RMW (`t = g; …; g = t + 1`) is never
    auto-atomic; that is the user's to serialize, in SF as in every language. (One init-ordering
    residual: a dependency reached only through a *member-routine* call — `x.foo()` — is not

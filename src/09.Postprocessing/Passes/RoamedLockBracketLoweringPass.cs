@@ -97,7 +97,13 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
         foreach (Statement stmt in block.Statements)
         {
             RecurseInto(stmt);
-            List<Expression> handles = FieldAccessHandles(stmt);
+            // An atomic-width scalar global RMW (`__globals__.n = __globals__.n.add(d)`) is emitted as a
+            // lock-free `atomicrmw` on the field address by codegen — it must NOT be bracketed, or it
+            // would needlessly take the escaped lock (and the two paths would disagree). Everything else
+            // (heavy-value field RMW, plain read/write) still gets the access-lock brackets.
+            List<Expression> handles = IsAtomicGlobalRmwStatement(stmt)
+                ? new List<Expression>()
+                : FieldAccessHandles(stmt);
             foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMemberRoutine.LockEnter);
             rewritten.Add(item: stmt);
             foreach (Expression h in handles) AddBracket(rewritten, h, RuntimeContract.RoamedMemberRoutine.LockExit);
@@ -115,6 +121,22 @@ internal sealed class RoamedLockBracketLoweringPass(PostprocessingContext ctx)
     // expressions. One entry per field-access occurrence (per-statement bracketing, see class doc).
     // Nested statements are bracketed when the block recursion reaches them, so only this statement's
     // own expressions are walked here (matching RoamedSpawnPromotionLoweringPass.CollectPromotes).
+    // True when the statement is the lock-free atomic-global RMW that codegen lowers to a single
+    // `atomicrmw` (shared matcher with codegen, so both agree on exactly which statements skip the lock).
+    private static bool IsAtomicGlobalRmwStatement(Statement stmt)
+    {
+        (Expression Target, Expression Value)? tv = stmt switch
+        {
+            AssignmentStatement a => (a.Target, a.Value),
+            ExpressionStatement { Expression: BinaryExpression { Operator: BinaryOperator.Assign } b } =>
+                (b.Left, b.Right),
+            _ => null
+        };
+        return tv is { } p && CodeGen.LlvmCodeGenerator.TryMatchAtomicModuleGlobalRmw(
+            target: p.Target, value: p.Value, fieldMember: out _, isFloat: out _, atomicOp: out _,
+            delta: out _);
+    }
+
     private List<Expression> FieldAccessHandles(Statement stmt)
     {
         var handles = new List<Expression>();

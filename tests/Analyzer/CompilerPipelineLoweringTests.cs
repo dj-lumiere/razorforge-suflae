@@ -505,11 +505,12 @@ public class CompilerPipelineLoweringTests
     [Fact]
     public void Codegen_LambdaLift_GeneratesIr()
     {
+        // RazorForge has no module-level mutable state (RF-S435), so the captured binding is a
+        // routine local — the lambda lift still fires on the closure over `factor`.
         string source = """
-                        var global_factor = 100_s32
-
                         routine test() -> S32
-                          var scale = x => x * global_factor
+                          var factor = 100_s32
+                          var scale = x given factor => x * factor
                           return 0_s32
                         """;
 

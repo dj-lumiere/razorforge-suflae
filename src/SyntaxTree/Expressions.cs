@@ -254,6 +254,17 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
 
+    /// <summary>
+    /// Set by semantic analysis when this identifier resolved to a Suflae module-level <c>global</c>
+    /// (its <see cref="TypeModel.Symbols.VariableInfo.IsGlobal"/> is true). Because <c>LookupVariable</c>
+    /// checks local scopes BEFORE the global table, a local that shadows a global resolves to the local
+    /// and this flag stays false — so the flag is shadowing-exact. Consumed by
+    /// <c>GlobalEntityRewritePass</c>, which rewrites every flagged reference to a field access on the
+    /// hidden per-program <c>__ModuleGlobals</c> singleton (the thread-safe storage), so no bare global
+    /// identifier survives into codegen.
+    /// </summary>
+    public bool IsModuleGlobal { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

@@ -323,7 +323,7 @@ public sealed partial class SemanticVerifier
         // The parser requires a type annotation on every `global`, so global.Type is non-null here.
         TypeSymbol globalType = ResolveType(typeExpr: global.Type!);
 
-        _registry.DeclareVariable(name: global.Name, type: globalType);
+        _registry.DeclareVariable(name: global.Name, type: globalType, isGlobal: true);
 
         string? module = GetCurrentModuleName();
         _registry.RegisterGlobal(name: global.Name,

@@ -16,6 +16,10 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void Run(Program program)
     {
+        // Route Suflae module-level `global`s through the hidden __ModuleGlobals entity FIRST, so every
+        // subsequent pass (f-string, operator, Roamed projection/lock-bracket) sees the field accesses
+        // and the globals inherit the entity's thread-safe access-lock brackets.
+        new GlobalEntityRewritePass(ctx).Run(program);
         new VariantReturnLoweringPass(ctx).Run(program);
         new LiteralLoweringPass(ctx).Run(program);
         new BuilderQueryInliningPass(ctx.Registry, ctx.VariantBodies).Run(program);
@@ -72,6 +76,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void RunGlobal()
     {
+        new GlobalEntityRewritePass(ctx).RunOnVariantBodies();
         new VariantReturnLoweringPass(ctx).RunOnVariantBodies();
         new LiteralLoweringPass(ctx).RunOnVariantBodies();
         new BuilderQueryInliningPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();

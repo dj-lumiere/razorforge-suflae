@@ -559,57 +559,169 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Recognizes a scalar-integer module-<c>global</c> read-modify-write <c>g = g + d</c> / <c>g = g - d</c>
-    /// and emits a single seq-cst <c>atomicrmw</c> (lock-free, thread-safe) instead of the racy
-    /// load-compute-store. Returns true when handled. Only fires for an integer-scalar global whose
-    /// assignment value is <c>g.add(d)</c>/<c>g.sub(d)</c> on the SAME global; anything else returns false
-    /// and takes the ordinary path. Entity/Text/Decimal globals are handled elsewhere (Roamed lock).
+    /// Recognizes an atomic-width scalar module-<c>global</c> read-modify-write
+    /// <c>g = g + d</c> / <c>g = g - d</c> — now lowered to a field of the hidden <c>__ModuleGlobals</c>
+    /// singleton (<c>__globals__.g = __globals__.g.add(d)</c>) — and emits a single seq-cst
+    /// <c>atomicrmw</c> on the field ADDRESS (lock-free, thread-safe) instead of the locked
+    /// load-compute-store. Returns true when handled. Only fires when the field is an atomic width
+    /// (i8..i64 / f32 / f64) and the delta touches no other global field (see
+    /// <see cref="TryMatchAtomicModuleGlobalRmw"/>); the matching statement is left UN-bracketed by
+    /// <c>RoamedLockBracketLoweringPass</c>, so this is the only code that touches the field. Heavy-value
+    /// fields (S128/S256/F16/F128/Text/Decimal/records) fall through to the ordinary locked field write.
     /// </summary>
     private bool TryEmitAtomicGlobalRmw(StringBuilder sb, Expression target, Expression valueExpr)
     {
-        if (target is not IdentifierExpression { Name: var gName }
-            || !_moduleGlobals.TryGetValue(key: gName, value: out (TypeInfo Type, string Symbol) gslot))
+        if (!TryMatchAtomicModuleGlobalRmw(target: target, value: valueExpr,
+                fieldMember: out MemberExpression? fieldMember, isFloat: out bool _,
+                atomicOp: out string? atomicOp, delta: out Expression? delta)
+            || fieldMember is null || atomicOp is null || delta is null)
         {
             return false;
         }
 
-        string llvmType = GetValueLlvmType(type: gslot.Type);
-        // Atomic-capable scalar widths: integers i8..i64 (S8..S64 / U8..U64) and floats F32/F64.
-        // Wider ints (S128/S256), F16/F128, and Text/Decimal/records are NOT handled here (→ Roamed).
-        bool isFloat = llvmType is "float" or "double";
-        if (llvmType is not ("i8" or "i16" or "i32" or "i64") && !isFloat)
-        {
-            return false;
-        }
-
-        // Value must be `<gName>.add(d)` or `<gName>.sub(d)` — the same global read on the RHS.
-        if (valueExpr is not CallExpression
-            {
-                Callee: MemberExpression { Object: IdentifierExpression { Name: var recv }, MemberName: var op },
-                Arguments: [{ } deltaArg]
-            }
-            || recv != gName)
-        {
-            return false;
-        }
-
-        string? atomicOp = op switch
-        {
-            "add" => isFloat ? "fadd" : "add",
-            "sub" => isFloat ? "fsub" : "sub",
-            _ => null
-        };
-        if (atomicOp == null)
-        {
-            return false;
-        }
-
-        Expression delta = deltaArg is NamedArgumentExpression na ? na.Value : deltaArg;
+        // atomicrmw needs the field ADDRESS: project the Roamed handle to the entity behind its
+        // controller, then GEP to the field. The delta is field-free (guaranteed by the matcher), so
+        // evaluating it outside any lock is safe.
+        string fieldPtr = EmitRoamedEntityFieldAddress(sb: sb, fieldMember: fieldMember);
+        string llvmType = GetValueLlvmType(type: fieldMember.ResolvedType!);
         string deltaVal = EmitExpression(sb: sb, expr: delta);
         string old = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {old} = atomicrmw {atomicOp} ptr {gslot.Symbol}, {llvmType} {deltaVal} seq_cst");
+            line: $"  {old} = atomicrmw {atomicOp} ptr {fieldPtr}, {llvmType} {deltaVal} seq_cst");
         return true;
+    }
+
+    /// <summary>
+    /// Matches <c>__globals__.field = __globals__.field.add|sub(delta)</c> where <c>field</c> is an
+    /// atomic-width scalar (i8..i64 / f32 / f64) of the <c>__ModuleGlobals</c> singleton and <c>delta</c>
+    /// touches no global field. Shared by codegen (emits the <c>atomicrmw</c>) and
+    /// <c>RoamedLockBracketLoweringPass</c> (skips the access-lock bracket for the matched statement) so
+    /// the two agree exactly on which RMWs are lock-free.
+    /// </summary>
+    internal static bool TryMatchAtomicModuleGlobalRmw(Expression target, Expression value,
+        out MemberExpression? fieldMember, out bool isFloat, out string? atomicOp, out Expression? delta)
+    {
+        fieldMember = null;
+        isFloat = false;
+        atomicOp = null;
+        delta = null;
+
+        if (target is not MemberExpression tm) return false;
+        if (ModuleGlobalsInnerEntity(t: tm.Object.ResolvedType) is null) return false;
+        if (!IsAtomicWidthScalar(t: tm.ResolvedType, isFloat: out isFloat)) return false;
+
+        Expression v = value is NamedArgumentExpression nav ? nav.Value : value;
+        if (v is not CallExpression
+            {
+                Callee: MemberExpression { Object: MemberExpression vm, MemberName: var op },
+                Arguments: [{ } deltaArg]
+            })
+        {
+            return false;
+        }
+        if (op is not ("add" or "sub")) return false;
+        // Same singleton field on both sides (`__globals__.field`).
+        if (tm.MemberName != vm.MemberName
+            || tm.Object is not IdentifierExpression ti
+            || vm.Object is not IdentifierExpression vi
+            || ti.Name != vi.Name)
+        {
+            return false;
+        }
+
+        Expression d = deltaArg is NamedArgumentExpression nad ? nad.Value : deltaArg;
+        // A field-free delta is a literal / local / atomic snapshot — safe to read unlocked. If it read a
+        // heavy (non-atomic) field, the unlocked read could tear, so those fall back to the locked path.
+        if (ReferencesModuleGlobalField(e: d)) return false;
+
+        fieldMember = tm;
+        atomicOp = isFloat ? op == "add" ? "fadd" : "fsub" : op == "add" ? "add" : "sub";
+        delta = d;
+        return true;
+    }
+
+    /// <summary>The <c>__ModuleGlobals</c> entity inside a <c>Roamed[__ModuleGlobals]</c> handle type,
+    /// or null when the type is not that handle.</summary>
+    private static EntityTypeInfo? ModuleGlobalsInnerEntity(TypeInfo? t)
+    {
+        EntityTypeInfo? inner = t switch
+        {
+            WrapperTypeInfo { Name: Resolution.RuntimeContract.Roamed, InnerType: EntityTypeInfo e } => e,
+            RecordTypeInfo
+            {
+                GenericDefinition.Name: Resolution.RuntimeContract.Roamed, TypeArguments: [EntityTypeInfo e]
+            } => e,
+            _ => null
+        };
+        return inner?.BareName == Builder.Program.ModuleGlobalsEntityName ? inner : null;
+    }
+
+    private static bool IsAtomicWidthScalar(TypeInfo? t, out bool isFloat)
+    {
+        isFloat = false;
+        switch (t?.BareName)
+        {
+            case "S8" or "S16" or "S32" or "S64" or "U8" or "U16" or "U32" or "U64":
+                return true;
+            case "F32" or "F64":
+                isFloat = true;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool ReferencesModuleGlobalField(Expression e)
+    {
+        var found = false;
+        AstWalker.WalkExpressions(root: e, visit: n =>
+        {
+            if (n is MemberExpression m && ModuleGlobalsInnerEntity(t: m.Object.ResolvedType) is not null)
+                found = true;
+        });
+        return found;
+    }
+
+    /// <summary>Projects a <c>Roamed[__ModuleGlobals]</c> field-access member expression to the field's
+    /// ADDRESS: read the entity ptr from the roam controller's <c>data</c>, then GEP to the field.</summary>
+    private string EmitRoamedEntityFieldAddress(StringBuilder sb, MemberExpression fieldMember)
+    {
+        EntityTypeInfo entity = ModuleGlobalsInnerEntity(t: fieldMember.Object.ResolvedType)!;
+        string handle = EmitExpression(sb: sb, expr: fieldMember.Object);
+        TypeInfo? controllerType = _registry.LookupType(name: $"RoamController[{entity.FullName}]")
+            ?? _registry.LookupType(name: $"Core.RoamController[{entity.FullName}]");
+        string entityPtr = controllerType is EntityTypeInfo controllerEntity
+            ? EmitEntityMemberVariableRead(sb: sb, entityPtr: handle, entity: controllerEntity,
+                memberVariableName: "data")
+            : handle;
+        return EmitEntityMemberVariableFieldPointer(sb: sb, entityPtr: entityPtr, entity: entity,
+            memberVariableName: fieldMember.MemberName);
+    }
+
+    /// <summary>The GEP pointer to an entity member variable (the address, without the load that
+    /// <see cref="EmitEntityMemberVariableRead"/> appends).</summary>
+    private string EmitEntityMemberVariableFieldPointer(StringBuilder sb, string entityPtr,
+        EntityTypeInfo entity, string memberVariableName)
+    {
+        entity = RefreshEntityMemberVariables(entity: entity, memberVariableName: memberVariableName);
+        GenerateEntityType(entity: entity);
+
+        int idx = -1;
+        for (int i = 0; i < entity.MemberVariables.Count; i++)
+        {
+            if (entity.MemberVariables[index: i].Name == memberVariableName) { idx = i; break; }
+        }
+        if (idx < 0)
+        {
+            throw new InvalidOperationException(
+                message: $"Member variable '{memberVariableName}' not found on entity '{entity.FullName}'");
+        }
+
+        string typeName = GetEntityTypeName(entity: entity);
+        string ptr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {ptr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {idx}");
+        return ptr;
     }
 
     /// <summary>

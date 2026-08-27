@@ -1397,38 +1397,73 @@ internal partial class Program
     /// externs (or routines) across the compiled programs. De-duplicated, order-preserving. The caller
     /// passes only files that survived the <c>@target</c> gate, so the result is per-target correct.
     /// </summary>
+    /// <summary>Name of the synthesized per-program entity that holds every Suflae module-level
+    /// <c>global</c> as a field. Routing all globals through ONE <c>entity</c> behind a hidden
+    /// <c>Roamed</c> singleton makes them thread-safe on the M:N worker pool: the per-statement
+    /// access-lock brackets (RoamedLockBracketLoweringPass) serialize concurrent field RMW, and
+    /// atomic-width scalar fields additionally get a lock-free <c>atomicrmw</c> fast-path on the field
+    /// address.</summary>
+    internal const string ModuleGlobalsEntityName = "__ModuleGlobals";
+
+    /// <summary>Name of the hidden singleton holding the one <see cref="ModuleGlobalsEntityName"/>
+    /// instance. Every module-level global access <c>g</c> is rewritten to <c>__globals__.g</c> by
+    /// GlobalEntityRewritePass.</summary>
+    internal const string ModuleGlobalsSingletonName = "__globals__";
+
     /// <summary>
-    /// Suflae `global` eager initialization. Moves each module-level <c>global</c>'s initializer out of
-    /// the declaration and into a runtime assignment prepended (in module init order) to the entry
-    /// <c>start()</c> body. The declaration keeps only zero-initialized storage; the assignment performs
-    /// the real init and flows through the whole pipeline, so a non-constant or entity initializer works
-    /// exactly like ordinary code. Suflae has a single <c>start()</c> program entry, so prepending there
-    /// guarantees every global is initialized before any user code runs.
+    /// Suflae <c>global</c> eager initialization + thread-safe storage synthesis. Each module-level
+    /// <c>global name: T = init</c> becomes a FIELD of one hidden per-program entity
+    /// <see cref="ModuleGlobalsEntityName"/>, stored behind a single <c>Roamed</c> singleton
+    /// <see cref="ModuleGlobalsSingletonName"/> (constructed + promoted at the top of <c>start()</c>).
+    /// Field initializers run in dependency order (a global's init may read another global; a cycle —
+    /// including self-reference, including through a free-routine call — is RF-S436). Initializers that
+    /// touch no other global are folded straight into the singleton constructor; a dependent initializer
+    /// runs as an ordered field assignment AFTER construction so its read sees the already-initialized
+    /// field. The original <c>global</c> declarations are kept (init stripped) ONLY so semantic analysis
+    /// registers them and stamps <c>IdentifierExpression.IsModuleGlobal</c> on every reference;
+    /// GlobalEntityRewritePass then deletes them and rewrites each stamped reference to
+    /// <c>__globals__.field</c>.
     /// </summary>
     private static bool InjectGlobalInitializers(
         List<(SyntaxTree.Program Program, string FilePath)> orderedFiles)
     {
-        // 1) Collect globals (in encounter order) and strip their initializers off the declarations.
-        var globals = new List<(string Name, Expression Init, SourceLocation Loc)>();
-        var globalNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // 1) Collect globals (in encounter order) and strip their initializers off the declarations. The
+        //    (now init-less) declaration is kept so SA still registers the global for reference resolution.
+        var collected = new List<(string Name, TypeExpression Type, Expression Init, SourceLocation Loc)>();
         foreach ((SyntaxTree.Program program, string _) in orderedFiles)
         {
             List<ISyntaxTreeNode> decls = program.Declarations;
             for (int i = 0; i < decls.Count; i++)
             {
-                if (decls[i] is VariableDeclaration { IsGlobal: true, Initializer: not null } g)
+                if (decls[i] is VariableDeclaration
+                    { IsGlobal: true, Initializer: not null, Type: not null } g)
                 {
-                    globals.Add(item: (g.Name, g.Initializer, g.Location));
-                    globalNames.Add(item: g.Name);
+                    collected.Add(item: (g.Name, g.Type, g.Initializer, g.Location));
                     decls[i] = g with { Initializer = null };
                 }
             }
         }
 
-        if (globals.Count == 0)
+        if (collected.Count == 0)
         {
             return true;
         }
+
+        // Deduplicate by bare name — a duplicate declaration's LAST initializer wins (matching the
+        // registry's last-write-wins global table). First-seen order gives a stable field layout.
+        var seenOrder = new List<string>();
+        var latest =
+            new Dictionary<string, (TypeExpression Type, Expression Init, SourceLocation Loc)>(
+                comparer: StringComparer.Ordinal);
+        foreach ((string name, TypeExpression type, Expression init, SourceLocation loc) in collected)
+        {
+            if (!latest.ContainsKey(key: name)) seenOrder.Add(item: name);
+            latest[key: name] = (type, init, loc);
+        }
+        var globals = seenOrder
+            .Select(selector: name => (Name: name, latest[key: name].Type, latest[key: name].Init,
+                latest[key: name].Loc))
+            .ToList();
 
         // 2) Order the initializers so each global runs AFTER every other global it depends on (the
         //    dependency inits before its dependent). Globals with no inter-dependency keep source order
@@ -1520,25 +1555,123 @@ internal partial class Program
             return false;
         }
 
-        var inits = order.Select(selector: i => new AssignmentStatement(
-            Target: new IdentifierExpression(Name: globals[index: i].Name, Location: globals[index: i].Loc),
-            Value: globals[index: i].Init,
-            Location: globals[index: i].Loc) { IsGlobalInit = true }).ToList();
+        // 3) Build the __ModuleGlobals entity — one field per global (`name: Type`, no initializer).
+        SourceLocation loc0 = globals[index: 0].Loc;
+        var fieldDecls = new List<Declaration>(capacity: n);
+        for (int i = 0; i < n; i++)
+        {
+            fieldDecls.Add(item: new VariableDeclaration(Name: globals[index: i].Name,
+                Type: globals[index: i].Type, Initializer: null, Visibility: VisibilityModifier.Open,
+                Location: globals[index: i].Loc));
+        }
+        var entityDecl = new EntityDeclaration(Name: ModuleGlobalsEntityName, GenericParameters: null,
+            Protocols: new List<TypeExpression>(), Members: fieldDecls,
+            Visibility: VisibilityModifier.Open, Location: loc0);
 
-        // 3) Prepend the ordered assignments to the entry module's start() (Suflae's single program entry).
+        // 4) Constructor arguments: a field whose initializer touches no other global (deps empty) is set
+        //    directly at construction with its REAL initializer; a dependent field is seeded with a type
+        //    default and gets its real value from an ordered field assignment after construction (below).
+        var ctorArgs = new List<(string Name, Expression Value)>(capacity: n);
+        for (int i = 0; i < n; i++)
+        {
+            Expression value;
+            if (deps[index: i].Count == 0)
+            {
+                value = globals[index: i].Init;
+            }
+            else
+            {
+                Expression? def = DefaultInitializerFor(type: globals[index: i].Type,
+                    loc: globals[index: i].Loc);
+                if (def == null)
+                {
+                    Console.Error.WriteLine(
+                        value: $"error[RF-S437]: the global '{globals[index: i].Name}: " +
+                               $"{globals[index: i].Type.Name}' has an initializer that depends on another " +
+                               $"global, but dependent initialization is only supported for scalar/Text/Bool " +
+                               $"types. Initialize it from a constant instead.");
+                    return false;
+                }
+                value = def;
+            }
+            ctorArgs.Add(item: (globals[index: i].Name, value));
+        }
+        var construct = new CreatorExpression(TypeName: ModuleGlobalsEntityName, TypeArguments: null,
+            MemberVariables: ctorArgs, Location: loc0);
+
+        // 5) Init statements prepended to start(): construct + promote the singleton (IsGlobalInit lets
+        //    RoamedSpawnPromotionLoweringPass arm its lock), then the ordered field assignments for the
+        //    dependent globals. Each dependent assignment's target + any global reads inside its value are
+        //    bare global identifiers that GlobalEntityRewritePass retargets to `__globals__.field`.
+        var initStmts = new List<Statement>(capacity: n + 1)
+        {
+            new AssignmentStatement(
+                Target: new IdentifierExpression(Name: ModuleGlobalsSingletonName, Location: loc0),
+                Value: construct, Location: loc0) { IsGlobalInit = true }
+        };
+        foreach (int i in order)
+        {
+            if (deps[index: i].Count == 0) continue; // independent — already set by the constructor
+            initStmts.Add(item: new AssignmentStatement(
+                Target: new IdentifierExpression(Name: globals[index: i].Name,
+                    Location: globals[index: i].Loc),
+                Value: globals[index: i].Init, Location: globals[index: i].Loc));
+        }
+
+        // 6) The singleton declaration — an entity `global` whose storage is a promoted Roamed[E] handle.
+        var singletonDecl = new VariableDeclaration(Name: ModuleGlobalsSingletonName,
+            Type: new TypeExpression(Name: ModuleGlobalsEntityName, GenericArguments: null,
+                Location: loc0),
+            Initializer: null, Visibility: VisibilityModifier.Open, Location: loc0, IsGlobal: true);
+
+        // 7) Splice into the entry file (the one with `start()`): declare the entity + singleton and
+        //    prepend the init statements to start().
         foreach ((SyntaxTree.Program program, string _) in orderedFiles)
         {
+            BlockStatement? startBlock = null;
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is RoutineDeclaration { Name: "start", Body: BlockStatement block })
                 {
-                    block.Statements.InsertRange(index: 0, collection: inits);
-                    return true;
+                    startBlock = block;
+                    break;
                 }
             }
+
+            if (startBlock == null) continue;
+
+            // Append (NOT prepend) the synthesized declarations: imports must stay at the top of the
+            // file (RF-S114). Declaration order does not matter for type collection.
+            program.Declarations.Add(item: entityDecl);
+            program.Declarations.Add(item: singletonDecl);
+            startBlock.Statements.InsertRange(index: 0, collection: initStmts);
+            return true;
         }
 
-        return true;
+        Console.Error.WriteLine(
+            value: "error[RF-S438]: module-level 'global' declarations require a 'routine start()' entry " +
+                   "point to host their initialization.");
+        return false;
+    }
+
+    /// <summary>A build-time default value for a <c>global</c> whose initializer depends on another
+    /// global (so its real value is assigned after the singleton is constructed). A bare integer literal
+    /// <c>0</c> conforms to any numeric type (int/float/decimal) via RF-S767; Text and Bool have their
+    /// own empty/false defaults. Returns null for a type with no synthesizable default.</summary>
+    private static Expression? DefaultInitializerFor(TypeExpression type, SourceLocation loc)
+    {
+        return type.Name switch
+        {
+            "Text" => new LiteralExpression(Value: "", LiteralType: Compiler.Tokenizer.TokenType.TextLiteral,
+                Location: loc),
+            "Bool" => new LiteralExpression(Value: false, LiteralType: Compiler.Tokenizer.TokenType.False,
+                Location: loc),
+            "S8" or "S16" or "S32" or "S64" or "S128" or "S256" or "U8" or "U16" or "U32" or "U64"
+                or "U128" or "U256" or "F16" or "F32" or "F64" or "F128" or "F256" or "Decimal"
+                or "D32" or "D64" or "D128" or "Integer" => new LiteralExpression(Value: "0",
+                    LiteralType: Compiler.Tokenizer.TokenType.UndecidedInteger, Location: loc),
+            _ => null
+        };
     }
 
     private static IReadOnlyList<string> CollectLinkLibraries(IEnumerable<SyntaxTree.Program> programs)

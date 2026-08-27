@@ -2199,12 +2199,12 @@ public sealed partial class TypeRegistry
     /// <param name="isNullable">Whether the variable is nullable.</param>
     /// <returns>True if successful, false if already declared in this scope.</returns>
     public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false,
-        Expression? presetValue = null, bool isNullable = false)
+        Expression? presetValue = null, bool isNullable = false, bool isGlobal = false)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
             IsModifiable = !isPreset, IsPreset = isPreset, PresetValue = presetValue,
-            IsNullable = isNullable
+            IsNullable = isNullable, IsGlobal = isGlobal
         };
 
         return _currentScope.DeclareVariable(variable: variable);
