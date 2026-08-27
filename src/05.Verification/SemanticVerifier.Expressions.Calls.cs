@@ -497,6 +497,19 @@ public sealed partial class SemanticVerifier
                                     ? ctorMemberVariables[index: creatorPosIdx]
                                     : null);
                             argExpected = field?.Type;
+                            // A USER constructor's PARAMETER names may differ from the field names
+                            // (`routine Pt(v: S64) -> Pt` with a field `x`), so the field-by-name lookup
+                            // above finds nothing → the bare literal would stall at Suflae's `Integer`
+                            // default (→ a pruned `Integer.from_literal`). Fall back to the matching
+                            // `create` param's type so `Pt(v: 3)` coerces `3` to the param's type.
+                            if (argExpected == null && arg is NamedArgumentExpression ctorArg
+                                && callableType is TypeInfo ctorOwner)
+                            {
+                                argExpected = _registry.GetMemberRoutinesForType(type: ctorOwner)
+                                    .Where(predicate: m => m.Name == "create")
+                                    .SelectMany(selector: m => m.Parameters)
+                                    .FirstOrDefault(predicate: p => p.Name == ctorArg.Name)?.Type;
+                            }
                             // For a generic record/entity instantiation (Box[S64]), resolve the field's
                             // formal param (`T`) to the concrete type arg so the literal conforms to S64,
                             // not to the unresolved `T`.
