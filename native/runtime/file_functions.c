@@ -531,6 +531,40 @@ rf_S32 rf_fs_move(const char* src, rf_S32 src_len, const char* dst, rf_S32 dst_l
 #endif
 }
 
+/**
+ * Move/rename WITHOUT overwriting an existing destination.
+ * Returns 0 = moved, 1 = destination already exists (caller skips), -1 = error.
+ * Folds the "does the target exist?" preflight and the rename into one syscall on
+ * Windows (MoveFileEx without REPLACE); on POSIX (whose rename() replaces) it does
+ * a best-effort existence check first.
+ */
+rf_S32 rf_fs_move_no_replace(const char* src, rf_S32 src_len, const char* dst, rf_S32 dst_len)
+{
+    char* csrc = make_cstr(src, src_len);
+    char* cdst = make_cstr(dst, dst_len);
+    if (!csrc || !cdst) { free(csrc); free(cdst); return -1; }
+
+#ifdef _WIN32
+    /* No REPLACE flag: fails with ERROR_ALREADY_EXISTS when the target exists. */
+    BOOL ok = MoveFileExA(csrc, cdst, 0);
+    if (ok) { free(csrc); free(cdst); return 0; }
+    DWORD err = GetLastError();
+    free(csrc); free(cdst);
+    return (err == ERROR_ALREADY_EXISTS || err == ERROR_FILE_EXISTS) ? 1 : -1;
+#else
+    struct stat st;
+    if (stat(cdst, &st) == 0) { free(csrc); free(cdst); return 1; }  /* exists */
+    int ret = rename(csrc, cdst);
+    if (ret != 0)
+    {
+        ret = rf_fs_copy(csrc, (rf_S32)strlen(csrc), cdst, (rf_S32)strlen(cdst));
+        if (ret == 0) unlink(csrc);
+    }
+    free(csrc); free(cdst);
+    return ret == 0 ? 0 : -1;
+#endif
+}
+
 /* ========================================================================== */
 /* FileSystem: Directory listing                                               */
 /* ========================================================================== */
@@ -640,11 +674,17 @@ char* rf_fs_list_dir_typed(const char* path, rf_S32 len)
     char* out = (char*)malloc(cap);
     if (!out) { free(cpath); rf_last_result_len = 0; return NULL; }
 
-    /* Append `<kind><name>` as one line to `out`, growing as needed. Returns 0 on
-       allocation failure. */
-#define RF_EMIT_ENTRY(is_dir, name, nlen)                                       \
+    /* Append one line `<kind><mtime> <name>` to `out`, growing as needed.
+       `<kind>` is 'd'/'f'; `<mtime>` is non-negative Unix epoch seconds in decimal
+       (clamped to 0 so the caller never has to parse a sign); a single space then
+       the raw name. The caller reads mtime as the digits between kind and the FIRST
+       space, so a name containing spaces is unambiguous. Sets emit_ok=0 on OOM. */
+#define RF_EMIT_ENTRY(is_dir, mtime, name, nlen)                                \
     do {                                                                        \
-        size_t need = out_len + (out_len > 0 ? 1 : 0) + 1 + (nlen);             \
+        char mbuf[24];                                                          \
+        rf_S64 mt = (mtime) < 0 ? 0 : (mtime);                                  \
+        int mlen = snprintf(mbuf, sizeof(mbuf), "%lld", (long long)mt);         \
+        size_t need = out_len + (out_len > 0 ? 1 : 0) + 1 + (size_t)mlen + 1 + (nlen); \
         if (need + 1 > cap)                                                     \
         {                                                                       \
             while (need + 1 > cap) cap *= 2;                                    \
@@ -654,6 +694,9 @@ char* rf_fs_list_dir_typed(const char* path, rf_S32 len)
         }                                                                       \
         if (out_len > 0) out[out_len++] = '\n';                                 \
         out[out_len++] = (is_dir) ? 'd' : 'f';                                  \
+        memcpy(out + out_len, mbuf, (size_t)mlen);                             \
+        out_len += (size_t)mlen;                                                \
+        out[out_len++] = ' ';                                                   \
         memcpy(out + out_len, (name), (nlen));                                  \
         out_len += (nlen);                                                      \
     } while (0)
@@ -679,7 +722,11 @@ char* rf_fs_list_dir_typed(const char* path, rf_S32 len)
         if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
             continue;
         int is_dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        RF_EMIT_ENTRY(is_dir, fd.cFileName, strlen(fd.cFileName));
+        /* mtime comes free from the enumeration — no per-entry stat. */
+        rf_U64 ticks = ((rf_U64)fd.ftLastWriteTime.dwHighDateTime << 32)
+                     | (rf_U64)fd.ftLastWriteTime.dwLowDateTime;
+        rf_S64 mtime = (rf_S64)(ticks / 10000000ULL) - 11644473600LL;
+        RF_EMIT_ENTRY(is_dir, mtime, fd.cFileName, strlen(fd.cFileName));
         if (!emit_ok) break;
     } while (FindNextFileA(hFind, &fd));
     FindClose(hFind);
@@ -694,26 +741,24 @@ char* rf_fs_list_dir_typed(const char* path, rf_S32 len)
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        int is_dir;
-        if (entry->d_type == DT_DIR)
-            is_dir = 1;
-        else if (entry->d_type == DT_REG || entry->d_type == DT_LNK)
-            is_dir = 0;
-        else
+        /* POSIX readdir gives no mtime, so stat each entry (also yields the kind).
+           On this path the mtime savings are for the Windows enumeration above. */
+        int is_dir = 0;
+        rf_S64 mtime = 0;
+        size_t nlen = strlen(entry->d_name);
+        char* full = (char*)malloc(plen + 1 + nlen + 1);
+        if (full)
         {
-            /* DT_UNKNOWN (or a type we don't special-case): one stat to classify. */
-            size_t nlen = strlen(entry->d_name);
-            char* full = (char*)malloc(plen + 1 + nlen + 1);
-            is_dir = 0;
-            if (full)
+            snprintf(full, plen + 1 + nlen + 1, "%s/%s", cpath, entry->d_name);
+            struct stat st;
+            if (stat(full, &st) == 0)
             {
-                snprintf(full, plen + 1 + nlen + 1, "%s/%s", cpath, entry->d_name);
-                struct stat st;
-                if (stat(full, &st) == 0) is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
-                free(full);
+                is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
+                mtime = (rf_S64)st.st_mtime;
             }
+            free(full);
         }
-        RF_EMIT_ENTRY(is_dir, entry->d_name, strlen(entry->d_name));
+        RF_EMIT_ENTRY(is_dir, mtime, entry->d_name, nlen);
         if (!emit_ok) break;
     }
     closedir(dir);

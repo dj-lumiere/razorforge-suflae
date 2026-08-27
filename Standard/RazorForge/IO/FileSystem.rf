@@ -107,6 +107,21 @@ routine move!(source: Text, destination: Text)
     throw IOError(description: f"Cannot move '{source}' to '{destination}'")
   return
 
+### Moves or renames an entry WITHOUT overwriting an existing destination.
+### Folds the "does the destination exist?" check into the move itself (one syscall
+### on Windows), so callers that skip on collision need no separate `exists` probe.
+### :param source: The source path.
+### :param destination: The destination path.
+### :returns: `true` when the move happened; `false` when the destination already existed.
+### :throws: May throw {IOError} on any other failure.
+routine move_if_absent!(source: Text, destination: Text) -> Bool
+  var src_cstr = CStr(from: source)
+  var dst_cstr = CStr(from: destination)
+  var result = rf_fs_move_no_replace(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot move '{source}' to '{destination}'")
+  return result == 0
+
 ### Removes a file or empty directory.
 ### Use `delete_path_all!` when recursive removal is required.
 ### :param path: The path to remove.
@@ -286,14 +301,17 @@ routine list_dir!(path: Text) -> List[Text]
   var joined = bytes.decode_as_utf8_lossy()
   return joined.split(separator: '\n')
 
-### One directory entry: its bare name and whether it is a directory.
+### One directory entry: its bare name, kind, and last-modification time.
 record DirEntry
   name: Text               # The final path component
   is_directory: Bool       # Whether the entry is a directory
+  modified: Moment         # Last-modification time (from the directory read)
 
-### Returns the direct entries of a directory WITH their kind, in one directory read.
-### Prefer this over `list_dir!` + `is_directory` when walking a tree: the kind comes
-### for free from the OS directory read, so no extra `stat` per entry is needed.
+### Returns the direct entries of a directory WITH their kind AND modification time,
+### in one directory read. Prefer this over `list_dir!` + `is_directory` + `metadata!`
+### when walking a tree: on Windows the kind and mtime come for free from the OS
+### directory enumeration, so NO per-entry `stat` is needed. (POSIX falls back to one
+### stat per entry to obtain the mtime.)
 ### `.` / `..` are omitted; an empty directory yields an empty list.
 ### :param path: The directory to list.
 ### :returns: The resulting `List[DirEntry]`.
@@ -310,10 +328,18 @@ routine list_dir_entries!(path: Text) -> List[DirEntry]
   var bytes = Bytes(ptr: ptr, count: len)
   var joined = bytes.decode_as_utf8_lossy()
   each line in joined.split(separator: '\n')
-    # Each line is `<kind><name>` — 'd' for a directory, 'f' otherwise.
+    # Each line is `<kind><mtime> <name>`: 'd'/'f', then decimal Unix seconds, one
+    # space, then the raw name (which may itself contain spaces).
     var is_dir = line[0u64] == 'd'
-    var name = line[1u64 til ^0]
-    result.add_last(value: DirEntry(name: name, is_directory: is_dir))
+    var space = line.find!(letter: ' ')
+    var mtime: S64 = 0
+    each k in 1u64 til space
+      mtime = mtime * 10_s64 + S64(line[k].digit_value())
+    var name = line[(space + 1u64) til ^0]
+    result.add_last(value: DirEntry(
+      name: name,
+      is_directory: is_dir,
+      modified: Moment.from_timestamp(seconds: mtime)))
   return result
 
 # ============================================================================
