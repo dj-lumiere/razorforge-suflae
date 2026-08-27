@@ -261,6 +261,17 @@ internal sealed class TypeResolver
     {
         if (_sa._registry.Language != Language.Suflae) return resolved;
         if (_sa.IsStdlibFile(filePath: _sa._currentFilePath)) return resolved;
+        // An entity DEFINED in a user RazorForge module (imported `.rf`, not stdlib) is a genuine RF-realm
+        // entity — it keeps RF ownership semantics (bare, deterministic teardown), exactly like an
+        // `RF::`-qualified reference. SF must NOT auto-roam it (that silently wraps an RF entity in a
+        // RoamController whose ABI the RF constructor/methods don't expect → crash). SF holds it as a bare
+        // local, or wraps it in an SF entity for persistence (the RF:: wrapper pattern).
+        if (resolved is TypeInfo { Location.FileName: { } defFile }
+            && defFile.EndsWith(value: ".rf", comparisonType: StringComparison.OrdinalIgnoreCase)
+            && !_sa.IsStdlibFile(filePath: defFile))
+        {
+            return resolved;
+        }
         if (_sa._registry.LookupType(name: RuntimeContract.Roamed) is not { } roamedDef) return resolved;
         return RoamSlot(resolved: resolved, roamedDef: roamedDef);
     }
