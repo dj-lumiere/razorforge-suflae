@@ -94,6 +94,12 @@ public record DeclarationStatement(Declaration Declaration, SourceLocation Locat
 public record AssignmentStatement(Expression Target, Expression Value, SourceLocation Location)
     : Statement(Location: Location)
 {
+    /// <summary>True for the compiler-synthesized assignment that initializes a Suflae module-level
+    /// <c>global</c> at the top of <c>start()</c>. Signals the Roamed promotion pass to escape the
+    /// global's handle to ESCAPED (armed-lock) mode right after init — a global is reachable from every
+    /// task, so its access lock must engage for thread-safe concurrent mutation.</summary>
+    public bool IsGlobalInit { get; init; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

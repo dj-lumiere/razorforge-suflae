@@ -93,6 +93,15 @@ internal sealed class RoamedSpawnPromotionLoweringPass(PostprocessingContext ctx
             RecurseInto(stmt);
             rewritten.AddRange(collection: CollectPromotes(stmt));
             rewritten.Add(item: stmt);
+
+            // A Suflae `global` whose storage is a Roamed[T] handle is reachable from every task, so it
+            // must be ESCAPED (armed lock) for the per-statement access-lock brackets to serialize
+            // concurrent mutation. Promote it right AFTER its init assignment. Idempotent + void.
+            if (stmt is AssignmentStatement { IsGlobalInit: true } gi
+                && TryMakePromote(handle: gi.Target) is { } gpromote)
+            {
+                rewritten.Add(item: gpromote);
+            }
         }
         block.Statements.Clear();
         block.Statements.AddRange(collection: rewritten);

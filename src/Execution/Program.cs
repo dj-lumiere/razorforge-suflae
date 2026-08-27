@@ -1523,7 +1523,7 @@ internal partial class Program
         var inits = order.Select(selector: i => new AssignmentStatement(
             Target: new IdentifierExpression(Name: globals[index: i].Name, Location: globals[index: i].Loc),
             Value: globals[index: i].Init,
-            Location: globals[index: i].Loc)).ToList();
+            Location: globals[index: i].Loc) { IsGlobalInit = true }).ToList();
 
         // 3) Prepend the ordered assignments to the entry module's start() (Suflae's single program entry).
         foreach ((SyntaxTree.Program program, string _) in orderedFiles)

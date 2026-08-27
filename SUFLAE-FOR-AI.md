@@ -84,15 +84,18 @@ When unsure, consult ground truth in the repo:
    can `import Mod.the_global` and read AND write it (it is one shared storage cell). **Use it
    for process-singular state** (a logger, config, an asset registry); per-frame / per-world
    context (delta time, input, the current world) belongs in engine-injected parameters, not a
-   global. **A global is single-writer-safe, NOT thread-safe:** its storage is a plain
-   (non-atomic) load/store, and the coroutine scheduler is M:N (real per-core worker threads),
-   so mutating the SAME global from two parallel agents is a data race with lost updates
-   (measured: 8 agents × 5000 `+= 1` yielded 39 837, not 40 000). This is the same
-   single-thread-only rule shared mutable state already carries in SF (cf. the each-loop ban) —
-   mutate a global from ONE logical flow (startup, the main update loop); if several parallel
-   agents must touch it, serialize them yourself. (One ordering residual: a dependency reached
-   only through a *member-routine* call — `x.foo()` — is not followed by the build-time
-   initialization ordering.)
+   global. **Thread-safety depends on the global's type.** The scheduler is M:N (real per-core
+   worker threads), so parallel agents can touch a global at the same time. An **entity/object
+   global is thread-safe**: it is backed by `Roamed`, promoted to ESCAPED at init, and every
+   statement that touches it is wrapped in the task-keyed access lock — so a single-statement
+   read-modify-write (`box.count = box.count + 1`) is atomic across workers (measured: 8 agents ×
+   5000 → exactly 40 000). A **value-type global (scalar `S64`, `Text`, …) is currently only
+   single-writer-safe**: its storage is a plain non-atomic load/store, so concurrent mutation from
+   parallel agents races and loses updates (measured 39 837/40 000) — pending its own Roamed
+   backing. Either way, a *multi-statement* logical RMW (`t = g; …; g = t + 1`) is never
+   auto-atomic; that is the user's to serialize, in SF as in every language. (One init-ordering
+   residual: a dependency reached only through a *member-routine* call — `x.foo()` — is not
+   followed by the build-time ordering.)
 9. **Keyword set = RazorForge's, minus the RF-only reserved words.** The shared
    keyword inventory is RAZORFORGE-FOR-AI §16; Suflae does NOT reserve the
    RF-only ones: `steal` `danger` `dangerous` `threaded`, and `expand` — the single
