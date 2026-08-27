@@ -37,6 +37,13 @@ internal sealed class SuflaeEntityLoweringPass
     // owned local returned by move is NOT in this set, so it is correctly left alone.
     private readonly HashSet<string> _borrowNames = new();
 
+    // True while lowering a `create` constructor body. A constructor returns the BARE entity by
+    // convention (the caller roams it — see the class doc's carve-out + stdlib), so its return
+    // construction must NOT be roamed here, or the value is roamed twice (once inside `create`, once at
+    // the call site) → the outer controller's `data` points at the inner controller → wrong-value read
+    // (scalar field) or AccessViolation (pointer field). Reset per routine.
+    private bool _inCreateRoutine;
+
     public SuflaeEntityLoweringPass(TypeRegistry registry)
     {
         _registry = registry;
@@ -124,6 +131,10 @@ internal sealed class SuflaeEntityLoweringPass
         _roamedLocals.Clear();
         _borrowNames.Clear();
         _borrowNames.Add(item: "me");
+        // A constructor is the `routine T(...) -> T` form (named after the type it builds). It returns
+        // the bare entity by convention; the caller roams. (The routine is mangled to `T.create` at
+        // codegen, but its declaration name is the type name here.)
+        _inCreateRoutine = r.ReturnType is { Name: var rn } && r.Name == rn;
         foreach (Parameter p in r.Parameters)
             if (p.Type?.ResolvedType is WrapperTypeInfo { Name: RuntimeContract.Roamed }
                 or RecordTypeInfo { GenericDefinition.Name: RuntimeContract.Roamed })
@@ -181,6 +192,12 @@ internal sealed class SuflaeEntityLoweringPass
             case ReturnStatement { Value: not null } ret:
             {
                 Expression v = LowerExpression(ret.Value);
+                // A `create` constructor returns the BARE entity — the caller roams it (documented
+                // convention; stdlib's generic constructors already return bare). If lowering roamed the
+                // return construction, peel that top `Roamed(from: X)` back off so the value isn't roamed
+                // AGAIN at the call site (the double-roam bug: outer controller.data → inner controller).
+                if (_inCreateRoutine && TryUnwrapRoamConstruction(expr: v, inner: out Expression? bareInner))
+                    return ReferenceEquals(bareInner, ret.Value) ? stmt : ret with { Value = bareInner };
                 // Returning a BORROW (`me` / a Roamed param) or a Roamed FIELD read hands a fresh
                 // reference to the caller; retain so the caller owns its own count. The borrow itself is
                 // not released at scope exit (teardown skips `me` + SF Roamed params), so without the
@@ -637,6 +654,24 @@ internal sealed class SuflaeEntityLoweringPass
     // (Parser.Expressions parses `RF::Core.List` into `IdentifierExpression { Realm = "RF" }`).
     private static bool IsRfRealmRef(Expression callee) =>
         callee is IdentifierExpression { Realm: "RF" };
+
+    // Recognizes the `Roamed(from: X)` wrapper construction that <see cref="WrapInRoam"/> builds and
+    // yields the inner (pre-roam) construction X. Used to peel a redundant roam off a `create` return.
+    private static bool TryUnwrapRoamConstruction(Expression expr, out Expression? inner)
+    {
+        if (expr is CallExpression
+            {
+                LoweringKind: CallLoweringKind.WrapperConstruction,
+                Callee: IdentifierExpression { Name: RuntimeContract.Roamed },
+                Arguments: [NamedArgumentExpression { Name: "from", Value: { } from }]
+            })
+        {
+            inner = from;
+            return true;
+        }
+        inner = null;
+        return false;
+    }
 
     private Expression WrapInRoam(Expression inner, EntityTypeInfo entity)
     {
