@@ -26,7 +26,6 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class LiteralLoweringPass
 {
     private readonly Dictionary<string, Statement>? _variantBodies;
-    private readonly TypeInfo? _backIndexType;
     // Arbitrary-precision literal lowering: `123n`/`3.14dn` -> Integer/Decimal.from_literal(text:"...").
     private readonly TypeInfo? _integerType;
     private readonly TypeInfo? _decimalType;
@@ -51,10 +50,6 @@ internal sealed class LiteralLoweringPass
     internal LiteralLoweringPass(PostprocessingContext ctx)
     {
         _variantBodies = ctx.VariantBodies;
-        // Cached so the synthesized `BackIndex(...)` creator can carry a resolved type — a later
-        // pass (OperatorLoweringPass) needs it to pick the BackIndex `getitem!` overload.
-        _backIndexType = ctx.Registry.LookupType(name: "BackIndex");
-
         // `n`/`dn` arbitrary-precision literals are emitted as malformed scalar IR by codegen
         // (e.g. `store %Record.Integer 42n`); lower them to an infallible constructor call instead.
         _integerType = ctx.Registry.LookupType(name: "Integer");
@@ -459,10 +454,20 @@ internal sealed class LiteralLoweringPass
             }
             case BackIndexExpression back:
             {
-                // Lower `^n` to `BackIndex(offset: n)` so codegen never sees the back-index
-                // operator — it only sees the creator, the same as ByteSize/Character literals.
-                Expression o = LowerExpression(back.Operand);
-                return MakeBackIndexCreator(o, back.Location);
+                // `^n` is NOT materialized into a value here — it stays a `BackIndexExpression` marker.
+                // OperatorLoweringPass (runs after this pass) rewrites the enclosing subscript/slice to
+                // `back_resolve(count: coll.count(), offset: n)`. Retag an untyped/signed integer-literal
+                // offset to U64 (the `^n` position is U64) BEFORE lowering, so it stays a scalar i64 and
+                // is not lowered to an arbitrary-precision Integer (which is heap/Text-backed).
+                Expression operand = back.Operand is LiteralExpression
+                    {
+                        LiteralType: TokenType.UndecidedInteger or TokenType.IntegerLiteral
+                            or TokenType.S64Literal
+                    } lit
+                    ? lit with { LiteralType = TokenType.U64Literal }
+                    : back.Operand;
+                Expression o = LowerExpression(operand);
+                return back with { Operand = o };
             }
             case BlockExpression block:
             {
@@ -664,28 +669,6 @@ internal sealed class LiteralLoweringPass
     {
         var byteLit = new LiteralExpression(Value: byteValue.ToString(), LiteralType: TokenType.U8Literal, Location: loc);
         return new CreatorExpression("Byte", null, [("from", byteLit)], loc);
-    }
-
-    /// <summary>
-    /// Builds the `BackIndex(offset: n)` creator that replaces a `^n` expression.
-    /// The <c>BackIndex.create</c> routine takes a <c>U64</c> offset, so an untyped or
-    /// signed integer-literal operand is retagged <c>U64</c>; any other operand passes through
-    /// unchanged (semantic analysis has already verified it is an integer).
-    /// </summary>
-    private CreatorExpression MakeBackIndexCreator(Expression operand, SourceLocation loc)
-    {
-        Expression offset =
-            operand is LiteralExpression
-            {
-                LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal
-            } lit
-                ? lit with { LiteralType = TokenType.U64Literal }
-                : operand;
-        var creator = new CreatorExpression("BackIndex", null, [("offset", offset)], loc);
-        // Carry the resolved type so OperatorLoweringPass can disambiguate `getitem!`/`setitem!`
-        // by the index argument type (the BackIndex overload, not the forward U64 one).
-        creator.ResolvedType = _backIndexType;
-        return creator;
     }
 
     // -----------------------------------------------------------------------------

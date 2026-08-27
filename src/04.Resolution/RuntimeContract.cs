@@ -124,9 +124,11 @@ public static class RuntimeContract
         public const string Replace = "replace";
     }
 
-    /// <summary><c>BackIndex.resolve(count:)</c> — resolve a back-index against a container size.</summary>
-    /// <remarks>Sites: OperatorLoweringPass, RoutineReachabilityPass. Failable.</remarks>
-    public const string Resolve = "resolve";
+    /// <summary><c>back_resolve(count:, offset:)</c> — free routine resolving a `^n` back-index offset
+    /// to a forward `U64` position against a container size. The `^` syntax is sugar with no runtime
+    /// type; this routine is the lowering target.</summary>
+    /// <remarks>Sites: OperatorLoweringPass, RoutineReachabilityPass. Failable (throws IndexOutOfBoundsError).</remarks>
+    public const string BackResolve = "back_resolve";
 
     /// <summary><c>data_size()</c> — per-type byte size (compile-time BuilderQuery intrinsic, folded not called).</summary>
     /// <remarks>Sites: BuilderInfoProvider, BuilderQueryInliningPass, GenericAstRewriter.</remarks>
@@ -164,7 +166,7 @@ public static class RuntimeContract
         RawPointer.Invalidate, RawPointer.Hijack,
         RefCount.RawData,
         Collection.Count, Collection.Add, Collection.AddLast, Collection.Replace,
-        Resolve, CrashMessage,
+        BackResolve, CrashMessage,
     ];
 
     /// <summary>Additional wrapper / marker-protocol TYPE-name contracts that must each resolve to a

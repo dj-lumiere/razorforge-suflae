@@ -4,6 +4,7 @@ using System.Linq;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
 using Compiler.Synthesis;
+using Compiler.Tokenizer;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -358,35 +359,33 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 TypeInfo? targetType = idx.Object.ResolvedType;
 
                 // End-relative SLICE bounds: `xs[a til ^0]`. By this pass the range index is already a
-                // `Range[U64]` CreatorExpression (ExpressionLoweringPass ran first), so a `^n` bound is
-                // baked in as a raw `BackIndex(offset: n)` — which reinterprets to the i64 `n` (so `^0`
-                // -> 0, flipping `7 til ^0` into a descending `7 til 0`). Rewrite each BackIndex-typed
-                // start/end member to the forward position `count - n` via `BackIndex.resolve!(count)`
-                // (returns `count` for `^0`; throws only when the offset n exceeds count).
+                // `Range[U64]` CreatorExpression (ExpressionLoweringPass ran first) whose start/end may
+                // still be a `^n` `BackIndexExpression` marker. Rewrite each such bound to the forward
+                // position `count - n` via the free routine `back_resolve(count:, offset:)` (returns
+                // `count` for `^0`; throws only when the offset n exceeds count).
                 if (targetType != null && loweredIdx is CreatorExpression { TypeName: "Range" } rangeCtor &&
                     rangeCtor.MemberVariables.Any(predicate: mv =>
-                        mv.Name is "start" or "end" && mv.Value.ResolvedType is { Name: "BackIndex" }))
+                        mv.Name is "start" or "end" && mv.Value is BackIndexExpression))
                 {
                     // ONLY the start/end bounds carry a `^n`; the step/inclusive members must be left
-                    // untouched (wrapping a numeric `step` in resolve! would corrupt the stride).
+                    // untouched (wrapping a numeric `step` in back_resolve would corrupt the stride).
                     var rewrittenMembers = rangeCtor.MemberVariables.Select(selector: mv =>
-                        mv.Name is "start" or "end" && mv.Value.ResolvedType is { Name: "BackIndex" }
-                            ? (mv.Name, BuildBackIndexResolve(loweredObj: loweredObj, backIndex: mv.Value,
+                        mv.Name is "start" or "end" && mv.Value is BackIndexExpression backBound
+                            ? (mv.Name, BuildBackIndexResolve(loweredObj: loweredObj, backIndex: backBound,
                                 targetType: targetType, location: mv.Value.Location))
                             : mv).ToList();
                     loweredIdx = rangeCtor with { MemberVariables = rewrittenMembers };
                 }
 
-                // Back-index desugaring: `coll[^n]` has a BackIndex-typed index. Collections only
-                // expose `getitem!(index: U64)`, so rewrite the index to a forward U64 position
-                // via `backIdx.resolve!(coll.count())` (which throws on out-of-range, matching the
-                // old per-type BackIndex overload). The object is referenced twice — acceptable for
-                // the common `var[^n]` case; a side-effecting receiver would evaluate twice.
-                TypeInfo? rawIndexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
-                if (targetType != null && rawIndexType is { Name: "BackIndex" })
+                // Back-index desugaring: `coll[^n]` has a `^n` `BackIndexExpression` index. Collections
+                // only expose `getitem!(index: U64)`, so rewrite the index to a forward U64 position via
+                // `back_resolve(count: coll.count(), offset: n)` (throws IndexOutOfBoundsError on
+                // out-of-range). The object is referenced twice — acceptable for the common `var[^n]`
+                // case; a side-effecting receiver would evaluate twice.
+                if (targetType != null && loweredIdx is BackIndexExpression backIdx)
                 {
                     loweredIdx = BuildBackIndexResolve(loweredObj: loweredObj,
-                        backIndex: loweredIdx, targetType: targetType, location: idx.Location);
+                        backIndex: backIdx, targetType: targetType, location: idx.Location);
                 }
 
                 if (targetType != null)
@@ -1152,12 +1151,11 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Builds the forward-index expression for a back-index subscript: given a receiver and a
-    /// <c>BackIndex</c> value, produces <c>backIndex.resolve!(receiver.count())</c> — a resolved
-    /// <c>U64</c> position. This is the call-site desugaring that replaces the per-collection
-    /// <c>getitem!(index: BackIndex)</c> overloads; collections need only declare the
-    /// <c>getitem!(index: U64)</c> form. <c>BackIndex.resolve!</c> throws on out-of-range, so the
-    /// bounds semantics match the old overload.
+    /// Builds the forward-index expression for a back-index subscript: given a receiver and a `^n`
+    /// <c>BackIndexExpression</c> marker, produces <c>back_resolve(count: receiver.count(), offset: n)</c>
+    /// — a resolved <c>U64</c> position. `^` carries no runtime type; this call-site desugaring is what
+    /// lets collections declare only the <c>getitem!(index: U64)</c> form. The free routine
+    /// <c>back_resolve</c> throws <c>IndexOutOfBoundsError</c> on out-of-range.
     /// </summary>
     // The inner container type inside a `Roamed[E]` handle (either representation the pipeline
     // produces), or null when the type is not an RC wrapper. Mirrors the membership/comparison branch's
@@ -1172,7 +1170,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         _ => null
     };
 
-    private Expression BuildBackIndexResolve(Expression loweredObj, Expression backIndex,
+    private Expression BuildBackIndexResolve(Expression loweredObj, BackIndexExpression backIndex,
         TypeInfo targetType, SourceLocation location)
     {
         // receiver.count() -> U64
@@ -1190,22 +1188,37 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 : CallLoweringKind.DirectMemberRoutine
         };
 
-        // backIndex.resolve!(count) -> U64 (failable: throws IndexOutOfBoundsError on overshoot)
-        TypeInfo? backIndexType = backIndex.ResolvedType;
-        RoutineInfo? resolveRoutine = backIndexType != null
-            ? ctx.Registry.LookupMemberRoutine(type: backIndexType, memberRoutineName: Resolution.RuntimeContract.Resolve, isFailable: true)
-            : null;
+        // back_resolve(count: coll.count(), offset: n) -> U64 (free routine, failable: throws
+        // IndexOutOfBoundsError on overshoot). `^` carries no runtime type; the offset is the `^n`
+        // operand, already typed U64 by semantic analysis (see AnalyzeBackIndexExpression).
+        RoutineInfo? resolveRoutine =
+            ctx.Registry.LookupRoutine(fullName: $"Core.{Resolution.RuntimeContract.BackResolve}", isFailable: true)
+            ?? ctx.Registry.LookupRoutine(fullName: Resolution.RuntimeContract.BackResolve, isFailable: true);
+
+        // The offset must be a scalar U64. An untyped/signed integer-literal operand (`^1`) is retagged
+        // U64Literal here so codegen never treats it as an arbitrary-precision Integer (Text-backed);
+        // any other operand (a U64 variable, an expression) already carries its type and passes through.
+        Expression offset = backIndex.Operand is LiteralExpression
+            {
+                LiteralType: TokenType.UndecidedInteger or TokenType.IntegerLiteral
+                    or TokenType.S64Literal or TokenType.U64Literal
+            } olit
+            ? new LiteralExpression(Value: olit.Value, LiteralType: TokenType.U64Literal, Location: olit.Location)
+            {
+                ResolvedType = countRoutine?.ReturnType
+            }
+            : backIndex.Operand;
         return new CallExpression(
-            Callee: new MemberExpression(Object: backIndex, MemberName: Resolution.RuntimeContract.Resolve,
-                Location: location),
-            Arguments: [countCall],
+            Callee: new IdentifierExpression(Name: Resolution.RuntimeContract.BackResolve, Location: location)
+            {
+                ResolvedType = resolveRoutine?.ReturnType
+            },
+            Arguments: [countCall, offset],
             Location: location)
         {
             ResolvedRoutine = resolveRoutine,
             ResolvedType = resolveRoutine?.ReturnType,
-            LoweringKind = resolveRoutine != null
-                ? ClassifyMemberRoutine(resolveRoutine)
-                : CallLoweringKind.DirectMemberRoutine
+            LoweringKind = CallLoweringKind.DirectRoutine
         };
     }
 

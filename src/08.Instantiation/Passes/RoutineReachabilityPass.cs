@@ -510,42 +510,33 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // tracks failability on RoutineInfo separately. See TypeRegistry.MemberRoutineLookup.cs:236.
                 EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: "getitem");
                 EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: "setitem");
-                if (ixNode.Index.ResolvedType is { } idxRaw)
+                // `coll[^n]` (a `^n` BackIndexExpression index) is desugared by OperatorLoweringPass
+                // (Phase 9, after this pass) to `coll.getitem!(back_resolve(count: coll.count(),
+                // offset: n))`. Seed the two helpers that desugar introduces so they aren't
+                // linked-but-unemitted: the collection's `count()` and the free routine `back_resolve`.
+                // The `getitem` forward (U64) form is already seeded above.
+                if (ixNode.Index is BackIndexExpression)
+                {
+                    EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: RuntimeContract.Collection.Count);
+                    EnqueueBackResolve();
+                }
+                else if (ixNode.Index.ResolvedType is { } idxRaw)
                 {
                     TypeInfo idxType = RoutineInfo.SubstituteType(type: idxRaw, substitution: typeSubs);
-                    // `coll[^n]` (BackIndex index) is desugared by OperatorLoweringPass (Phase 8,
-                    // after this pass) to `coll.getitem!(backIdx.resolve!(coll.count()))`. Seed the
-                    // two helper routines that desugar introduces so they aren't linked-but-unemitted:
-                    // the collection's `count()` and `BackIndex.resolve!`. The `getitem` forward
-                    // (U64) form is already seeded above.
-                    if (idxType is { Name: "BackIndex" })
-                    {
-                        EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: RuntimeContract.Collection.Count);
-                        EnqueueMemberRoutineIfPresent(owner: idxType, memberRoutineName: RuntimeContract.Resolve);
-                    }
-                    else
-                    {
-                        EnqueueMemberRoutineOverloadIfPresent(owner: collectionType, memberRoutineName: "getitem",
-                            argType: idxType);
-                        EnqueueMemberRoutineOverloadIfPresent(owner: collectionType, memberRoutineName: "setitem",
-                            argType: idxType);
-                    }
+                    EnqueueMemberRoutineOverloadIfPresent(owner: collectionType, memberRoutineName: "getitem",
+                        argType: idxType);
+                    EnqueueMemberRoutineOverloadIfPresent(owner: collectionType, memberRoutineName: "setitem",
+                        argType: idxType);
                 }
 
-                // A slice with end-relative bounds `coll[a til ^0]` has a Range index (type Range[U64],
-                // so the BackIndex branch above is skipped), yet OperatorLoweringPass (Phase 9) still
-                // desugars each `^n` endpoint to `backIdx.resolve!(coll.count())`. Seed `count` and
-                // `BackIndex.resolve` for the range's BackIndex bounds, mirroring the scalar branch.
+                // A slice with end-relative bounds `coll[a til ^0]` has a Range index; each `^n`
+                // endpoint is desugared by OperatorLoweringPass (Phase 9) to `back_resolve(count:
+                // coll.count(), offset: n)`. Seed `count` and `back_resolve`, mirroring the scalar branch.
                 if (ixNode.Index is RangeExpression rangeIx &&
                     (rangeIx.Start is BackIndexExpression || rangeIx.End is BackIndexExpression))
                 {
                     EnqueueMemberRoutineIfPresent(owner: collectionType, memberRoutineName: RuntimeContract.Collection.Count);
-                    TypeInfo? backType = (rangeIx.Start as BackIndexExpression)?.ResolvedType
-                        ?? (rangeIx.End as BackIndexExpression)?.ResolvedType;
-                    if (backType is { Name: "BackIndex" })
-                    {
-                        EnqueueMemberRoutineIfPresent(owner: backType, memberRoutineName: RuntimeContract.Resolve);
-                    }
+                    EnqueueBackResolve();
                 }
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
@@ -576,6 +567,17 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (routine != null) EnqueueCallee(callee: routine);
     }
 
+    /// <summary>Seeds the free routine <c>back_resolve</c> that OperatorLoweringPass injects for each
+    /// <c>coll[^n]</c> subscript / <c>coll[a til ^0]</c> slice bound (this pass runs before that
+    /// desugaring, so the call is not yet in the AST to be walked).</summary>
+    private void EnqueueBackResolve()
+    {
+        RoutineInfo? backResolve =
+            ctx.Registry.LookupRoutine(fullName: $"Core.{RuntimeContract.BackResolve}", isFailable: true)
+            ?? ctx.Registry.LookupRoutine(fullName: RuntimeContract.BackResolve, isFailable: true);
+        if (backResolve != null) EnqueueCallee(callee: backResolve);
+    }
+
     /// <summary>True if <paramref name="type"/> is a (resolved or generic-def) <c>Roamed[T]</c>.
     /// Uses the canonical structured base-name classifier — no ad-hoc name parsing.</summary>
     private static bool IsRoamedType(TypeInfo type) =>
@@ -583,8 +585,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     /// <summary>
     /// Enqueues the <paramref name="memberRoutineName"/> overload whose parameter list matches a single
-    /// argument of <paramref name="argType"/>. Used to reach a type-specific index overload (e.g.
-    /// <c>getitem!(BackIndex)</c>) that the first-match <see cref="EnqueueMemberRoutineIfPresent"/> skips.
+    /// argument of <paramref name="argType"/>. Used to reach a type-specific index overload that the
+    /// first-match <see cref="EnqueueMemberRoutineIfPresent"/> skips.
     /// No-op when no such overload exists (e.g. two-parameter <c>setitem!</c> against one argType).
     /// </summary>
     private void EnqueueMemberRoutineOverloadIfPresent(TypeInfo owner, string memberRoutineName, TypeInfo argType)

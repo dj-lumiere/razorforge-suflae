@@ -417,7 +417,10 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private TypeSymbol AnalyzeBackIndexExpression(BackIndexExpression back)
     {
-        // BackIndex stores its offset as U64; retype untyped integer literals (`^1`) accordingly.
+        // `^n` is pure sugar for the forward position `count - n`; it carries no runtime type of its
+        // own. Analyze the offset as U64 and report the expression's type as U64 (its lowered value).
+        // OperatorLoweringPass rewrites the enclosing subscript/slice to the free routine
+        // `back_resolve(count:, offset:)`; the `BackIndexExpression` node is the only signal it needs.
         TypeSymbol? u64Type = _registry.LookupType(name: "U64");
         TypeSymbol operandType =
             AnalyzeExpression(expression: back.Operand, expectedType: u64Type);
@@ -430,14 +433,7 @@ public sealed partial class SemanticVerifier
                 location: back.Location);
         }
 
-        TypeSymbol? backIndexType = _registry.LookupType(name: "BackIndex");
-        if (backIndexType != null)
-        {
-            return backIndexType;
-        }
-
-        // Fallback: return Address as the index representation
-        return _registry.LookupType(name: "Address") ?? operandType;
+        return u64Type ?? operandType;
     }
 
     /// <summary>

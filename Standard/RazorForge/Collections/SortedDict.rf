@@ -786,19 +786,6 @@ routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
     var root_ref = me.root!!.as_entity()
     return me.get_by_rank_node(node: root_ref, rank: i)
 
-### Returns the entry addressed by a back index in sorted order.
-### `^1` is the entry with the largest key, `^2` the second-largest, and so on.
-### :param i: The backward sorted rank to resolve.
-### :returns: The {DictEntry[K, V]} at the resolved sorted position.
-@readonly
-routine SortedDict[K, V].get_by_rank!(i: BackIndex) -> DictEntry[K, V]
-  var rank = i.resolve(me.count)
-  if rank >= me.count
-    throw IndexOutOfBoundsError(index: rank, count: me.count)
-  danger
-    var root_ref = me.root!!.as_entity()
-    return me.get_by_rank_node(node: root_ref, rank: rank)
-
 ### Returns the entry at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
