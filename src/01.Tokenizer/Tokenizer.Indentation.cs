@@ -110,6 +110,24 @@ public partial class Tokenizer
             return;
         }
 
+        // Leading-operator line continuation: when the first token on this line is an
+        // infix/continuation operator (`and`, `or`, `but`, arithmetic/comparison/bitwise
+        // symbols, `.`, `??`), the line continues the previous logical line instead of
+        // starting a new statement. Drop the newline that terminated the previous line
+        // and skip INDENT/DEDENT for this line — no block boundary, no indent-stack change.
+        //
+        // Guard on `spaces >= current indent`: when this line is LESS indented than the
+        // enclosing block, a genuine DEDENT takes priority (so a stray operator-led line
+        // cannot silently swallow a block boundary).
+        if (spaces >= _indentStack.Peek() && StartsWithContinuationOperator())
+        {
+            if (_tokens.Count > 0 && _tokens[^1].Type == TokenType.Newline)
+            {
+                _tokens.RemoveAt(index: _tokens.Count - 1);
+            }
+            return;
+        }
+
         // Validate indentation alignment
         if (spaces % 2 != 0)
         {
@@ -144,6 +162,51 @@ public partial class Tokenizer
             _indentStack.Pop();
             AddToken(type: TokenType.Dedent, text: "");
         }
+    }
+
+    /// <summary>
+    /// Peeks (without consuming) whether the upcoming token on the current line is a
+    /// word logical operator (<c>and</c>/<c>or</c>/<c>but</c>), indicating this line
+    /// continues the previous one. Leading whitespace has already been consumed by the
+    /// caller, so <see cref="Peek()"/> returns the first content character.
+    /// </summary>
+    /// <remarks>
+    /// Only the WORD logical operators qualify. Symbolic operators (<c>==</c>, <c>&lt;</c>,
+    /// <c>.</c>, …) are deliberately excluded: a <c>when</c> expression writes its arms as
+    /// leading comparison/case patterns (<c>== 0x22 =&gt;</c>, <c>.RED =&gt;</c>), so
+    /// treating a line-leading symbol as a continuation would swallow those arms. No valid
+    /// statement or <c>when</c> arm begins with <c>and</c>/<c>or</c>/<c>but</c>, so these
+    /// are unambiguous.
+    /// </remarks>
+    private bool StartsWithContinuationOperator()
+    {
+        // Require a trailing word boundary so identifiers like `orange`, `android`, or
+        // `button` are not misread as `or`/`and`/`but`.
+        return Peek() switch
+        {
+            'a' => MatchesKeywordAhead(word: "and"),
+            'o' => MatchesKeywordAhead(word: "or"),
+            'b' => MatchesKeywordAhead(word: "but"),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Peeks whether the characters at the current position spell <paramref name="word"/>
+    /// followed by a word boundary (a non-identifier character), without consuming input.
+    /// </summary>
+    /// <param name="word">The keyword to test for.</param>
+    private bool MatchesKeywordAhead(string word)
+    {
+        for (int i = 0; i < word.Length; i++)
+        {
+            if (Peek(offset: i) != word[index: i])
+            {
+                return false;
+            }
+        }
+
+        return !IsIdentifierPart(c: Peek(offset: word.Length));
     }
 
     #endregion
