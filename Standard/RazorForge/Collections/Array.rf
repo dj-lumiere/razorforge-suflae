@@ -68,6 +68,23 @@ routine Array[T, N].setitem!(index: U64, value: T)
     LLVM::store_element_ref[Array[T, N], T](me.hijack(), index, value)
   return
 
+### Returns a `List[T]` holding independent copies of the elements in `range` — the slice form of
+### indexing (`array[a til b]`). Unlike scalar indexing this returns a `List`, NOT an `Array[T, M]`: the
+### slice length is a runtime value, whereas an `Array`'s size is a compile-time parameter, so it cannot
+### type as a fixed-size array. A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields
+### `[a, b]`; a descending range reverses. Positions at or past `N` are skipped. Each element is copied
+### through `copy`.
+### :param range: The index range to extract.
+### :returns: A `List[T]` owning copies of the selected elements.
+@readonly
+routine Array[T, N].getitem(range: Range[U64]) -> List[T]
+needs T obeys Copyable
+  var result = List[T]()
+  each i in range
+    if i < N
+      result.add_last(value: me[i].copy())
+  return steal result
+
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
 ### entity elements. Invoked through an owning entity's generated `destroy` field-recursion when
 ### the array is an entity field — all `N` inline slots are live, so the full range is visited.

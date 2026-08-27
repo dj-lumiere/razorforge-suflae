@@ -679,10 +679,14 @@ public sealed partial class SemanticVerifier
         // trivial record via the auto-derived bitwise store, a managed leaf like Text via its retaining
         // store). A single-owner `entity` deliberately obeys no `Assignable`, so it has no copy of its own.
         // A bind whose initializer is a VIEW of a value someone else owns — a bare reference (`var x = a`)
-        // or an element read (`var x = a[i]`) — would make TWO owners of that one entity, so it is
+        // or a scalar element read (`var x = a[i]`) — would make TWO owners of that one entity, so it is
         // rejected. A fresh owned producer (creator / in-flight call) and an explicit `steal` are MOVES,
         // not views, and are allowed. (SF entity elements are `Roamed`, which DOES obey Assignable via its
         // refcount retain — so this never fires in Suflae.)
+        // EXCEPTION: a RANGE slice (`var sub = a[i til j]`) is NOT a view — it binds the `getitem(range)`
+        // overload, which returns a FRESH owned sub-collection (a copy, gated on the element being
+        // Copyable), exactly like a call. So a range-indexed `IndexExpression` is a move, not a two-owner
+        // alias — excluded here, same as `a.copy()` or a creator call.
         // The store-less set is EXACTLY the entities: every value category (records, tuples, routines,
         // SIMD vectors, generic records) is copyable via an auto-derived bitwise or field-wise store, so
         // `obeys Assignable` under-reports them — `EntityTypeInfo` is the precise predicate for "has no
@@ -690,7 +694,8 @@ public sealed partial class SemanticVerifier
         // A tuple element access (`_t.item0`) is how `var (a, b) = expr` destructuring lowers: the tuple
         // is a CONSUMED temporary, so each element MOVES out — not a view of a persisting owner. Exclude it
         // (Object is a TupleTypeInfo) so channel/pair destructuring of entity elements stays a legal move.
-        bool isEntityViewInit = varDecl.Initializer is IdentifierExpression or IndexExpression
+        bool isEntityViewInit = varDecl.Initializer is IdentifierExpression
+            || varDecl.Initializer is IndexExpression { Index: not RangeExpression }
             || varDecl.Initializer is MemberExpression { Object.ResolvedType: not TupleTypeInfo };
         if (_registry.Language == Language.RazorForge
             && isEntityViewInit

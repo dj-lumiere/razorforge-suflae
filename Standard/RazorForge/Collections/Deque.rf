@@ -281,6 +281,22 @@ routine Deque[T].setitem!(index: U64, value: T)
   me.write_at(physical_idx: physical_idx, value: value)
   return
 
+### Returns a NEW deque holding independent copies of the elements in `range` — the slice form of
+### indexing (`deque[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
+### `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range reverses. Positions at or past
+### `count` are skipped. Each element is copied through `copy`, so the result shares no structure with
+### the original — the value-semantics counterpart to `List`/`Text` slicing.
+### :param range: The logical index range to extract.
+### :returns: A new `Deque[T]` owning copies of the selected elements.
+@readonly
+routine Deque[T].getitem(range: Range[U64]) -> Deque[T]
+needs T obeys Copyable
+  var result = Deque[T]()
+  each i in range
+    if i < me.count
+      result.add_last(value: me[i].copy())
+  return steal result
+
 # ============================================================================
 # Rotation
 # ============================================================================

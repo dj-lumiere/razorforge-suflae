@@ -278,6 +278,23 @@ routine List[T].setitem!(index: U64, value: T)
     me.data.offset(byte_offset).poke(value)
   return
 
+### Returns a NEW list holding independent copies of the elements in `range` — the slice form of
+### indexing (`list[a til b]`). A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields
+### `[a, b]`; a descending range reverses the segment. Positions at or past `count` are skipped, so
+### `list[a til ^0]` slices cleanly to the end. Each element is copied through `copy` (managed leaves
+### like `Text` bump their refcount), so the result shares no structure with the original and mutating
+### one does not affect the other — the value-semantics counterpart to `Text`/`Bytes` slicing.
+### :param range: The index range to extract.
+### :returns: A new `List[T]` owning copies of the selected elements.
+@readonly
+routine List[T].getitem(range: Range[U64]) -> List[T]
+needs T obeys Copyable
+  var result = List[T]()
+  each i in range
+    if i < me.count
+      result.add_last(value: me.get_raw(index: i).copy())
+  return steal result
+
 # ============================================================================
 # Unchecked internal access — no bounds check, for stdlib use only
 # ============================================================================

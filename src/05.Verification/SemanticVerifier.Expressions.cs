@@ -942,7 +942,20 @@ public sealed partial class SemanticVerifier
         TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
         // Analyze the RHS too — without this, constructor calls like `n += S64(5)`
         // never get classified as TypeConstructor and reach codegen unlowered (S959).
-        AnalyzeExpression(expression: compound.Value);
+        //
+        // For a same-typed compound op (`+= -= *= /= //= %= **= &= |= ^= ??=`) the RHS
+        // must conform to the TARGET type, so a bare literal like `1` in `i += 1` types
+        // as the target (e.g. `U64`) rather than the language default — `Integer` in
+        // Suflae, `S64` in RazorForge. Without this hint an SF `U64 += 1` leaves the `1`
+        // an `Integer`, which mis-lowers (Integer.from_literal against a fixed-width
+        // target) into a runaway/garbage result. Shift amounts (`<<= >>= <<<= >>>=`) are
+        // U32, not the target type, so they keep their own inference.
+        bool isShift = compound.Operator is BinaryOperator.ArithmeticLeftShift
+            or BinaryOperator.ArithmeticRightShift
+            or BinaryOperator.LogicalLeftShift
+            or BinaryOperator.LogicalRightShift;
+        AnalyzeExpression(expression: compound.Value,
+            expectedType: isShift ? null : targetType);
 
         // Step 0: Verify target is assignable and modifiable
         if (!IsAssignableTarget(target: compound.Target))

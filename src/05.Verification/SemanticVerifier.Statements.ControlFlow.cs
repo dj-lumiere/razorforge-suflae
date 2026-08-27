@@ -34,6 +34,15 @@ public sealed partial class SemanticVerifier
         NarrowingInfo? narrowing = TryExtractNarrowingFromCondition(condition: ifStmt.Condition);
         VariantIsNarrowing? variantNarrowing = TryGetVariantIsNarrowing(condition: ifStmt.Condition);
 
+        // ── Deadref (steal) flow across the branches ──────────────────────────────
+        // `steal x` marks x dead for the REST of the current linear scope (_deadrefVariables
+        // is flow-insensitive). But a steal in a branch that definitely EXITS
+        // (return/throw/break/continue) must NOT leak onto the path taken when that branch did
+        // not run — e.g. `var v = ...; if c: return steal v; use(v)` keeps `v` alive on the
+        // fall-through. Snapshot the dead set, analyze each branch from the same pre-if state,
+        // then keep only the deadrefs reaching past the `if` (from branches that fall through).
+        var deadrefBefore = new HashSet<string>(collection: _deadrefVariables);
+
         // Analyze then branch (with narrowing if applicable)
         if (narrowing?.ThenBranchType != null || narrowing is { ThenNonNull: true } ||
             variantNarrowing != null)
@@ -62,6 +71,13 @@ public sealed partial class SemanticVerifier
         {
             AnalyzeStatement(statement: ifStmt.ThenStatement);
         }
+
+        bool thenExits = HasDefiniteExit(statement: ifStmt.ThenStatement);
+        var afterThen = new HashSet<string>(collection: _deadrefVariables);
+        // Re-analyze the else branch from the pre-if dead set — the branches are mutually
+        // exclusive, so the else must not see the then branch's steals.
+        _deadrefVariables.Clear();
+        _deadrefVariables.UnionWith(other: deadrefBefore);
 
         // Analyze else branch if present (with inverse narrowing if applicable)
         if (ifStmt.ElseStatement != null)
@@ -93,6 +109,22 @@ public sealed partial class SemanticVerifier
             {
                 AnalyzeStatement(statement: ifStmt.ElseStatement);
             }
+        }
+
+        bool elseExits = ifStmt.ElseStatement != null &&
+                         HasDefiniteExit(statement: ifStmt.ElseStatement);
+        var afterElse = new HashSet<string>(collection: _deadrefVariables);
+        // Merge: a variable is dead after the `if` iff it is dead on some path that FALLS
+        // THROUGH. Steals confined to an exiting branch are dropped. (With no else branch,
+        // `afterElse` is the pre-if state, i.e. the condition-false fall-through.)
+        _deadrefVariables.Clear();
+        if (!thenExits)
+        {
+            _deadrefVariables.UnionWith(other: afterThen);
+        }
+        if (!elseExits)
+        {
+            _deadrefVariables.UnionWith(other: afterElse);
         }
 
         // Guard clause narrowing: if the then branch definitely exits,
