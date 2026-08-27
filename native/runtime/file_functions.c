@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <sys/time.h>
 #endif
 
 /* Forward declaration from memory.c */
@@ -535,17 +536,264 @@ rf_S32 rf_fs_move(const char* src, rf_S32 src_len, const char* dst, rf_S32 dst_l
 /* ========================================================================== */
 
 /**
- * List directory entries.
- * Returns null-separated list of names. Sets *out_count to number of entries,
- * *out_total_len to total byte length of the returned buffer.
+ * List the direct entries of a directory.
+ * Returns a heap buffer of the entry names joined by '\n' (excluding "." and
+ * ".."), sets rf_last_result_len to its byte length. An empty directory yields
+ * an empty buffer (len 0). Returns NULL on error (e.g. path is not a directory).
+ * Only the bare names are returned; the caller joins them onto the parent path.
  */
-/* list_dir deferred — needs returning List[Text] from C */
+char* rf_fs_list_dir(const char* path, rf_S32 len)
+{
+    char* cpath = make_cstr(path, len);
+    if (!cpath) { rf_last_result_len = 0; return NULL; }
+
+    /* Grow-able output buffer of '\n'-joined names. */
+    size_t cap = 256;
+    size_t out_len = 0;
+    char* out = (char*)malloc(cap);
+    if (!out) { free(cpath); rf_last_result_len = 0; return NULL; }
+
+#ifdef _WIN32
+    /* Build search pattern: path\* */
+    size_t plen = strlen(cpath);
+    char* pattern = (char*)malloc(plen + 3);
+    if (!pattern) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+    memcpy(pattern, cpath, plen);
+    pattern[plen] = '\\';
+    pattern[plen + 1] = '*';
+    pattern[plen + 2] = '\0';
+
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(pattern, &fd);
+    free(pattern);
+    if (hFind == INVALID_HANDLE_VALUE) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+
+    do
+    {
+        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
+            continue;
+
+        size_t nlen = strlen(fd.cFileName);
+        size_t need = out_len + (out_len > 0 ? 1 : 0) + nlen;
+        if (need + 1 > cap)
+        {
+            while (need + 1 > cap) cap *= 2;
+            char* nb = (char*)realloc(out, cap);
+            if (!nb) { FindClose(hFind); free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+            out = nb;
+        }
+        if (out_len > 0) out[out_len++] = '\n';
+        memcpy(out + out_len, fd.cFileName, nlen);
+        out_len += nlen;
+    } while (FindNextFileA(hFind, &fd));
+    FindClose(hFind);
+#else
+    DIR* dir = opendir(cpath);
+    if (!dir) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        size_t nlen = strlen(entry->d_name);
+        size_t need = out_len + (out_len > 0 ? 1 : 0) + nlen;
+        if (need + 1 > cap)
+        {
+            while (need + 1 > cap) cap *= 2;
+            char* nb = (char*)realloc(out, cap);
+            if (!nb) { closedir(dir); free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+            out = nb;
+        }
+        if (out_len > 0) out[out_len++] = '\n';
+        memcpy(out + out_len, entry->d_name, nlen);
+        out_len += nlen;
+    }
+    closedir(dir);
+#endif
+
+    free(cpath);
+    out[out_len] = '\0';
+    rf_last_result_len = (rf_address)out_len;
+    return out;
+}
+
+/**
+ * List the direct entries of a directory WITH their kind, so the caller avoids a
+ * per-entry stat just to tell files from directories. Each entry becomes one line
+ * of the form `<kind><name>` where `<kind>` is 'd' (directory) or 'f' (other),
+ * lines joined by '\n'. Excludes "." / ".."; empty directory yields an empty
+ * buffer; sets rf_last_result_len; returns NULL on error.
+ *
+ * The kind comes for free from the directory read (Win32 dwFileAttributes / POSIX
+ * dirent.d_type); only when the platform reports an unknown POSIX d_type do we fall
+ * back to a stat for that one entry.
+ */
+char* rf_fs_list_dir_typed(const char* path, rf_S32 len)
+{
+    char* cpath = make_cstr(path, len);
+    if (!cpath) { rf_last_result_len = 0; return NULL; }
+
+    size_t cap = 256;
+    size_t out_len = 0;
+    char* out = (char*)malloc(cap);
+    if (!out) { free(cpath); rf_last_result_len = 0; return NULL; }
+
+    /* Append `<kind><name>` as one line to `out`, growing as needed. Returns 0 on
+       allocation failure. */
+#define RF_EMIT_ENTRY(is_dir, name, nlen)                                       \
+    do {                                                                        \
+        size_t need = out_len + (out_len > 0 ? 1 : 0) + 1 + (nlen);             \
+        if (need + 1 > cap)                                                     \
+        {                                                                       \
+            while (need + 1 > cap) cap *= 2;                                    \
+            char* nb = (char*)realloc(out, cap);                               \
+            if (!nb) { emit_ok = 0; break; }                                    \
+            out = nb;                                                           \
+        }                                                                       \
+        if (out_len > 0) out[out_len++] = '\n';                                 \
+        out[out_len++] = (is_dir) ? 'd' : 'f';                                  \
+        memcpy(out + out_len, (name), (nlen));                                  \
+        out_len += (nlen);                                                      \
+    } while (0)
+
+    int emit_ok = 1;
+
+#ifdef _WIN32
+    size_t plen = strlen(cpath);
+    char* pattern = (char*)malloc(plen + 3);
+    if (!pattern) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+    memcpy(pattern, cpath, plen);
+    pattern[plen] = '\\';
+    pattern[plen + 1] = '*';
+    pattern[plen + 2] = '\0';
+
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(pattern, &fd);
+    free(pattern);
+    if (hFind == INVALID_HANDLE_VALUE) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+
+    do
+    {
+        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
+            continue;
+        int is_dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        RF_EMIT_ENTRY(is_dir, fd.cFileName, strlen(fd.cFileName));
+        if (!emit_ok) break;
+    } while (FindNextFileA(hFind, &fd));
+    FindClose(hFind);
+#else
+    DIR* dir = opendir(cpath);
+    if (!dir) { free(cpath); free(out); rf_last_result_len = 0; return NULL; }
+
+    size_t plen = strlen(cpath);
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        int is_dir;
+        if (entry->d_type == DT_DIR)
+            is_dir = 1;
+        else if (entry->d_type == DT_REG || entry->d_type == DT_LNK)
+            is_dir = 0;
+        else
+        {
+            /* DT_UNKNOWN (or a type we don't special-case): one stat to classify. */
+            size_t nlen = strlen(entry->d_name);
+            char* full = (char*)malloc(plen + 1 + nlen + 1);
+            is_dir = 0;
+            if (full)
+            {
+                snprintf(full, plen + 1 + nlen + 1, "%s/%s", cpath, entry->d_name);
+                struct stat st;
+                if (stat(full, &st) == 0) is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
+                free(full);
+            }
+        }
+        RF_EMIT_ENTRY(is_dir, entry->d_name, strlen(entry->d_name));
+        if (!emit_ok) break;
+    }
+    closedir(dir);
+#endif
+
+#undef RF_EMIT_ENTRY
+
+    free(cpath);
+    if (!emit_ok) { free(out); rf_last_result_len = 0; return NULL; }
+    out[out_len] = '\0';
+    rf_last_result_len = (rf_address)out_len;
+    return out;
+}
 
 /* ========================================================================== */
 /* FileSystem: Metadata                                                        */
 /* ========================================================================== */
 
-/* metadata deferred — needs FileMetadata record type in RF stdlib */
+/*
+ * One stat() populates these cached fields; the field accessors below read them.
+ * Mirrors the rf_last_result_len idiom (avoids out-parameters RF can't pass) —
+ * single-threaded, like the rest of this result-buffer surface.
+ */
+static rf_S64  rf_meta_size = 0;
+static rf_S64  rf_meta_modified = 0;   /* Unix epoch seconds */
+static rf_S64  rf_meta_created = 0;    /* Unix epoch seconds */
+static rf_Bool rf_meta_is_directory = false;
+static rf_Bool rf_meta_readonly = false;
+
+/**
+ * Read filesystem metadata for a path in a single stat, caching the result.
+ * Returns 0 on success, -1 on error.
+ */
+rf_S32 rf_fs_metadata(const char* path, rf_S32 len)
+{
+    char* cpath = make_cstr(path, len);
+    if (!cpath) return -1;
+
+#ifdef _WIN32
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    if (!GetFileAttributesExA(cpath, GetFileExInfoStandard, &data))
+    {
+        free(cpath);
+        return -1;
+    }
+    free(cpath);
+
+    /* 11644473600 = seconds between 1601-01-01 (FILETIME epoch) and 1970-01-01. */
+    rf_U64 mticks = ((rf_U64)data.ftLastWriteTime.dwHighDateTime << 32)
+                  | (rf_U64)data.ftLastWriteTime.dwLowDateTime;
+    rf_U64 cticks = ((rf_U64)data.ftCreationTime.dwHighDateTime << 32)
+                  | (rf_U64)data.ftCreationTime.dwLowDateTime;
+
+    rf_meta_size = (rf_S64)(((rf_U64)data.nFileSizeHigh << 32) | (rf_U64)data.nFileSizeLow);
+    rf_meta_modified = (rf_S64)(mticks / 10000000ULL) - 11644473600LL;
+    rf_meta_created = (rf_S64)(cticks / 10000000ULL) - 11644473600LL;
+    rf_meta_is_directory = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    rf_meta_readonly = (data.dwFileAttributes & FILE_ATTRIBUTE_READONLY) != 0;
+    return 0;
+#else
+    struct stat st;
+    if (stat(cpath, &st) != 0) { free(cpath); return -1; }
+    free(cpath);
+
+    rf_meta_size = (rf_S64)st.st_size;
+    rf_meta_modified = (rf_S64)st.st_mtime;
+    /* POSIX has no portable birth time; st_ctime (inode change time) is the
+       closest widely-available field. */
+    rf_meta_created = (rf_S64)st.st_ctime;
+    rf_meta_is_directory = S_ISDIR(st.st_mode);
+    rf_meta_readonly = (st.st_mode & S_IWUSR) == 0;
+    return 0;
+#endif
+}
+
+rf_S64  rf_fs_meta_size(void)         { return rf_meta_size; }
+rf_S64  rf_fs_meta_modified(void)     { return rf_meta_modified; }
+rf_S64  rf_fs_meta_created(void)      { return rf_meta_created; }
+rf_Bool rf_fs_meta_is_directory(void) { return rf_meta_is_directory; }
+rf_Bool rf_fs_meta_readonly(void)     { return rf_meta_readonly; }
 
 /**
  * Get file size in bytes. Returns -1 on error.
@@ -569,6 +817,154 @@ rf_S64 rf_fs_file_size(const char* path, rf_S32 len)
     if (stat(cpath, &st) != 0) { free(cpath); return -1; }
     free(cpath);
     return (rf_S64)st.st_size;
+#endif
+}
+
+/* ========================================================================== */
+/* FileSystem: Working directory, standard directories, touch                  */
+/* ========================================================================== */
+
+/**
+ * Return the process working directory as a heap buffer, '/'-preferred on POSIX
+ * and left as the platform form on Windows. Sets rf_last_result_len; NULL on error.
+ */
+char* rf_fs_current_dir(void)
+{
+#ifdef _WIN32
+    DWORD need = GetCurrentDirectoryA(0, NULL); /* includes NUL */
+    if (need == 0) { rf_last_result_len = 0; return NULL; }
+    char* buf = (char*)malloc((size_t)need);
+    if (!buf) { rf_last_result_len = 0; return NULL; }
+    DWORD got = GetCurrentDirectoryA(need, buf);
+    if (got == 0 || got >= need) { free(buf); rf_last_result_len = 0; return NULL; }
+    rf_last_result_len = (rf_address)got;
+    return buf;
+#else
+    size_t cap = 256;
+    for (;;)
+    {
+        char* buf = (char*)malloc(cap);
+        if (!buf) { rf_last_result_len = 0; return NULL; }
+        if (getcwd(buf, cap))
+        {
+            rf_last_result_len = (rf_address)strlen(buf);
+            return buf;
+        }
+        free(buf);
+        if (errno != ERANGE) { rf_last_result_len = 0; return NULL; }
+        cap *= 2;
+    }
+#endif
+}
+
+rf_S32 rf_fs_set_current_dir(const char* path, rf_S32 len)
+{
+    char* cpath = make_cstr(path, len);
+    if (!cpath) return -1;
+#ifdef _WIN32
+    BOOL ok = SetCurrentDirectoryA(cpath);
+    free(cpath);
+    return ok ? 0 : -1;
+#else
+    int ret = chdir(cpath);
+    free(cpath);
+    return ret == 0 ? 0 : -1;
+#endif
+}
+
+/* Copy a C string into a fresh heap buffer, setting rf_last_result_len. */
+static char* rf_dup_result(const char* s)
+{
+    if (!s) { rf_last_result_len = 0; return NULL; }
+    size_t slen = strlen(s);
+    char* buf = (char*)malloc(slen + 1);
+    if (!buf) { rf_last_result_len = 0; return NULL; }
+    memcpy(buf, s, slen + 1);
+    rf_last_result_len = (rf_address)slen;
+    return buf;
+}
+
+/**
+ * Return the platform temporary directory. Honors the usual environment
+ * variables, falling back to a sensible platform default. Never returns NULL.
+ */
+char* rf_fs_temp_dir(void)
+{
+#ifdef _WIN32
+    char buf[MAX_PATH + 1];
+    DWORD got = GetTempPathA(sizeof(buf), buf); /* trailing backslash included */
+    if (got == 0 || got > MAX_PATH) return rf_dup_result("C:\\Windows\\Temp");
+    /* Strip a single trailing separator for consistency with our other paths. */
+    if (got > 0 && (buf[got - 1] == '\\' || buf[got - 1] == '/')) buf[got - 1] = '\0';
+    return rf_dup_result(buf);
+#else
+    const char* t = getenv("TMPDIR");
+    if (t && t[0]) return rf_dup_result(t);
+    return rf_dup_result("/tmp");
+#endif
+}
+
+/**
+ * Return the current user's home directory, or NULL when it cannot be
+ * determined (sets rf_last_result_len to 0 in that case).
+ */
+char* rf_fs_home_dir(void)
+{
+#ifdef _WIN32
+    const char* h = getenv("USERPROFILE");
+    if (h && h[0]) return rf_dup_result(h);
+    const char* drive = getenv("HOMEDRIVE");
+    const char* path = getenv("HOMEPATH");
+    if (drive && path)
+    {
+        size_t dl = strlen(drive), pl = strlen(path);
+        char* buf = (char*)malloc(dl + pl + 1);
+        if (!buf) { rf_last_result_len = 0; return NULL; }
+        memcpy(buf, drive, dl);
+        memcpy(buf + dl, path, pl + 1);
+        rf_last_result_len = (rf_address)(dl + pl);
+        return buf;
+    }
+    rf_last_result_len = 0;
+    return NULL;
+#else
+    const char* h = getenv("HOME");
+    if (h && h[0]) return rf_dup_result(h);
+    rf_last_result_len = 0;
+    return NULL;
+#endif
+}
+
+/**
+ * Create an empty file if it does not exist, or update its modification time
+ * if it does. Returns 0 on success, -1 on error.
+ */
+rf_S32 rf_fs_touch(const char* path, rf_S32 len)
+{
+    char* cpath = make_cstr(path, len);
+    if (!cpath) return -1;
+
+#ifdef _WIN32
+    HANDLE h = CreateFileA(cpath, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(cpath);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    SYSTEMTIME st;
+    FILETIME ft;
+    GetSystemTime(&st);
+    SystemTimeToFileTime(&st, &ft);
+    BOOL ok = SetFileTime(h, NULL, NULL, &ft);
+    CloseHandle(h);
+    return ok ? 0 : -1;
+#else
+    /* Create if missing... */
+    int fd = open(cpath, O_WRONLY | O_CREAT, 0644);
+    if (fd < 0) { free(cpath); return -1; }
+    close(fd);
+    /* ...then bump mtime/atime to now (utimes with NULL uses current time). */
+    int ret = utimes(cpath, NULL);
+    free(cpath);
+    return ret == 0 ? 0 : -1;
 #endif
 }
 
@@ -697,8 +1093,8 @@ char* rf_fs_file_stem(const char* path, rf_S32 len)
 }
 
 /**
- * Return the file extension (including dot).
- * "file.txt" -> ".txt", "file" -> ""
+ * Return the file extension WITHOUT the leading dot.
+ * "file.txt" -> "txt", "file" -> "", "archive.tar.gz" -> "gz"
  */
 char* rf_fs_extension(const char* path, rf_S32 len)
 {
@@ -722,10 +1118,11 @@ char* rf_fs_extension(const char* path, rf_S32 len)
         return buf;
     }
 
-    size_t ext_len = (size_t)(name_len - (rf_address)dot_pos);
+    /* Skip the dot itself: name + dot_pos + 1 .. end. */
+    size_t ext_len = (size_t)(name_len - (rf_address)dot_pos - 1);
     char* buf = (char*)malloc(ext_len + 1);
     if (!buf) { free(name); rf_last_result_len = 0; return NULL; }
-    memcpy(buf, name + dot_pos, ext_len);
+    memcpy(buf, name + dot_pos + 1, ext_len);
     buf[ext_len] = '\0';
     rf_last_result_len = (rf_address)ext_len;
     free(name);

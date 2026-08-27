@@ -1065,7 +1065,7 @@ routine C::rf_fs_file_name(path: CStr, len: S32) -> Hijacked[Byte]
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the stem text.
 routine C::rf_fs_file_stem(path: CStr, len: S32) -> Hijacked[Byte]
-### Returns the final extension component of a path.
+### Returns the final extension component of a path, WITHOUT the leading dot.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.
 ### :returns: A runtime-managed byte buffer containing the extension text.
@@ -1101,6 +1101,59 @@ routine C::rf_fs_can_execute(path: CStr, len: S32) -> Bool
 ### :param readonly_flag: `true` to mark readonly, `false` to clear it.
 ### :returns: A runtime status code.
 routine C::rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32
+### Reads filesystem metadata for a path in a single stat, caching the result.
+### Field accessors below read the cached values from the most recent successful call.
+### :param path: The null-terminated path to inspect.
+### :param len: The path length in bytes.
+### :returns: `0` on success, or `-1` on error.
+routine C::rf_fs_metadata(path: CStr, len: S32) -> S32
+### Returns the cached size in bytes from the last `rf_fs_metadata` call.
+### :returns: The file size in bytes.
+routine C::rf_fs_meta_size() -> S64
+### Returns the cached last-modification time as whole Unix epoch seconds.
+### :returns: Unix epoch seconds.
+routine C::rf_fs_meta_modified() -> S64
+### Returns the cached creation time as whole Unix epoch seconds.
+### :returns: Unix epoch seconds.
+routine C::rf_fs_meta_created() -> S64
+### Returns whether the cached metadata describes a directory.
+### :returns: `true` when the path is a directory.
+routine C::rf_fs_meta_is_directory() -> Bool
+### Returns whether the cached metadata marks the path readonly.
+### :returns: `true` when the path is readonly.
+routine C::rf_fs_meta_readonly() -> Bool
+### Lists the direct entries of a directory as newline-separated names.
+### The returned buffer excludes `.` and `..`; an empty directory yields an empty buffer.
+### :param path: The null-terminated directory path to list.
+### :param len: The path length in bytes.
+### :returns: A runtime-managed byte buffer of newline-separated entry names.
+routine C::rf_fs_list_dir(path: CStr, len: S32) -> Hijacked[Byte]
+### Lists directory entries WITH kind, so the caller avoids a per-entry stat.
+### Each newline-separated line is `<kind><name>` where `<kind>` is 'd' (directory)
+### or 'f' (other); `.` and `..` are excluded.
+### :param path: The null-terminated directory path to list.
+### :param len: The path length in bytes.
+### :returns: A runtime-managed byte buffer of newline-separated typed entries.
+routine C::rf_fs_list_dir_typed(path: CStr, len: S32) -> Hijacked[Byte]
+### Returns the current working directory of the process.
+### :returns: A runtime-managed byte buffer containing the working directory path.
+routine C::rf_fs_current_dir() -> Hijacked[Byte]
+### Sets the current working directory of the process.
+### :param path: The null-terminated directory path to switch to.
+### :param len: The path length in bytes.
+### :returns: `0` on success, or `-1` on error.
+routine C::rf_fs_set_current_dir(path: CStr, len: S32) -> S32
+### Returns the platform temporary directory (TMPDIR/TEMP, falling back to a default).
+### :returns: A runtime-managed byte buffer containing the temp directory path.
+routine C::rf_fs_temp_dir() -> Hijacked[Byte]
+### Returns the current user's home directory (HOME/USERPROFILE).
+### :returns: A runtime-managed byte buffer containing the home directory path, or none when unset.
+routine C::rf_fs_home_dir() -> Hijacked[Byte]
+### Creates an empty file, or updates the modification time when it already exists.
+### :param path: The null-terminated file path to touch.
+### :param len: The path length in bytes.
+### :returns: `0` on success, or `-1` on error.
+routine C::rf_fs_touch(path: CStr, len: S32) -> S32
 
 # ============================================================================
 # Real (arbitrary-precision binary float, libbf-backed) — handle lifecycle +

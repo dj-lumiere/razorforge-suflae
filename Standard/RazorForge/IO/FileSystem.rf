@@ -240,3 +240,208 @@ routine set_readonly!(path: Text, readonly: Bool = true)
   if result == -1
     throw IOError(description: f"Cannot set readonly on: {path}")
   return
+
+# ============================================================================
+# Directory listing
+# ============================================================================
+
+### Returns the direct entries of a directory as bare names.
+### The final path component only is returned for each entry; join onto `path`
+### for a full path. Order follows the platform directory-iteration order, and
+### `.` / `..` are omitted. An empty directory yields an empty list.
+### :param path: The directory to list.
+### :returns: The resulting `List[Text]` of entry names.
+### :throws: May throw {IOError} when the path cannot be listed.
+routine list_dir!(path: Text) -> List[Text]
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_list_dir(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: f"Cannot list directory: {path}")
+  if len == 0u64
+    return List[Text]()
+  var bytes = Bytes(ptr: ptr, count: len)
+  var joined = bytes.decode_as_utf8_lossy()
+  return joined.split(separator: '\n')
+
+### One directory entry: its bare name and whether it is a directory.
+record DirEntry
+  name: Text               # The final path component
+  is_directory: Bool       # Whether the entry is a directory
+
+### Returns the direct entries of a directory WITH their kind, in one directory read.
+### Prefer this over `list_dir!` + `is_directory` when walking a tree: the kind comes
+### for free from the OS directory read, so no extra `stat` per entry is needed.
+### `.` / `..` are omitted; an empty directory yields an empty list.
+### :param path: The directory to list.
+### :returns: The resulting `List[DirEntry]`.
+### :throws: May throw {IOError} when the path cannot be listed.
+routine list_dir_entries!(path: Text) -> List[DirEntry]
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_list_dir_typed(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: f"Cannot list directory: {path}")
+  var result = List[DirEntry]()
+  if len == 0u64
+    return result
+  var bytes = Bytes(ptr: ptr, count: len)
+  var joined = bytes.decode_as_utf8_lossy()
+  each line in joined.split(separator: '\n')
+    # Each line is `<kind><name>` — 'd' for a directory, 'f' otherwise.
+    var is_dir = line[0u64] == 'd'
+    var name = line[1u64 til ^0]
+    result.add_last(value: DirEntry(name: name, is_directory: is_dir))
+  return result
+
+# ============================================================================
+# Metadata
+# ============================================================================
+
+### Filesystem metadata for a path, captured in a single stat.
+record FileMetadata
+  size: S64                # Size in bytes
+  modified: Moment         # Last-modification time
+  created: Moment          # Creation time (inode-change time on POSIX, best-effort)
+  is_directory: Bool       # Whether the path is a directory
+  readonly: Bool           # Whether the path is marked readonly
+
+### Reads filesystem metadata for a path in a single stat.
+### :param path: The path to inspect.
+### :returns: The resulting `FileMetadata` value.
+### :throws: May throw {IOError} when the path cannot be inspected.
+routine metadata!(path: Text) -> FileMetadata
+  var cstr = CStr(from: path)
+  var status = rf_fs_metadata(path: cstr, len: cstr.count().S32())
+  if status == -1
+    throw IOError(description: f"Cannot read metadata: {path}")
+  return FileMetadata(
+    size: rf_fs_meta_size(),
+    modified: Moment.from_timestamp(seconds: rf_fs_meta_modified()),
+    created: Moment.from_timestamp(seconds: rf_fs_meta_created()),
+    is_directory: rf_fs_meta_is_directory(),
+    readonly: rf_fs_meta_readonly())
+
+### Returns the size of a regular file in bytes.
+### This is a convenience over `metadata!` when only the size is needed.
+### :param path: The file path to inspect.
+### :returns: The resulting size in bytes.
+### :throws: May throw {IOError} when the path cannot be inspected.
+routine file_size!(path: Text) -> S64
+  var cstr = CStr(from: path)
+  var size = rf_fs_file_size(path: cstr, len: cstr.count().S32())
+  if size == -1s64
+    throw IOError(description: f"Cannot read file size: {path}")
+  return size
+
+# ============================================================================
+# Working directory & standard directories (OS calls)
+# ============================================================================
+
+### Returns the current working directory of the process.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError} when the working directory cannot be read.
+routine current_dir!() -> Text
+  var ptr = rf_fs_current_dir()
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: "Cannot read current working directory")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Changes the current working directory of the process.
+### :param path: The directory to switch to.
+### :throws: May throw {IOError} when the directory cannot be entered.
+routine set_current_dir!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_set_current_dir(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot change directory to: {path}")
+  return
+
+### Returns the platform temporary directory.
+### This honors the usual environment variables and never fails.
+### :returns: The resulting `Text` value.
+routine temp_dir() -> Text
+  var ptr = rf_fs_temp_dir()
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Returns the current user's home directory.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError} when the home directory cannot be determined.
+routine home_dir!() -> Text
+  var ptr = rf_fs_home_dir()
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: "Cannot determine home directory")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Creates an empty file, or updates its modification time when it already exists.
+### Parent directories must already exist.
+### :param path: The file path to touch.
+### :throws: May throw {IOError} when the file cannot be created or updated.
+routine touch!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_touch(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot touch: {path}")
+  return
+
+# ============================================================================
+# Path builders (pure, no OS calls)
+# ============================================================================
+
+### Splits a path into its file stem and extension.
+### The stem is the final component without its extension; the extension omits
+### the leading dot. A path without an extension yields an empty extension.
+### The extension is returned WITHOUT a leading dot, so it round-trips through
+### `with_extension` (`with_extension(p, split_extension(p).extension)`).
+### :param path: The path to split.
+### :returns: A `(stem, extension)` tuple.
+routine split_extension(path: Text) -> (Text, Text)
+  return (file_stem(path: path), extension(path: path))
+
+### Returns the path with its extension replaced.
+### An empty `ext` drops the extension entirely. The directory portion is preserved.
+### :param path: The path to rebuild.
+### :param ext: The new extension WITHOUT a leading dot (e.g. `"png"`).
+### :returns: The resulting `Text` value.
+routine with_extension(path: Text, ext: Text) -> Text
+  var stem = file_stem(path: path)
+  var base = if ext.is_empty() then stem else f"{stem}.{ext}"
+  var dir = parent_path(path: path)
+  return if dir.is_empty() then base else join_path(a: dir, b: base)
+
+### Returns the path with its final component replaced.
+### The directory portion is preserved.
+### :param path: The path to rebuild.
+### :param name: The new final component.
+### :returns: The resulting `Text` value.
+routine with_file_name(path: Text, name: Text) -> Text
+  var dir = parent_path(path: path)
+  return if dir.is_empty() then name else join_path(a: dir, b: name)
+
+# ============================================================================
+# Recursive traversal
+# ============================================================================
+
+### Returns every descendant path under a directory, recursively.
+### Each returned path is a full path built by joining onto `path`; directories
+### are included alongside files, in the platform directory-iteration order
+### (a directory appears before its own contents). An empty directory yields an
+### empty list. Symlinks are NOT followed, so this cannot loop on link cycles.
+### :param path: The root directory to walk.
+### :returns: The resulting `List[Text]` of descendant paths.
+### :throws: May throw {IOError} when any directory in the tree cannot be listed.
+routine walk_dir!(path: Text) -> List[Text]
+  var result = List[Text]()
+  each entry in list_dir_entries!(path: path)
+    var full = join_path(a: path, b: entry.name)
+    result.add_last(value: full)
+    if entry.is_directory
+      each descendant in walk_dir!(path: full)
+        result.add_last(value: descendant)
+  return result
