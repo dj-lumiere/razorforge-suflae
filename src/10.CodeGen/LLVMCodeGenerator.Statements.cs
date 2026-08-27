@@ -574,9 +574,12 @@ public partial class LlvmCodeGenerator
         }
 
         string llvmType = GetValueLlvmType(type: gslot.Type);
-        if (llvmType is not ("i8" or "i16" or "i32" or "i64"))
+        // Atomic-capable scalar widths: integers i8..i64 (S8..S64 / U8..U64) and floats F32/F64.
+        // Wider ints (S128/S256), F16/F128, and Text/Decimal/records are NOT handled here (→ Roamed).
+        bool isFloat = llvmType is "float" or "double";
+        if (llvmType is not ("i8" or "i16" or "i32" or "i64") && !isFloat)
         {
-            return false; // atomicrmw add/sub: integer scalars only
+            return false;
         }
 
         // Value must be `<gName>.add(d)` or `<gName>.sub(d)` — the same global read on the RHS.
@@ -590,7 +593,12 @@ public partial class LlvmCodeGenerator
             return false;
         }
 
-        string? atomicOp = op switch { "add" => "add", "sub" => "sub", _ => null };
+        string? atomicOp = op switch
+        {
+            "add" => isFloat ? "fadd" : "add",
+            "sub" => isFloat ? "fsub" : "sub",
+            _ => null
+        };
         if (atomicOp == null)
         {
             return false;

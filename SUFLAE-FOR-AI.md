@@ -89,12 +89,16 @@ When unsure, consult ground truth in the repo:
    global is thread-safe**: it is backed by `Roamed`, promoted to ESCAPED at init, and every
    statement that touches it is wrapped in the task-keyed access lock — so a single-statement
    read-modify-write (`box.count = box.count + 1`) is atomic across workers (measured: 8 agents ×
-   5000 → exactly 40 000). An **integer-scalar global** (`S8`…`S64`/`U8`…`U64`) is **also
-   thread-safe for `g = g + d` / `g = g - d`**: that single-statement RMW lowers to one lock-free
-   `atomicrmw` (measured 40 000/40 000). Note the atomic RMW **wraps on overflow** (like every
-   language's atomics), unlike the checked `+` — opting a global into concurrent mutation opts into
-   wrapping atomics. A **`Text`/`Decimal`/record value global is currently only single-writer-safe**
-   (plain load/store; concurrent mutation races) — pending Roamed-cell backing. Either way, a
+   5000 → exactly 40 000). An **atomic-width scalar global** — integers `S8`…`S64`/`U8`…`U64` and
+   floats `F32`/`F64` — is **also thread-safe for `g = g + d` / `g = g - d`**: that single-statement
+   RMW lowers to one lock-free `atomicrmw` (`add`/`sub` for ints, `fadd`/`fsub` for floats; measured
+   40 000/40 000). `Bool` needs nothing extra — a byte store/load is already atomic. The atomic RMW
+   **wraps on overflow** (like every language's atomics), unlike the checked `+` — opting a global
+   into concurrent mutation opts into wrapping atomics. Everything wider or heavier — `S128`/`S256`,
+   `F16`/`F128`, `Text`, `Decimal`, records — is currently only **single-writer-safe** (plain
+   load/store; concurrent mutation races), pending the planned single global-entity backing (all
+   such globals become fields of one `Roamed` object, so each access takes the task-keyed lock).
+   Either way, a
    *multi-statement* logical RMW (`t = g; …; g = t + 1`) is never
    auto-atomic; that is the user's to serialize, in SF as in every language. (One init-ordering
    residual: a dependency reached only through a *member-routine* call — `x.foo()` — is not
