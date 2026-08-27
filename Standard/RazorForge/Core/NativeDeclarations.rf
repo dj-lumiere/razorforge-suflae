@@ -1038,6 +1038,13 @@ routine C::rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### :param dst_len: The destination path length in bytes.
 ### :returns: A runtime status code.
 routine C::rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
+### Moves an entry without overwriting an existing destination.
+### :param src: The null-terminated source path.
+### :param src_len: The source path length in bytes.
+### :param dst: The null-terminated destination path.
+### :param dst_len: The destination path length in bytes.
+### :returns: `0` when moved, `1` when the destination already exists, `-1` on error.
+routine C::rf_fs_move_no_replace(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### Returns the file size for a regular file path.
 ### :param path: The null-terminated path to inspect.
 ### :param len: The path length in bytes.

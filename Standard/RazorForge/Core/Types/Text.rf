@@ -173,6 +173,31 @@ routine Text.count_of(character: Character) -> U64
       result += 1u64
   return result
 
+### Returns the number of non-overlapping occurrences of a substring.
+### After a match the scan resumes past it, so occurrences never overlap
+### (`"aaa".count_of("aa")` is `1`). An empty substring yields `0`.
+### :param other: The substring to search for.
+### :returns: The resulting `U64` value.
+@readonly
+routine Text.count_of(other: Text) -> U64
+  var oc = other.count()
+  if oc == 0u64 or oc > me.count
+    return 0u64
+  var result: U64 = 0u64
+  var i: U64 = 0u64
+  while i + oc <= me.count
+    var found = true
+    each j in 0u64 til oc
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
+      result += 1u64
+      i += oc
+    else
+      i += 1u64
+  return result
+
 ### Returns `true` when this text contains no characters.
 ### This is equivalent to checking whether `count()` is `0`.
 ### :returns: The resulting `Bool` value.
@@ -443,6 +468,60 @@ routine Text.find!(other: Text) -> U64
       return i
   absent
 
+### Returns the position of the LAST occurrence of `letter` (reverse search).
+### :param letter: The character to search for.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
+@readonly
+routine Text.find_last!(letter: Character) -> U64
+  var i = me.count
+  loop
+    if i == 0u64
+      break
+    i -= 1u64
+    if me[i] == letter
+      return i
+  absent
+
+### Returns the position of the LAST occurrence of `other` (reverse search).
+### An empty `other` matches at `count()` (one past the last index).
+### :param other: The substring to search for.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
+@readonly
+routine Text.find_last!(other: Text) -> U64
+  var oc = other.count()
+  if oc == 0u64
+    return me.count
+  if oc > me.count
+    absent
+  var i = me.count - oc + 1u64
+  loop
+    if i == 0u64
+      break
+    i -= 1u64
+    var found = true
+    each j in 0u64 til oc
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
+      return i
+  absent
+
+### Splits at the FIRST occurrence of `separator` into a `(before, after)` pair.
+### The separator itself appears in neither half. Absents when the separator is
+### not present (use `try_split_once` to recover a `Maybe`).
+### :param separator: The separator to split on.
+### :returns: A `(before, after)` tuple.
+### :absent: Returns absent when the separator is not found.
+@readonly
+routine Text.split_once!(separator: Text) -> (Text, Text)
+  var pos = me.find!(separator)
+  var before = me[0u64 til pos]
+  var after = me[(pos + separator.count()) til ^0]
+  return (before, after)
+
 # Transform
 
 ### Converts this value to uppercase.
@@ -464,6 +543,28 @@ routine Text.to_lowercase() -> Text
   each i in 0u64 til me.count
     result.add_last(me[i].to_lowercase())
   return Text(from_list: steal result)
+
+### Returns a copy with the first character uppercased and the rest lowercased.
+### Empty text is returned unchanged. This follows the common "capitalize a word"
+### convention (the whole tail is lowercased, not left as-is).
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.capitalize() -> Text
+  if me.is_empty()
+    return me
+  var result = List[Character]()
+  result.add_last(me[0u64].to_uppercase())
+  each i in 1u64 til me.count
+    result.add_last(me[i].to_lowercase())
+  return Text(from_list: steal result)
+
+### Returns whether both values are equal ignoring ASCII/Unicode case.
+### Both operands are case-folded via `to_lowercase` before comparison.
+### :param other: The other text to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Text.eq_ignore_case(other: Text) -> Bool
+  return me.to_lowercase().eq(other.to_lowercase())
 
 ### Returns a copy with leading and trailing whitespace removed.
 ### Whitespace is identified using `Character.is_whitespace()`.
@@ -557,6 +658,36 @@ routine Text.replace(old: Text, new: Text) -> Text
       i += 1u64
   return Text(from_list: steal result)
 
+### Returns a copy with only the FIRST occurrence of `old` replaced by `new`.
+### When `old` is empty or not present, the original text is returned unchanged.
+### :param old: The value to replace.
+### :param new: The replacement value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.replace_first(old: Text, new: Text) -> Text
+  if old.is_empty()
+    return me
+  var oc = old.count()
+  if oc > me.count
+    return me
+  var pos = me.count
+  var i: U64 = 0u64
+  while i + oc <= me.count
+    var found = true
+    each j in 0u64 til oc
+      if me[i + j] != old[j]
+        found = false
+        break
+    if found
+      pos = i
+      break
+    i += 1u64
+  if pos == me.count
+    return me
+  var before = me[0u64 til pos]
+  var after = me[(pos + oc) til ^0]
+  return before.concat(new).concat(after)
+
 ### Returns a copy without the matching prefix.
 ### When `prefix` is not present, the original text is returned unchanged.
 ### :param prefix: The prefix to remove if present.
@@ -637,6 +768,28 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
     result.add_last(me[i])
   var pad_count = width - me.count
   each p in 0u64 til pad_count
+    result.add_last(fill)
+  return Text(from_list: steal result)
+
+### Returns a copy centered within `width`, padded on both sides with `fill`.
+### An odd remainder puts the extra fill character on the right. If `width` is at
+### or below the current length, the original text is returned.
+### :param width: The total width to target.
+### :param fill: The fill character to use.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.center(width: U64, fill: Character) -> Text
+  if me.count >= width
+    return me
+  var total = width - me.count
+  var left = total // 2u64
+  var right = total - left
+  var result = List[Character]()
+  each p in 0u64 til left
+    result.add_last(fill)
+  each i in 0u64 til me.count
+    result.add_last(me[i])
+  each p in 0u64 til right
     result.add_last(fill)
   return Text(from_list: steal result)
 

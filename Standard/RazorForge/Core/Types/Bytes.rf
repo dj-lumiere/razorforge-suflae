@@ -15,7 +15,7 @@ import BuilderQuery
 ### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
 ### value represents an empty or static-literal sequence and `store`/`destroy`
 ### are no-ops.
-record Bytes obeys Assignable, Copyable, Iterable[Byte], Equatable
+record Bytes obeys Assignable, Copyable, Iterable[Byte], Ordered, Hashable
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
   ### Number of bytes in the buffer.
@@ -170,6 +170,21 @@ routine Bytes.getitem!(index: U64) -> Byte
   danger
     return me.data.stride(count: S64(index)).peek()
 
+### Returns the sub-sequence spanning an index range — the slice form of indexing (`bytes[a til b]`).
+### A half-open `a til b` yields `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range
+### reverses the segment. Positions at or past `count` are skipped, so `bytes[a til ^0]` slices cleanly
+### to the end. `Bytes` is immutable, so the result is a freshly allocated copy.
+### :param range: The index range to extract.
+### :returns: The resulting `Bytes` value.
+@readonly
+routine Bytes.getitem(range: Range[U64]) -> Bytes
+  var result = List[Byte]()
+  danger
+    each i in range
+      if i < me.count
+        result.add_last(me.data.stride(count: S64(i)).peek())
+  return Bytes(from_list: steal result)
+
 # String operations
 
 ### Returns a new value with `other` appended.
@@ -212,6 +227,40 @@ routine Bytes.eq(other: Bytes) -> Bool
       return false
   return true
 
+### Compares this value with the other value.
+### Comparison is lexicographic over raw byte values; a shorter sequence that is a
+### prefix of a longer one sorts first. Lets `Bytes` be sorted and used as a map key.
+### :param other: The other byte sequence to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Bytes.cmp(other: Bytes) -> ComparisonSign
+  var min_len = me.count
+  if other.count < min_len
+    min_len = other.count
+  each i in 0u64 til min_len
+    if me[i] < other[i]
+      return ComparisonSign.ME_SMALL
+    if me[i] > other[i]
+      return ComparisonSign.ME_LARGE
+  if me.count < other.count
+    return ComparisonSign.ME_SMALL
+  if me.count > other.count
+    return ComparisonSign.ME_LARGE
+  return ComparisonSign.SAME
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Each byte is folded into the keyed hash so equal sequences under the same key
+### produce the same digest — the counterpart to `Text.hash`.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` keyed hash.
+@readonly
+routine Bytes.hash(k0: U64, k1: U64) -> U64
+  var h = __hash_leaf(v: me.count)
+  each i in 0u64 til me.count
+    h = __hash_round(acc: h, h: me[i].hash(k0: k0, k1: k1))
+  return __hash_finalize(h)
+
 # Search
 
 ### Returns `true` when this byte sequence contains `byte`.
@@ -221,6 +270,28 @@ routine Bytes.eq(other: Bytes) -> Bool
 routine Bytes.contains(byte: Byte) -> Bool
   each i in 0u64 til me.count
     if me[i] == byte
+      return true
+  return false
+
+### Returns `true` when this byte sequence contains `other` as a contiguous sub-sequence.
+### An empty `other` is always considered contained.
+### :param other: The sub-sequence to search for.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Bytes.contains(other: Bytes) -> Bool
+  if other.is_empty()
+    return true
+  var oc = other.count
+  if oc > me.count
+    return false
+  var limit = me.count - oc + 1u64
+  each i in 0u64 til limit
+    var found = true
+    each j in 0u64 til oc
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
       return true
   return false
 
@@ -260,6 +331,28 @@ routine Bytes.find!(byte: Byte) -> U64
       return i
   absent
 
+### Returns the position of the first occurrence of `other` as a sub-sequence.
+### An empty `other` matches at position `0`.
+### :param other: The sub-sequence to search for.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
+@readonly
+routine Bytes.find!(other: Bytes) -> U64
+  if other.is_empty()
+    return 0u64
+  if other.count > me.count
+    absent
+  var limit = me.count - other.count + 1u64
+  each i in 0u64 til limit
+    var found = true
+    each j in 0u64 til other.count
+      if me[i + j] != other[j]
+        found = false
+        break
+    if found
+      return i
+  absent
+
 # Split
 
 ### Splits this value into parts.
@@ -276,6 +369,38 @@ routine Bytes.split(separator: Byte) -> List[Bytes]
       current = List[Byte]()
     else
       current.add_last(me[i])
+  parts.add_last(Bytes(from_list: steal current))
+  return steal parts
+
+### Splits this value on a multi-byte separator sub-sequence.
+### Separator bytes are not included in the returned segments. An empty separator
+### returns the whole sequence as a single segment.
+### :param separator: The separator sub-sequence to split on.
+### :returns: The resulting `List[Bytes]` value.
+@readonly
+routine Bytes.split(separator: Bytes) -> List[Bytes]
+  var parts = List[Bytes]()
+  if separator.is_empty()
+    parts.add_last(me)
+    return steal parts
+  var sc = separator.count
+  var current = List[Byte]()
+  var i: U64 = 0u64
+  while i < me.count
+    var matched = false
+    if i + sc <= me.count
+      matched = true
+      each j in 0u64 til sc
+        if me[i + j] != separator[j]
+          matched = false
+          break
+    if matched
+      parts.add_last(Bytes(from_list: steal current))
+      current = List[Byte]()
+      i += sc
+    else
+      current.add_last(me[i])
+      i += 1u64
   parts.add_last(Bytes(from_list: steal current))
   return steal parts
 
@@ -314,6 +439,51 @@ routine Bytes.repeat(times: U64) -> Bytes
       rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Byte.data_size() * me.count)
       t += 1u64
     return Bytes(data: buf, count: n, ctrl: FrozenController().hijack())
+
+# Hex encoding
+
+### Maps a 0..15 nibble to its lowercase hex character.
+routine __nibble_to_hex_char(nibble: U32) -> Character
+  if nibble < 10u32
+    return Character(0x30u32 + nibble)
+  return Character(0x61u32 + nibble - 10u32)
+
+### Returns the lowercase hexadecimal encoding of this sequence.
+### Each byte becomes exactly two hex digits (high nibble first), so the result is
+### always `2 * count()` characters. The inverse is `Bytes.from_hex!`.
+### :returns: The resulting `Text` value.
+@readonly
+routine Bytes.to_hex() -> Text
+  var out = List[Character]()
+  each i in 0u64 til me.count
+    var v = me[i].codepoint()
+    out.add_last(__nibble_to_hex_char(nibble: (v >> 4u32) & 0xFu32))
+    out.add_last(__nibble_to_hex_char(nibble: v & 0xFu32))
+  return Text(from_list: steal out)
+
+### Decodes a hexadecimal string into bytes.
+### Accepts upper- or lowercase digits. The inverse of `to_hex`.
+### :param hex: The hex string to decode; its length must be even.
+### :returns: The resulting `Bytes` value.
+### :throws: {InvalidValueError} on an odd length or a non-hex character.
+routine Bytes.from_hex!(hex: Text) -> Bytes
+  var n = hex.count()
+  if n % 2u64 != 0u64
+    throw InvalidValueError(input: hex, target: "Bytes.from_hex")
+  if n == 0u64
+    return Bytes()
+  var out = List[Byte]()
+  var i: U64 = 0u64
+  while i < n
+    var hi_c = hex[i]
+    var lo_c = hex[i + 1u64]
+    if hi_c.codepoint() > 0x7Fu32 or lo_c.codepoint() > 0x7Fu32
+      throw InvalidValueError(input: hex, target: "Bytes.from_hex")
+    var hi = Byte(from: U8(hi_c.codepoint())).hex_value!()
+    var lo = Byte(from: U8(lo_c.codepoint())).hex_value!()
+    out.add_last(Byte(from: hi * 16u8 + lo))
+    i += 2u64
+  return Bytes(from_list: steal out)
 
 # Conversion to modifiable list
 
