@@ -84,8 +84,15 @@ When unsure, consult ground truth in the repo:
    can `import Mod.the_global` and read AND write it (it is one shared storage cell). **Use it
    for process-singular state** (a logger, config, an asset registry); per-frame / per-world
    context (delta time, input, the current world) belongs in engine-injected parameters, not a
-   global. (One residual: a dependency reached only through a *member-routine* call — `x.foo()`
-   — is not followed by the build-time ordering.)
+   global. **A global is single-writer-safe, NOT thread-safe:** its storage is a plain
+   (non-atomic) load/store, and the coroutine scheduler is M:N (real per-core worker threads),
+   so mutating the SAME global from two parallel agents is a data race with lost updates
+   (measured: 8 agents × 5000 `+= 1` yielded 39 837, not 40 000). This is the same
+   single-thread-only rule shared mutable state already carries in SF (cf. the each-loop ban) —
+   mutate a global from ONE logical flow (startup, the main update loop); if several parallel
+   agents must touch it, serialize them yourself. (One ordering residual: a dependency reached
+   only through a *member-routine* call — `x.foo()` — is not followed by the build-time
+   initialization ordering.)
 9. **Keyword set = RazorForge's, minus the RF-only reserved words.** The shared
    keyword inventory is RAZORFORGE-FOR-AI §16; Suflae does NOT reserve the
    RF-only ones: `steal` `danger` `dangerous` `threaded`, and `expand` — the single
