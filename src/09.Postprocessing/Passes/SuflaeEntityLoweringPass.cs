@@ -319,6 +319,7 @@ internal sealed class SuflaeEntityLoweringPass
             case CreatorExpression creator when creator.ResolvedType is EntityTypeInfo ce:
                 return WrapInRoam(inner: creator, entity: ce);
 
+
             // A collection literal (`[1,2,3]` / `{…}`) is an entity rvalue just like a constructor call —
             // it resolves to a bare `Core.List`/`Set`/`Dict` entity, so an SF entity slot must `.roam()` it
             // (else a bare-list pointer is bound to a `Roamed` handle and reinterpreted as a controller →
@@ -449,9 +450,26 @@ internal sealed class SuflaeEntityLoweringPass
                 // sets MeType — so the call passes the Roamed handle directly and `me.field` routes through
                 // the Roamed access machinery. No projection needed.)
 
-                return call.ResolvedType is EntityTypeInfo callEntity && !IsRfRealmRef(call.Callee)
-                    ? WrapInRoam(inner: lowered, entity: callEntity)
-                    : lowered;
+                if (call.ResolvedType is EntityTypeInfo callEntity && !IsRfRealmRef(call.Callee))
+                    return WrapInRoam(inner: lowered, entity: callEntity);
+
+                // A PARAMETERIZED SF constructor call (`Pt(v: x)`) is a CallExpression typed `Roamed[E]`
+                // (SA roamed `create`'s declared return), but the `create` BODY returns the BARE entity
+                // (create-returns-bare convention — see ReturnStatement lowering). So it still must be
+                // wrapped once at the call site — otherwise a bare entity binds into a Roamed slot
+                // (under-roamed → later destroyed as a controller → AccessViolation). The no-arg form
+                // `Box()` is typed bare (handled above); this catches the arg-carrying form. Gated on
+                // `create` (returns bare) so an ordinary routine returning a `Roamed[E]` value is NOT
+                // re-wrapped, and on the SF realm (an RF entity stays bare).
+                if (lowered.ResolvedRoutine is { Name: "create" }
+                    && RoamedInnerEntity(call.ResolvedType) is { } createEntity
+                    && !IsRfRealmRef(call.Callee))
+                {
+                    lowered.ResolvedType = createEntity;
+                    return WrapInRoam(inner: lowered, entity: createEntity);
+                }
+
+                return lowered;
             }
 
             // A generic-instance construction like `List[Node]()` stays a GenericMemberRoutineCallExpression
