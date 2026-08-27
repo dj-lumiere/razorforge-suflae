@@ -480,6 +480,15 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitAssignment(StringBuilder sb, AssignmentStatement assign)
     {
+        // Thread-safe scalar-integer global RMW: `g = g + d` / `g = g - d` on a module `global` becomes a
+        // single lock-free `atomicrmw` so parallel agents don't lose updates. Atomic arithmetic WRAPS on
+        // overflow (as everywhere — Rust/Go/C++ atomics), unlike the checked `+`; opting a global into
+        // concurrent mutation opts into wrapping atomics. Non-matching writes fall through unchanged.
+        if (TryEmitAtomicGlobalRmw(sb: sb, target: assign.Target, valueExpr: assign.Value))
+        {
+            return;
+        }
+
         // Evaluate the value first
         string value = EmitExpression(sb: sb, expr: assign.Value);
 
@@ -547,6 +556,52 @@ public partial class LlvmCodeGenerator
         {
             _localRetainedVars.RemoveAll(match: e => e.Name == sourceName);
         }
+    }
+
+    /// <summary>
+    /// Recognizes a scalar-integer module-<c>global</c> read-modify-write <c>g = g + d</c> / <c>g = g - d</c>
+    /// and emits a single seq-cst <c>atomicrmw</c> (lock-free, thread-safe) instead of the racy
+    /// load-compute-store. Returns true when handled. Only fires for an integer-scalar global whose
+    /// assignment value is <c>g.add(d)</c>/<c>g.sub(d)</c> on the SAME global; anything else returns false
+    /// and takes the ordinary path. Entity/Text/Decimal globals are handled elsewhere (Roamed lock).
+    /// </summary>
+    private bool TryEmitAtomicGlobalRmw(StringBuilder sb, Expression target, Expression valueExpr)
+    {
+        if (target is not IdentifierExpression { Name: var gName }
+            || !_moduleGlobals.TryGetValue(key: gName, value: out (TypeInfo Type, string Symbol) gslot))
+        {
+            return false;
+        }
+
+        string llvmType = GetValueLlvmType(type: gslot.Type);
+        if (llvmType is not ("i8" or "i16" or "i32" or "i64"))
+        {
+            return false; // atomicrmw add/sub: integer scalars only
+        }
+
+        // Value must be `<gName>.add(d)` or `<gName>.sub(d)` — the same global read on the RHS.
+        if (valueExpr is not CallExpression
+            {
+                Callee: MemberExpression { Object: IdentifierExpression { Name: var recv }, MemberName: var op },
+                Arguments: [{ } deltaArg]
+            }
+            || recv != gName)
+        {
+            return false;
+        }
+
+        string? atomicOp = op switch { "add" => "add", "sub" => "sub", _ => null };
+        if (atomicOp == null)
+        {
+            return false;
+        }
+
+        Expression delta = deltaArg is NamedArgumentExpression na ? na.Value : deltaArg;
+        string deltaVal = EmitExpression(sb: sb, expr: delta);
+        string old = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {old} = atomicrmw {atomicOp} ptr {gslot.Symbol}, {llvmType} {deltaVal} seq_cst");
+        return true;
     }
 
     /// <summary>

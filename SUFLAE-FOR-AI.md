@@ -89,10 +89,13 @@ When unsure, consult ground truth in the repo:
    global is thread-safe**: it is backed by `Roamed`, promoted to ESCAPED at init, and every
    statement that touches it is wrapped in the task-keyed access lock — so a single-statement
    read-modify-write (`box.count = box.count + 1`) is atomic across workers (measured: 8 agents ×
-   5000 → exactly 40 000). A **value-type global (scalar `S64`, `Text`, …) is currently only
-   single-writer-safe**: its storage is a plain non-atomic load/store, so concurrent mutation from
-   parallel agents races and loses updates (measured 39 837/40 000) — pending its own Roamed
-   backing. Either way, a *multi-statement* logical RMW (`t = g; …; g = t + 1`) is never
+   5000 → exactly 40 000). An **integer-scalar global** (`S8`…`S64`/`U8`…`U64`) is **also
+   thread-safe for `g = g + d` / `g = g - d`**: that single-statement RMW lowers to one lock-free
+   `atomicrmw` (measured 40 000/40 000). Note the atomic RMW **wraps on overflow** (like every
+   language's atomics), unlike the checked `+` — opting a global into concurrent mutation opts into
+   wrapping atomics. A **`Text`/`Decimal`/record value global is currently only single-writer-safe**
+   (plain load/store; concurrent mutation races) — pending Roamed-cell backing. Either way, a
+   *multi-statement* logical RMW (`t = g; …; g = t + 1`) is never
    auto-atomic; that is the user's to serialize, in SF as in every language. (One init-ordering
    residual: a dependency reached only through a *member-routine* call — `x.foo()` — is not
    followed by the build-time ordering.)

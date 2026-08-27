@@ -1177,6 +1177,14 @@ public partial class LlvmCodeGenerator
             return "undef";
         }
 
+        // Thread-safe scalar-integer global RMW: `g = g + d` / `g = g - d` → lock-free `atomicrmw`
+        // (see TryEmitAtomicGlobalRmw). User-written assignments reach codegen as BinaryExpression(Assign),
+        // so the detection must live here too, not only in EmitAssignment.
+        if (TryEmitAtomicGlobalRmw(sb: sb, target: binary.Left, valueExpr: binary.Right))
+        {
+            return "undef";
+        }
+
         string value = EmitExpression(sb: sb, expr: binary.Right);
 
         switch (binary.Left)
