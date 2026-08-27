@@ -120,7 +120,8 @@ public record VariableDeclaration(
     SourceLocation Location,
     StorageClass Storage = StorageClass.None,
     List<string>? Annotations = null,
-    bool IsLateInit = false) : Declaration(Location: Location)
+    bool IsLateInit = false,
+    bool IsGlobal = false) : Declaration(Location: Location)
 {
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

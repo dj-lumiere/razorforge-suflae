@@ -1601,8 +1601,12 @@ public partial class LlvmCodeGenerator
             return (constVal.Value.ToString(), ResolveConstGenericUnderlyingType(constVal: constVal));
         }
 
+        // A Suflae module `global` receiver (`counter.add(...)`) is a VALUE, not a type name — it is
+        // excluded here so it falls through to the value path below, where EmitExpression loads it from
+        // its `@global` symbol (otherwise this typewise branch would synthesize a zero receiver).
         if (member.Object is IdentifierExpression typeId &&
             !_localVariables.ContainsKey(key: typeId.Name) &&
+            !_moduleGlobals.ContainsKey(key: typeId.Name) &&
             ResolveAggregatePreset(name: typeId.Name) == null)
         {
             // Aggregate-preset receivers are NOT typewise/static receivers — they are by-ref values
@@ -1684,6 +1688,12 @@ public partial class LlvmCodeGenerator
 
         if (!_localVariables.ContainsKey(key: id.Name))
         {
+            // Suflae module-level `global`: its storage IS the `@global` symbol, so that is its address.
+            if (_moduleGlobals.TryGetValue(key: id.Name, value: out (TypeInfo Type, string Symbol) gslot))
+            {
+                return gslot.Symbol;
+            }
+
             throw new InvalidOperationException(
                 message:
                 $"Cannot take address of '{id.Name}' — not a local variable or " +

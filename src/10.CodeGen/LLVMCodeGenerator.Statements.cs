@@ -557,6 +557,14 @@ public partial class LlvmCodeGenerator
     {
         if (!_localVariables.TryGetValue(key: varName, value: out TypeInfo? varType))
         {
+            // Suflae module-level `global`: store to its `@global` symbol.
+            if (_moduleGlobals.TryGetValue(key: varName, value: out (TypeInfo Type, string Symbol) gslot))
+            {
+                EmitLine(sb: sb,
+                    line: $"  store {GetValueLlvmType(type: gslot.Type)} {value}, ptr {gslot.Symbol}");
+                return;
+            }
+
             throw new InvalidOperationException(message: $"Variable '{varName}' not found");
         }
 

@@ -204,6 +204,11 @@ public partial class LlvmCodeGenerator
 /// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
+    /// <summary>Suflae module-level <c>global</c> variables: source name -&gt; (type, LLVM <c>@global</c>
+    /// symbol). Populated by <see cref="GenerateGlobalVariables"/> before routine bodies are emitted;
+    /// consulted by the identifier read / assignment / lvalue paths as a fallback after local lookup.</summary>
+    private readonly Dictionary<string, (TypeInfo Type, string Symbol)> _moduleGlobals = new();
+
     /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
     private readonly Dictionary<string, string> _localVarLlvmNames = new();
 
@@ -500,6 +505,10 @@ public partial class LlvmCodeGenerator
         GenerateTypeDeclarations();
         Mark(label: "Stage 1 TypeDeclarations");
 
+        // Stage 1b: Emit Suflae module-level `global` storage before routine bodies reference it.
+        GenerateGlobalVariables();
+        Mark(label: "Stage 1b GlobalVariables");
+
         // Stage 2: Generate function declarations (signatures)
         GenerateRoutineDeclarations();
         Mark(label: "Stage 2 RoutineDeclarations");
@@ -649,6 +658,40 @@ public partial class LlvmCodeGenerator
     /// Only emits 'declare' for external routines that don't have bodies.
     /// Routines with bodies (user program and stdlib) are handled by GenerateRoutineDefinitions().
     /// </summary>
+    /// <summary>
+    /// Emits one zero-initialized LLVM <c>@global</c> per Suflae module-level <c>global</c> declaration
+    /// and records the name-&gt;symbol mapping in <see cref="_moduleGlobals"/>. The initializer itself is
+    /// NOT emitted here — <c>InjectGlobalInitializers</c> moved it into a runtime assignment at the top of
+    /// <c>start()</c>, so the storage only needs a zero placeholder. The global's resolved type comes from
+    /// the registry (the declaration's initializer was stripped by that injection).
+    /// </summary>
+    private void GenerateGlobalVariables()
+    {
+        foreach ((Program program, string _, string module) in _userPrograms)
+        {
+            foreach (ISyntaxTreeNode decl in program.Declarations)
+            {
+                if (decl is not VariableDeclaration { IsGlobal: true } g)
+                {
+                    continue;
+                }
+
+                TypeInfo? type = _registry.LookupVariable(name: g.Name)?.Type;
+                if (type == null)
+                {
+                    continue; // SA registered every global; skip defensively if absent
+                }
+
+                string llvmType = GetValueLlvmType(type: type);
+                string qualified = string.IsNullOrEmpty(value: module) ? g.Name : $"{module}.{g.Name}";
+                string symbol = $"@\"global.{qualified}\"";
+
+                EmitLine(sb: _globalDeclarations, line: $"{symbol} = global {llvmType} zeroinitializer");
+                _moduleGlobals[key: g.Name] = (type, symbol);
+            }
+        }
+    }
+
     private void GenerateRoutineDeclarations()
     {
         // Build set of routine names that have bodies (in user programs or stdlib)

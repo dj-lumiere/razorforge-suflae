@@ -150,6 +150,7 @@ public partial class Tokenizer
             // Variable declarations
             [key: "var"] = TokenType.Var,
             [key: "preset"] = TokenType.Preset,
+            [key: "global"] = TokenType.Global,
             [key: "lateinit"] = TokenType.LateInit,
 
             // Access modifiers

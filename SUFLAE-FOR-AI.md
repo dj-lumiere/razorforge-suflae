@@ -66,7 +66,27 @@ When unsure, consult ground truth in the repo:
 7. **Suflae hides low-level concepts** RazorForge surfaces (see §5). You will not
    write `danger`, `Hijacked`, access tokens (`Viewing`/`Modifying`/`Consulting`/
    `Amending`), `steal`, `@reshaping`, or anything about iterator invalidation.
-8. **Keyword set = RazorForge's, minus the RF-only reserved words.** The shared
+8. **`global` = module-level mutable state — Suflae-only.** Suflae HAS module globals;
+   RazorForge does not (its deterministic teardown has no owning scope for one). Syntax:
+   `global name: Type = initializer` — both the type annotation AND the initializer are
+   REQUIRED, and there is NO `var` (a `global` is mutable by definition). A bare `var` at
+   module level is an error (RF-S435) — `var` is a routine-local binding; a module-level
+   `preset` (a constant) still exists for constants. A `global` is module-scoped (read/write
+   from any routine in the module by bare name), session-lifetime (the GC/cycle-collector
+   reclaims it), and mutable. It is initialized ONCE at program startup, before any user code,
+   in **dependency order**: if one global's initializer references another, the referenced
+   one initializes first (a forward reference just works — no declare-before-use burden). The
+   ordering is **transitive through free-routine calls** — `global a = compute()` where
+   `compute` reads global `b` still orders `b` before `a`, all at build time. A dependency
+   **cycle** (including a self-reference, and cycles that only show up through a call) is a
+   compile error (RF-S436). Entity initializers work: `global origin: Point = Point(x: 10,
+   y: 20)` heap-allocates once and is shared. Globals cross module boundaries — another module
+   can `import Mod.the_global` and read AND write it (it is one shared storage cell). **Use it
+   for process-singular state** (a logger, config, an asset registry); per-frame / per-world
+   context (delta time, input, the current world) belongs in engine-injected parameters, not a
+   global. (One residual: a dependency reached only through a *member-routine* call — `x.foo()`
+   — is not followed by the build-time ordering.)
+9. **Keyword set = RazorForge's, minus the RF-only reserved words.** The shared
    keyword inventory is RAZORFORGE-FOR-AI §16; Suflae does NOT reserve the
    RF-only ones: `steal` `danger` `dangerous` `threaded`, and `expand` — the single
    comptime-reflection keyword. The reflection *sources* (`openmemvarof`

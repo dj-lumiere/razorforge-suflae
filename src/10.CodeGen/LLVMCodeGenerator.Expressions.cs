@@ -768,6 +768,15 @@ public partial class LlvmCodeGenerator
         // Look up the variable in local variables first
         if (!_localVariables.TryGetValue(key: identifier.Name, value: out TypeInfo? varType))
         {
+            // Suflae module-level `global`: load from its `@global` symbol.
+            if (_moduleGlobals.TryGetValue(key: identifier.Name, value: out (TypeInfo Type, string Symbol) gslot))
+            {
+                string gLlvmType = GetLlvmType(type: gslot.Type);
+                string gTmp = NextTemp();
+                EmitLine(sb: sb, line: $"  {gTmp} = load {gLlvmType}, ptr {gslot.Symbol}");
+                return gTmp;
+            }
+
             throw new InvalidOperationException(
                 message: $"Unknown identifier '{identifier.Name}'");
         }

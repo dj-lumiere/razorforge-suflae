@@ -486,6 +486,36 @@ public partial class Parser
             Advance(); // consume 'preset'
             return ParsePresetDeclaration(isSecret: visibility == VisibilityModifier.Secret);
         }
+        // `global NAME: Type = value` — module-level mutable global. SUFLAE-ONLY: SF's GC + single-thread
+        // + REPL model makes a session-lifetime global honest, whereas RazorForge's deterministic
+        // scope-anchored teardown has no owning scope for one (so RF has no module-level mutable state).
+        // Also not allowed inside a type body (member variables use bare `name: Type`).
+        if (Check(type: TokenType.Global))
+        {
+            if (_language == Language.RazorForge)
+            {
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "'global' is Suflae-only: RazorForge has no module-level mutable state " +
+                             "(thread state through parameters or a heap entity; use 'preset' for constants)",
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
+            }
+            if (_parsingTypeBody)
+            {
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Type member variables cannot use 'global'. Use 'name: Type' syntax instead",
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
+            }
+
+            Advance(); // consume 'global'
+            return ParseGlobalDeclaration(visibility: visibility, storage: storage,
+                annotations: annotations);
+        }
         if (Match(TokenType.Var))
         {
             // In type bodies (record, entity), var/preset are not allowed

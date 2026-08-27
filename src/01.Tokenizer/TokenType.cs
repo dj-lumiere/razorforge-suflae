@@ -305,6 +305,13 @@ public enum TokenType
     Preset,
 
     /// <summary>
+    /// Module-level mutable global declaration: `global counter: S64 = 0`.
+    /// Module-scope storage, runtime-initialized. `global` already implies mutability,
+    /// so no `var` — and module-level `var` is an error (use `global`).
+    /// </summary>
+    Global,
+
+    /// <summary>
     /// Late-init modifier on var declarations: `lateinit var x: T`.
     /// Eager allocation, late initialization: the binding's storage is allocated
     /// (entities get a real zeroed heap block, create not run) so the value is

@@ -104,9 +104,13 @@ Every file begins with `module <Path>`. Imports use `/` separators.
 (`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
 a type/routine/preset in module `Foo`). `Core` is auto-imported everywhere.
 
-**No module-level mutable state.** There is no module global `var` and no module
-`const`. Thread shared state through parameters or a heap entity; for constants,
-use a `preset` (or inline the literal).
+**No module-level mutable state (RazorForge).** There is no module global `var` and no
+module `const`. Thread shared state through parameters or a heap entity; for constants,
+use a `preset` (or inline the literal). This is a consequence of deterministic scope
+teardown — a mutable global has no owning scope to anchor its `destroy`. A `var` at module
+level is an error (RF-S435); the `global` keyword is **Suflae-only** and rejected in RF
+(see SUFLAE-FOR-AI §2). `preset` (a build-time constant, inlined) is the only module-level
+binding RazorForge has.
 
 ## 3. Types
 

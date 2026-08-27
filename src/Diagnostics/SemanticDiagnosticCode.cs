@@ -496,6 +496,14 @@ public enum SemanticDiagnosticCode
     /// <summary>Variant must be dismantled immediately with 'when' — cannot be used after other statements.</summary>
     VariantNotDismantled = 434,
 
+    /// <summary><c>var</c> declared at module level. <c>var</c> is a routine-local binding; module-level
+    /// mutable state must use a Suflae <c>global</c> (RazorForge has no module-level mutable state).</summary>
+    ModuleLevelVarNotAllowed = 435,
+
+    /// <summary>Circular Suflae <c>global</c> initialization — a set of globals directly reference each
+    /// other (or a global references itself) in their initializers, so none can initialize first.</summary>
+    ModuleGlobalCircularInit = 436,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

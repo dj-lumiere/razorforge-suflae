@@ -322,6 +322,13 @@ public sealed partial class TypeRegistry
     /// <summary>Presets indexed by module-qualified name for unambiguous lookup.</summary>
     private readonly Dictionary<string, VariableInfo> _presetsByQualifiedName = new();
 
+    /// <summary>Suflae module-level <c>global</c> variables (mutable, session-lifetime), accessible
+    /// across files within their module. Separate from presets so they are NOT inlined.</summary>
+    private readonly Dictionary<string, VariableInfo> _globals = new();
+
+    /// <summary>Globals indexed by module-qualified name for unambiguous lookup.</summary>
+    private readonly Dictionary<string, VariableInfo> _globalsByQualifiedName = new();
+
     #endregion
 
     #region Scope Management
@@ -2240,7 +2247,30 @@ public sealed partial class TypeRegistry
     public VariableInfo? LookupVariable(string name)
     {
         return _currentScope.LookupVariable(name: name) ?? _presets.GetValueOrDefault(key: name) ??
-            _presetsByQualifiedName.GetValueOrDefault(key: name);
+            _presetsByQualifiedName.GetValueOrDefault(key: name) ??
+            _globals.GetValueOrDefault(key: name) ??
+            _globalsByQualifiedName.GetValueOrDefault(key: name);
+    }
+
+    /// <summary>
+    /// Registers a Suflae module-level <c>global</c> variable — mutable, session-lifetime, accessible
+    /// across files within the same module. Mirrors <see cref="RegisterPreset"/> but the global is
+    /// modifiable and NOT a preset (so it is not inlined; codegen gives it real <c>@global</c> storage).
+    /// </summary>
+    public void RegisterGlobal(string name, TypeInfo type, string? module = null, bool isSecret = false)
+    {
+        var variable = new VariableInfo(name: name, type: type)
+        {
+            IsModifiable = true, IsGlobal = true, IsSecret = isSecret, Module = module
+        };
+
+        _globals[key: name] = variable;
+
+        string qualifiedName = variable.QualifiedName;
+        if (qualifiedName != name)
+        {
+            _globalsByQualifiedName.TryAdd(key: qualifiedName, value: variable);
+        }
     }
 
     /// <summary>

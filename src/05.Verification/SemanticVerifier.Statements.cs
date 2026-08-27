@@ -54,8 +54,26 @@ public sealed partial class SemanticVerifier
                 break;
             }
 
+            case VariableDeclaration { IsGlobal: true } globalDecl:
+                // Suflae module-level `global` — already registered in Phase 3 (CollectGlobalDeclaration);
+                // here we only type-check the initializer against the declared type so codegen has a
+                // resolved repr for the stored value.
+                if (globalDecl.Initializer != null)
+                {
+                    TypeSymbol declaredType = ResolveType(typeExpr: globalDecl.Type!);
+                    AnalyzeExpression(expression: globalDecl.Initializer, expectedType: declaredType);
+                }
+                break;
+
             case VariableDeclaration varDecl:
-                AnalyzeVariableDeclaration(varDecl: varDecl);
+                // A bare `var` at module level. `var` is a routine-local binding; there is no module-level
+                // `var`. Suflae uses `global` for module-level mutable state; RazorForge has none.
+                ReportError(code: SemanticDiagnosticCode.ModuleLevelVarNotAllowed,
+                    message:
+                    $"'var {varDecl.Name}' is not allowed at module level. 'var' declares a routine-local " +
+                    "binding — move it inside a routine. For module-level mutable state use a Suflae " +
+                    "'global' (RazorForge has no module-level mutable state).",
+                    location: varDecl.Location);
                 break;
         }
     }

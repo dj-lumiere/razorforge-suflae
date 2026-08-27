@@ -52,6 +52,37 @@ public partial class Parser
     }
 
     /// <summary>
+    /// Parses a module-level mutable global: <c>global counter: S64 = 0</c>.
+    /// Unlike <c>var</c>, both the type annotation AND an initializer are REQUIRED (a global has no
+    /// enclosing scope to infer from and must have a definite start value). Produces a
+    /// <see cref="VariableDeclaration"/> tagged <c>IsGlobal = true</c> — no dedicated AST node, so no
+    /// visitor churn; SA/codegen branch on the flag. The leading <c>global</c> keyword is already consumed.
+    /// </summary>
+    private VariableDeclaration ParseGlobalDeclaration(
+        VisibilityModifier visibility = VisibilityModifier.Open,
+        StorageClass storage = StorageClass.None,
+        List<string>? annotations = null)
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+
+        string name = ConsumeIdentifier(errorMessage: "Expected global name");
+        Consume(type: TokenType.Colon, errorMessage: "Expected ':' after global name");
+        TypeExpression type = ParseType();
+        Consume(type: TokenType.Assign, errorMessage: "Expected '=' after global type (a global must be initialized)");
+        Expression initializer = ParseExpression();
+        ConsumeStatementTerminator();
+
+        return new VariableDeclaration(Name: name,
+            Type: type,
+            Initializer: initializer,
+            Visibility: visibility,
+            Location: location,
+            Storage: storage,
+            Annotations: annotations?.Count > 0 ? annotations : null,
+            IsGlobal: true);
+    }
+
+    /// <summary>
     /// Parses a member variable declaration in records.
     /// Syntax: <c>name: Type</c> or <c>public name: Type = value</c>
     /// MemberVariables are declared without var keywords.

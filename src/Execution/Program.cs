@@ -1067,6 +1067,18 @@ internal partial class Program
             discoveredLinkLibraries = CollectLinkLibraries(
                 programs: orderedFiles.Select(selector: f => f.Program));
 
+            // Suflae `global` eager initialization: move each global's initializer into a runtime
+            // assignment prepended to the entry `start()` (in module init order). This makes non-constant
+            // and entity initializers work — the assignment flows through the whole pipeline (reachability,
+            // lowering, codegen) and stores to the global's `@global` storage. Runs before SA so the
+            // injected assignments are analyzed in context.
+            if (!InjectGlobalInitializers(orderedFiles: orderedFiles))
+            {
+                Console.WriteLine();
+                Console.Error.WriteLine(value: "Code generation aborted due to errors.");
+                return 1;
+            }
+
             // Phase 2: Semantic analysis (multi-file)
             if (showBuildStages)
             {
@@ -1385,6 +1397,150 @@ internal partial class Program
     /// externs (or routines) across the compiled programs. De-duplicated, order-preserving. The caller
     /// passes only files that survived the <c>@target</c> gate, so the result is per-target correct.
     /// </summary>
+    /// <summary>
+    /// Suflae `global` eager initialization. Moves each module-level <c>global</c>'s initializer out of
+    /// the declaration and into a runtime assignment prepended (in module init order) to the entry
+    /// <c>start()</c> body. The declaration keeps only zero-initialized storage; the assignment performs
+    /// the real init and flows through the whole pipeline, so a non-constant or entity initializer works
+    /// exactly like ordinary code. Suflae has a single <c>start()</c> program entry, so prepending there
+    /// guarantees every global is initialized before any user code runs.
+    /// </summary>
+    private static bool InjectGlobalInitializers(
+        List<(SyntaxTree.Program Program, string FilePath)> orderedFiles)
+    {
+        // 1) Collect globals (in encounter order) and strip their initializers off the declarations.
+        var globals = new List<(string Name, Expression Init, SourceLocation Loc)>();
+        var globalNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach ((SyntaxTree.Program program, string _) in orderedFiles)
+        {
+            List<ISyntaxTreeNode> decls = program.Declarations;
+            for (int i = 0; i < decls.Count; i++)
+            {
+                if (decls[i] is VariableDeclaration { IsGlobal: true, Initializer: not null } g)
+                {
+                    globals.Add(item: (g.Name, g.Initializer, g.Location));
+                    globalNames.Add(item: g.Name);
+                    decls[i] = g with { Initializer = null };
+                }
+            }
+        }
+
+        if (globals.Count == 0)
+        {
+            return true;
+        }
+
+        // 2) Order the initializers so each global runs AFTER every other global it depends on (the
+        //    dependency inits before its dependent). Globals with no inter-dependency keep source order
+        //    (stable Kahn). A dependency cycle — including a self-reference — is a use-before-init and
+        //    fails LOUD. Dependencies are TRANSITIVE through free-routine calls: if a global's
+        //    initializer calls `f()` and `f`'s body reads another global, that is a dependency too — so
+        //    `global a = compute()` where `compute` reads `b` correctly orders `b` before `a` (or reports
+        //    a cycle) at build time, with zero runtime cost. (Member-routine calls are not followed — a
+        //    global read hidden behind `x.foo()` is the remaining residual.)
+        int n = globals.Count;
+        var nameToIdx = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        for (int i = 0; i < n; i++) nameToIdx[key: globals[index: i].Name] = i; // last decl of a dup name wins
+
+        // Index every free routine's body by bare name so the dependency scan can follow calls.
+        var routineBodies = new Dictionary<string, Statement>(comparer: StringComparer.Ordinal);
+        foreach ((SyntaxTree.Program program, string _) in orderedFiles)
+        {
+            foreach (ISyntaxTreeNode node in program.Declarations)
+            {
+                if (node is RoutineDeclaration { Body: { } body } r)
+                {
+                    routineBodies[key: r.Name] = body;
+                }
+            }
+        }
+
+        var deps = new List<HashSet<int>>(capacity: n);
+        for (int i = 0; i < n; i++)
+        {
+            var d = new HashSet<int>();
+            var visitedRoutines = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var toScan = new Queue<object>();
+            toScan.Enqueue(item: globals[index: i].Init);
+            while (toScan.Count > 0)
+            {
+                object root = toScan.Dequeue();
+                AstWalker.WalkExpressions(root: root, visit: e =>
+                {
+                    if (e is IdentifierExpression id && nameToIdx.TryGetValue(key: id.Name, value: out int j))
+                    {
+                        d.Add(item: j);
+                    }
+                    // Follow a call into the callee's body once (transitive hidden dependency).
+                    if (e is CallExpression { Callee: IdentifierExpression callee }
+                        && routineBodies.TryGetValue(key: callee.Name, value: out Statement? calleeBody)
+                        && visitedRoutines.Add(item: callee.Name))
+                    {
+                        toScan.Enqueue(item: calleeBody);
+                    }
+                });
+            }
+            deps.Add(item: d);
+        }
+
+        // Kahn's algorithm, stable in source order among ready nodes.
+        var indegree = new int[n];
+        for (int i = 0; i < n; i++)
+            foreach (int j in deps[index: i])
+                if (j != i) indegree[i]++; // edge j -> i (dependency j before dependent i)
+
+        var order = new List<int>(capacity: n);
+        bool ready;
+        do
+        {
+            ready = false;
+            for (int i = 0; i < n; i++)
+            {
+                if (indegree[i] == 0)
+                {
+                    indegree[i] = -1; // consumed
+                    order.Add(item: i);
+                    ready = true;
+                    for (int k = 0; k < n; k++)
+                        if (k != i && deps[index: k].Contains(item: i))
+                            indegree[k]--;
+                }
+            }
+        } while (ready);
+
+        if (order.Count != n)
+        {
+            IEnumerable<string> cyclic = Enumerable.Range(start: 0, count: n)
+                .Where(predicate: i => !order.Contains(value: i))
+                .Select(selector: i => globals[index: i].Name);
+            Console.Error.WriteLine(
+                value: "error[RF-S436]: circular global initialization — these globals reference each " +
+                       $"other (directly) before they are initialized: {string.Join(", ", cyclic)}. " +
+                       "A global's initializer may only reference globals it does not (transitively) depend on.");
+            return false;
+        }
+
+        var inits = order.Select(selector: i => new AssignmentStatement(
+            Target: new IdentifierExpression(Name: globals[index: i].Name, Location: globals[index: i].Loc),
+            Value: globals[index: i].Init,
+            Location: globals[index: i].Loc)).ToList();
+
+        // 3) Prepend the ordered assignments to the entry module's start() (Suflae's single program entry).
+        foreach ((SyntaxTree.Program program, string _) in orderedFiles)
+        {
+            foreach (ISyntaxTreeNode node in program.Declarations)
+            {
+                if (node is RoutineDeclaration { Name: "start", Body: BlockStatement block })
+                {
+                    block.Statements.InsertRange(index: 0, collection: inits);
+                    return true;
+                }
+            }
+        }
+
+        return true;
+    }
+
     private static IReadOnlyList<string> CollectLinkLibraries(IEnumerable<SyntaxTree.Program> programs)
     {
         var libs = new List<string>();

@@ -151,6 +151,10 @@ public sealed partial class SemanticVerifier
 
                 break;
 
+            case VariableDeclaration { IsGlobal: true } global:
+                CollectGlobalDeclaration(global: global);
+                break;
+
             case VariableDeclaration variable:
                 CollectMemberVariableDeclaration(memberVariable: variable);
                 break;
@@ -307,6 +311,25 @@ public sealed partial class SemanticVerifier
         }
 
         // TODO: Register member variable in the current type's member variable list when type body resolution is implemented
+    }
+
+    /// <summary>
+    /// Collects a Suflae module-level <c>global</c> (`global counter: S64 = 0`). Registers it both into
+    /// the current scope (intra-file resolution) and into the registry's module-global table (cross-file
+    /// resolution + the codegen storage signal). Unlike a preset the global is MUTABLE and not inlined.
+    /// </summary>
+    private void CollectGlobalDeclaration(VariableDeclaration global)
+    {
+        // The parser requires a type annotation on every `global`, so global.Type is non-null here.
+        TypeSymbol globalType = ResolveType(typeExpr: global.Type!);
+
+        _registry.DeclareVariable(name: global.Name, type: globalType);
+
+        string? module = GetCurrentModuleName();
+        _registry.RegisterGlobal(name: global.Name,
+            type: globalType,
+            module: module,
+            isSecret: global.Visibility == VisibilityModifier.Secret);
     }
 
     private void CollectPresetDeclaration(PresetDeclaration preset)
