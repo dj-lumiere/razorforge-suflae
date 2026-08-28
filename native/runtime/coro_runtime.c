@@ -995,6 +995,13 @@ struct rf_sched {
     // worker is idle (workers_idle == workers_total): with N>1 one idle worker while another still
     // runs a coroutine is not stuck. Inc/dec around each idle cond-wait in rf_sched_step.
     int workers_idle;
+    // Consecutive times the all-parked deadlock condition has been observed with NO intervening
+    // progress. A wake can land in a sub-millisecond window just as the last worker goes idle, which
+    // an eager one-shot detector mis-reads as a deadlock (an intermittent false positive on macOS's
+    // scheduling). So the detector confirms across a short grace instead of firing on first sight:
+    // rf_sched_make_ready zeroes this on any genuine progress (a coroutine becoming runnable), so a
+    // TRUE deadlock — where make_ready is never called — lets it climb to RF_DEADLOCK_CONFIRMS and throw.
+    int deadlock_confirm;
     // Per-worker local run deques (M:N step 3), one per pool worker (indexed by g_worker_id). NULL for
     // a directly-driven rf_sched (rf_sched_run / native tests) — those keep using only the injector.
     // Allocated by rf_pool_spawn_workers once workers_total is fixed. Each has its OWN lock (never held
@@ -1255,9 +1262,11 @@ static void rf_sched_make_ready(rf_sched* s, rf_coro* c)
         case RF_SCHED_IDLE:
             rf_sched_unlink_timer(s, c);   // if it was deadline-parked, take it off the timer list
             rf_sched_enqueue_ready(s, c);  // -> QUEUED, to the waker's local deque or the injector
+            s->deadlock_confirm = 0;       // genuine progress: reset the deadlock-confirm counter
             break;
         case RF_SCHED_RUNNING:
             atomic_store(&c->sched_state, RF_SCHED_NOTIFIED);
+            s->deadlock_confirm = 0;       // a wake landed on a running coroutine — also progress
             break;
         case RF_SCHED_QUEUED:
         case RF_SCHED_NOTIFIED:
@@ -1591,6 +1600,13 @@ static rf_coro* rf_sched_claim_work(rf_sched* s)
  *     so once we hold it and still see nothing runnable, any later enqueue is guaranteed to signal the
  *     cond we are about to wait on — no wake is lost. The lock is dropped only around rf_coro_resume.
  * The shared body of the pool worker, rf_sched_run, and rf_sched_run_until. */
+// Deadlock-detector confirmation: the all-parked condition must PERSIST for this many consecutive
+// idle-check passes (each separated by a RF_DEADLOCK_GRACE_NS wait) before we declare a deadlock —
+// so a wake landing in a sub-ms window as the last worker goes idle can't be mis-read as one. A real
+// deadlock never makes progress, so it confirms within ~CONFIRMS × GRACE (a few ms) and still throws.
+#define RF_DEADLOCK_CONFIRMS 3
+#define RF_DEADLOCK_GRACE_NS 2000000ULL /* 2 ms */
+
 static int rf_sched_step(rf_sched* s)
 {
     rf_coro* c = rf_sched_claim_work(s);
@@ -1653,14 +1669,29 @@ static int rf_sched_step(rf_sched* s)
         //    make progress. (We have not incremented workers_idle yet, so compare against +1.)
         if (s->live > 0 && s->cross_wakers == 0 && s->waiters > 0 &&
             s->workers_idle + 1 == s->workers_total) {
+            // Suspected all-parked deadlock — but a coroutine can be made runnable in a tiny window as
+            // the last worker goes idle (an intermittent macOS-timing false positive). Confirm before
+            // declaring: only throw once the condition has PERSISTED for RF_DEADLOCK_CONFIRMS passes with
+            // no intervening progress (rf_sched_make_ready zeroes deadlock_confirm on any real wake). A
+            // genuine deadlock never calls make_ready, so it climbs to the threshold and throws.
+            if (++s->deadlock_confirm >= RF_DEADLOCK_CONFIRMS) {
+                rf_mutex_unlock(&s->lock);
+                __rf_throw("DeadlockError",
+                           "all coroutines are parked and none is runnable — no send, receive, or wake "
+                           "can ever make progress (deadlock). If coroutines communicate (a channel, a "
+                           "SignalCaster), they must all be LAUNCHED before you wait on one: retrieving a "
+                           "consumer before its producer is started parks it forever. Launch background "
+                           "feeders with `.execute()` and await the rest with `.retrieve()`/`.gather()`.");
+                return 0; // unreachable: __rf_throw exits
+            }
+            // Not yet confirmed: wait a short grace for a real wake to arrive (make_ready signals the
+            // cond and resets deadlock_confirm), then retry the whole step. A true deadlock nobody wakes
+            // just times out and re-confirms next pass.
+            s->workers_idle++;
+            rf_cond_wait_ns(&s->cond, &s->lock, RF_DEADLOCK_GRACE_NS);
+            s->workers_idle--;
             rf_mutex_unlock(&s->lock);
-            __rf_throw("DeadlockError",
-                       "all coroutines are parked and none is runnable — no send, receive, or wake "
-                       "can ever make progress (deadlock). If coroutines communicate (a channel, a "
-                       "SignalCaster), they must all be LAUNCHED before you wait on one: retrieving a "
-                       "consumer before its producer is started parks it forever. Launch background "
-                       "feeders with `.execute()` and await the rest with `.retrieve()`/`.gather()`.");
-            return 0; // unreachable: __rf_throw exits
+            return 0; // retry: re-attempt every work source before deciding again
         }
         // A cross-thread wake is outstanding (threaded await / async I/O / signal / race), or other
         // workers are still busy: block until work arrives or a worker signals.
