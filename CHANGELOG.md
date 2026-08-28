@@ -88,6 +88,20 @@ ownership runtime and an approachable surface. It ships alongside RazorForge 0.4
 - Carrier lowering: `Try`/`Check`/`Lookup` failable variants lower to `Maybe`/`Result`/`Lookup`
   values (the internal `#carrier` representation is eliminated program-wide; payload is a single
   `CPtr` slot).
+- **Reference-identity operators `===` / `!==`** — "same object?", distinct from value equality `==`.
+  A primitive pointer compare (not overloadable, never lowered to `.eq()`), valid on reference-carrying
+  operands only — an `entity` or a forwarding wrapper (`Viewing`/`Modifying`/`Consulting`/`Amending`/
+  `Retained`/`Guarded`/`Tracked`/`Witnessed`/`Roamed`); a value type is **RF-S440** (use `==`).
+  `Hijacked` is excluded (its `==` is already identity). Works in both realms.
+- **`###` doc-comments** with reStructuredText-style field lists — `:param name:`, `:typeparam Name:`,
+  `:returns:`, `:throws:`, `:absent:`, `:note:`, `:see:` — captured onto declarations and surfaced by the
+  language server (see **Tooling**).
+
+**Standard library**
+- **`Signals` module** (`when_interrupted` / `when_terminated`): register handlers for OS interrupt /
+  terminate signals, dispatched off a dedicated thread with a suppress-default option;
+  `Guarded`/`Roamed` context overloads. (Empty-tuple type `()` now spells `Routine[(), None]`; generic
+  overloads resolve by argument type.)
 
 **Numerics**
 - Quaternions `Q32` / `Q64`; vector types `Vector2D` / `Vector3D` / `Vector4D`.
@@ -119,7 +133,17 @@ ownership runtime and an approachable surface. It ships alongside RazorForge 0.4
 - Versions sourced from the csproj `AssemblyMetadata` via `BuildInfo`; `builder_version()` is
   language-specific.
 
-### Changed (non-breaking)
+**Tooling — editor / language server**
+- **Built-in language server** (`RazorForge --lsp`, stdio JSON-RPC): live diagnostics, hover (types,
+  routine signatures, and `###` doc-comments including `:param:`/`:returns:`/… fields — for stdlib and
+  external-module symbols too), go-to-definition (routines cross-file; variables/parameters
+  scope-precise), binding-precise references and rename, signature help, completion (type-filtered
+  `receiver.` members hiding `secret` fields, realm-scoped `C::`/`LLVM::`, resolve), document & workspace
+  symbols, inlay hints (inferred `var` types), code actions, and semantic tokens — including a **dead-use
+  grey-out** that marks a value read after its ownership was moved out by `steal`. Analysis reuses a
+  cached stdlib snapshot for microsecond per-keystroke re-analysis.
+- **Editor integrations:** a VS Code extension and a Rider (JetBrains LSP API) plugin under
+  `rider-plugin/`; TextMate grammars gain annotation highlighting.
 
 - **Object-level liveness on `RoamController`:** weak observation + tombstone (a `Watching` handle,
   `is_alive()` / `is_destroyed()`), cycle-collect and multithread safe.

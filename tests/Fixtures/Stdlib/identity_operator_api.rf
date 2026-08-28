@@ -1,0 +1,22 @@
+module Tests/Stdlib/IdentityOperatorApi
+import IO/Console
+
+# Reference identity (=== / !==): "same object?", distinct from value equality (==).
+# Valid on entities and forwarding wrappers (Viewing/Modifying/Retained/...); a value type is RF-S440.
+# It is a primitive pointer compare — not overloadable, never lowered to `.eq()`.
+
+entity Node
+  value: S32
+
+routine start()
+  var a = Node(value: 1)
+  var b = Node(value: 1)
+
+  # Same binding = same object; two distinct entities (even with equal fields) = different objects.
+  show(f"a === a: {a === a}")
+  show(f"a === b: {a === b}")
+  show(f"a !== b: {a !== b}")
+  show(f"a !== a: {a !== a}")
+
+  show("DONE")
+  return
