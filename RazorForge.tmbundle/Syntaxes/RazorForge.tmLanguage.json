@@ -28,6 +28,11 @@
     "keywords": {
       "patterns": [
         {
+          "comment": "Annotations (@target, @link, @positional, @reshaping, @readonly, @writable, @llvm, @inline, @innate, @override, @overridable, @crash_only, @dangerous, @generated, ...)",
+          "name": "storage.modifier.annotation.razorforge",
+          "match": "@\\w+"
+        },
+        {
           "comment": "Type declarations",
           "name": "storage.type.razorforge",
           "match": "\\b(routine|entity|record|choice|variant|protocol|flags|crashable)\\b"

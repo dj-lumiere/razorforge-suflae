@@ -276,6 +276,7 @@ public sealed class ErrorHandlingGenerator
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
+                MeType = original.MeType,
                 Parameters = original.Parameters,
                 ReturnType = boolType,
                 IsFailable = false,
@@ -309,6 +310,7 @@ public sealed class ErrorHandlingGenerator
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
+                MeType = original.MeType,
                 Parameters = original.Parameters,
                 ReturnType = maybeType,
                 IsFailable = false, // try_ variants don't fail
@@ -354,6 +356,7 @@ public sealed class ErrorHandlingGenerator
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
+                MeType = original.MeType,
                 Parameters = original.Parameters,
                 ReturnType = resultType,
                 IsFailable = false, // check_ variants don't fail
@@ -401,6 +404,7 @@ public sealed class ErrorHandlingGenerator
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
+                MeType = original.MeType,
                 Parameters = original.Parameters,
                 ReturnType = resultType,
                 IsFailable = false,
@@ -433,6 +437,7 @@ public sealed class ErrorHandlingGenerator
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
+                MeType = original.MeType,
                 Parameters = original.Parameters,
                 ReturnType = lookupType,
                 IsFailable = false, // lookup_ variants don't fail

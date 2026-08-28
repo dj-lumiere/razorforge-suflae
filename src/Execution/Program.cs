@@ -96,6 +96,13 @@ internal partial class Program
             return 0;
         }
 
+        // `--lsp` (or `lsp`): run the stdio Language Server. Takes no file argument; it speaks
+        // LSP/JSON-RPC over stdin/stdout until the client sends `exit`.
+        if (command is "lsp")
+        {
+            return LspServer.Run();
+        }
+
         if (!isCommand)
         {
             // A bare source file RUNS (build + execute) when it is a Suflae script — either the `.sf`

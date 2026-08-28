@@ -1,0 +1,100 @@
+module Signals
+
+# ============================================================================
+# Current-process signal handlers.
+#
+# Register a handler to run when the OS asks this process to stop:
+#   - `when_interrupted` — the user interrupted it (Ctrl-C / SIGINT).
+#   - `when_terminated`  — the OS is terminating it (SIGTERM / console-close).
+#
+# Registering a handler SUPPRESSES the default termination: the process no longer
+# dies on its own, and YOUR handler decides what to do (typically: flip a flag your
+# main loop polls, then exit). Handlers run on a dedicated dispatch thread, NOT the
+# main thread, so keep them small (set a flag, log, save) and do not assume they run
+# in main-thread context.
+#
+# The handler is a bare routine value — pass a named `routine on_stop()` by name
+# (RazorForge lambdas are expression-only, so a multi-statement handler must be a
+# named routine). Any state the handler touches must outlive the process (module
+# state / a `Retained` handle it can reach), since it may fire at any time.
+#
+# NOTE: SIGKILL and the OOM-killer cannot be caught — the process dies before any
+# handler runs. `when_terminated` covers the catchable termination request (SIGTERM),
+# not a forced kill.
+# ============================================================================
+
+### Registers a handler to run when the process is interrupted (Ctrl-C / SIGINT).
+### Registering SUPPRESSES the default termination — the handler decides whether to
+### exit. Multiple handlers may be registered; all run, in registration order, on a
+### dedicated dispatch thread.
+### :param handler: A `() -> None` routine to run on interrupt.
+routine when_interrupted(handler: Routine[(), None])
+  danger
+    C::rf_signal_register(0_s32, handler)
+  return
+
+### Registers a handler to run when the process is terminated (SIGTERM / console-close).
+### Registering SUPPRESSES the default termination — the handler decides whether to
+### exit. Multiple handlers may be registered; all run, in registration order, on a
+### dedicated dispatch thread. A forced kill (SIGKILL / OOM-killer) cannot be caught.
+### :param handler: A `() -> None` routine to run on termination.
+routine when_terminated(handler: Routine[(), None])
+  danger
+    C::rf_signal_register(1_s32, handler)
+  return
+
+# ============================================================================
+# Context overloads — carry shared state to the handler.
+#
+# The handler runs on the dispatch thread, so the state it touches must be a
+# thread-safe, storable handle: a `Guarded[T, P]` (RazorForge's multi-thread RC) or a
+# `Roamed[T]` (Suflae's auto-promoting entity handle). The registration RETAINS the
+# handle for the process lifetime (a Roamed context is also promoted to its atomic
+# escaped mode, since another thread now reaches it), so the state stays alive and
+# access stays serialized. The handler receives the same handle back on every fire —
+# no capture, no global; state flows through an explicit owned handle.
+# ============================================================================
+
+### Interrupt handler carrying a `Guarded[T, P]` context (RazorForge multi-thread state).
+routine when_interrupted[T, P](handler: Routine[(Guarded[T, P],), None], context: Guarded[T, P])
+needs T is EntityType, P obeys LockPolicy
+  danger
+    Hijacked[GuardController[T, P]](context).as_entity().hold()
+    C::rf_signal_register_ctx(0_s32,
+      Hijacked[Byte](handler).get_address(),
+      Hijacked[GuardController[T, P]](context).get_address())
+  return
+
+### Termination handler carrying a `Guarded[T, P]` context (RazorForge multi-thread state).
+routine when_terminated[T, P](handler: Routine[(Guarded[T, P],), None], context: Guarded[T, P])
+needs T is EntityType, P obeys LockPolicy
+  danger
+    Hijacked[GuardController[T, P]](context).as_entity().hold()
+    C::rf_signal_register_ctx(1_s32,
+      Hijacked[Byte](handler).get_address(),
+      Hijacked[GuardController[T, P]](context).get_address())
+  return
+
+### Interrupt handler carrying a `Roamed[T]` context (Suflae entity state).
+routine when_interrupted[T](handler: Routine[(Roamed[T],), None], context: Roamed[T])
+needs T is EntityType
+  danger
+    var ctrl = Hijacked[RoamController[T]](context).as_entity()
+    ctrl.promote()
+    ctrl.hold()
+    C::rf_signal_register_ctx(0_s32,
+      Hijacked[Byte](handler).get_address(),
+      Hijacked[RoamController[T]](context).get_address())
+  return
+
+### Termination handler carrying a `Roamed[T]` context (Suflae entity state).
+routine when_terminated[T](handler: Routine[(Roamed[T],), None], context: Roamed[T])
+needs T is EntityType
+  danger
+    var ctrl = Hijacked[RoamController[T]](context).as_entity()
+    ctrl.promote()
+    ctrl.hold()
+    C::rf_signal_register_ctx(1_s32,
+      Hijacked[Byte](handler).get_address(),
+      Hijacked[RoamController[T]](context).get_address())
+  return

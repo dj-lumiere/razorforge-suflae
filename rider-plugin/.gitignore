@@ -1,0 +1,8 @@
+.gradle/
+build/
+.idea/
+.intellijPlatform/
+*.iml
+out/
+# Wrapper jar is binary; regenerate with `gradle wrapper` (see README).
+gradle/wrapper/gradle-wrapper.jar

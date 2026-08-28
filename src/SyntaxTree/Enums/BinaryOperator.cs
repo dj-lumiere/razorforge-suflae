@@ -113,6 +113,14 @@ public enum BinaryOperator
     /// <summary>Inequality comparison operator (!=)</summary>
     NotEqual,
 
+    /// <summary>Reference-identity operator (===) — "same object?". A primitive pointer compare on the
+    /// underlying object address; NOT overloadable and NOT lowered to <c>.eq()</c>. Valid only on entity /
+    /// forwarding-wrapper operands.</summary>
+    IdentityEqual,
+
+    /// <summary>Negated reference-identity operator (!==) — "different object?".</summary>
+    IdentityNotEqual,
+
     /// <summary>Less than relational operator (&lt;)</summary>
     Less,
 
@@ -244,6 +252,8 @@ public static class BinaryOperatorExtensions
 
                 BinaryOperator.Equal => "==",
                 BinaryOperator.NotEqual => "!=",
+                BinaryOperator.IdentityEqual => "===",
+                BinaryOperator.IdentityNotEqual => "!==",
                 BinaryOperator.Less => "<",
                 BinaryOperator.LessEqual => "<=",
                 BinaryOperator.Greater => ">",

@@ -334,10 +334,15 @@ public sealed partial class SemanticVerifier
 
         _registry.EnterScope(kind: ScopeKind.Function, name: routine.Name);
 
-        // Declare parameters in scope
-        foreach (ParameterInfo param in routineInfo.Parameters)
+        // Declare parameters in scope. Pair each with its AST parameter (same order) so the binding
+        // carries the source location the language server needs for go-to-definition / rename.
+        for (int pi = 0; pi < routineInfo.Parameters.Count; pi++)
         {
-            _registry.DeclareVariable(name: param.Name, type: param.Type);
+            ParameterInfo param = routineInfo.Parameters[index: pi];
+            SourceLocation? paramLoc = pi < routine.Parameters.Count
+                ? routine.Parameters[index: pi].Location
+                : null;
+            _registry.DeclareVariable(name: param.Name, type: param.Type, location: paramLoc);
         }
 
         // #169: dangerous routine implicit danger context
@@ -804,7 +809,7 @@ public sealed partial class SemanticVerifier
         }
 
         bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType,
-            isNullable: varIsNullable);
+            isNullable: varIsNullable, location: varDecl.Location);
 
         if (!declared)
         {

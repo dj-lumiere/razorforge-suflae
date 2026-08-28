@@ -345,7 +345,8 @@ public partial class Parser
     {
         Expression expr = ParseComparison();
 
-        while (Match(TokenType.NotEqual))
+        // `!=` value inequality, plus the non-chainable reference-identity operators `===` / `!==`.
+        while (Match(TokenType.NotEqual, TokenType.IdentityEqual, TokenType.IdentityNotEqual))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseComparison();

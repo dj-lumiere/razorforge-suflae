@@ -19,7 +19,16 @@ namespace SyntaxTree;
 /// <item>Modules: imports and module organization</item>
 /// </list>
 /// </remarks>
-public abstract record Declaration(SourceLocation Location) : SyntaxTreeNode(Location: Location);
+public abstract record Declaration(SourceLocation Location) : SyntaxTreeNode(Location: Location)
+{
+    /// <summary>
+    /// The documentation-comment text (the lines of a <c>###</c> doc block) written immediately above
+    /// this declaration, joined with newlines, or null if none. Attached by the parser; carried into
+    /// <c>RoutineInfo.Documentation</c> at registration so hover / completion can surface it (including
+    /// for stdlib symbols, which are parsed the same way). Not consumed by codegen.
+    /// </summary>
+    public string? Documentation { get; set; }
+}
 
 /// <summary>
 /// Empty placeholder declaration used inside type bodies.

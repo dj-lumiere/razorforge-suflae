@@ -102,3 +102,4 @@ old
 
 # Claude Code file-based memory (junctioned from ~/.claude/projects/.../memory; not shared via git)
 .claude-memory/
+.intellijPlatform

@@ -291,6 +291,29 @@ public sealed partial class SemanticVerifier
                     List<TypeInfo>? inferred =
                         InferGenericTypeArguments(genericRoutine: routine,
                             arguments: call.Arguments, expectedType: expectedType);
+
+                    // The initial pick is first-wins by name+arity, which is not enough to choose among
+                    // several generic overloads that differ only in PARAMETER TYPE (e.g.
+                    // `when_interrupted[T, P](Guarded[T, P])` vs `when_interrupted[T](Roamed[T])`). If it
+                    // does not unify with the arguments, try the sibling overloads and take the one that does.
+                    if (inferred == null)
+                    {
+                        foreach (RoutineInfo sibling in _registry.GenericOverloadsByArity(
+                                     name: routine.Name, arity: call.Arguments.Count))
+                        {
+                            if (sibling == routine) continue;
+                            List<TypeInfo>? siblingInferred =
+                                InferGenericTypeArguments(genericRoutine: sibling,
+                                    arguments: call.Arguments, expectedType: expectedType);
+                            if (siblingInferred != null)
+                            {
+                                routine = sibling;
+                                inferred = siblingInferred;
+                                break;
+                            }
+                        }
+                    }
+
                     if (inferred != null)
                     {
                         RoutineInfo? monomorphized = _registry.GetOrCreateRoutineResolution(
@@ -332,6 +355,29 @@ public sealed partial class SemanticVerifier
                             List<TypeInfo>? inferred =
                                 InferGenericTypeArguments(genericRoutine: generic,
                                     arguments: call.Arguments);
+
+                            // `LookupGenericOverload` returns the first same-arity overload; it cannot
+                            // choose among generic overloads that differ only in PARAMETER TYPE (e.g.
+                            // `when_interrupted[T, P](Guarded[T, P])` vs `when_interrupted[T](Roamed[T])`).
+                            // If the first pick does not unify, try the sibling overloads.
+                            if (inferred == null)
+                            {
+                                foreach (RoutineInfo sibling in _registry.GenericOverloadsByArity(
+                                             name: generic.Name, arity: call.Arguments.Count))
+                                {
+                                    if (sibling == generic) continue;
+                                    List<TypeInfo>? siblingInferred =
+                                        InferGenericTypeArguments(genericRoutine: sibling,
+                                            arguments: call.Arguments);
+                                    if (siblingInferred != null)
+                                    {
+                                        generic = sibling;
+                                        inferred = siblingInferred;
+                                        break;
+                                    }
+                                }
+                            }
+
                             routine = inferred != null
                                 ? _registry.GetOrCreateRoutineResolution(
                                     genericDef: generic, typeArguments: inferred)
@@ -964,6 +1010,29 @@ public sealed partial class SemanticVerifier
                     List<TypeInfo>? inferredImportGen =
                         InferGenericTypeArguments(genericRoutine: routine,
                             arguments: call.Arguments, expectedType: expectedType);
+
+                    // First-wins by name+arity cannot choose among generic overloads that differ only in
+                    // PARAMETER TYPE (e.g. `when_interrupted[T, P](Guarded[T, P])` vs
+                    // `when_interrupted[T](Roamed[T])`). If the initial pick does not unify, try the
+                    // sibling overloads and take the one that does.
+                    if (inferredImportGen == null)
+                    {
+                        foreach (RoutineInfo sibling in _registry.GenericOverloadsByArity(
+                                     name: routine.Name, arity: call.Arguments.Count))
+                        {
+                            if (sibling == routine) continue;
+                            List<TypeInfo>? siblingInferred =
+                                InferGenericTypeArguments(genericRoutine: sibling,
+                                    arguments: call.Arguments, expectedType: expectedType);
+                            if (siblingInferred != null)
+                            {
+                                routine = sibling;
+                                inferredImportGen = siblingInferred;
+                                break;
+                            }
+                        }
+                    }
+
                     if (inferredImportGen != null)
                     {
                         RoutineInfo? monomorphized = _registry.GetOrCreateRoutineResolution(
@@ -1021,6 +1090,29 @@ public sealed partial class SemanticVerifier
                                 List<TypeInfo>? inferredImport =
                                     InferGenericTypeArguments(genericRoutine: genericImport,
                                         arguments: call.Arguments);
+
+                                // `LookupGenericOverload` returns the first same-name overload; it cannot
+                                // choose among generic overloads that differ only in PARAMETER TYPE (e.g.
+                                // `when_interrupted[T, P](Guarded[T, P])` vs `when_interrupted[T](Roamed[T])`).
+                                // If the first pick does not unify, try the sibling overloads of matching arity.
+                                if (inferredImport == null)
+                                {
+                                    foreach (RoutineInfo sibling in _registry.GenericOverloadsByArity(
+                                                 name: genericImport.Name, arity: call.Arguments.Count))
+                                    {
+                                        if (sibling == genericImport) continue;
+                                        List<TypeInfo>? siblingInferred =
+                                            InferGenericTypeArguments(genericRoutine: sibling,
+                                                arguments: call.Arguments);
+                                        if (siblingInferred != null)
+                                        {
+                                            genericImport = sibling;
+                                            inferredImport = siblingInferred;
+                                            break;
+                                        }
+                                    }
+                                }
+
                                 routine = inferredImport != null
                                     ? _registry.GetOrCreateRoutineResolution(
                                         genericDef: genericImport, typeArguments: inferredImport)

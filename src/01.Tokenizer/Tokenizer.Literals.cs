@@ -410,13 +410,24 @@ public partial class Tokenizer
                         : TokenType.Colon);
                     break;
                 case '=':
-                    AddToken(type: Match(expected: '=') ? TokenType.Equal :
-                        Match(expected: '>') ? TokenType.FatArrow : TokenType.Assign);
+                    if (Match(expected: '='))
+                    {
+                        AddToken(type: Match(expected: '=') ? TokenType.IdentityEqual : TokenType.Equal);
+                    }
+                    else if (Match(expected: '>'))
+                    {
+                        AddToken(type: TokenType.FatArrow);
+                    }
+                    else
+                    {
+                        AddToken(type: TokenType.Assign);
+                    }
+
                     break;
                 case '!':
                     if (Match(expected: '='))
                     {
-                        AddToken(type: TokenType.NotEqual);
+                        AddToken(type: Match(expected: '=') ? TokenType.IdentityNotEqual : TokenType.NotEqual);
                     }
                     else if (Match(expected: '!'))
                     {

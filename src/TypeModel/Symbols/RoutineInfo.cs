@@ -291,6 +291,12 @@ public sealed class RoutineInfo
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }
 
+    /// <summary>The <c>###</c> documentation-comment text written above the routine's declaration (lines
+    /// joined with newlines), or null. Carried from <c>Declaration.Documentation</c> at registration so
+    /// the language server can show it on hover / completion — for stdlib routines too, since the stdlib
+    /// is parsed the same way.</summary>
+    public string? Documentation { get; init; }
+
     /// <summary>
     /// Structural hash of a CONSTRUCTOR body, set at registration for the divergent-duplicate guard.
     /// Two constructors can share a signature across files (e.g. <c>U16(from: U8)</c> in both U8.rf and
@@ -543,6 +549,7 @@ public sealed class RoutineInfo
                 : this,
             Visibility = Visibility,
             Location = Location,
+            Documentation = Documentation,
             Module = Module,
             ModulePath = ModulePath,
             Annotations = Annotations,

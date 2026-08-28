@@ -160,6 +160,9 @@ binding is immediately valid and borrowable; assign before reading.)
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `x.try_abs()!!`
+- Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
+  compares whether two references are the SAME object (entities / access-token /
+  RC-wrapper operands only — RF-S440 on value types). See §7.
 
 ## 5. Control flow
 
@@ -292,6 +295,24 @@ using c.modify() as m        # Modifying[Counter], write intent
   m.increment()
 ```
 
+- **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
+  from value equality `==`. Valid only on reference-carrying operands: an `entity` or
+  a forwarding wrapper (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/
+  `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a compile error
+  (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
+  is already identity — you `peek` to see its value). It is a primitive pointer
+  compare, never a `.eq()` call, so it is not overloadable. For single-owner entities
+  `a === b` is trivially `false` between distinct bindings; it earns its keep where
+  aliasing exists — two `Retained[T]` (or two `Viewing`/`Modifying` tokens) that may
+  point at the same entity.
+
+```razorforge
+var r1 = a.retain()          # Retained[Node]
+var r2 = r1.retain()         # second handle to the SAME node
+show(r1 === r2)              # true  — same object
+show(a === make_other())    # false — different objects
+```
+
 ## 8. Generics and protocols
 
 ```razorforge
@@ -325,6 +346,17 @@ show(f"debug: {value:?}")     # :? = diagnose (debug) format spec
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
 `Byte`; `b"..."` has type `Bytes`.
 
+- **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
+  (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
+  Beyond the basics, `Text` carries a rich pure-RF method set (search, split,
+  case, padding) — e.g. `count_of`, `find!`/`find_last!`, `split_once!`,
+  `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
+  in `Standard/RazorForge/Core/Types/Text.rf`.
+- **`Bytes` `obeys Ordered, Hashable`** — usable as a `Dict` key and sortable.
+  It supports range slicing (`bs[a til b]`), sub-sequence `contains`/`find!`/
+  `split`, and hex `to_hex`/`from_hex!`. Container `represent` quotes elements
+  by type (Text/Bytes → `"…"`, Char/Byte → `'…'`).
+
 ## 10. Collections quick reference
 
 Verify exact signatures in `Standard/RazorForge/Collections/` — highlights
@@ -338,6 +370,13 @@ that differ from other languages:
   hood, so use `dict.try_getitem(key: k)` when you want `Maybe[V]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
+- **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
+  `List`/`Deque` yields a new `List`/`Deque`, on `Array[T, N]` a `List[T]`
+  (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
+  the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
+  end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
+  error). For a lazy, no-copy window use the iterator combinator
+  `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
 - `List[T]`, `Dict[K, V]`, `Set[T]`, `Deque[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
   enough; use `Viewing[List[T]]` and pass `items.view()` inline for one call.
@@ -364,6 +403,34 @@ that differ from other languages:
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate.
+
+## 10b. Filesystem and paths (`IO/FileSystem`)
+
+Synchronous path/filesystem operations live in `import IO/FileSystem` as **free
+routines** (not methods on a path type — RF has no `Path` type; paths are plain
+`Text`). This is distinct from the *async* file-content I/O in §14 (`IO/File`).
+Highlights, with the gotchas that differ from Python `os`/`pathlib`:
+
+- **Existence (pure, non-throwing):** `exists`, `is_file`, `is_directory`,
+  `can_read`/`can_write`/`can_execute`.
+- **Mutation (failable):** `create_dir!`/`create_dir_all!`, `delete_path!`/
+  `delete_path_all!`, `move!`, `move_if_absent!` (→ `Bool`, false if the dest
+  existed), `touch!`, `set_readonly!`. **Copy is `copy_path!` / `copy_path_all!`,
+  NOT `copy!`** — a bare `copy` collides with the structural `copy` derive verb.
+- **Path builders (pure, no OS call):** `join_path(a:, b:)`, `parent_path`,
+  `file_name`, `file_stem`, `extension`, `split_extension` (→ `(stem, ext)`
+  tuple), `with_extension(path:, ext:)`, `with_file_name`. **`extension()`
+  returns WITHOUT the leading dot** (`"txt"`, not `".txt"`), and round-trips
+  through `with_extension`.
+- **Listing / walking:** `list_dir!` (→ `List[Text]` bare names), `list_dir_entries!`
+  (→ `List[DirEntry]` with `name`/`is_directory`/`modified` in ONE read — prefer
+  it when walking, no per-entry stat on Windows), `walk_dir!` (→ full descendant
+  paths, recursive, symlink-safe).
+- **Metadata:** `metadata!` (→ `FileMetadata`), `file_size!`.
+- **Dirs:** `current_dir!`/`set_current_dir!`, `home_dir!`, `temp_dir` (never fails).
+
+Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
+`symlink!`/`hard_link!`) and `glob`.
 
 ## 11. CLI and project manifest
 
@@ -510,6 +577,49 @@ each n in rx
 
 **Not implemented yet** (do not generate these — they do not exist): async networking
 (sockets/HTTP/WebSocket). It is on the roadmap, not in the language today.
+
+## 14b. Process signals (`Signals`)
+
+`import Signals` to react to the OS asking the process to stop:
+
+```razorforge
+import Signals
+
+routine on_stop()                    # a NAMED routine — lambdas are expression-only,
+  show("cleaning up")                # so a multi-statement handler cannot be a lambda
+  return
+
+routine start()
+  when_interrupted(handler: on_stop)   # Ctrl-C / SIGINT
+  when_terminated(handler: on_stop)    # SIGTERM / console-close
+  ...                                  # your own loop — see below
+  return
+```
+
+- **Registering a handler SUPPRESSES the default termination.** The process no longer
+  dies on Ctrl-C / SIGTERM; your handler decides. Registering does NOT keep the
+  program alive — it must run its own loop; the handler typically flips a flag the
+  loop checks, then the loop exits. (SIGKILL / OOM-killer cannot be caught.)
+- **The handler runs on a dedicated dispatch thread**, not the main thread — keep it
+  small (set a flag, log, save) and thread-aware. Multiple handlers per class all run,
+  in registration order.
+- The handler type is **`Routine[(), None]`** — a no-argument, no-return routine value.
+  (`()` is the empty parameter tuple; `None` is the void return. The parameter list is
+  always tuple-notation: `()`, `(T,)`, `(A, B)`.)
+- **Carrying state — the context overload.** Because the handler runs on another thread,
+  shared state it touches must be a thread-safe, storable handle: a `Guarded[T, P]`
+  (RazorForge multi-thread RC) or a `Roamed[T]`. Pass it with the copy verb and the
+  handler receives it back on every fire — no capture, no global:
+
+  ```razorforge
+  routine on_stop(box: Guarded[Flags, Exclusive])   # or Roamed[T]
+    ...
+  when_interrupted(handler: on_stop, context: flags.share())   # .share() / (Roamed) .share()
+  ```
+
+  The registration retains the handle for the process lifetime (a `Roamed` context is
+  also promoted to its atomic escaped mode). One overload set accepts either handle
+  type — the compiler picks by the argument type.
 
 ## 15. Foreign functions and conditional compilation
 

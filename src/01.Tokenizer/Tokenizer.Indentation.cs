@@ -101,6 +101,19 @@ public partial class Tokenizer
                 AddToken(type: TokenType.Indent, text: "");
                 _indentStack.Push(spaces);
             }
+            else if (isDocComment && spaces < _indentStack.Peek())
+            {
+                // A dedented doc comment CLOSES the blocks it dropped out of, so it attaches to the
+                // OUTER declaration it precedes rather than being swallowed by the inner body it
+                // visually trails (e.g. a `###` between a record body and the next `routine`). Regular
+                // (# / ##) comments still never change indentation state — they are inert.
+                while (spaces < _indentStack.Peek())
+                {
+                    _indentStack.Pop();
+                    AddToken(type: TokenType.Dedent, text: "");
+                }
+            }
+
             return;
         }
 

@@ -265,6 +265,25 @@ public record IdentifierExpression(string Name, SourceLocation Location, string?
     /// </summary>
     public bool IsModuleGlobal { get; set; }
 
+    /// <summary>
+    /// Set by semantic analysis to the <see cref="VariableInfo"/> this identifier bound to (a local,
+    /// parameter, each-loop/using/pattern binding, global, or preset), or null when it resolved to
+    /// something else (type, choice case, routine) or did not resolve. Because lookup returns the ONE
+    /// stored instance per binding, two references to the same binding carry the SAME object — so
+    /// reference-identity gives scope-precise "same variable" grouping for the language server's
+    /// references / rename / go-to-definition. Not consumed by codegen; purely an IDE aid.
+    /// </summary>
+    public VariableInfo? ResolvedVariable { get; set; }
+
+    /// <summary>
+    /// Set by semantic analysis when this reference reads a variable that is DEAD at this point — its
+    /// ownership was moved out by an earlier <c>steal</c> (or send) and it has not been re-bound since.
+    /// Mirrors the analyzer's flow-sensitive deadref set (with the same if/else merge + rebind revival),
+    /// captured PER OCCURRENCE so the language server can grey out / strike the dead uses. The consuming
+    /// use inside the <c>steal</c> itself stays false (it is still valid — it is what does the moving).
+    /// </summary>
+    public bool IsDeadUse { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

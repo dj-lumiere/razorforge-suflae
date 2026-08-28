@@ -38,12 +38,15 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// <summary>
     /// Builds the display name for a function type.
     /// Examples: "Routine[(S32, S32), S32]", "Routine[(), Bool]", "Routine[(Text,), None]"
+    /// The parameter list is ALWAYS tuple-notation so the display matches the writable source
+    /// spelling: "()" for zero parameters (NOT "None", which in a parameter position parses as a
+    /// single unit-typed parameter — a different type), "(T,)" for one, "(A, B)" for more.
     /// </summary>
     private static string BuildName(List<TypeInfo> parameterTypes, TypeInfo? returnType)
     {
         string paramList = parameterTypes.Count switch
         {
-            0 => "None",
+            0 => "()",
             1 => "(" + parameterTypes[index: 0].Name + ",)",
             _ => "(" + string.Join(separator: ", ",
                 values: parameterTypes.Select(selector: p => p.Name)) + ")"

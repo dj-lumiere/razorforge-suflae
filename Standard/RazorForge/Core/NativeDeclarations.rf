@@ -966,6 +966,24 @@ routine C::rf_proc_add_env(builder: CPtr, key: CStr, key_len: S32, val: CStr, va
 ### Launches a built subprocess (no shell), capturing stdout/stderr like `rf_proc_run`, and consumes
 ### the builder. Parks the calling coroutine while it runs. Returns the exit code, or -1 on failure.
 routine C::rf_proc_run_built(builder: CPtr) -> S64
+
+# ============================================================================
+# Current-process signal handlers (Signals.rf). Registering a handler suppresses
+# the default termination; the RF closure runs on a dedicated dispatch thread,
+# OUTSIDE signal context (self-pipe on POSIX, SetConsoleCtrlHandler on Windows).
+# ============================================================================
+
+### Registers a `Routine[(), None]` closure to run when a process signal arrives.
+### which: 0 = interrupt (SIGINT / Ctrl-C), 1 = terminate (SIGTERM / console-close).
+### The handler is process-lifetime; multiple handlers may be registered per class.
+dangerous routine C::rf_signal_register(which: S32, handler: Routine[(), None])
+
+### As `rf_signal_register`, but the handler additionally receives a context handle each time it
+### fires. Both `handler` (a `Routine[(Ctx,), None]` closure box) and `context` (a Roamed[T] /
+### Guarded[T,P] handle — a single pointer, retained by the RF wrapper for the process lifetime)
+### are passed as raw `Address`es; the runtime invokes `handler(box, context)`.
+dangerous routine C::rf_signal_register_ctx(which: S32, handler: Address, context: Address)
+
 ### Reads up to `count` bytes from a file into a runtime-managed buffer.
 ### :param fd: The file descriptor to read from.
 ### :param count: The maximum number of bytes to read.

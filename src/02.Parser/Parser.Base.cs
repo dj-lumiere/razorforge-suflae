@@ -248,6 +248,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
                 Precedence.Comparison,
             TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
                .Comparison,
+            TokenType.IdentityEqual or TokenType.IdentityNotEqual => Precedence.Comparison,
 
             // Bitwise operators
             TokenType.Pipe => Precedence.BitwiseOr,
@@ -645,6 +646,8 @@ _ => GrammarDiagnosticCode.UnexpectedToken
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
+            TokenType.IdentityEqual => BinaryOperator.IdentityEqual,
+            TokenType.IdentityNotEqual => BinaryOperator.IdentityNotEqual,
             TokenType.Less => BinaryOperator.Less,
             TokenType.LessEqual => BinaryOperator.LessEqual,
             TokenType.Greater => BinaryOperator.Greater,

@@ -511,6 +511,12 @@ public enum SemanticDiagnosticCode
     /// (persistent) / <c>Consulting[T]</c>·<c>Amending[T]</c> (in-call access) instead.</summary>
     SuflaeBareRfEntityInSignature = 439,
 
+    /// <summary>An operand of the reference-identity operator <c>===</c>/<c>!==</c> is not a
+    /// reference-carrying type. Identity ("same object?") is only meaningful for an <c>entity</c> or a
+    /// forwarding wrapper (Viewing/Modifying/Consulting/Amending/Retained/Tracked/Guarded/Witnessed/Roamed);
+    /// a value (record/scalar/Text-as-value) has no identity — use <c>==</c> for value equality.</summary>
+    IdentityOperandNotReference = 440,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMBER ACCESS ERRORS (RF-S450 - RF-S499)
     // ═══════════════════════════════════════════════════════════════════════════

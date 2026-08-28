@@ -35,7 +35,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Still declare the variable even if shadowing, to avoid cascading errors
-        _registry.DeclareVariable(name: name, type: type);
+        _registry.DeclareVariable(name: name, type: type, location: location);
     }
 
     private void AnalyzePattern(Pattern pattern, TypeSymbol matchedType)

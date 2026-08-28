@@ -259,6 +259,7 @@ public partial class LlvmCodeGenerator
         return binary.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
             or BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
             or BinaryOperator.GreaterEqual or BinaryOperator.And or BinaryOperator.Or or BinaryOperator.In or BinaryOperator.NotIn
+            or BinaryOperator.IdentityEqual or BinaryOperator.IdentityNotEqual
             ? _registry.LookupType(name: "Bool")
             : GetExpressionType(expr: binary.Left);
     }

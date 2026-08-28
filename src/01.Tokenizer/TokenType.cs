@@ -645,6 +645,12 @@ public enum TokenType
     /// <summary>Inequality comparison operator (!=)</summary>
     NotEqual,
 
+    /// <summary>Reference-identity comparison operator (===) — "same object?", distinct from value `==`.</summary>
+    IdentityEqual,
+
+    /// <summary>Negated reference-identity comparison operator (!==) — "different object?".</summary>
+    IdentityNotEqual,
+
     /// <summary>Less than comparison operator (&lt;)</summary>
     Less,
 

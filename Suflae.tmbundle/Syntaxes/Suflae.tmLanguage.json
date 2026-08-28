@@ -28,6 +28,11 @@
     "keywords": {
       "patterns": [
         {
+          "comment": "Annotations (@positional, @inline, @readonly, @writable, @override, @generated, ...)",
+          "name": "storage.modifier.annotation.sf",
+          "match": "@\\w+"
+        },
+        {
           "comment": "Type declarations",
           "name": "storage.type.sf",
           "match": "\\b(routine|entity|record|variant|choice|protocol|flags|crashable)\\b"
@@ -66,11 +71,6 @@
           "comment": "Resource management",
           "name": "keyword.control.sf",
           "match": "\\b(using)\\b"
-        },
-        {
-          "comment": "Async",
-          "name": "keyword.control.sf",
-          "match": "\\b(waitfor|within|after)\\b"
         },
         {
           "comment": "Generic constraints",

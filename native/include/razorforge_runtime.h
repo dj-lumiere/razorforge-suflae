@@ -90,6 +90,17 @@ uintptr_t rf_proc_output_len(void);
 char* rf_proc_errors(void);          /* captured stderr (malloc'd, NUL-terminated) */
 uintptr_t rf_proc_errors_len(void);
 
+/* Current-process signal handlers (Signals.rf: when_interrupted / when_terminated). Registering a
+ * handler suppresses the default termination; the RF closure runs on a dedicated dispatch thread,
+ * outside signal context. which: 0 = interrupt (SIGINT/Ctrl-C), 1 = terminate (SIGTERM/console-close).
+ * handler_box is an RF `Routine[(), None]` closure box (field 0 = void(*)(void*), the lambda ABI). */
+void rf_signal_register(int32_t which, void* handler_box);
+
+/* As rf_signal_register, but the handler is `Routine[(Ctx,), None]` and receives `context` — the raw
+ * pointer of a Roamed[T] / Guarded[T,P] handle (both a single pointer), retained for the process
+ * lifetime by the RF wrapper. On fire the handler is invoked as fn(box, context). */
+void rf_signal_register_ctx(int32_t which, void* handler_box, void* context);
+
 /* Argv builder: spawn an executable directly with an explicit argument vector (no shell). begin sets
  * argv[0] = file; add_arg appends; set_cwd is optional (empty = inherit); run_built launches it
  * (same parking/blocking + accessors as rf_proc_run) and consumes the builder. */

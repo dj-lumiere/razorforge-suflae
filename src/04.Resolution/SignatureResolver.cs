@@ -431,6 +431,7 @@ internal sealed class SignatureResolver
                 : null,
             Visibility = routine.Visibility,
             Location = routine.Location,
+            Documentation = routine.Documentation,
             Module = pending.Module,
             ModulePath = pending.Module?.Split('/').ToList(),
             Annotations = routine.Annotations,

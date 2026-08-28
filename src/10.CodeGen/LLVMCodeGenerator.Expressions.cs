@@ -1151,6 +1151,12 @@ public partial class LlvmCodeGenerator
                 memberRoutineName: "notcontains"),
             BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
+            // Reference identity (===, !==): a raw pointer compare on the operands. Every entity and
+            // forwarding wrapper lowers to a `ptr` (see GetLlvmType), and that pointer IS the object
+            // reference member forwarding dispatches on — so comparing the two pointers answers
+            // "same object?". SA already restricted the operands to reference-carrying types.
+            BinaryOperator.IdentityEqual => EmitIdentityCompare(sb: sb, binary: binary, cmpOp: "eq"),
+            BinaryOperator.IdentityNotEqual => EmitIdentityCompare(sb: sb, binary: binary, cmpOp: "ne"),
             // obeys/disobeys are folded to a compile-time Bool literal by ExpressionLoweringPass
             // (SA validates the conformance and gates any error). They must never reach codegen.
             BinaryOperator.Obeys or BinaryOperator.Disobeys => throw new InvalidOperationException(
@@ -1268,6 +1274,19 @@ public partial class LlvmCodeGenerator
         string right = EmitExpression(sb: sb, expr: binary.Right);
         string result = NextTemp();
         EmitLine(sb: sb, line: $"  {result} = icmp {cmpOp} i32 {left}, {right}");
+        return result;
+    }
+
+    /// <summary>
+    /// Emits <c>===</c> / <c>!==</c> as a pointer-identity compare. Both operands lower to a <c>ptr</c>
+    /// (entity or forwarding wrapper), so <c>icmp eq/ne ptr</c> answers "same object?". Returns the i1.
+    /// </summary>
+    private string EmitIdentityCompare(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = icmp {cmpOp} ptr {left}, {right}");
         return result;
     }
 

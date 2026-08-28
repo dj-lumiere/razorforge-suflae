@@ -193,6 +193,18 @@ public partial class Parser
         if (Match(type: TokenType.LeftParen))
         {
             var elementTypes = new List<TypeExpression>();
+
+            // Empty tuple type `()` — a zero-element parameter list, the param slot of a no-argument
+            // routine type: `Routine[(), None]`. Kept as a `Tuple` with an empty argument list so the
+            // type resolver produces zero parameter types.
+            if (Check(type: TokenType.RightParen))
+            {
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple type");
+                return new TypeExpression(Name: "Tuple",
+                    GenericArguments: elementTypes,
+                    Location: location);
+            }
+
             elementTypes.Add(item: ParseType());
 
             if (!Match(type: TokenType.Comma))

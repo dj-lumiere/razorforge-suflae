@@ -234,7 +234,8 @@ public sealed partial class SemanticVerifier
         if (eachStmt.Variable != null)
         {
             // Simple variable binding: for item in items
-            _registry.DeclareVariable(name: eachStmt.Variable, type: elementType);
+            _registry.DeclareVariable(name: eachStmt.Variable, type: elementType,
+                location: eachStmt.Location);
         }
         else if (eachStmt.VariablePattern != null)
         {
@@ -865,7 +866,8 @@ public sealed partial class SemanticVerifier
         _registry.EnterScope(kind: ScopeKind.Block, name: "using");
 
         // Declare the binding variable in the using scope
-        _registry.DeclareVariable(name: usingStmt.Name, type: boundType);
+        _registry.DeclareVariable(name: usingStmt.Name, type: boundType,
+            location: usingStmt.Location);
 
         // Analyze the body
         AnalyzeStatement(statement: usingStmt.Body);

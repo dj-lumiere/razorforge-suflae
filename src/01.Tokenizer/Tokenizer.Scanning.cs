@@ -190,13 +190,26 @@ public partial class Tokenizer
 
             // Comparison and assignment
             case '=':
-                AddToken(type: Match(expected: '=') ? TokenType.Equal :
-                    Match(expected: '>') ? TokenType.FatArrow : TokenType.Assign);
+                if (Match(expected: '='))
+                {
+                    // `==` value equality, or `===` reference identity (longest match).
+                    AddToken(type: Match(expected: '=') ? TokenType.IdentityEqual : TokenType.Equal);
+                }
+                else if (Match(expected: '>'))
+                {
+                    AddToken(type: TokenType.FatArrow);
+                }
+                else
+                {
+                    AddToken(type: TokenType.Assign);
+                }
+
                 break;
             case '!':
                 if (Match(expected: '='))
                 {
-                    AddToken(type: TokenType.NotEqual);
+                    // `!=` value inequality, or `!==` reference non-identity (longest match).
+                    AddToken(type: Match(expected: '=') ? TokenType.IdentityNotEqual : TokenType.NotEqual);
                 }
                 else if (Match(expected: '!'))
                 {

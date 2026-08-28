@@ -413,6 +413,7 @@ public sealed partial class TypeRegistry
             GenericConstraints = genericConstraints,
             Visibility = routine.Visibility,
             Location = routine.Location,
+            Documentation = routine.Documentation,
             Module = routine.Module,
             ModulePath = routine.ModulePath,
             Annotations = routine.Annotations,
@@ -643,6 +644,17 @@ public sealed partial class TypeRegistry
         => _routinesByOwner.TryGetValue(key: FreeOwnerKey, value: out Dictionary<string, List<RoutineInfo>>? byName)
             ? OwnerMemberRoutines(byName: byName).Where(predicate: r => r.Name == name && r.IsGenericDefinition).ToList()
             : [];
+
+    /// <summary>
+    /// All non-variadic generic free-routine overloads of <paramref name="name"/> whose parameter
+    /// count equals <paramref name="arity"/>. Multiple generic overloads may share a name and arity,
+    /// distinguished ONLY by parameter type (e.g. a `Guarded[T, P]` context vs a `Roamed[T]` context);
+    /// overload resolution tries each candidate's type-argument inference to pick the one that unifies.
+    /// </summary>
+    public List<RoutineInfo> GenericOverloadsByArity(string name, int arity)
+        => GenericFreeFunctions(name: name)
+            .Where(predicate: r => !r.IsVariadic && r.Parameters.Count == arity)
+            .ToList();
 
     public void RegisterDeriveTemplate(string memberRoutine, string ownerParam, int arity,
         List<GenericConstraintDeclaration>? constraints, Statement body)
@@ -1195,6 +1207,7 @@ public sealed partial class TypeRegistry
                 GenericConstraints = memberRoutineOnlyConstraints,
                 Visibility = memberRoutine.Visibility,
                 Location = memberRoutine.Location,
+                Documentation = memberRoutine.Documentation,
                 Module = memberRoutine.Module,
                 ModulePath = memberRoutine.ModulePath,
                 Annotations = memberRoutine.Annotations,
@@ -1288,6 +1301,7 @@ public sealed partial class TypeRegistry
                     MutationCategory = memberRoutine.MutationCategory,
                     Visibility = memberRoutine.Visibility,
                     Location = memberRoutine.Location,
+                Documentation = memberRoutine.Documentation,
                     Module = memberRoutine.Module,
                     ModulePath = memberRoutine.ModulePath,
                     Annotations = memberRoutine.Annotations,
@@ -1388,6 +1402,7 @@ public sealed partial class TypeRegistry
             GenericConstraints = memberRoutineOnlyConstraints2,
             Visibility = memberRoutine.Visibility,
             Location = memberRoutine.Location,
+            Documentation = memberRoutine.Documentation,
             Module = memberRoutine.Module,
             ModulePath = memberRoutine.ModulePath,
             Annotations = memberRoutine.Annotations,

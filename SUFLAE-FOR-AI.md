@@ -178,6 +178,23 @@ routine start()
   - Constructing/assigning `none` into a non-nullable `E` field is rejected
     (RF-S252) — declare the field `E?` if it may be absent.
 - `record` is unchanged from RF: a value type, copied, no identity, no destructor.
+- **Identity comparison `===` / `!==`** — "same object?", distinct from value equality
+  `==`. Because SF entities alias freely (`var b = a` shares), asking whether two
+  handles point at the SAME object is a common, first-class question (like Python's
+  `is` / JS `===` for objects):
+
+  ```suflae
+  var a = Cell(value: 1)
+  var b = a                  # shares the same entity
+  var c = Cell(value: 1)     # a distinct entity
+  show(a === b)             # true  — same object
+  show(a === c)             # false — different objects
+  ```
+
+  Valid on any reference-carrying operand — an `entity` (`Roamed`) or a wrapper
+  (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/`Guarded`/`Tracked`/
+  `Witnessed`). A `record` or scalar is a compile error (**RF-S440**): a value has no
+  identity — use `==`. It is a primitive pointer compare (not a `.eq()` call).
 
 ## 5. What Suflae deliberately HIDES
 
@@ -264,6 +281,62 @@ suflae build hello.sf  # build to a native executable, don't run
 Configuration lives in `razorforge.toml` (see `RAZORFORGE-FOR-AI.md` §11); there
 are no build flags. The shared stdlib resolves relative to the compiler, not the
 current directory, so a repo-external `.sf` still finds `Core`.
+
+## 9. Interop: importing and holding RazorForge types
+
+A `.sf` file may `import` a RazorForge `.rf` module (its own or a library's) and
+use the RF types directly — this is how SF reaches RF-realm code.
+
+- **An imported RF `entity` stays BARE RF-realm — it is NOT auto-roamed.** SF's
+  entity→`Roamed` lowering applies only to entities *declared in Suflae*; an
+  entity from an imported `.rf` module keeps RF's own ownership model. As a
+  **local**, this just works: `import Physics; var b = Body(px: 3, py: 4);
+  b.move(...); var s = b.sum()` — construct it, call its methods (even mutating
+  ones), no ceremony, no `steal`, no danger.
+- **A bare RF entity may NOT cross an SF routine signature (RF-S439).** Using a
+  bare `RF::` entity as an SF routine *parameter* or *return type* is a compile
+  error: RF entities have no reference count, so an SF scope-exit teardown on a
+  by-value crossing would double-free. Locals and fields are fine; only
+  signatures are blocked. The diagnostic points you to the right currency:
+  - **Store it long-term → `Retained[T]`** (a strong RC handle; the one currency
+    that is storable, thread-safe, and not scope-bound).
+  - **Read/write it within one call → `Consulting[T]` (read) / `Amending[T]`
+    (write)** params (locked, scope-bound).
+  - **Keep it as SF state → wrap it in an SF `entity` field.**
+- A value's controller type is a one-time commitment: once shared as `Retained`,
+  it is only ever shared as `Retained` (you cannot re-home it to `Roamed`).
+
+## 10. Process signals (`Signals`)
+
+`import Signals` works in Suflae just as in RazorForge (RAZORFORGE-FOR-AI §14b):
+`when_interrupted(handler:)` / `when_terminated(handler:)` register a named `() -> None`
+routine, registering suppresses the default termination, and the handler runs on a
+dedicated dispatch thread. The idiomatic Suflae graceful-shutdown pattern uses a
+`global` flag (Suflae HAS module globals; §2 rule 8) that the handler flips and the main
+loop observes — the cross-thread hand-off is safe because a `global` is backed by one
+escaped, thread-safe `Roamed` singleton:
+
+```suflae
+import IO/Console
+import Signals
+
+global should_quit: Bool = false
+
+routine on_interrupt()
+  should_quit = true
+  return
+
+routine start()
+  when_interrupted(handler: on_interrupt)
+  while not should_quit
+    waitfor(200ms)
+    # ... do work ...
+  show("exiting gracefully")
+  return
+```
+
+The `Guarded[T,P]` / `Roamed[T]` context overload exists too, but in Suflae the `global`
+flag is the natural choice (no handle to thread through).
 
 ---
 

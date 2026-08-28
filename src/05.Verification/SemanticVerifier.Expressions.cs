@@ -212,8 +212,14 @@ public sealed partial class SemanticVerifier
             // stamped — the flag is shadowing-exact.
             id.IsModuleGlobal = varInfo.IsGlobal;
 
-            // #11: Deadref tracking — report error if steal invalidated variable
-            if (_deadrefVariables.Contains(item: id.Name))
+            // Record the exact binding for the language server (scope-precise references / rename /
+            // go-to-definition). Reference identity distinguishes shadowed same-name bindings.
+            id.ResolvedVariable = varInfo;
+
+            // #11: Deadref tracking — report error if steal invalidated variable. Stamp the per-occurrence
+            // dead state first (for the language server's grey-out) regardless of whether we error.
+            id.IsDeadUse = _deadrefVariables.Contains(item: id.Name);
+            if (id.IsDeadUse)
             {
                 ReportError(code: SemanticDiagnosticCode.UseAfterSteal,
                     message:
@@ -351,6 +357,30 @@ public sealed partial class SemanticVerifier
     /// - Membership/type operators (in, notin, is, isnot, obeys, disobeys)
     /// - None coalescing (??) — requires short-circuit evaluation
     /// </summary>
+    /// <summary>
+    /// A type carries a comparable object identity iff it is an <c>entity</c> or one of the forwarding
+    /// wrappers (Viewing/Modifying/Consulting/Amending/Retained/Tracked/Guarded/Witnessed/Roamed). Hijacked
+    /// is deliberately excluded (its <c>==</c> is already identity). Value types have no identity.
+    /// </summary>
+    private static bool IsIdentityComparable(TypeSymbol type) =>
+        type is EntityTypeInfo ||
+        Compiler.Resolution.RuntimeContract.ForwardingWrapperTypes.Contains(item: type.BareName);
+
+    /// <summary>Reports RF-S440 if an <c>===</c>/<c>!==</c> operand is a value type, not a reference.</summary>
+    private void ValidateIdentityOperand(TypeSymbol type, BinaryOperator op, SourceLocation location)
+    {
+        if (type is ErrorTypeInfo || IsIdentityComparable(type: type))
+        {
+            return;
+        }
+
+        ReportError(code: SemanticDiagnosticCode.IdentityOperandNotReference,
+            message: $"Operator '{op.ToStringRepresentation()}' compares object IDENTITY, which needs a " +
+                     $"reference operand (an entity or a borrow/handle wrapper) — but '{type.Name}' is a " +
+                     "value type. Use '==' for value equality.",
+            location: location);
+    }
+
     private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
     {
         // Comptime `expand` gate: a comparison/equality on a comptime member value (me.$nameof(m)) is a
@@ -555,6 +585,16 @@ public sealed partial class SemanticVerifier
                     location: binary.Location);
             }
 
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+        }
+
+        // Reference-identity operators (===, !==): NOT overloadable and NOT lowered to `.eq()` — a
+        // primitive pointer compare in codegen. Both operands must be reference-carrying (entity or a
+        // forwarding wrapper); a value type has no identity. Result is always Bool.
+        if (binary.Operator is BinaryOperator.IdentityEqual or BinaryOperator.IdentityNotEqual)
+        {
+            ValidateIdentityOperand(type: leftType, op: binary.Operator, location: binary.Left.Location);
+            ValidateIdentityOperand(type: rightType, op: binary.Operator, location: binary.Right.Location);
             return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 

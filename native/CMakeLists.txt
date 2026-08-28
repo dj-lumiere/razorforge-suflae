@@ -139,6 +139,7 @@ add_library(razorforge_runtime SHARED
     runtime/async_io.c
     runtime/channel_runtime.c
     runtime/signal_runtime.c
+    runtime/process_signals.c
     runtime/random.c
     runtime/types.h
 )

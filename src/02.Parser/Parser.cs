@@ -37,6 +37,13 @@ public partial class Parser
     private readonly List<string> _errors = [];
 
     /// <summary>
+    /// Structured form of the accumulated parse errors, preserving code + source position
+    /// (the plain <see cref="_errors"/> strings are pre-formatted and lose the location fields).
+    /// Consumed by the language server to emit positioned diagnostics.
+    /// </summary>
+    private readonly List<GrammarException> _structuredErrors = [];
+
+    /// <summary>
     /// Returns true if any parse errors occurred during parsing.
     /// </summary>
     public bool HasErrors => _errors.Count > 0;
@@ -47,6 +54,14 @@ public partial class Parser
     public List<string> GetErrors()
     {
         return _errors;
+    }
+
+    /// <summary>
+    /// Gets the accumulated parse errors with their code and source position preserved.
+    /// </summary>
+    public IReadOnlyList<GrammarException> GetStructuredErrors()
+    {
+        return _structuredErrors;
     }
 
     /// <summary>
@@ -165,6 +180,9 @@ public partial class Parser
     {
         var declarations = new List<ISyntaxTreeNode>();
 
+        // Doc-comment (### ...) lines accumulate here until the next declaration claims them.
+        var pendingDoc = new List<string>();
+
         while (!IsAtEnd)
         {
             try
@@ -175,12 +193,13 @@ public partial class Parser
                     continue;
                 }
 
-                // Skip trailing doc comments (### lines) that are not followed by a declaration.
-                // A module file may end with a block of documentation (e.g. the BuilderExpansion
-                // capability-gate module, which declares nothing) — those must not drive
-                // ParseDeclaration into an EOF "Unexpected token" error.
-                if (Match(type: TokenType.DocComment))
+                // Accumulate doc-comment (### ...) lines; they attach to the NEXT declaration. A module
+                // file may also end with a block of documentation that declares nothing (e.g. the
+                // BuilderExpansion capability-gate module) — that trailing block simply never gets claimed
+                // and is discarded when the loop ends, so it can't drive ParseDeclaration into an EOF error.
+                if (Check(type: TokenType.DocComment))
                 {
+                    pendingDoc.Add(item: Advance().Text.Trim());
                     continue;
                 }
 
@@ -192,6 +211,12 @@ public partial class Parser
                 }
 
                 ISyntaxTreeNode decl = ParseDeclaration();
+                if (pendingDoc.Count > 0 && decl is SyntaxTree.Declaration documented)
+                {
+                    documented.Documentation = string.Join(separator: "\n", values: pendingDoc);
+                }
+
+                pendingDoc.Clear();
                 declarations.Add(item: decl);
             }
             catch (GrammarException ex)
@@ -200,6 +225,7 @@ public partial class Parser
                 // error[RF-G150]: filename.rf:9:14: message
                 // error[SF-G150]: filename.sf:9:14: message
                 _errors.Add(item: ex.Message);
+                _structuredErrors.Add(item: ex);
                 DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
                 Synchronize();
             }
@@ -274,6 +300,7 @@ public partial class Parser
                 "Either move the top-level statements into start(), or remove the explicit start().",
                 fileName: FileName, line: startLoc.Line, column: startLoc.Column, language: _language);
             _errors.Add(item: ex.Message);
+            _structuredErrors.Add(item: ex);
             DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
             return kept;
         }

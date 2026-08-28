@@ -838,6 +838,7 @@ public sealed partial class StdlibLoader
             Module = moduleName,
             ModulePath = moduleName?.Split('/').ToList(),
             Location = routine.Location,
+            Documentation = routine.Documentation,
             IsFailable = routine.IsFailable,
             IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
