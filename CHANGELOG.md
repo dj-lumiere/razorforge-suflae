@@ -4,7 +4,7 @@ All notable changes to RazorForge and Suflae are documented here. This project f
 [Keep a Changelog](https://keepachangelog.com/) conventions; RazorForge and Suflae version
 independently (`RazorForgeVersion` / `SuflaeVersion` in the project manifest).
 
-## [Unreleased] — RazorForge 0.4.0 · Suflae 0.1.0
+## [0.4.0] — 2026-08-28 · RazorForge 0.4.0 · Suflae 0.1.0
 
 _Covers everything since `v0.3.0` (234 commits). RazorForge 0.4 is largely an API-surface cleanup
 release — read the **Breaking Changes** section before upgrading._
