@@ -15,8 +15,8 @@ public sealed class ProtocolTypeInfo : TypeInfo
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Protocol;
 
-    /// <summary>Method signatures defined by this protocol.</summary>
-    public List<ProtocolMethodInfo> Methods { get; set; } = [];
+    /// <summary>memberRoutine signatures defined by this protocol.</summary>
+    public List<ProtocolMemberRoutineInfo> MemberRoutines { get; set; } = [];
 
     /// <summary>Parent protocols that this protocol extends.</summary>
     public List<ProtocolTypeInfo> ParentProtocols { get; init; } = [];
@@ -69,10 +69,10 @@ public sealed class ProtocolTypeInfo : TypeInfo
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.Name))}]";
 
-        var substitutedMethods = Methods
-            .Select(selector: m => new ProtocolMethodInfo(name: m.Name)
+        var substitutedMemberRoutines = MemberRoutines
+            .Select(selector: m => new ProtocolMemberRoutineInfo(name: m.Name)
             {
-                IsInstanceMethod = m.IsInstanceMethod,
+                IsInstanceMemberRoutine = m.IsInstanceMemberRoutine,
                 Mutation = m.Mutation,
                 ParameterTypes = m.ParameterTypes
                     .Select(selector: t => RecordTypeInfo.SubstituteType(type: t, substitution: substitution))
@@ -107,14 +107,15 @@ public sealed class ProtocolTypeInfo : TypeInfo
 
         return new ProtocolTypeInfo(name: resolvedName)
         {
-            Methods = substitutedMethods,
+            MemberRoutines = substitutedMemberRoutines,
             ParentProtocols = substitutedParentProtocols,
             AssociatedTypes = substitutedAssociated,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 }

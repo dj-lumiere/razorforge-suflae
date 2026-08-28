@@ -12,26 +12,26 @@ module Core
 ### exp on the unpacked engine (TLFloat exp_, N=20, M=1).
 routine UnpackedFloat[M, L, W].exp(n: S64) -> UnpackedFloat[M, L, W]
   # W=512 (octuple-of-octuple) overrides the degree to 36 for 70+ digit accuracy.
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     n = 36_s64
   # |me| > ~2^28 over/underflows: +inf for positive, +0 for negative.
-  if signed_gt[S64](a: me.exp, b: 28_s64)
+  if LLVM::signed_gt(a: me.exp, b: 28_s64)
     if me.sign()
       return UnpackedFloat[M, L, W].zero(sign: false)
     return UnpackedFloat[M, L, W].inf(sign: false)
   # Range reduction: q = round(me / ln2); reduced d = (me - q*ln2)/2 via two-part
   # ln2 (hi+lo) FMAs so the cancellation stays full-precision, then halved (ldexp -1).
   var q = me.mul(you: UnpackedFloat[M, L, W].recip_ln2()).rint().to_s64()
-  var nq = UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: 0_s64, b: q))
+  var nq = UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: 0_s64, b: q))
   var d = nq.fma(b: UnpackedFloat[M, L, W].ln2_hi(), c: me)
   d = nq.fma(b: UnpackedFloat[M, L, W].ln2_lo(), c: d)
   d = d.ldexp(e: -1_s64)
   # Horner evaluation of the exp series (degree n+1 down to 0) in the reduced d.
-  var s = UnpackedFloat[M, L, W].exp_coef(add[S64](a: n, b: 1_s64))
+  var s = UnpackedFloat[M, L, W].exp_coef(LLVM::add(a: n, b: 1_s64))
   var i = n
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     s = s.fma(b: d, c: UnpackedFloat[M, L, W].exp_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   # Undo the half-angle (exp(d) -> exp(2d) = s^2), then scale by 2^q (ldexp q).
   s = s.mul(you: s)
   return s.ldexp(e: q)
@@ -39,27 +39,27 @@ routine UnpackedFloat[M, L, W].exp(n: S64) -> UnpackedFloat[M, L, W]
 ### expm1 on the unpacked engine (TLFloat expm1_, degree n, M=1).
 routine UnpackedFloat[M, L, W].expm1(n: S64) -> UnpackedFloat[M, L, W]
   # W=512 overrides the degree to 36 for 70+ digit accuracy.
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     n = 36_s64
   if me.iszero()
     return me
   # |me| > ~2^28: -1 for large-negative (e^x -> 0), +inf for large-positive.
-  if signed_gt[S64](a: me.exp, b: 28_s64)
+  if LLVM::signed_gt(a: me.exp, b: 28_s64)
     if me.sign()
       return UnpackedFloat[M, L, W].from_s64(src: -1_s64)
     return UnpackedFloat[M, L, W].inf(sign: false)
   # Same q = round(me/ln2) + two-part-ln2 reduction + half-angle as exp.
   var q = me.mul(you: UnpackedFloat[M, L, W].recip_ln2()).rint().to_s64()
-  var nq = UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: 0_s64, b: q))
+  var nq = UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: 0_s64, b: q))
   var d = nq.fma(b: UnpackedFloat[M, L, W].ln2_hi(), c: me)
   d = nq.fma(b: UnpackedFloat[M, L, W].ln2_lo(), c: d)
   d = d.ldexp(e: -1_s64)
   # Horner series down to coef 1 (the constant term is handled by the expm1 form below).
-  var s = UnpackedFloat[M, L, W].exp_coef(add[S64](a: n, b: 1_s64))
+  var s = UnpackedFloat[M, L, W].exp_coef(LLVM::add(a: n, b: 1_s64))
   var i = n
-  while signed_ge[S64](a: i, b: 1_s64)
+  while LLVM::signed_ge(a: i, b: 1_s64)
     s = s.fma(b: d, c: UnpackedFloat[M, L, W].exp_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   # Reconstruct expm1(2d) = s^2 + 2s from the half-angle s = expm1(d)/... (avoids 1-1
   # cancellation that a plain exp(x)-1 would suffer for small x).
   s = s.mul(you: d)
@@ -71,7 +71,7 @@ routine UnpackedFloat[M, L, W].expm1(n: S64) -> UnpackedFloat[M, L, W]
 ### log on the unpacked engine (TLFloat log_, degree n, m sqrt-reductions, threshold t).
 routine UnpackedFloat[M, L, W].log(n: S64, m: S64, t: S64) -> UnpackedFloat[M, L, W]
   # W=512 overrides degree/reductions/threshold for 70+ digits (t very negative = always reduce).
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     n = 33_s64
     m = 2_s64
     t = -1000000_s64
@@ -82,25 +82,25 @@ routine UnpackedFloat[M, L, W].log(n: S64, m: S64, t: S64) -> UnpackedFloat[M, L
   var e = p.item1
   if fr.lt(you: UnpackedFloat[M, L, W].sqrt_half())
     fr = fr.ldexp(e: 1_s64)
-    e = sub[S64](a: e, b: 1_s64)
+    e = LLVM::sub(a: e, b: 1_s64)
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   # When fr is not already near 1, take m square roots: log(fr) = 2^m * log(fr^(1/2^m)),
   # shrinking |x| so the fixed-degree polynomial reaches the target precision.
   var mm = 0_s64
-  if signed_gt[S64](a: m, b: 0_s64) and signed_gt[S64](a: fr.sub(you: one).abs().ilogb(), b: t)
+  if LLVM::signed_gt[S64](a: m, b: 0_s64) and LLVM::signed_gt[S64](a: fr.sub(you: one).abs().ilogb(), b: t)
     var k = 0_s64
-    while signed_lt[S64](a: k, b: m)
+    while LLVM::signed_lt(a: k, b: m)
       fr = fr.sqrt()
-      k = add[S64](a: k, b: 1_s64)
+      k = LLVM::add(a: k, b: 1_s64)
     mm = m
   # atanh series: log(fr) = 2*atanh(x) with x = (fr-1)/(fr+1); evaluate in x^2 by Horner.
   var x = fr.sub(you: one).div(you: fr.add(you: one))
   var xx = x.mul(you: x)
-  var y = UnpackedFloat[M, L, W].log_coef(add[S64](a: n, b: 1_s64))
+  var y = UnpackedFloat[M, L, W].log_coef(LLVM::add(a: n, b: 1_s64))
   var i = n
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     y = y.fma(b: xx, c: UnpackedFloat[M, L, W].log_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   y = y.mul(you: x)
   # Reassemble: undo the m reductions (ldexp mm), then add e*ln2 via two-part ln2 FMAs.
   var ef = UnpackedFloat[M, L, W].from_s64(src: e)
@@ -109,7 +109,7 @@ routine UnpackedFloat[M, L, W].log(n: S64, m: S64, t: S64) -> UnpackedFloat[M, L
 
 ### log1p on the unpacked engine (TLFloat log1p_, degree n, m sqrt-reductions).
 routine UnpackedFloat[M, L, W].log1p(n: S64, m: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     n = 33_s64
     # m=2 (one fewer sqrt+div reduction than the old m=3): the Taylor-conservative
     # truncation is still 2^-324 (~97 digits) >> D256's 70 — verified in gen probes.
@@ -124,23 +124,23 @@ routine UnpackedFloat[M, L, W].log1p(n: S64, m: S64) -> UnpackedFloat[M, L, W]
   var e = p.item1
   if fr.lt(you: UnpackedFloat[M, L, W].sqrt_half())
     fr = fr.ldexp(e: 1_s64)
-    e = sub[S64](a: e, b: 1_s64)
+    e = LLVM::sub(a: e, b: 1_s64)
   fr = if e == 0_s64 then me else fr.sub(you: one)
   # m reduction steps fr <- fr/(sqrt(1+fr)+1) (half-argument for log1p); each halves
   # the magnitude, reconstructed by ldexp m below.
   var k = 0_s64
-  while signed_lt[S64](a: k, b: m)
+  while LLVM::signed_lt(a: k, b: m)
     fr = fr.div(you: fr.add(you: one).sqrt().add(you: one))
-    k = add[S64](a: k, b: 1_s64)
+    k = LLVM::add(a: k, b: 1_s64)
   # atanh series in x = fr/(fr+2): log1p(fr) = 2*atanh(x); Horner in x^2.
   var two = UnpackedFloat[M, L, W].from_s64(src: 2_s64)
   var x = fr.div(you: fr.add(you: two))
   var xx = x.mul(you: x)
-  var y = UnpackedFloat[M, L, W].log_coef(add[S64](a: n, b: 1_s64))
+  var y = UnpackedFloat[M, L, W].log_coef(LLVM::add(a: n, b: 1_s64))
   var i = n
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     y = y.fma(b: xx, c: UnpackedFloat[M, L, W].log_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   y = y.mul(you: x)
   # Undo the m reductions (ldexp m) and add e*ln2 (two-part ln2 FMAs).
   var ef = UnpackedFloat[M, L, W].from_s64(src: e)
@@ -151,18 +151,18 @@ routine UnpackedFloat[M, L, W].log1p(n: S64, m: S64) -> UnpackedFloat[M, L, W]
 routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   var one_third = UnpackedFloat[M, L, W].one_third()
   # Split off a power of 2: scale me down by 2^e so the mantissa d is near 1.
-  var e = add[S64](a: me.mul(you: one_third).ilogb(), b: 2_s64)
-  var d = me.ldexp(e: sub[S64](a: 0_s64, b: e))
+  var e = LLVM::add(a: me.mul(you: one_third).ilogb(), b: 2_s64)
+  var d = me.ldexp(e: LLVM::sub(a: 0_s64, b: e))
   # Decompose e = 3*(e//3) + r with a large bias (3145728/1048576) to keep e//3 exact;
   # the residue r in {0,1,2} picks the cube-root-of-2^r factor q reapplied at the end.
-  var eo3 = add[S64](a: e, b: 3145728_s64)
-  var r = signed_rem[S64](a: eo3, b: 3_s64)
+  var eo3 = LLVM::add(a: e, b: 3145728_s64)
+  var r = LLVM::signed_rem(a: eo3, b: 3_s64)
   var q = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   if r == 1_s64
     q = UnpackedFloat[M, L, W].cbrt_2()
   if r == 2_s64
     q = UnpackedFloat[M, L, W].cbrt_4()
-  q = q.ldexp(e: sub[S64](a: signed_div[S64](a: eo3, b: 3_s64), b: 1048576_s64))
+  q = q.ldexp(e: LLVM::sub(a: LLVM::signed_div(a: eo3, b: 3_s64), b: 1048576_s64))
   if d.sign()
     q = q.neg()
   d = d.abs()
@@ -171,16 +171,16 @@ routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   var dm1 = d.sub(you: one)
   var x = UnpackedFloat[M, L, W].cbrt_coef(5_s64)
   var i = 4_s64
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     x = x.fma(b: dm1, c: UnpackedFloat[M, L, W].cbrt_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   # 3 Halley/Newton-style iterations: x <- x - (1/3)*x*(x^4*d - 1) drives x to d^(-2/3).
   var j = 0_s64
-  while signed_lt[S64](a: j, b: 3_s64)
+  while LLVM::signed_lt(a: j, b: 3_s64)
     var yy = x.mul(you: x)
     yy = yy.mul(you: yy)
     x = d.fma(b: yy, c: x.neg()).fma(b: one_third.neg(), c: x)
-    j = add[S64](a: j, b: 1_s64)
+    j = LLVM::add(a: j, b: 1_s64)
   # Final correction: form d*x^2 ~ d^(1/3) and apply one Newton step, then scale by q.
   var y2 = x.mul(you: x).mul(you: d)
   var t = y2.fma(b: x, c: UnpackedFloat[M, L, W].from_s64(src: -1_s64))
@@ -192,7 +192,7 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
   # W=512 needs deeper half-angle reduction + higher poly degree for 70+ digits.
   var deg = 17_s64
   var depth = 3_s64
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     deg = 22_s64
     depth = 5_s64
   return me.atan2_p(x0: x0, deg: deg, depth: depth)
@@ -219,14 +219,14 @@ routine UnpackedFloat[M, L, W].atan2_p(x0: UnpackedFloat[M, L, W], deg: S64, dep
   # `depth` half-angle reductions d <- d/(sqrt(1+d^2)+1) shrink |d| so the fixed-degree
   # poly converges; the matching ldexp(depth) below undoes them.
   var j = 0_s64
-  while signed_lt[S64](a: j, b: depth)
+  while LLVM::signed_lt(a: j, b: depth)
     d = d.div(you: d.fma(b: d, c: one).sqrt().add(you: one))
-    j = add[S64](a: j, b: 1_s64)
+    j = LLVM::add(a: j, b: 1_s64)
   # Horner evaluation of the atan series in d^2, then multiply by d.
-  var i = sub[S64](a: deg, b: 1_s64)
-  while signed_ge[S64](a: i, b: 0_s64)
+  var i = LLVM::sub(a: deg, b: 1_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     r = r.fma(b: d.mul(you: d), c: UnpackedFloat[M, L, W].atan_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   r = r.mul(you: d)
   var qu = UnpackedFloat[M, L, W].from_s64(src: q)
   if q == 0_s64
@@ -654,7 +654,7 @@ routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F12
   var yisint = yo.isint()
   var yisoddint = yisint and not yo.iseven()
   var poszero = F128.from_bits(bits: 0_u128)
-  var negzero = F128.from_bits(bits: shift_left[U128](value: 1_u128, bits: 127_u128))
+  var negzero = F128.from_bits(bits: LLVM::shift_left(value: 1_u128, bits: 127_u128))
   var posinf = F128.from_bits(bits: f128_inf(sign: 0_u64))
   var neginf = F128.from_bits(bits: f128_inf(sign: 1_u64))
   var xs = 0_u64
@@ -894,88 +894,88 @@ routine F128.acosh_unchecked() -> F128
 common routine L.read_table_bytes(start: S64, nbytes: S64) -> L
   var acc = L.to_width(s: 0_s64)
   var i = 0_s64
-  while signed_lt[S64](a: i, b: nbytes)
-    var byte = rpitab_byte(idx: reinterpret_bits[S64, U64](add[S64](a: start, b: i)))
-    acc = add[L](a: shift_left[L](value: acc, bits: L.to_width(s: 8_s64)), b: zero_extend[U64, L](byte))
-    i = add[S64](a: i, b: 1_s64)
+  while LLVM::signed_lt(a: i, b: nbytes)
+    var byte = rpitab_byte(idx: LLVM::reinterpret_bits[S64, U64](LLVM::add(a: start, b: i)))
+    acc = LLVM::add(a: LLVM::shift_left(value: acc, bits: L.to_width(s: 8_s64)), b: LLVM::zero_extend[U64, L](byte))
+    i = LLVM::add(a: i, b: 1_s64)
   return acc
 
 ### Payne-Hanek reduction: returns (reduced angle, quadrant&0xff). TLFloat `ph`.
 routine UnpackedFloat[M, L, W].ph(p: S64) -> UFExp[M, L, W]
-  var wb = reinterpret_bits[U64, S64](W)
-  var w2 = mul[S64](a: 2_s64, b: wb)
-  var nbytes = signed_div[S64](a: wb, b: 8_s64)
-  var nbmant = sub[S64](a: wb, b: 2_s64)
+  var wb = LLVM::reinterpret_bits[U64, S64](W)
+  var w2 = LLVM::mul(a: 2_s64, b: wb)
+  var nbytes = LLVM::signed_div(a: wb, b: 8_s64)
+  var nbmant = LLVM::sub(a: wb, b: 2_s64)
   # Tiny arguments (|me| < ~2^-5) need no reduction: return unchanged, quadrant 0.
-  if me.iszero() or signed_lt[S64](a: me.exp, b: -5_s64)
+  if me.iszero() or LLVM::signed_lt(a: me.exp, b: -5_s64)
     var asis = UnpackedFloat[M, L, W].make(mant: me.mant, exp: me.exp, fpclass: SignedFpClass.from_flags(sign: me.sign(), iszero: me.iszero(), isinf: me.isinf(), isnan: me.isnan()))
     return UFExp[M, L, W](item0: asis, item1: 0_s64)
   # Pick the byte window of the 1/(2pi) table aligned to the input's binary exponent so
   # only the bits of 1/(2pi) that overlap me's significance are multiplied.
-  var mantexp = sub[S64](a: me.exp, b: sub[S64](a: nbmant, b: 1_s64))
-  var m = sub[S64](a: mantexp, b: 1_s64)
-  if signed_lt[S64](a: m, b: 0_s64)
+  var mantexp = LLVM::sub(a: me.exp, b: LLVM::sub(a: nbmant, b: 1_s64))
+  var m = LLVM::sub(a: mantexp, b: 1_s64)
+  if LLVM::signed_lt[S64](a: m, b: 0_s64)
     m = 0_s64
-  var m_aligned = sub[S64](a: m, b: signed_rem[S64](a: m, b: 8_s64))
-  var rpiexp = sub[S64](a: sub[S64](a: p, b: m_aligned), b: wb)
-  var m8 = signed_div[S64](a: m, b: 8_s64)
+  var m_aligned = LLVM::sub[S64](a: m, b: LLVM::signed_rem[S64](a: m, b: 8_s64))
+  var rpiexp = LLVM::sub(a: LLVM::sub(a: p, b: m_aligned), b: wb)
+  var m8 = LLVM::signed_div[S64](a: m, b: 8_s64)
   # Read two W-bit limbs (high, low) of 1/(2pi) and form mant * 1/(2pi) at full width.
   var rpih = L.read_table_bytes(start: m8, nbytes: nbytes)
-  var rpil = L.read_table_bytes(start: add[S64](a: m8, b: nbytes), nbytes: nbytes)
-  var mantL = zero_extend[M, L](me.mant)
-  var rm = add[L](a: mul[L](a: mantL, b: rpih), b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), L.to_width(s: wb)))
+  var rpil = L.read_table_bytes(start: LLVM::add(a: m8, b: nbytes), nbytes: nbytes)
+  var mantL = LLVM::zero_extend[M, L](me.mant)
+  var rm = LLVM::add(a: LLVM::mul(a: mantL, b: rpih), b: LLVM::shift_right_unsigned(LLVM::mul(a: mantL, b: rpil), L.to_width(s: wb)))
   # Extract the integer quadrant q = round(rm) and subtract it, leaving the fractional
   # part rm in [-1/2, 1/2) of a full turn (round-to-nearest via the roundbit + mask).
   var q = 0_s64
-  var negshift = sub[S64](a: 0_s64, b: add[S64](a: mantexp, b: rpiexp))
-  if signed_lt[S64](a: negshift, b: w2)
-    var roundbit = shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: sub[S64](a: negshift, b: 1_s64)))
-    var mask = shift_left[L](value: (L.to_width(s: 0_s64)).bit_not(), bits: L.to_width(s: negshift))
-    var qm = bit_and[L](a: add[L](a: rm, b: roundbit), b: mask)
-    rm = sub[L](a: rm, b: qm)
-    q = int_truncate[L, S64](shift_right_unsigned[L](qm, L.to_width(s: negshift)))
-  var exp = sub[S64](a: add[S64](a: mantexp, b: rpiexp), b: p)
+  var negshift = LLVM::sub(a: 0_s64, b: LLVM::add(a: mantexp, b: rpiexp))
+  if LLVM::signed_lt(a: negshift, b: w2)
+    var roundbit = LLVM::shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: LLVM::sub[S64](a: negshift, b: 1_s64)))
+    var mask = LLVM::shift_left(value: (L.to_width(s: 0_s64)).bit_not(), bits: L.to_width(s: negshift))
+    var qm = LLVM::bit_and(a: LLVM::add(a: rm, b: roundbit), b: mask)
+    rm = LLVM::sub(a: rm, b: qm)
+    q = LLVM::int_truncate[L, S64](LLVM::shift_right_unsigned(qm, L.to_width(s: negshift)))
+  var exp = LLVM::sub(a: LLVM::add(a: mantexp, b: rpiexp), b: p)
   # If the fraction is tiny (near 0 or all-ones), bring in more low limbs of 1/(2pi) to
   # keep full precision before normalizing.
-  var j = mul[S64](a: 2_s64, b: nbytes)
-  while signed_gt[S64](a: UnpackedFloat[M, L, W].clz_wide(v: rm), b: wb) or signed_gt[S64](a: UnpackedFloat[M, L, W].clz_wide(v: (rm).bit_not()), b: wb)
-    var lowpart = bit_and[L](a: mul[L](a: mantL, b: rpil), b: L.low_mask(n: wb))
-    rm = add[L](a: shift_left[L](value: rm, bits: L.to_width(s: wb)), b: lowpart)
-    rpil = L.read_table_bytes(start: add[S64](a: j, b: m8), nbytes: nbytes)
-    rm = add[L](a: rm, b: shift_right_unsigned[L](mul[L](a: mantL, b: rpil), L.to_width(s: wb)))
-    exp = sub[S64](a: exp, b: wb)
-    j = add[S64](a: j, b: nbytes)
+  var j = LLVM::mul(a: 2_s64, b: nbytes)
+  while LLVM::signed_gt(a: UnpackedFloat[M, L, W].clz_wide(v: rm), b: wb) or LLVM::signed_gt(a: UnpackedFloat[M, L, W].clz_wide(v: (rm).bit_not()), b: wb)
+    var lowpart = LLVM::bit_and(a: LLVM::mul(a: mantL, b: rpil), b: L.low_mask(n: wb))
+    rm = LLVM::add(a: LLVM::shift_left(value: rm, bits: L.to_width(s: wb)), b: lowpart)
+    rpil = L.read_table_bytes(start: LLVM::add(a: j, b: m8), nbytes: nbytes)
+    rm = LLVM::add(a: rm, b: LLVM::shift_right_unsigned(LLVM::mul(a: mantL, b: rpil), L.to_width(s: wb)))
+    exp = LLVM::sub(a: exp, b: wb)
+    j = LLVM::add(a: j, b: nbytes)
   # If the fraction is in the upper half (>= 1/2 turn) negate it (and q, sign) so the
   # reduced value lies in [0, 1/2) and the quadrant accounting stays consistent.
   var sign = me.sign()
-  if (rm).bit(pos: sub[S64](a: w2, b: 1_s64))
-    rm = sub[L](a: L.to_width(s: 0_s64), b: rm)
-    q = sub[S64](a: 0_s64, b: q)
+  if (rm).bit(pos: LLVM::sub(a: w2, b: 1_s64))
+    rm = LLVM::sub[L](a: L.to_width(s: 0_s64), b: rm)
+    q = LLVM::sub(a: 0_s64, b: q)
     sign = not sign
   # Normalize the fraction back into an M-bit mantissa u (left/right shift with rounding),
   # fixing the exponent x for any leading-zero count or rounding carry.
-  var x = sub[S64](a: w2, b: UnpackedFloat[M, L, W].clz_wide(v: rm))
-  var s = sub[S64](a: nbmant, b: sub[S64](a: x, b: 1_s64))
+  var x = LLVM::sub(a: w2, b: UnpackedFloat[M, L, W].clz_wide(v: rm))
+  var s = LLVM::sub(a: nbmant, b: LLVM::sub(a: x, b: 1_s64))
   var u = M.to_width(s: 0_s64)
-  if signed_ge[S64](a: s, b: 0_s64)
-    u = int_truncate[L, M](shift_left[L](value: rm, bits: L.to_width(s: s)))
+  if LLVM::signed_ge(a: s, b: 0_s64)
+    u = LLVM::int_truncate[L, M](LLVM::shift_left(value: rm, bits: L.to_width(s: s)))
   else
-    var ns = sub[S64](a: 0_s64, b: s)
-    var rb = shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: sub[S64](a: ns, b: 1_s64)))
-    u = int_truncate[L, M](shift_right_unsigned[L](add[L](a: rm, b: rb), L.to_width(s: ns)))
-  if (u).bit(pos: add[S64](a: nbmant, b: 1_s64))
-    u = shift_right_unsigned[M](u, M.to_width(s: 1_s64))
-    x = add[S64](a: x, b: 1_s64)
+    var ns = LLVM::sub(a: 0_s64, b: s)
+    var rb = LLVM::shift_left[L](value: L.to_width(s: 1_s64), bits: L.to_width(s: LLVM::sub[S64](a: ns, b: 1_s64)))
+    u = LLVM::int_truncate[L, M](LLVM::shift_right_unsigned(LLVM::add(a: rm, b: rb), L.to_width(s: ns)))
+  if (u).bit(pos: LLVM::add(a: nbmant, b: 1_s64))
+    u = LLVM::shift_right_unsigned(u, M.to_width(s: 1_s64))
+    x = LLVM::add(a: x, b: 1_s64)
   # Multiply the reduced turn-fraction by pi to get the reduced angle in radians.
-  var rexp = add[S64](a: sub[S64](a: x, b: 2_s64), b: exp)
+  var rexp = LLVM::add(a: LLVM::sub(a: x, b: 2_s64), b: exp)
   var r = UnpackedFloat[M, L, W].make(mant: u, exp: rexp, fpclass: SignedFpClass.from_flags(sign: false, iszero: false, isinf: false, isnan: false)).mul(you: UnpackedFloat[M, L, W].pi())
   var rr = r
   if sign
     rr = r.neg()
   var qv = q
   if sign
-    qv = sub[S64](a: 0_s64, b: q)
-  var qf = reinterpret_bits[U64, S64](bit_and[U64](a: reinterpret_bits[S64, U64](qv), b: 0xff_u64))
+    qv = LLVM::sub(a: 0_s64, b: q)
+  var qf = LLVM::reinterpret_bits[U64, S64](LLVM::bit_and(a: LLVM::reinterpret_bits[S64, U64](qv), b: 0xff_u64))
   return UFExp[M, L, W](item0: rr, item1: qf)
 
 ### sin on the unpacked engine (TLFloat sin_, N=14).
@@ -986,23 +986,23 @@ routine UnpackedFloat[M, L, W].sin(n: S64) -> UnpackedFloat[M, L, W]
   var quad = pr.item1
   var negsq = red.mul(you: red).neg()
   var d = UnpackedFloat[M, L, W].from_s64(src: 0_s64)
-  if int_ne[S64](a: bit_and[S64](a: quad, b: 1_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: quad, b: 1_s64), b: 0_s64)
     # Odd quadrant: sin(x) = cos(reduced); Horner in -red^2 over cos coefficients.
-    d = UnpackedFloat[M, L, W].cos_coef(add[S64](a: n, b: 1_s64))
+    d = UnpackedFloat[M, L, W].cos_coef(LLVM::add(a: n, b: 1_s64))
     var i = n
-    while signed_ge[S64](a: i, b: 0_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
       d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].cos_coef(i))
-      i = sub[S64](a: i, b: 1_s64)
+      i = LLVM::sub(a: i, b: 1_s64)
   else
     # Even quadrant: sin polynomial in -red^2, multiplied by red (odd function).
     d = UnpackedFloat[M, L, W].sin_coef(n)
-    var i = sub[S64](a: n, b: 1_s64)
-    while signed_ge[S64](a: i, b: 0_s64)
+    var i = LLVM::sub(a: n, b: 1_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
       d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].sin_coef(i))
-      i = sub[S64](a: i, b: 1_s64)
+      i = LLVM::sub(a: i, b: 1_s64)
     d = d.mul(you: red)
   # Bit 1 of the quadrant flips the sign (quadrants 2,3).
-  if int_ne[S64](a: bit_and[S64](a: quad, b: 2_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: quad, b: 2_s64), b: 0_s64)
     return d.neg()
   return d
 
@@ -1018,28 +1018,28 @@ routine UnpackedFloat[M, L, W].cos_n(cn: S64) -> UnpackedFloat[M, L, W]
   var negsq = red.mul(you: red).neg()
   # W=512 needs higher poly degree (the ph reduction is already full-width).
   var codd = cn
-  var ceven = add[S64](a: cn, b: 1_s64)
-  if int_eq[U64](a: W, b: 512_u64)
+  var ceven = LLVM::add(a: cn, b: 1_s64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     codd = 26_s64
     ceven = 27_s64
   var d = UnpackedFloat[M, L, W].from_s64(src: 0_s64)
-  if int_ne[S64](a: bit_and[S64](a: quad, b: 1_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: quad, b: 1_s64), b: 0_s64)
     # Odd quadrant: cos(x) = -sin(reduced); sin poly in -red^2 times -red.
     d = UnpackedFloat[M, L, W].sin_coef(codd)
-    var i = sub[S64](a: codd, b: 1_s64)
-    while signed_ge[S64](a: i, b: 0_s64)
+    var i = LLVM::sub(a: codd, b: 1_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
       d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].sin_coef(i))
-      i = sub[S64](a: i, b: 1_s64)
+      i = LLVM::sub(a: i, b: 1_s64)
     d = d.mul(you: red.neg())
   else
     # Even quadrant: cos polynomial in -red^2 (even function).
     d = UnpackedFloat[M, L, W].cos_coef(ceven)
-    var i = sub[S64](a: ceven, b: 1_s64)
-    while signed_ge[S64](a: i, b: 0_s64)
+    var i = LLVM::sub(a: ceven, b: 1_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
       d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].cos_coef(i))
-      i = sub[S64](a: i, b: 1_s64)
+      i = LLVM::sub(a: i, b: 1_s64)
   # Bit 1 of the quadrant flips the sign (quadrants 2,3).
-  if int_ne[S64](a: bit_and[S64](a: quad, b: 2_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: quad, b: 2_s64), b: 0_s64)
     return d.neg()
   return d
 
@@ -1082,33 +1082,33 @@ routine UnpackedFloat[M, L, W].tanxy_n(td0: S64) -> UFPair[M, L, W]
   # uses a higher-degree numerator poly for 70+ digits.
   var sh = 3_s64
   var tdeg = td0
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     sh = 6_s64
     tdeg = 25_s64
   # Reduce by 2^sh so the tan polynomial converges; x = red / 2^sh.
-  var x = red.ldexp(e: sub[S64](a: 0_s64, b: sh))
+  var x = red.ldexp(e: LLVM::sub(a: 0_s64, b: sh))
   var xx = x.mul(you: x)
   # Horner for tan(x)/x in x^2, then multiply by x.
   var d = UnpackedFloat[M, L, W].tan_coef(tdeg)
   var i = tdeg
-  while signed_gt[S64](a: i, b: 0_s64)
-    d = d.fma(b: xx, c: UnpackedFloat[M, L, W].tan_coef(sub[S64](a: i, b: 1_s64)))
-    i = sub[S64](a: i, b: 1_s64)
+  while LLVM::signed_gt(a: i, b: 0_s64)
+    d = d.fma(b: xx, c: UnpackedFloat[M, L, W].tan_coef(LLVM::sub(a: i, b: 1_s64)))
+    i = LLVM::sub(a: i, b: 1_s64)
   d = d.mul(you: x)
   # Double-angle: tan(2t) = -2t / (t^2 - 1), applied sh-1 times here (last step after).
   var negone = UnpackedFloat[M, L, W].from_s64(src: -1_s64)
   var y = UnpackedFloat[M, L, W].from_s64(src: 0_s64)
   var k = 0_s64
-  while signed_lt[S64](a: k, b: sub[S64](a: sh, b: 1_s64))
+  while LLVM::signed_lt(a: k, b: LLVM::sub(a: sh, b: 1_s64))
     y = d.fma(b: d, c: negone)
     x = d.ldexp(e: 1_s64).neg()
     d = x.div(you: y)
-    k = add[S64](a: k, b: 1_s64)
+    k = LLVM::add(a: k, b: 1_s64)
   # Final doubling kept as a numerator/denominator pair (x = -2d, y = d^2-1) so the
   # caller divides once; an odd quadrant means tan -> cot, so swap and negate.
   y = d.fma(b: d, c: negone)
   x = d.ldexp(e: 1_s64).neg()
-  if int_ne[S64](a: bit_and[S64](a: quad, b: 1_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: quad, b: 1_s64), b: 0_s64)
     var tmp = x
     x = y
     y = tmp.neg()
@@ -1179,19 +1179,19 @@ routine F128.hypot_unchecked(you: F128) -> F128
 routine UnpackedFloat[M, L, W].intlsb() -> S64
   if me.iszero() or me.isinf() or me.isnan()
     return 0_s64
-  var wb = reinterpret_bits[U64, S64](W)
-  var nbmant = sub[S64](a: wb, b: 2_s64)
-  var s = sub[S64](a: nbmant, b: add[S64](a: me.exp, b: 1_s64))
-  if signed_ge[S64](a: s, b: wb) or signed_le[S64](a: s, b: -16_s64)
+  var wb = LLVM::reinterpret_bits[U64, S64](W)
+  var nbmant = LLVM::sub(a: wb, b: 2_s64)
+  var s = LLVM::sub(a: nbmant, b: LLVM::add(a: me.exp, b: 1_s64))
+  if LLVM::signed_ge(a: s, b: wb) or LLVM::signed_le(a: s, b: -16_s64)
     return 0_s64
   var mm = 0_s64
-  if signed_ge[S64](a: s, b: 0_s64)
-    mm = int_truncate[M, S64](shift_right_unsigned[M](me.mant, M.to_width(s: s)))
+  if LLVM::signed_ge(a: s, b: 0_s64)
+    mm = LLVM::int_truncate[M, S64](LLVM::shift_right_unsigned(me.mant, M.to_width(s: s)))
   else
-    mm = int_truncate[M, S64](shift_left[M](value: me.mant, bits: M.to_width(s: sub[S64](a: 0_s64, b: s))))
-  mm = bit_and[S64](a: mm, b: 0xffff_s64)
+    mm = LLVM::int_truncate[M, S64](LLVM::shift_left(value: me.mant, bits: M.to_width(s: LLVM::sub(a: 0_s64, b: s))))
+  mm = LLVM::bit_and(a: mm, b: 0xffff_s64)
   if me.sign()
-    return sub[S64](a: sub[S64](a: 0_s64, b: mm), b: 1_s64)
+    return LLVM::sub(a: LLVM::sub(a: 0_s64, b: mm), b: 1_s64)
   return mm
 
 ### sinpi polynomial (TLFloat sinpi_, N=14) on the already-reduced argument.
@@ -1201,9 +1201,9 @@ routine UnpackedFloat[M, L, W].sinpi_poly() -> UnpackedFloat[M, L, W]
   var negsq = p.mul(you: p).neg()
   var d = UnpackedFloat[M, L, W].sin_coef(14_s64)
   var i = 13_s64
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].sin_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   return d.mul(you: p.neg())
 
 ### cospi polynomial (TLFloat cospi_, N=14) on the already-reduced argument.
@@ -1213,9 +1213,9 @@ routine UnpackedFloat[M, L, W].cospi_poly() -> UnpackedFloat[M, L, W]
   var negsq = p.mul(you: p).neg()
   var d = UnpackedFloat[M, L, W].cos_coef(15_s64)
   var i = 14_s64
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     d = d.fma(b: negsq, c: UnpackedFloat[M, L, W].cos_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   return d
 
 ### Returns `sin(pi*me)`.
@@ -1230,15 +1230,15 @@ routine F128.sinpi() -> F128
   var x = a.ldexp(e: 1_s64)
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
   var lx = x.ldexp(e: 1_s64).intlsb()
-  var lx3 = bit_and[S64](a: lx, b: 3_s64)
+  var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
   # Exact zeros at integer arguments (sin(pi*integer) = 0), preserving the signed zero.
-  if ((signed_ge[S64](a: lx, b: 0_s64) and lx3 == 0_s64) or (signed_lt[S64](a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
+  if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
     return UnpackedFloat[U128, U256, 128].zero(sign: x.sign()).to_f128()
   # Quadrant selects cospi vs sinpi polynomial; a further bit flips the sign.
   var z = y.cospi_poly()
-  if int_ne[S64](a: bit_and[S64](a: add[S64](a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
     z = y.sinpi_poly()
-  if int_ne[S64](a: bit_and[S64](a: add[S64](a: lx, b: 7_s64), b: 4_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 7_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
   return z.to_f128()
 
@@ -1252,13 +1252,13 @@ routine F128.cospi() -> F128
   var x = a.ldexp(e: 1_s64)
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
   var lx = x.ldexp(e: 1_s64).intlsb()
-  var lx3and2 = bit_and[S64](a: add[S64](a: lx, b: 3_s64), b: 2_s64)
+  var lx3and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64)
   if lx3and2 == 0_s64 and y.iszero()
     return UnpackedFloat[U128, U256, 128].zero(sign: false).to_f128()
   var z = y.sinpi_poly()
-  if int_ne[S64](a: lx3and2, b: 0_s64)
+  if LLVM::int_ne(a: lx3and2, b: 0_s64)
     z = y.cospi_poly()
-  if int_ne[S64](a: bit_and[S64](a: add[S64](a: lx, b: 1_s64), b: 4_s64), b: 0_s64)
+  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
   return z.to_f128()
 
@@ -1272,18 +1272,18 @@ routine F128.tanpi() -> F128
   var x = a.ldexp(e: 1_s64)
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
   var lx = x.ldexp(e: 1_s64).intlsb()
-  var lx3 = bit_and[S64](a: lx, b: 3_s64)
-  var lx4 = bit_and[S64](a: lx, b: 4_s64)
-  if ((signed_ge[S64](a: lx, b: 0_s64) and lx3 == 0_s64) or (signed_lt[S64](a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[U128, U256, 128].zero(sign: int_ne[S64](a: lx4, b: 0_s64)).to_f128()
+  var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
+  var lx4 = LLVM::bit_and(a: lx, b: 4_s64)
+  if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
+    return UnpackedFloat[U128, U256, 128].zero(sign: LLVM::int_ne(a: lx4, b: 0_s64)).to_f128()
   var pr = UnpackedFloat[U128, U256, 128].pi().mul(you: y).tanxy()
-  var lx1and2 = bit_and[S64](a: add[S64](a: lx, b: 1_s64), b: 2_s64)
+  var lx1and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 2_s64)
   var z = pr.item0.div(you: pr.item1)
-  if int_ne[S64](a: lx1and2, b: 0_s64)
+  if LLVM::int_ne(a: lx1and2, b: 0_s64)
     z = pr.item1.div(you: pr.item0)
   if z.isinf()
-    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: int_eq[S64](a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
-  if int_ne[S64](a: lx1and2, b: 0_s64)
+    z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: LLVM::int_eq(a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
+  if LLVM::int_ne(a: lx1and2, b: 0_s64)
     z = z.neg()
   return z.to_f128()
 
@@ -1299,18 +1299,18 @@ routine UnpackedFloat[M, L, W].erf_cf(levels: S64) -> UnpackedFloat[M, L, W]
   # caller to its precision target (F256 needs ~120; F128/D64 far fewer). The seed numerator is
   # 2*levels+1 (odd partial numerator just past the deepest level).
   var zz = me.mul(you: me)
-  var n = UnpackedFloat[M, L, W].from_s64(src: add[S64](a: mul[S64](a: 2_s64, b: levels), b: 1_s64))
+  var n = UnpackedFloat[M, L, W].from_s64(src: LLVM::add(a: LLVM::mul(a: 2_s64, b: levels), b: 1_s64))
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var i = levels
-  while signed_gt[S64](a: i, b: 0_s64)
-    var i2 = mul[S64](a: i, b: 2_s64)
+  while LLVM::signed_gt(a: i, b: 0_s64)
+    var i2 = LLVM::mul(a: i, b: 2_s64)
     var t = n
-    n = n.mul(you: UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: i2, b: 1_s64))).add(you: zz.mul(you: UnpackedFloat[M, L, W].from_s64(src: i2)).mul(you: d))
+    n = n.mul(you: UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: i2, b: 1_s64))).add(you: zz.mul(you: UnpackedFloat[M, L, W].from_s64(src: i2)).mul(you: d))
     d = t
     t = n
-    n = n.mul(you: UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: i2, b: 3_s64))).sub(you: zz.mul(you: UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: i2, b: 2_s64))).mul(you: d))
+    n = n.mul(you: UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: i2, b: 3_s64))).sub(you: zz.mul(you: UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: i2, b: 2_s64))).mul(you: d))
     d = t
-    i = sub[S64](a: i, b: 2_s64)
+    i = LLVM::sub(a: i, b: 2_s64)
   # erf(z) = (2/sqrt(pi)) * z * e^(-z^2) * (d/n); the ldexp(1) = factor of 2, rsqrt_pi = 1/sqrt(pi).
   d = d.ldexp(e: 1_s64)
   return me.mul(you: UnpackedFloat[M, L, W].rsqrt_pi()).mul(you: zz.neg().exp(n: 22_s64)).mul(you: d.div(you: n))
@@ -1324,14 +1324,14 @@ routine UnpackedFloat[M, L, W].erfc_cf(levels: S64) -> UnpackedFloat[M, L, W]
   var n = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var d = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   var i = levels
-  while signed_gt[S64](a: i, b: 0_s64)
+  while LLVM::signed_gt(a: i, b: 0_s64)
     var t = n
     n = n.add(you: UnpackedFloat[M, L, W].from_s64(src: i).ldexp(e: -1_s64).mul(you: d))
     d = t
     t = n
-    n = zz.mul(you: n).add(you: UnpackedFloat[M, L, W].from_s64(src: sub[S64](a: i, b: 1_s64)).ldexp(e: -1_s64).mul(you: d))
+    n = zz.mul(you: n).add(you: UnpackedFloat[M, L, W].from_s64(src: LLVM::sub(a: i, b: 1_s64)).ldexp(e: -1_s64).mul(you: d))
     d = t
-    i = sub[S64](a: i, b: 2_s64)
+    i = LLVM::sub(a: i, b: 2_s64)
   # erfc(z) = (1/sqrt(pi)) * z * e^(-z^2) * (d/n).
   return me.mul(you: UnpackedFloat[M, L, W].rsqrt_pi()).mul(you: zz.neg().exp(n: 22_s64)).mul(you: d.div(you: n))
 
@@ -1420,17 +1420,17 @@ routine UnpackedFloat[M, L, W].lgamma_core() -> UFSign[M, L, W]
   var twenty = UnpackedFloat[M, L, W].from_s64(src: 20_s64)
   if inv.lt(you: twenty)
     var ii = inv.to_s64()
-    while signed_lt[S64](a: ii, b: 20_s64)
+    while LLVM::signed_lt(a: ii, b: 20_s64)
       w = w.mul(you: UnpackedFloat[M, L, W].from_s64(src: ii).add(you: fr))
-      ii = add[S64](a: ii, b: 1_s64)
+      ii = LLVM::add(a: ii, b: 1_s64)
     a = twenty.add(you: fr)
   # Stirling asymptotic series in 1/a^2 (Bernoulli coefficients, degree 35), Horner.
   var inv_aa = one.div(you: a.mul(you: a))
   var y = UnpackedFloat[M, L, W].gamma_coef(35_s64)
   var i = 34_s64
-  while signed_ge[S64](a: i, b: 0_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     y = y.fma(b: inv_aa, c: UnpackedFloat[M, L, W].gamma_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   # Stirling: lgamma(a) = series/a + (a-1/2)*ln a - a + (1/2)*ln(2pi); subtract ln|w|
   # to undo the argument augmentation.
   var loga = a.log(n: 23_s64, m: 0_s64, t: 0_s64)
@@ -1460,16 +1460,16 @@ routine UnpackedFloat[M, L, W].lgamma_core_p(sdeg: S64, logn: S64, sinn: S64) ->
   var twenty = UnpackedFloat[M, L, W].from_s64(src: 20_s64)
   if inv.lt(you: twenty)
     var ii = inv.to_s64()
-    while signed_lt[S64](a: ii, b: 20_s64)
+    while LLVM::signed_lt(a: ii, b: 20_s64)
       w = w.mul(you: UnpackedFloat[M, L, W].from_s64(src: ii).add(you: fr))
-      ii = add[S64](a: ii, b: 1_s64)
+      ii = LLVM::add(a: ii, b: 1_s64)
     a = twenty.add(you: fr)
   var inv_aa = one.div(you: a.mul(you: a))
   var y = UnpackedFloat[M, L, W].gamma_coef(sdeg)
-  var i = sub[S64](a: sdeg, b: 1_s64)
-  while signed_ge[S64](a: i, b: 0_s64)
+  var i = LLVM::sub(a: sdeg, b: 1_s64)
+  while LLVM::signed_ge(a: i, b: 0_s64)
     y = y.fma(b: inv_aa, c: UnpackedFloat[M, L, W].gamma_coef(i))
-    i = sub[S64](a: i, b: 1_s64)
+    i = LLVM::sub(a: i, b: 1_s64)
   var loga = a.log(n: logn, m: 0_s64, t: 0_s64)
   y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[M, L, W].ln_2pi()))
   y = y.sub(you: w.abs().log(n: logn, m: 0_s64, t: 0_s64))

@@ -10,7 +10,7 @@ public enum CallLoweringKind
     /// <summary>Direct standalone routine call.</summary>
     DirectRoutine,
 
-    /// <summary>Direct method call on a concrete receiver type.</summary>
+    /// <summary>Direct memberRoutine call on a concrete receiver type.</summary>
     DirectMemberRoutine,
 
     /// <summary>Type construction through a creator or constructor-style call.</summary>
@@ -25,7 +25,7 @@ public enum CallLoweringKind
     /// <summary>Collection construction using literal-style lowering semantics.</summary>
     CollectionConstruction,
 
-    /// <summary>BuilderService/compiler metadata intrinsic.</summary>
+    /// <summary>BuilderQuery/compiler metadata intrinsic.</summary>
     BuilderIntrinsic,
 
     /// <summary>LLVM intrinsic template call.</summary>

@@ -28,6 +28,11 @@
     "keywords": {
       "patterns": [
         {
+          "comment": "Annotations (@target, @link, @positional, @reshaping, @readonly, @writable, @llvm, @inline, @innate, @override, @overridable, @crash_only, @dangerous, @generated, ...)",
+          "name": "storage.modifier.annotation.razorforge",
+          "match": "@\\w+"
+        },
+        {
           "comment": "Type declarations",
           "name": "storage.type.razorforge",
           "match": "\\b(routine|entity|record|choice|variant|protocol|flags|crashable)\\b"
@@ -35,22 +40,32 @@
         {
           "comment": "Variable declarations",
           "name": "keyword.declaration.razorforge",
-          "match": "\\b(var|preset|common|define|lateinit|uninit)\\b"
+          "match": "\\b(var|preset|common|define|lateinit)\\b"
         },
         {
           "comment": "Access and routine modifiers",
           "name": "keyword.modifier.razorforge",
-          "match": "\\b(secret|posted|external|dangerous|suspended|threaded)\\b"
+          "match": "\\b(secret|posted|dangerous|suspended|threaded)\\b"
         },
         {
           "comment": "Control flow",
           "name": "keyword.control.razorforge",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard)\\b"
+          "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard|pierce)\\b"
+        },
+        {
+          "comment": "Compile-time reflection SOURCE keywords (reserved; expand h in openmemvarof(T)/allmemvarof(T)/branchof(T)/caseof(T))",
+          "name": "keyword.control.razorforge",
+          "match": "\\b(openmemvarof|allmemvarof|branchof|caseof)\\b"
+        },
+        {
+          "comment": "Compile-time reflection metadata accessors — contextual builtins, NOT reserved keywords (nameof(m)/typeof(m)/valueof(c)/…)",
+          "name": "support.function.builtin.razorforge",
+          "match": "\\b(nameof|orderof|placeof|sizeof|typeof|typeidof|valueof|visibilityof)\\b"
         },
         {
           "comment": "Type and pattern operations",
           "name": "keyword.operator.razorforge",
-          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but)\\b"
+          "match": "\\b(is|isnot|obeys|disobeys|in|notin|but|everywhere)\\b"
         },
         {
           "comment": "Module system",

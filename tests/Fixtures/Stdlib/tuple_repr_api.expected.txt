@@ -1,0 +1,6 @@
+(1, 2)
+Core.Tuple[Core.S32, Core.S32](1, 2)
+(42, hi, true)
+Core.Tuple[Core.S32, Core.Text, Core.Bool](42, hi, true)
+((1, 2), 3)
+DONE

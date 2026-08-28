@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 import Core.SecureHashKey
 
 secret preset DICT_INITIAL_CAPACITY: U64 = 16u64
@@ -21,7 +21,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### **When to use**
 ### - You are storing data derived from untrusted input (e.g. HTTP headers, user IDs, file names).
 ### - You need the same insert/lookup/remove interface as {Dict[K, V]} with a security guarantee.
-### - Use {FastDict[K, V]} instead when the key space is fully trusted and throughput matters more.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -33,9 +32,8 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ###
 ### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
 ### :typeparam V: The value type associated with each key.
-### :see: {FastDict[K, V]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Set[T]} for the set counterpart.
-entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container
+entity Dict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable, Container, Copyable
 needs K obeys Hashable, Equatable
 relates DictEmittable[K, V] as Iter
 relates K as Key
@@ -78,12 +76,12 @@ routine Dict[K, V](key: SecureHashKey) -> Dict[K, V]
     k1: key.k1
   )
   danger
-    dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+    dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
-    dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
+    dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
 routine Dict[K, V](key: SecureHashKey, capacity: U64) -> Dict[K, V]
@@ -108,12 +106,12 @@ routine Dict[K, V](key: SecureHashKey, capacity: U64) -> Dict[K, V]
     k1: key.k1
   )
   danger
-    dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
+    dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
-    dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
+    dict.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are
@@ -212,7 +210,7 @@ routine Dict[K, V].should_rehash() -> Bool
     return true
   return false
 
-@migratable
+@reshaping
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap
@@ -233,12 +231,12 @@ routine Dict[K, V].rehash()
     new_ecap = old_ecap *% 2u64
 
   danger
-    me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+    me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
     me.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * new_ecap))
     me.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * new_ecap))
-    me.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(new_ecap))
+    me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
   me.capacity = new_cap
   me.entries_cap = new_ecap
   me.count = 0u64
@@ -263,15 +261,15 @@ routine Dict[K, V].rehash()
 
   danger
     if not old_ctrl.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
-      rf_invalidate(pointer_to_int[U64, Address](old_indices))
+      C::rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
     if not old_keys.is_none()
-      rf_invalidate(pointer_to_int[K, Address](old_keys))
+      C::rf_invalidate(LLVM::pointer_to_int[K, Address](old_keys))
     if not old_vals.is_none()
-      rf_invalidate(pointer_to_int[V, Address](old_vals))
+      C::rf_invalidate(LLVM::pointer_to_int[V, Address](old_vals))
     if not old_entry_live.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](old_entry_live))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================
@@ -288,7 +286,7 @@ routine Dict[K, V].is_empty() -> Bool
 
 routine Dict[K, V].clear()
   danger
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
   me.entries_used = 0u64
@@ -340,13 +338,13 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 @readonly
-routine Dict[K, V].getitem!(key: Referring[K]) -> V
+routine Dict[K, V].getitem!(key: Accessing[K]) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val_at(me.read_index(slot))
 
-routine Dict[K, V].setitem!(key: Referring[K], value: V)
+routine Dict[K, V].setitem!(key: Accessing[K], value: V)
   if key notin me
     absent
   var slot = me.find_slot(key)
@@ -445,7 +443,7 @@ routine Dict[K, V].copy() -> Dict[K, V]
 needs K obeys Copyable
 needs V obeys Copyable
   var result = Dict[K, V]()
-  for entry in me
+  each entry in me
     discard result.add(key: entry.key.copy(), value: entry.value.copy())
   return steal result
 
@@ -453,28 +451,28 @@ needs V obeys Copyable
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine Dict[K, V].represent() -> Text
   if me.is_empty()
     return "{:}"
   var result = "{"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     first = false
   result = result + "}"
   return steal result
 
-@readonly
+@[readonly, override]
 routine Dict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for entry in me
+  each entry in me
     if not first
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     first = false
   result = result + "})"
   return steal result
@@ -484,9 +482,9 @@ routine Dict[K, V].diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Dict[K, V].eq(other: Referring[Dict[K, V]]) -> Bool
+routine Dict[K, V].eq(you: Accessing[Dict[K, V]]) -> Bool
 needs V obeys Equatable
-  if me.count != other.count
+  if me.count != you.count
     return false
   var i = 0u64
   while i < me.entries_used
@@ -494,11 +492,11 @@ needs V obeys Equatable
       if me.entry_live.offset(ByteSize(bytes: i)).peek() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).peek()
         var v = me.vals.offset(V.data_size() * i).peek()
-        var slot = other.find_slot(k)
-        if slot >= other.capacity
+        var slot = you.find_slot(k)
+        if slot >= you.capacity
           return false
-        var other_ei = other.indices.offset(U64.data_size() * slot).peek()
-        var other_v = other.vals.offset(V.data_size() * other_ei).peek()
+        var other_ei = you.indices.offset(U64.data_size() * slot).peek()
+        var other_v = you.vals.offset(V.data_size() * other_ei).peek()
         if v != other_v
           return false
     i = i +% 1u64
@@ -506,10 +504,9 @@ needs V obeys Equatable
 
 ### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine Dict[K, V].serialize() -> SerialValue
-needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
-  for __e in me
+  each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

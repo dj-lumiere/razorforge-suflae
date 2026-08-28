@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 ### A growable double-ended queue backed by a power-of-two circular buffer.
 ###
@@ -217,7 +217,7 @@ routine Deque[T].clear()
 
 ### Grows the backing storage using the deque's standard doubling policy.
 ### Empty deques start at four slots; subsequent growth always doubles.
-@migratable
+@reshaping
 routine Deque[T].grow()
   var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
@@ -228,7 +228,7 @@ routine Deque[T].grow()
 ### the new buffer in logical order so the front moves to physical slot 0.
 ### Requests no larger than the current capacity are ignored.
 ### :param new_capacity: The minimum element count to accommodate.
-@migratable
+@reshaping
 routine Deque[T].reserve(new_capacity: U64)
   var actual = 1u64
   while actual < new_capacity
@@ -281,6 +281,22 @@ routine Deque[T].setitem!(index: U64, value: T)
   me.write_at(physical_idx: physical_idx, value: value)
   return
 
+### Returns a NEW deque holding independent copies of the elements in `range` — the slice form of
+### indexing (`deque[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
+### `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range reverses. Positions at or past
+### `count` are skipped. Each element is copied through `copy`, so the result shares no structure with
+### the original — the value-semantics counterpart to `List`/`Text` slicing.
+### :param range: The logical index range to extract.
+### :returns: A new `Deque[T]` owning copies of the selected elements.
+@readonly
+routine Deque[T].getitem(range: Range[U64]) -> Deque[T]
+needs T obeys Copyable
+  var result = Deque[T]()
+  each i in range
+    if i < me.count
+      result.add_last(value: me[i].copy())
+  return steal result
+
 # ============================================================================
 # Rotation
 # ============================================================================
@@ -294,7 +310,7 @@ routine Deque[T].rotate_left(n: U64)
   # Front elements move to back
   if me.count == 0u64
     return
-  var shift = unsigned_rem[U64](n, me.count)
+  var shift = LLVM::unsigned_rem(n, me.count)
   me.start = me.wrap_index(me.start +% shift)
   return
 
@@ -307,7 +323,7 @@ routine Deque[T].rotate_right(n: U64)
   # Back elements move to front
   if me.count == 0u64
     return
-  var shift = unsigned_rem[U64](n, me.count)
+  var shift = LLVM::unsigned_rem(n, me.count)
   if shift > me.start
     me.start = me.capacity -% (shift -% me.start)
   else
@@ -398,41 +414,41 @@ needs T obeys Equatable
 # Comparison Operations
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine Deque[T].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return steal result
 
-@readonly
+@[readonly, override]
 routine Deque[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return steal result
 
 ### Returns true if both deques contain the same elements in the same logical order.
-### :param other: The other deque to compare against.
+### :param you: The other deque to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine Deque[T].eq(other: Referring[Deque[T]]) -> Bool
+routine Deque[T].eq(you: Accessing[Deque[T]]) -> Bool
 needs T obeys Equatable
-  if me.count != other.count
+  if me.count != you.count
     return false
   var i = 0u64
   while i < me.count
-    if me[i] != other[i]
+    if me[i] != you[i]
       return false
     i = i +% 1u64
   return true
@@ -451,10 +467,9 @@ dangerous routine Deque[T].destroy()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine Deque[T].serialize() -> SerialValue
-needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

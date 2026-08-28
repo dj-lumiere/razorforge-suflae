@@ -25,7 +25,7 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           consume(handle: ra)
                           return
                         """;
@@ -50,8 +50,8 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          consume(handle: ra.retain())
+                          var ra = Retained(from: steal a)
+                          consume(handle: ra.share())
                           return
                         """;
 
@@ -79,9 +79,9 @@ public class ImplicitWrapperCopyCallArgTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Passing a trivially-copyable record by name is accepted.</summary>
+    /// <summary>Passing a trivially-Assignable record by name is accepted.</summary>
     [Fact]
-    public void Analyze_CallArg_TriviallyCopyableRecord_IsAccepted()
+    public void Analyze_CallArg_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point
@@ -118,7 +118,7 @@ public class ImplicitWrapperCopyCallArgTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           consume(tag: 7, handle: ra)
                           return
                         """;

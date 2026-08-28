@@ -9,7 +9,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the move-on-consume rule:
 /// - `a.retain()` / `a.track()` on a raw entity or `T` source consumes the receiver.
-/// - `.retain()` on an already-RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump
+/// - `.retain()` on an already-RC handle (`Retained[T]`, `Guarded[T]`, ...) is a refcount bump
 ///   and the source remains valid.
 /// Use-after-consume is reported as <c>S615 UseAfterSteal</c>.
 /// </summary>
@@ -25,7 +25,7 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           show(a.value)
                           return
                         """;
@@ -56,7 +56,7 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var b = Box(inner: Node(value: 1))
-                          var ra = b.inner.retain()
+                          var ra = Retained(from: steal b.inner)
                           show(b.inner.value)
                           return
                         """;
@@ -85,8 +85,8 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var r1 = a.retain()
-                          var r2 = a.retain()
+                          var r1 = Retained(from: steal a)
+                          var r2 = Retained(from: steal a)
                           return
                         """;
 
@@ -105,8 +105,8 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           show(ra.value)
                           return
                         """;
@@ -126,8 +126,8 @@ public class MoveOnConsumeTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var t = ra.track()
+                          var ra = Retained(from: steal a)
+                          var t = ra.observe()
                           show(ra.value)
                           return
                         """;

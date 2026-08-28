@@ -1,0 +1,35 @@
+module Tests/Stdlib/WhenAndGuardApi
+import IO/Console
+
+# when-arm guards use `and` (not `if`); the guard may reference the arm binding, which is
+# materialised before the guard runs. A failed guard falls through to the next arm.
+
+variant Shape
+  S32
+  Text
+  None
+
+routine classify(s: Shape) -> Text
+  when s
+    is S32 n and 0 < n < 100     => return f"small:{n}"
+    is S32 n and n >= 100        => return f"big:{n}"
+    is S32 n                     => return f"nonpos:{n}"
+    is Text t and t.count() > 3  => return f"long:{t}"
+    is Text t                    => return f"short:{t}"
+    else                         => return "none"
+
+routine start()
+  var a: Shape = 7_s32
+  var b: Shape = 250_s32
+  var c: Shape = -5_s32
+  var d: Shape = "hello"
+  var e: Shape = "hi"
+  var f: Shape = none
+
+  show(classify(s: a))
+  show(classify(s: b))
+  show(classify(s: c))
+  show(classify(s: d))
+  show(classify(s: e))
+  show(classify(s: f))
+  return

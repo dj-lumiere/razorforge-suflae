@@ -76,20 +76,20 @@ public class ProtocolValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for protocol writable impl migratable and reports the expected error.
+    /// Verifies semantic analysis behavior for protocol writable impl reshaping and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ProtocolWritableImplMigratable_ReportsError()
+    public void Analyze_ProtocolWritableImplReshaping_ReportsError()
     {
-        // Protocol method is writable by default; the impl is @migratable — MORE mutating than
+        // Protocol memberRoutine is writable by default; the impl is @reshaping — MORE mutating than
         // the contract allows, so it is rejected (a Modifying-token caller could trigger relocation).
         string source = """
                         protocol Mutator
                           routine Me.mutate()
                         entity Thing obeys Mutator
                           value: S32
-                        @migratable
+                        @reshaping
                         routine Thing.mutate()
                           return
                         """;
@@ -101,21 +101,21 @@ public class ProtocolValidationTests
 
     #endregion
 
-    #region Migratable protocol contract
+    #region Reshaping protocol contract
 
     /// <summary>
-    /// Verifies that a @migratable protocol method implemented as @migratable produces no error.
+    /// Verifies that a @reshaping protocol memberRoutine implemented as @reshaping produces no error.
     /// </summary>
     [Fact]
-    public void Analyze_ProtocolMigratableImplMigratable_NoError()
+    public void Analyze_ProtocolReshapingImplReshaping_NoError()
     {
         string source = """
                         protocol Relocatable
-                          @migratable
+                          @reshaping
                           routine Me.relocate()
                         entity Widget obeys Relocatable
                           value: S32
-                        @migratable
+                        @reshaping
                         routine Widget.relocate()
                           return
                         """;
@@ -126,15 +126,15 @@ public class ProtocolValidationTests
     }
 
     /// <summary>
-    /// Verifies that a @migratable protocol method implemented as plain writable produces no error
-    /// (writable is more restrictive than migratable, so the contract is satisfied).
+    /// Verifies that a @reshaping protocol memberRoutine implemented as plain writable produces no error
+    /// (writable is more restrictive than reshaping, so the contract is satisfied).
     /// </summary>
     [Fact]
-    public void Analyze_ProtocolMigratableImplWritable_NoError()
+    public void Analyze_ProtocolReshapingImplWritable_NoError()
     {
         string source = """
                         protocol Relocatable
-                          @migratable
+                          @reshaping
                           routine Me.relocate()
                         entity Widget obeys Relocatable
                           value: S32
@@ -148,10 +148,10 @@ public class ProtocolValidationTests
     }
 
     /// <summary>
-    /// Verifies that a @readonly protocol method implemented as @migratable reports a contract violation.
+    /// Verifies that a @readonly protocol memberRoutine implemented as @reshaping reports a contract violation.
     /// </summary>
     [Fact]
-    public void Analyze_ProtocolReadonlyImplMigratable_ReportsError()
+    public void Analyze_ProtocolReadonlyImplReshaping_ReportsError()
     {
         string source = """
                         protocol Reader
@@ -159,7 +159,7 @@ public class ProtocolValidationTests
                           routine Me.read() -> S32
                         entity Sensor obeys Reader
                           value: S32
-                        @migratable
+                        @reshaping
                         routine Sensor.read() -> S32
                           return me.value
                         """;

@@ -14,11 +14,11 @@ record Tagged
   pass
 
 routine Tagged.create(from: S64) -> Tagged
-  return reinterpret_bits[S64, Tagged](from)
+  return LLVM::reinterpret_bits[S64, Tagged](from)
 
 @readonly
 routine Tagged.value() -> S64
-  return reinterpret_bits[Tagged, S64](me)
+  return LLVM::reinterpret_bits[Tagged, S64](me)
 
 @readonly
 routine Tagged.with_added(n: S64) -> Tagged

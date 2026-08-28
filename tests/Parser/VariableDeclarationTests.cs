@@ -548,11 +548,11 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call chain.
+    /// Verifies that the parser accepts memberRoutine call chain.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallChain()
+    public void Parse_memberRoutineCallChain()
     {
         string source = """
                         routine test()

@@ -1,0 +1,62 @@
+module Tests/Stdlib/CSubsystemApi
+import IO/Console
+import BuilderQuery
+
+# Platform-INDEPENDENT surface of the C FFI scalar/string wrappers. Every value here fits BOTH data
+# models (CLong/CULong ≤ 2^31-1, CWChar ≤ 0xFFFF), so the observable output is identical on Windows
+# (LLP64) and Unix (LP64). The platform-DIVERGENT behavior (widths, overflow at the 32-/16-bit
+# boundary, supplementary code units) is covered by the OS-keyed CFfiPlatformWidthTests instead.
+
+# Builds a 3-element (+ null) wide C string from BMP code units, allocating a fresh buffer whose
+# element stride matches the platform's wchar_t width.
+routine make_wstr(a: U32, b: U32, c: U32) -> CWStr
+  danger
+    var elem = CWChar.data_size().byte_size()
+    var nbytes = 4u64 * elem
+    var raw = Hijacked[Byte](from: C::rf_allocate_dynamic(nbytes))
+    var buf = raw.recast_as[CWChar]()
+    buf.stride(count: 0s64).poke(value: CWChar(from: a))
+    buf.stride(count: 1s64).poke(value: CWChar(from: b))
+    buf.stride(count: 2s64).poke(value: CWChar(from: c))
+    buf.stride(count: 3s64).poke(value: CWChar(from: 0u32))
+    return CWStr(from_ptr: buf)
+
+routine start()
+  # ----- CLong -----
+  var la = CLong(from: 100s64)
+  var lb = CLong(from: 100s64)
+  var lc = CLong(from: 250s64)
+  show(f"CLong repr={la} diag={la.diagnose()}")
+  show(f"CLong eq={la.eq(you: lb)} ne={la.eq(you: lc)} cmp_lt={la.cmp(you: lc)} cmp_eq={la.cmp(you: lb)}")
+  show(f"CLong hash_eq={la.hash(k0: 0u64, k1: 0u64) == lb.hash(k0: 0u64, k1: 0u64)}")
+
+  # ----- CULong -----
+  var ua = CULong(from: 4000u64)
+  var ub = CULong(from: 4000u64)
+  var uc = CULong(from: 9000u64)
+  show(f"CULong repr={ua} diag={ua.diagnose()}")
+  show(f"CULong eq={ua.eq(you: ub)} cmp_lt={ua.cmp(you: uc)} cmp_gt={uc.cmp(you: ua)}")
+  show(f"CULong hash_eq={ua.hash(k0: 0u64, k1: 0u64) == ub.hash(k0: 0u64, k1: 0u64)}")
+
+  # ----- CWChar (BMP: 'A'=65, euro sign U+20AC=8364) -----
+  var wa = CWChar(from: 65u32)
+  var wb = CWChar(from: 65u32)
+  var we = CWChar(from: 8364u32)
+  show(f"CWChar repr={wa} cp={wa.codepoint()} diag={wa.diagnose()}")
+  show(f"CWChar euro repr={we} cp={we.codepoint()}")
+  show(f"CWChar eq={wa.eq(you: wb)} cmp_lt={wa.cmp(you: we)}")
+
+  # ----- CWStr (BMP wide strings) -----
+  var s = make_wstr(a: 72u32, b: 105u32, c: 33u32)   # "Hi!"
+  var s2 = make_wstr(a: 72u32, b: 105u32, c: 33u32)   # "Hi!"
+  var s3 = make_wstr(a: 72u32, b: 105u32, c: 63u32)   # "Hi?"
+  show(f"CWStr count={s.count()} is_null={s.is_null()} is_empty={s.is_empty()}")
+  show(f"CWStr eq={s.eq(you: s2)} ne={s.eq(you: s3)} cmp_lt={s.cmp(you: s3)}")
+  show(f"CWStr null is_null={CWSTR_NULL.is_null()} is_empty={CWSTR_NULL.is_empty()}")
+  danger
+    show(f"CWStr get0={s.getitem(index: 0u64).codepoint()} get2={s.getitem(index: 2u64).codepoint()}")
+    var tail = s.offset(n: 1u64)
+    show(f"CWStr offset1 count={tail.count()} get0={tail.getitem(index: 0u64).codepoint()}")
+
+  show("DONE")
+  return

@@ -1,0 +1,5 @@
+SerialValue({"item0": SerialValue(1), "item1": SerialValue(2)})
+SerialValue({"item0": SerialValue(42), "item1": SerialValue(hi), "item2": SerialValue(true)})
+SerialValue({"item0": SerialValue({"item0": SerialValue(1), "item1": SerialValue(2)}), "item1": SerialValue(3)})
+SerialValue({"item0": SerialValue({"x": SerialValue(7), "y": SerialValue(8)}), "item1": SerialValue(9)})
+DONE

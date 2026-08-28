@@ -1,10 +1,10 @@
 module Core
 
-### Readers-XOR-writer discipline — many concurrent readers (`Inspecting[T]`) OR one exclusive
-### writer (`Claiming[T]`). A spinlock read-write lock: readers bump an atomic count after checking
+### Readers-XOR-writer discipline — many concurrent readers (`Consulting[T]`) OR one exclusive
+### writer (`Amending[T]`). A spinlock read-write lock: readers bump an atomic count after checking
 ### no writer is active (rechecking to close the race); a writer claims a flag then waits for the
 ### reader count to drain. Spin-based, like {Exclusive}.
-### :see: {LockPolicy}, {Exclusive}, {Shared}, {Atomic}
+### :see: {LockPolicy}, {Exclusive}, {Guarded}, {Atomic}
 record MultiRead obeys LockPolicy
   ### Number of active readers.
   secret readers: Atomic[S32]
@@ -27,7 +27,7 @@ routine MultiRead() -> MultiRead
 ### is active. Crashes with {ReentrantLockError} if the CALLING thread already holds the WRITE lock
 ### (the read would wait for a writer that is itself — a self-deadlock).
 routine MultiRead.acquire_read()
-  var tid = rf_current_thread_id()
+  var tid = C::rf_current_thread_id()
   loop
     if me.writer.load() == 0_u8
       discard me.readers.fetch_add(delta: 1_s32)
@@ -48,7 +48,7 @@ routine MultiRead.release_read()
 ### Crashes with {ReentrantLockError} on a re-entrant write acquire (the calling thread already
 ### holds the write lock).
 routine MultiRead.acquire_write()
-  var tid = rf_current_thread_id()
+  var tid = C::rf_current_thread_id()
   loop
     if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
       me.writer_owner.store(desired: tid)
@@ -120,7 +120,7 @@ routine MultiRead.try_add_inspector() -> Bool
 routine MultiRead.try_add_claimer() -> Bool
   if me.writer.compare_exchange(expected: 0_u8, desired: 1_u8)
     if me.readers.load() == 0_s32
-      me.writer_owner.store(desired: rf_current_thread_id())
+      me.writer_owner.store(desired: C::rf_current_thread_id())
       return true
     me.writer.store(desired: 0_u8)
   return false

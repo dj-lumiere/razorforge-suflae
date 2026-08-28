@@ -1,0 +1,9 @@
+module Core
+
+### Suflae SF-realm Core split list — wrapper over RF::Core.SplitList[T].
+### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
+entity SplitList[T]
+  secret inner: RF::Core.SplitList[T]
+
+routine SplitList[T]() -> SplitList[T]
+  return SplitList[T](inner: RF::Core.SplitList[T]())

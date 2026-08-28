@@ -8,7 +8,7 @@ import Collections
 ### good fit for packed numeric data, graphics formats, and bandwidth-sensitive
 ### workloads.
 @llvm("half")
-record F16 obeys Numeric, Ordered
+record F16 obeys Numeric, Ordered, Assignable, Copyable
   pass
 
 # IEEE 754 half precision constants
@@ -31,75 +31,75 @@ preset F16_SQRT_2: F16 = 1.414063_f16
 ### :returns: The corresponding `F16` value.
 @inline
 routine F16(from: S8) -> F16
-  return signed_to_float[S8, F16](from)
+  return LLVM::signed_to_float[S8, F16](from)
 
 ### Converts an `S16` into half-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 @inline
 routine F16(from: S16) -> F16
-  return signed_to_float[S16, F16](from)
+  return LLVM::signed_to_float[S16, F16](from)
 
 ### Converts an `S32` into half-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: S32) -> F16
-  return signed_to_float[S32, F16](from).finite()
+  return LLVM::signed_to_float[S32, F16](from).finite()
 
 ### Converts an `S64` into half-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: S64) -> F16
-  return signed_to_float[S64, F16](from).finite()
+  return LLVM::signed_to_float[S64, F16](from).finite()
 
 ### Converts an `S128` into half-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: S128) -> F16
-  return signed_to_float[S128, F16](from).finite()
+  return LLVM::signed_to_float[S128, F16](from).finite()
 
 ### Converts a `U8` into half-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F16` value.
 @inline
 routine F16(from: U8) -> F16
-  return unsigned_to_float[U8, F16](from)
+  return LLVM::unsigned_to_float[U8, F16](from)
 
 ### Converts a `U16` into half-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: U16) -> F16
-  return unsigned_to_float[U16, F16](from).finite()
+  return LLVM::unsigned_to_float[U16, F16](from).finite()
 
 ### Converts a `U32` into half-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: U32) -> F16
-  return unsigned_to_float[U32, F16](from).finite()
+  return LLVM::unsigned_to_float[U32, F16](from).finite()
 
 ### Converts a `U64` into half-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: U64) -> F16
-  return unsigned_to_float[U64, F16](from).finite()
+  return LLVM::unsigned_to_float[U64, F16](from).finite()
 
 ### Converts a `U128` into half-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: U128) -> F16
-  return unsigned_to_float[U128, F16](from).finite()
+  return LLVM::unsigned_to_float[U128, F16](from).finite()
 
 ### Converts an `S256` into half-precision floating-point form.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: S256) -> F16
-  return signed_to_float[S256, F16](from).finite()
+  return LLVM::signed_to_float[S256, F16](from).finite()
 
 ### Converts a `U256` into half-precision floating-point form.
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F16` value.
 routine F16!(from: U256) -> F16
-  return unsigned_to_float[U256, F16](from).finite()
+  return LLVM::unsigned_to_float[U256, F16](from).finite()
 
 ### Returns an existing `F16` unchanged.
 ### :param from: The half-precision value to forward.
@@ -113,14 +113,14 @@ routine F16(from: F16) -> F16
 ### :returns: The nearest representable `F16` value.
 @inline
 routine F16(from: F32) -> F16
-  return float_narrow[F32, F16](from)
+  return LLVM::float_narrow[F32, F16](from)
 
 ### Narrows a double-precision float to half precision.
 ### :param from: The `F64` value to convert.
 ### :returns: The nearest representable `F16` value.
 @inline
 routine F16(from: F64) -> F16
-  return float_narrow[F64, F16](from)
+  return LLVM::float_narrow[F64, F16](from)
 
 ### Narrows a quadruple-precision float to half precision.
 ### :param from: The `F128` value to convert.
@@ -134,19 +134,19 @@ routine F16(from: F128) -> F16
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16(from: D32) -> F16
-  return float_narrow[F32, F16](F32(from: F64(from)))
+  return LLVM::float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal64 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16(from: D64) -> F16
-  return float_narrow[F32, F16](F32(from: F64(from)))
+  return LLVM::float_narrow[F32, F16](F32(from: F64(from)))
 
 ### Converts a decimal128 value to half-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16(from: D128) -> F16
-  return float_narrow[F32, F16](F32(from: F64(from)))
+  return LLVM::float_narrow[F32, F16](F32(from: F64(from)))
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
@@ -161,7 +161,7 @@ routine F16(from: D128) -> F16
 ### :param you: The addend.
 ### :returns: The half-precision sum (always finite).
 routine F16.add!(you: F16) -> F16
-  var r = float_add[F16](a: me, b: you)
+  var r = LLVM::float_add[F16](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -173,7 +173,7 @@ routine F16.add!(you: F16) -> F16
 ### :param you: The value to subtract.
 ### :returns: The half-precision difference (always finite).
 routine F16.sub!(you: F16) -> F16
-  var r = float_sub[F16](a: me, b: you)
+  var r = LLVM::float_sub[F16](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -185,7 +185,7 @@ routine F16.sub!(you: F16) -> F16
 ### :param you: The multiplier.
 ### :returns: The half-precision product (always finite).
 routine F16.mul!(you: F16) -> F16
-  var r = float_mul[F16](a: me, b: you)
+  var r = LLVM::float_mul[F16](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -198,7 +198,7 @@ routine F16.mul!(you: F16) -> F16
 ### :param you: The divisor.
 ### :returns: The half-precision quotient (always finite).
 routine F16.truediv!(you: F16) -> F16
-  var r = float_div[F16](a: me, b: you)
+  var r = LLVM::float_div[F16](a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
@@ -219,26 +219,26 @@ routine F16.finite!() -> F16
 ### Returns the negated value.
 ### :returns: The resulting `F16` value.
 routine F16.neg() -> F16
-  return float_neg[F16](me)
+  return LLVM::float_neg[F16](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). Plain
 # (NOT `dangerous`): inf/NaN are valid IEEE values, the `_unchecked` spelling is the marker.
 
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
 routine F16.truediv_unchecked(you: F16) -> F16
-  return float_div[F16](a: me, b: you)
+  return LLVM::float_div[F16](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F16.add_unchecked(you: F16) -> F16
-  return float_add[F16](a: me, b: you)
+  return LLVM::float_add[F16](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F16.sub_unchecked(you: F16) -> F16
-  return float_sub[F16](a: me, b: you)
+  return LLVM::float_sub[F16](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F16.mul_unchecked(you: F16) -> F16
-  return float_mul[F16](a: me, b: you)
+  return LLVM::float_mul[F16](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -248,15 +248,15 @@ routine F16.mul_unchecked(you: F16) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F16.eq(you: F16) -> Bool
-  return float_eq[F16](a: me, b: you)
+  return LLVM::float_eq[F16](a: me, b: you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F16.cmp(you: F16) -> ComparisonSign
-  if float_lt[F16](a: me, b: you)
+  if LLVM::float_lt[F16](a: me, b: you)
     return ME_SMALL
-  if float_gt[F16](a: me, b: you)
+  if LLVM::float_gt[F16](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -276,38 +276,38 @@ routine F16.sqrt!() -> F16
 
 ### Square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN). Thin wrapper over LLVM `sqrt`.
 routine F16.sqrt_unchecked() -> F16
-  return sqrt[F16](me)
+  return LLVM::sqrt[F16](me)
 
 ### Returns the absolute value.
 ### :returns: The resulting `F16` value.
 routine F16.abs() -> F16
-  return float_abs[F16](me)
+  return LLVM::float_abs[F16](me)
 
 ### Rounds this value toward negative infinity.
 ### :returns: The greatest integral-valued `F16` not larger than `me`.
 routine F16.floor() -> F16
-  return floor[F16](me)
+  return LLVM::floor[F16](me)
 
 ### Rounds this value toward positive infinity.
 ### :returns: The smallest integral-valued `F16` not smaller than `me`.
 routine F16.ceil() -> F16
-  return ceil[F16](me)
+  return LLVM::ceil[F16](me)
 
 ### Rounds this value to the nearest integral-valued `F16`.
 ### :returns: The rounded result in half precision.
 routine F16.round() -> F16
-  return round[F16](me)
+  return LLVM::round[F16](me)
 
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in half precision.
 routine F16.int_truncate() -> F16
-  return float_truncate[F16](me)
+  return LLVM::float_truncate[F16](me)
 
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F16.copysign(sign: F16) -> F16
-  return copysign[F16](me, sign)
+  return LLVM::copysign[F16](me, sign)
 
 # ============================================================================
 # Utility Methods
@@ -352,20 +352,20 @@ routine F16.is_zero() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F16.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U16](a: bits, b: 0x7C00_u16)
-  var mantissa = bit_and[U16](a: bits, b: 0x03FF_u16)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7C00_u16)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x03FF_u16)
   return exponent == 0x7C00_u16 and mantissa != 0_u16
 
 ### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
 routine F16.is_signaling() -> Bool
-  return me.is_nan() and bit_and[U16](a: me.to_bits(), b: 0x0200_u16) == 0_u16
+  return me.is_nan() and LLVM::bit_and(a: me.to_bits(), b: 0x0200_u16) == 0_u16
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F16.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U16](a: bits, b: 0x7C00_u16)
-  var mantissa = bit_and[U16](a: bits, b: 0x03FF_u16)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7C00_u16)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x03FF_u16)
   return exponent == 0x7C00_u16 and mantissa == 0_u16
 
 ### Returns `true` when this value is neither NaN nor infinity.
@@ -388,13 +388,13 @@ routine F16.signum() -> F16
 ### Reinterprets this float as its raw IEEE 754 bit pattern.
 ### :returns: The underlying `U16` encoding of this value.
 routine F16.to_bits() -> U16
-  return reinterpret_bits[F16, U16](me)
+  return LLVM::reinterpret_bits[F16, U16](me)
 
 ### Reinterprets a raw IEEE 754 bit pattern as an `F16`.
 ### :param bits: The exact half-precision encoding to decode.
 ### :returns: The `F16` value with that bit pattern.
 common routine F16.from_bits(bits: U16) -> F16
-  return reinterpret_bits[U16, F16](bits)
+  return LLVM::reinterpret_bits[U16, F16](bits)
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine F16.signaling_nan() -> F16
@@ -409,7 +409,7 @@ common routine F16.signaling_nan() -> F16
 routine F16.represent() -> Text
   if me.is_signaling()
     return "snan"
-  var cstr_result = rf_format_F16(me)
+  var cstr_result = C::rf_format_F16(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
@@ -476,16 +476,11 @@ routine F16!(from_text: Text) -> F16
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F16")
   var cstr_val = CStr(from: from_text)
-  return rf_parse_F16(cstr_val)
+  return C::rf_parse_F16(cstr_val)
 
 # ============================================================================
 # Hashing
 # ============================================================================
-
-### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
-### :returns: A `U64` hash of the 16-bit float encoding.
-routine F16.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)))
 
 # ============================================================================
 # Byte Representation
@@ -494,19 +489,19 @@ routine F16.fast_hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 2]` value.
 routine F16.to_bytes_le() -> Array[Byte, 2]
-  var raw = reinterpret_bits[F16, U16](me)
+  var raw = LLVM::reinterpret_bits[F16, U16](me)
   var result = Array[Byte, 2]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U16, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U16, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 2]` value.
 routine F16.to_bytes_be() -> Array[Byte, 2]
-  var raw = byte_swap[U16](reinterpret_bits[F16, U16](me))
+  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[F16, U16](me))
   var result = Array[Byte, 2]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U16, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U16, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U16, U8](LLVM::shift_right_unsigned(raw, 8_u16)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -514,7 +509,7 @@ routine F16.to_bytes_be() -> Array[Byte, 2]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine F16.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[U16, U64](LLVM::reinterpret_bits[F16, U16](me)), k0: k0, k1: k1)
 
 # ============================================================================
 # Full libm parity (rf_f16_* runtime; uint16_t bit-pattern ABI, so each call
@@ -522,99 +517,99 @@ routine F16.hash(k0: U64, k1: U64) -> U64
 # runtime and re-narrowed.
 # ============================================================================
 ### C libm extern: sine of the F16 bit pattern (radians); result is a U16 encoding.
-external("C") routine rf_f16_sin(bits: U16) -> U16
+routine C::rf_f16_sin(bits: U16) -> U16
 ### C libm extern: cosine of the F16 bit pattern (radians).
-external("C") routine rf_f16_cos(bits: U16) -> U16
+routine C::rf_f16_cos(bits: U16) -> U16
 ### C libm extern: tangent of the F16 bit pattern (radians).
-external("C") routine rf_f16_tan(bits: U16) -> U16
+routine C::rf_f16_tan(bits: U16) -> U16
 ### C libm extern: arc sine of the F16 bit pattern.
-external("C") routine rf_f16_asin(bits: U16) -> U16
+routine C::rf_f16_asin(bits: U16) -> U16
 ### C libm extern: arc cosine of the F16 bit pattern.
-external("C") routine rf_f16_acos(bits: U16) -> U16
+routine C::rf_f16_acos(bits: U16) -> U16
 ### C libm extern: arc tangent of the F16 bit pattern.
-external("C") routine rf_f16_atan(bits: U16) -> U16
+routine C::rf_f16_atan(bits: U16) -> U16
 ### C libm extern: two-argument arc tangent atan2(y, x).
-external("C") routine rf_f16_atan2(y: U16, x: U16) -> U16
+routine C::rf_f16_atan2(y: U16, x: U16) -> U16
 ### C libm extern: hyperbolic sine.
-external("C") routine rf_f16_sinh(bits: U16) -> U16
+routine C::rf_f16_sinh(bits: U16) -> U16
 ### C libm extern: hyperbolic cosine.
-external("C") routine rf_f16_cosh(bits: U16) -> U16
+routine C::rf_f16_cosh(bits: U16) -> U16
 ### C libm extern: hyperbolic tangent.
-external("C") routine rf_f16_tanh(bits: U16) -> U16
+routine C::rf_f16_tanh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic sine.
-external("C") routine rf_f16_asinh(bits: U16) -> U16
+routine C::rf_f16_asinh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic cosine.
-external("C") routine rf_f16_acosh(bits: U16) -> U16
+routine C::rf_f16_acosh(bits: U16) -> U16
 ### C libm extern: inverse hyperbolic tangent.
-external("C") routine rf_f16_atanh(bits: U16) -> U16
+routine C::rf_f16_atanh(bits: U16) -> U16
 ### C libm extern: natural exponential e^x.
-external("C") routine rf_f16_exp(bits: U16) -> U16
+routine C::rf_f16_exp(bits: U16) -> U16
 ### C libm extern: base-2 exponential 2^x.
-external("C") routine rf_f16_exp2(bits: U16) -> U16
+routine C::rf_f16_exp2(bits: U16) -> U16
 ### C libm extern: exp(x) - 1, accurate near zero.
-external("C") routine rf_f16_expm1(bits: U16) -> U16
+routine C::rf_f16_expm1(bits: U16) -> U16
 ### C libm extern: base-10 exponential 10^x.
-external("C") routine rf_f16_exp10(bits: U16) -> U16
+routine C::rf_f16_exp10(bits: U16) -> U16
 ### C libm extern: natural logarithm.
-external("C") routine rf_f16_log(bits: U16) -> U16
+routine C::rf_f16_log(bits: U16) -> U16
 ### C libm extern: base-2 logarithm.
-external("C") routine rf_f16_log2(bits: U16) -> U16
+routine C::rf_f16_log2(bits: U16) -> U16
 ### C libm extern: base-10 logarithm.
-external("C") routine rf_f16_log10(bits: U16) -> U16
+routine C::rf_f16_log10(bits: U16) -> U16
 ### C libm extern: log(1 + x), accurate near zero.
-external("C") routine rf_f16_log1p(bits: U16) -> U16
+routine C::rf_f16_log1p(bits: U16) -> U16
 ### C libm extern: base raised to exp.
-external("C") routine rf_f16_pow(base: U16, exp: U16) -> U16
+routine C::rf_f16_pow(base: U16, exp: U16) -> U16
 ### C libm extern: cube root.
-external("C") routine rf_f16_cbrt(bits: U16) -> U16
+routine C::rf_f16_cbrt(bits: U16) -> U16
 ### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
-external("C") routine rf_f16_hypot(x: U16, y: U16) -> U16
+routine C::rf_f16_hypot(x: U16, y: U16) -> U16
 ### C libm extern: fused multiply-add x*y + z with a single rounding.
-external("C") routine rf_f16_fma(x: U16, y: U16, z: U16) -> U16
+routine C::rf_f16_fma(x: U16, y: U16, z: U16) -> U16
 ### C libm extern: floating-point remainder (C fmod).
-external("C") routine rf_f16_fmod(x: U16, y: U16) -> U16
+routine C::rf_f16_fmod(x: U16, y: U16) -> U16
 ### C libm extern: IEEE remainder (C remainder).
-external("C") routine rf_f16_remainder(x: U16, y: U16) -> U16
+routine C::rf_f16_remainder(x: U16, y: U16) -> U16
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
-external("C") routine rf_f16_fdim(x: U16, y: U16) -> U16
+routine C::rf_f16_fdim(x: U16, y: U16) -> U16
 ### C libm extern: larger of x and y (C fmax).
-external("C") routine rf_f16_max(x: U16, y: U16) -> U16
+routine C::rf_f16_max(x: U16, y: U16) -> U16
 ### C libm extern: smaller of x and y (C fmin).
-external("C") routine rf_f16_min(x: U16, y: U16) -> U16
+routine C::rf_f16_min(x: U16, y: U16) -> U16
 ### C libm extern: sin(pi*x).
-external("C") routine rf_f16_sinpi(bits: U16) -> U16
+routine C::rf_f16_sinpi(bits: U16) -> U16
 ### C libm extern: cos(pi*x).
-external("C") routine rf_f16_cospi(bits: U16) -> U16
+routine C::rf_f16_cospi(bits: U16) -> U16
 ### C libm extern: tan(pi*x).
-external("C") routine rf_f16_tanpi(bits: U16) -> U16
+routine C::rf_f16_tanpi(bits: U16) -> U16
 ### C libm extern: next representable value after x toward y.
-external("C") routine rf_f16_nextafter(x: U16, y: U16) -> U16
+routine C::rf_f16_nextafter(x: U16, y: U16) -> U16
 ### C libm extern: x * 2^n (C scalbn).
-external("C") routine rf_f16_scalbn(bits: U16, n: S64) -> U16
+routine C::rf_f16_scalbn(bits: U16, n: S64) -> U16
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
-external("C") routine rf_f16_ilogb(bits: U16) -> S64
+routine C::rf_f16_ilogb(bits: U16) -> S64
 ### C libm extern: round to nearest integer in the current rounding mode (C rint).
-external("C") routine rf_f16_rint(bits: U16) -> U16
+routine C::rf_f16_rint(bits: U16) -> U16
 ### C libm extern: error function.
-external("C") routine rf_f16_erf(bits: U16) -> U16
+routine C::rf_f16_erf(bits: U16) -> U16
 ### C libm extern: complementary error function.
-external("C") routine rf_f16_erfc(bits: U16) -> U16
+routine C::rf_f16_erfc(bits: U16) -> U16
 ### C libm extern: gamma function.
-external("C") routine rf_f16_tgamma(bits: U16) -> U16
+routine C::rf_f16_tgamma(bits: U16) -> U16
 ### C libm extern: natural log of the absolute value of gamma.
-external("C") routine rf_f16_lgamma(bits: U16) -> U16
+routine C::rf_f16_lgamma(bits: U16) -> U16
 
 ### Sine (radians).
 routine F16.sin() -> F16
-  return F16.from_bits(bits: rf_f16_sin(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_sin(bits: me.to_bits()))
 
 ### Cosine (radians).
 routine F16.cos() -> F16
-  return F16.from_bits(bits: rf_f16_cos(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_cos(bits: me.to_bits()))
 
 ### Tangent (radians).
 routine F16.tan() -> F16
-  return F16.from_bits(bits: rf_f16_tan(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_tan(bits: me.to_bits()))
 
 ### Arc sine.
 routine F16.asin!() -> F16
@@ -627,7 +622,7 @@ routine F16.asin!() -> F16
 
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f16_asin`.
 routine F16.asin_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_asin(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_asin(bits: me.to_bits()))
 
 ### Arc cosine.
 routine F16.acos!() -> F16
@@ -640,15 +635,15 @@ routine F16.acos!() -> F16
 
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f16_acos`.
 routine F16.acos_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_acos(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_acos(bits: me.to_bits()))
 
 ### Arc tangent.
 routine F16.atan() -> F16
-  return F16.from_bits(bits: rf_f16_atan(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_atan(bits: me.to_bits()))
 
 ### Two-argument arc tangent atan2(me, x).
 routine F16.atan2(x: F16) -> F16
-  return F16.from_bits(bits: rf_f16_atan2(y: me.to_bits(), x: x.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_atan2(y: me.to_bits(), x: x.to_bits()))
 
 ### Hyperbolic sine.
 routine F16.sinh!() -> F16
@@ -661,7 +656,7 @@ routine F16.sinh!() -> F16
 
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_f16_sinh`.
 routine F16.sinh_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_sinh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_sinh(bits: me.to_bits()))
 
 ### Hyperbolic cosine.
 routine F16.cosh!() -> F16
@@ -674,15 +669,15 @@ routine F16.cosh!() -> F16
 
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f16_cosh`.
 routine F16.cosh_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_cosh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_cosh(bits: me.to_bits()))
 
 ### Hyperbolic tangent.
 routine F16.tanh() -> F16
-  return F16.from_bits(bits: rf_f16_tanh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_tanh(bits: me.to_bits()))
 
 ### Inverse hyperbolic sine.
 routine F16.asinh() -> F16
-  return F16.from_bits(bits: rf_f16_asinh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_asinh(bits: me.to_bits()))
 
 ### Inverse hyperbolic cosine.
 routine F16.acosh!() -> F16
@@ -695,7 +690,7 @@ routine F16.acosh!() -> F16
 
 ### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps `rf_f16_acosh`.
 routine F16.acosh_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_acosh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_acosh(bits: me.to_bits()))
 
 ### Inverse hyperbolic tangent.
 routine F16.atanh!() -> F16
@@ -708,7 +703,7 @@ routine F16.atanh!() -> F16
 
 ### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps `rf_f16_atanh`.
 routine F16.atanh_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_atanh(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_atanh(bits: me.to_bits()))
 
 ### Natural exponential.
 routine F16.exp!() -> F16
@@ -721,7 +716,7 @@ routine F16.exp!() -> F16
 
 ### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f16_exp`.
 routine F16.exp_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_exp(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_exp(bits: me.to_bits()))
 
 ### Base-2 exponential.
 routine F16.exp2!() -> F16
@@ -734,7 +729,7 @@ routine F16.exp2!() -> F16
 
 ### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f16_exp2`.
 routine F16.exp2_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_exp2(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_exp2(bits: me.to_bits()))
 
 ### exp(me) - 1, accurate near zero.
 routine F16.expm1!() -> F16
@@ -747,7 +742,7 @@ routine F16.expm1!() -> F16
 
 ### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over `rf_f16_expm1`.
 routine F16.expm1_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_expm1(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_expm1(bits: me.to_bits()))
 
 ### Base-10 exponential.
 routine F16.exp10!() -> F16
@@ -760,7 +755,7 @@ routine F16.exp10!() -> F16
 
 ### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f16_exp10`.
 routine F16.exp10_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_exp10(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_exp10(bits: me.to_bits()))
 
 ### Natural logarithm.
 routine F16.log!() -> F16
@@ -773,7 +768,7 @@ routine F16.log!() -> F16
 
 ### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over `rf_f16_log`.
 routine F16.log_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_log(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_log(bits: me.to_bits()))
 
 ### Base-2 logarithm.
 routine F16.log2!() -> F16
@@ -786,7 +781,7 @@ routine F16.log2!() -> F16
 
 ### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_f16_log2`.
 routine F16.log2_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_log2(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_log2(bits: me.to_bits()))
 
 ### Base-10 logarithm.
 routine F16.log10!() -> F16
@@ -799,7 +794,7 @@ routine F16.log10!() -> F16
 
 ### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_f16_log10`.
 routine F16.log10_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_log10(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_log10(bits: me.to_bits()))
 
 ### log(1 + me), accurate near zero.
 routine F16.log1p!() -> F16
@@ -812,12 +807,12 @@ routine F16.log1p!() -> F16
 
 ### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over `rf_f16_log1p`.
 routine F16.log1p_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_log1p(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_log1p(bits: me.to_bits()))
 
 ### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps
 ### `rf_f16_pow`.
 routine F16.pow_unchecked(exp: F16) -> F16
-  return F16.from_bits(bits: rf_f16_pow(base: me.to_bits(), exp: exp.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_pow(base: me.to_bits(), exp: exp.to_bits()))
 
 ### Raises this value to `exp`, checked: crashes on a non-finite result (overflow -> inf, domain ->
 ### NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
@@ -833,7 +828,7 @@ routine F16.pow!(exp: F16) -> F16
 
 ### Cube root.
 routine F16.cbrt() -> F16
-  return F16.from_bits(bits: rf_f16_cbrt(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_cbrt(bits: me.to_bits()))
 
 ### Hypotenuse without overflow.
 routine F16.hypot!(you: F16) -> F16
@@ -846,7 +841,7 @@ routine F16.hypot!(you: F16) -> F16
 
 ### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_f16_hypot`.
 routine F16.hypot_unchecked(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_hypot(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_hypot(x: me.to_bits(), y: you.to_bits()))
 
 ### Fused multiply-add me*b + c with a single rounding.
 routine F16.fma!(b: F16, c: F16) -> F16
@@ -859,63 +854,63 @@ routine F16.fma!(b: F16, c: F16) -> F16
 
 ### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_f16_fma`.
 routine F16.fma_unchecked(b: F16, c: F16) -> F16
-  return F16.from_bits(bits: rf_f16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_fma(x: me.to_bits(), y: b.to_bits(), z: c.to_bits()))
 
 ### Floating-point remainder (C fmod).
 routine F16.fmod(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_fmod(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_fmod(x: me.to_bits(), y: you.to_bits()))
 
 ### IEEE remainder (C remainder).
 routine F16.remainder(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_remainder(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_remainder(x: me.to_bits(), y: you.to_bits()))
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine F16.fdim(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_fdim(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_fdim(x: me.to_bits(), y: you.to_bits()))
 
 ### Larger of me and you (C fmax).
 routine F16.fmax(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_max(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_max(x: me.to_bits(), y: you.to_bits()))
 
 ### Smaller of me and you (C fmin).
 routine F16.fmin(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_min(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_min(x: me.to_bits(), y: you.to_bits()))
 
 ### sin(pi*me).
 routine F16.sinpi() -> F16
-  return F16.from_bits(bits: rf_f16_sinpi(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_sinpi(bits: me.to_bits()))
 
 ### cos(pi*me).
 routine F16.cospi() -> F16
-  return F16.from_bits(bits: rf_f16_cospi(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_cospi(bits: me.to_bits()))
 
 ### tan(pi*me).
 routine F16.tanpi() -> F16
-  return F16.from_bits(bits: rf_f16_tanpi(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_tanpi(bits: me.to_bits()))
 
 ### Next representable value after me toward you.
 routine F16.nextafter(you: F16) -> F16
-  return F16.from_bits(bits: rf_f16_nextafter(x: me.to_bits(), y: you.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_nextafter(x: me.to_bits(), y: you.to_bits()))
 
 ### me * 2^n (C scalbn).
 routine F16.scalbn(n: S64) -> F16
-  return F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: n))
+  return F16.from_bits(bits: C::rf_f16_scalbn(bits: me.to_bits(), n: n))
 
 ### Alias of scalbn (C ldexp).
 routine F16.ldexp(n: S64) -> F16
-  return F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: n))
+  return F16.from_bits(bits: C::rf_f16_scalbn(bits: me.to_bits(), n: n))
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F16.rint() -> F16
-  return F16.from_bits(bits: rf_f16_rint(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_rint(bits: me.to_bits()))
 
 ### Error function.
 routine F16.erf() -> F16
-  return F16.from_bits(bits: rf_f16_erf(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_erf(bits: me.to_bits()))
 
 ### Complementary error function.
 routine F16.erfc() -> F16
-  return F16.from_bits(bits: rf_f16_erfc(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_erfc(bits: me.to_bits()))
 
 ### Gamma function.
 routine F16.tgamma!() -> F16
@@ -929,41 +924,41 @@ routine F16.tgamma!() -> F16
 ### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
 ### `rf_f16_tgamma`.
 routine F16.tgamma_unchecked() -> F16
-  return F16.from_bits(bits: rf_f16_tgamma(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_tgamma(bits: me.to_bits()))
 
 ### Natural log of the absolute value of gamma(me).
 routine F16.lgamma() -> F16
-  return F16.from_bits(bits: rf_f16_lgamma(bits: me.to_bits()))
+  return F16.from_bits(bits: C::rf_f16_lgamma(bits: me.to_bits()))
 
 ### Truncates toward zero (alias of int_truncate).
 routine F16.trunc() -> F16
-  return float_truncate[F16](me)
+  return LLVM::float_truncate[F16](me)
 
 ### Fractional part me - trunc(me).
 routine F16.frac() -> F16
-  return me - float_truncate[F16](me)
+  return me - LLVM::float_truncate[F16](me)
 
 ### Integer and fractional parts (C modf); both carry the sign of me.
 routine F16.modf() -> (F16, F16)
-  var ip = float_truncate[F16](me)
+  var ip = LLVM::float_truncate[F16](me)
   return (ip, me - ip)
 
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
 routine F16.frexp() -> (F16, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
-  var e = add[S64](a: rf_f16_ilogb(bits: me.to_bits()), b: 1_s64)
-  return (F16.from_bits(bits: rf_f16_scalbn(bits: me.to_bits(), n: sub[S64](a: 0_s64, b: e))), e)
+  var e = LLVM::add(a: C::rf_f16_ilogb(bits: me.to_bits()), b: 1_s64)
+  return (F16.from_bits(bits: C::rf_f16_scalbn(bits: me.to_bits(), n: LLVM::sub(a: 0_s64, b: e))), e)
 
 ### True if the sign bit is set (C signbit).
 routine F16.signbit() -> Bool
-  return int_ne[U16](a: bit_and[U16](a: me.to_bits(), b: 0x8000_u16), b: 0_u16)
+  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x8000_u16), b: 0_u16)
 
 ### True for a subnormal (denormalized, nonzero) value.
 routine F16.is_subnormal() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U16](a: bits, b: 0x7C00_u16)
-  var mantissa = bit_and[U16](a: bits, b: 0x03FF_u16)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7C00_u16)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x03FF_u16)
   return exponent == 0_u16 and mantissa != 0_u16
 
 ### True for a finite, normal value (nonzero and not subnormal).
@@ -991,9 +986,9 @@ routine F16.fpclassify() -> FpClass
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
 routine f16_order_key(bits: U16) -> U16
-  if int_ne[U16](a: bit_and[U16](a: bits, b: 0x8000_u16), b: 0_u16)
-    return bit_xor[U16](a: bits, b: 0xFFFF_u16)
-  return bit_or[U16](a: bits, b: 0x8000_u16)
+  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: 0x8000_u16), b: 0_u16)
+    return LLVM::bit_xor(a: bits, b: 0xFFFF_u16)
+  return LLVM::bit_or(a: bits, b: 0x8000_u16)
 
 ### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
@@ -1006,7 +1001,7 @@ routine F16.total_order(you: F16) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine F16.total_order_mag(you: F16) -> Bool
-  return bit_and[U16](a: me.to_bits(), b: 0x7FFF_u16) <= bit_and[U16](a: you.to_bits(), b: 0x7FFF_u16)
+  return LLVM::bit_and(a: me.to_bits(), b: 0x7FFF_u16) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFF_u16)
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
@@ -1032,7 +1027,7 @@ routine F16.logb() -> F16
     return F16_INFINITY
   if me.is_zero()
     return -F16_INFINITY
-  return F16(from: rf_f16_ilogb(bits: me.to_bits()))
+  return F16(from: C::rf_f16_ilogb(bits: me.to_bits()))
 
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.

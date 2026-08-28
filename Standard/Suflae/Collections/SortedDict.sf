@@ -1,0 +1,9 @@
+module Collections
+
+### Suflae SF-realm Collections sorted dict — wrapper over RF::Collections.SortedDict[K, V].
+### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
+entity SortedDict[K, V]
+  secret inner: RF::Collections.SortedDict[K, V]
+
+routine SortedDict[K, V]() -> SortedDict[K, V]
+  return SortedDict[K, V](inner: RF::Collections.SortedDict[K, V]())

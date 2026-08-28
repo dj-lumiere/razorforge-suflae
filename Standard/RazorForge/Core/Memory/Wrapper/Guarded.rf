@@ -1,0 +1,143 @@
+module Core
+
+import BuilderQuery
+
+### Multi-threaded strong reference to shared data under an access discipline `P`. Thin pointer to
+### {GuardController[T, P]}. The atomic-refcount twin of {Retained[T]} — equivalent to `Arc[T]` in Rust.
+### Cloning bumps the strong count atomically (`.share()`); dropping decrements it. Safe across threads.
+###
+### The discipline `P` (a {LockPolicy}: {ReadOnly} / {Exclusive} / {MultiRead}) is part of the type, so
+### it is fixed at compile time and selected by monomorphization — no runtime dispatch. Unlike
+### {Retained[T]}, `Guarded` does NOT obey `Controlling[T]`: multi-threaded access to the guarded data is
+### granted exclusively through the `Amending[T]` / `Consulting[T]` tokens (a later phase), whose legality
+### the readers-XOR-writer access discipline derives from `P`. A `Guarded` is therefore an ownership handle —
+### it refcounts and hands out weak references; reaching the inner value goes through a token.
+### :typeparam T: The exclusively owned entity type.
+### :typeparam P: The access-discipline lock policy.
+@llvm("ptr")
+record Guarded[T, P]
+needs T is EntityType, P obeys LockPolicy
+  pass
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Constructor form: `Guarded[T, P](from: n)` routes here. Ownership of the entity moves into the RC system.
+routine Guarded[T, P].create(from: T) -> Guarded[T, P]
+needs T is EntityType, P obeys LockPolicy
+  danger
+    var ctrl = GuardController[T, P](data: from.hijack()).hijack()
+    return Guarded[T, P](ctrl)
+
+# ============================================================================
+# Reference counting
+# ============================================================================
+
+### Returns a new strong reference to the same entity, atomically incrementing the strong count.
+### :returns: A new strong handle sharing the same underlying entity.
+routine Guarded[T, P].share() -> Guarded[T, P]
+  danger
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+    ctrl.hold()
+  return me
+
+### Creates a weak reference to the same entity.
+### :returns: A new weak handle to the same entity's controller.
+routine Guarded[T, P].observe() -> Witnessed[T, P]
+  danger
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+    ctrl.observe()
+    return Witnessed[T, P](me)
+
+# ============================================================================
+# Access — open a scoped token over the guarded entity (use with `using`)
+# ============================================================================
+
+### Opens shared (multi-reader) access to the guarded entity. The returned {Consulting[T]} must be
+### opened with `using`: entering the scope acquires the reader hold, leaving it releases. Legal only
+### when `P` admits readers (`ReadOnly` / `MultiRead`); the access discipline rejects it otherwise.
+### :returns: A scoped `Consulting[T, P]` read token.
+### :note: Use as `using s.consult() as v` — a bare `consult()` never acquires the lock.
+routine Guarded[T, P].consult() -> Consulting[T, P]
+needs P in [MultiRead, ReadOnly]
+  danger
+    return Consulting[T, P](me)
+
+### Opens shared (multi-reader) access for a *fallible*, non-blocking acquisition. Identical to
+### `consult()` except intended for `using ... fallback`: entering the scope tries the reader hold
+### once (via `try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
+### :returns: A scoped `Consulting[T, P]` read token.
+### :note: Use as `using s.try_consult() as v` followed by a `fallback` branch.
+routine Guarded[T, P].try_consult() -> Consulting[T, P]
+needs P in [MultiRead, ReadOnly]
+  danger
+    return Consulting[T, P](me)
+
+### Opens exclusive (read/write) access to the guarded entity. The returned {Amending[T]} must be
+### opened with `using`: entering the scope acquires the exclusive amender hold, leaving it releases.
+### Legal only when `P` admits a writer (`Exclusive` / `MultiRead`); the access discipline rejects it on
+### `ReadOnly`.
+### :returns: A scoped `Amending[T, P]` write token.
+### :note: Use as `using s.amend() as c` — a bare `amend()` never acquires the lock.
+routine Guarded[T, P].amend() -> Amending[T, P]
+needs P in [Exclusive, MultiRead]
+  danger
+    return Amending[T, P](me)
+
+### Opens exclusive access for a *fallible*, non-blocking acquisition. Identical to `amend()` except
+### intended for `using ... fallback`: entering the scope tries the exclusive hold once (via
+### `try_enter`) and, on contention, runs the `fallback` branch instead of blocking.
+### :returns: A scoped `Amending[T, P]` write token.
+### :note: Use as `using s.try_amend() as c` followed by a `fallback` branch.
+routine Guarded[T, P].try_amend() -> Amending[T, P]
+needs P in [Exclusive, MultiRead]
+  danger
+    return Amending[T, P](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns the current strong reference count.
+### :returns: The number of live strong handles to this entity.
+routine Guarded[T, P].strong_count() -> U64
+  danger
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+    return ctrl.strong_count()
+
+### Returns the current weak reference count.
+### :returns: The number of live weak handles to this entity's controller.
+routine Guarded[T, P].weak_count() -> U64
+  danger
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+    return ctrl.weak_count()
+
+# ============================================================================
+# Display (opaque — the inner value is reachable only through an access token)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Guarded[T, P].represent() -> Text
+  danger
+    return me.type_name()
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Guarded[T, P].diagnose() -> Text
+  danger
+    var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+    var rc = ctrl.strong_count()
+    var weak = ctrl.weak_count()
+    var addr = ctrl.raw_data().get_address()
+    return me.type_name() + "(holding: " + rc.represent() + ", observing: " + weak.represent() + ", addr: " + addr.represent() + ")"
+
+### Decrements the strong count, tearing down the entity at zero (and the controller when both counts
+### reach zero). This IS the decrement — no separate `release` verb; `destroy` is the teardown.
+dangerous routine Guarded[T, P].destroy()
+  var ctrl = Hijacked[GuardController[T, P]](me).as_entity()
+  ctrl.unhold()
+  return

@@ -1,0 +1,6 @@
+T(a: 1)
+K(x: k)
+U(a: 2)
+Pair[Text, S32](first: p, second: 7)
+mydict[Text, S32](key: a, val: 42)
+0.8427007929497148693412206350826093

@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 ### Pairs an element with the priority that determines its position in a {PriorityQueue}.
 ### Used for iteration, bulk inspection, and conversion to list form.
@@ -152,14 +152,14 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
       else
-        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
 
       if me.elements.is_none()
         var ptr = rf_allocate_dynamic_uninit(element_byte_size)
         me.elements = Hijacked[TElement](ptr)
       else
-        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: LLVM::pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
         me.elements = Hijacked[TElement](ptr)
 
     me.capacity = new_capacity
@@ -180,7 +180,7 @@ routine PriorityQueue[TPriority, TElement].grow()
 ### :param index: The child index whose parent to find.
 ### :returns: The index of the parent node.
 routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
-  return unsigned_div[U64](index -% 1u64, 2u64)
+  return LLVM::unsigned_div(index -% 1u64, 2u64)
 
 ### Returns the heap index of the left child of node `index`.
 ### :param index: The parent index to expand.
@@ -338,7 +338,7 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### Only pairs up to the length of the shorter list are inserted; any extra values are ignored.
 ### :param elements: The elements to enqueue.
 ### :param priorities: The priorities to assign at matching positions.
-routine PriorityQueue[TPriority, TElement].add_all(elements: Referring[List[TElement]], priorities: Referring[List[TPriority]])
+routine PriorityQueue[TPriority, TElement].add_all(elements: Accessing[List[TElement]], priorities: Accessing[List[TPriority]])
 needs TElement obeys Copyable
 needs TPriority obeys Copyable
   var i = 0u64
@@ -432,24 +432,26 @@ routine PriorityQueueEmittable[TPriority, TElement].emit!() -> PQEntry[TPriority
   me.index = me.index + 1u64
   return _result
 
+@[readonly, override]
 routine PriorityQueue[TPriority, TElement].represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.represent() + ": " + entry.element.represent()
+    result = result + nested_repr(entry.priority) + ": " + nested_repr(entry.element)
     i = i +% 1u64
   result = result + "])"
   return steal result
 
+@[readonly, override]
 routine PriorityQueue[TPriority, TElement].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.priority.represent() + ": " + entry.element.represent()
+    result = result + nested_repr(entry.priority) + ": " + nested_repr(entry.element)
     i = i +% 1u64
   result = result + "])"
   return steal result

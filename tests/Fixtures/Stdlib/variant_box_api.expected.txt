@@ -1,0 +1,4 @@
+text
+none
+inner
+p-none

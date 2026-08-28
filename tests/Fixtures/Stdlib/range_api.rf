@@ -4,7 +4,7 @@ import IO/Console
 # Range expressions: `to` (inclusive) and `til` (exclusive), with optional `by`.
 routine print_range(label: Text, r: Iterable[S64])
   var out = f"{label}: "
-  for x in r
+  each x in r
     out = out + f"{x} "
   show(out)
   return
@@ -32,7 +32,7 @@ routine start()
 
   # Sum via IterTools
   var s = 0_s64
-  for x in 1 to 100
+  each x in 1 to 100
     s = s + x
   show(f"sum 1..100: {s}")
 

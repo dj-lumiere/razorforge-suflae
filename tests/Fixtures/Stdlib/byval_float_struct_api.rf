@@ -1,0 +1,64 @@
+module Tests/Stdlib/ByvalFloatStruct
+import IO/Console
+
+# Locks the FLOAT-bearing struct ABI boundary (Phase 3 SSE / HFA classification). Before the fix a
+# record with float/double fields crossed a by-value call boundary as a raw first-class aggregate,
+# which LLVM does NOT lower to the platform C ABI — the value arrived corrupted. Now AbiClassify
+# coerces per-eightbyte (SysV SSE), by size (Win-x64 GP-reg), or as an HFA (AAPCS64). Covers: float
+# pair, double pair, mixed int+float (INTEGER-eightbyte), a 3-float aggregate, arithmetic through a
+# by-value param, sret-sized returns, and value semantics (callee gets a copy).
+
+record Vec2
+  posted x: F32
+  posted y: F32
+
+record Vec2d
+  posted x: F64
+  posted y: F64
+
+record Mixed
+  posted n: S32
+  posted f: F32
+
+record Vec3
+  posted x: F32
+  posted y: F32
+  posted z: F32
+
+@positional
+routine add2(a: Vec2, b: Vec2) -> Vec2
+  return Vec2(x: a.x + b.x, y: a.y + b.y)
+
+@positional
+routine dot2(a: Vec2, b: Vec2) -> F32
+  return a.x * b.x + a.y * b.y
+
+@positional
+routine scale2d(v: Vec2d, s: F64) -> Vec2d
+  return Vec2d(x: v.x * s, y: v.y * s)
+
+@positional
+routine bump(m: Mixed) -> Mixed
+  return Mixed(n: m.n + 1_s32, f: m.f * 2.0_f32)
+
+@positional
+routine rot3(v: Vec3) -> Vec3
+  return Vec3(x: v.y, y: v.z, z: v.x)
+
+routine start()
+  var p = Vec2(x: 1.0_f32, y: 2.0_f32)
+  var q = add2(p, Vec2(x: 3.0_f32, y: 4.0_f32))
+  show(f"add2: {q.x},{q.y}")
+  show(f"dot2: {dot2(p, Vec2(x: 5.0_f32, y: 6.0_f32))}")
+
+  var d = scale2d(Vec2d(x: 1.5_f64, y: 2.5_f64), 2.0_f64)
+  show(f"scale2d: {d.x},{d.y}")
+
+  var m = bump(Mixed(n: 41_s32, f: 1.25_f32))
+  show(f"bump: {m.n},{m.f}")
+
+  var r = rot3(Vec3(x: 1.0_f32, y: 2.0_f32, z: 3.0_f32))
+  show(f"rot3: {r.x},{r.y},{r.z}")
+
+  show(f"orig unchanged: {p.x},{p.y}")
+  return

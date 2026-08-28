@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the marker-protocol closed allowlist (S707) and the @llvm("typename") pass-body
 /// rule (S708). Together these enforce the soundness invariant for build-time-dispatched
-/// marker protocols (<c>Referring[T]</c>/<c>Controlling[T]</c>): obeyers must share T's ptr
+/// marker protocols (<c>Accessing[T]</c>/<c>Controlling[T]</c>): obeyers must share T's ptr
 /// layout, which is guaranteed only for a closed set of stdlib wrappers whose @llvm("ptr")
 /// annotation dictates the layout and whose bodies are `pass`.
 /// </summary>
@@ -16,7 +16,7 @@ public class MarkerProtocolAllowlistTests
 {
     #region S707 — MarkerProtocolLayoutViolation
 
-    /// <summary>Verifies user-defined record obeying Referring[T] reports S707.</summary>
+    /// <summary>Verifies user-defined record obeying Accessing[T] reports S707.</summary>
     [Fact]
     public void UserRecord_ObeysReferring_ReportsS707()
     {
@@ -24,7 +24,7 @@ public class MarkerProtocolAllowlistTests
                         entity Bar
                           pass
                         @llvm("ptr")
-                        record Weird[T] obeys Referring[T]
+                        record Weird[T] obeys Accessing[T]
                         needs T is EntityType
                           pass
                         """;
@@ -38,7 +38,7 @@ public class MarkerProtocolAllowlistTests
     [Fact]
     public void UserRecord_ObeysControlling_ReportsS707()
     {
-        // Controlling[T] extends Referring[T] — same allowlist applies.
+        // Controlling[T] extends Accessing[T] — same allowlist applies.
         string source = """
                         entity Bar
                           pass
@@ -58,7 +58,7 @@ public class MarkerProtocolAllowlistTests
     public void StdlibWrapper_ObeysControlling_NoS707()
     {
         // Retained/Viewing/Modifying/Hijacked/Tracked are blessed — they declare obeys
-        // Referring/Controlling in stdlib without tripping the check. Importing IO/Console
+        // Accessing/Controlling in stdlib without tripping the check. Importing IO/Console
         // forces stdlib to load (and re-validate) in the test harness.
         string source = """
                         import IO/Console
@@ -71,11 +71,11 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.MarkerProtocolLayoutViolation);
     }
 
-    /// <summary>Verifies implicit entity conformance to Referring[T] does not trigger S707.</summary>
+    /// <summary>Verifies implicit entity conformance to Accessing[T] does not trigger S707.</summary>
     [Fact]
     public void UserEntity_AutoConformanceToReferring_NoS707()
     {
-        // Entity T trivially obeys Referring[T]/Controlling[T] via _implicitProtocolConformances —
+        // Entity T trivially obeys Accessing[T]/Controlling[T] via _implicitProtocolConformances —
         // the closed-allowlist check exempts implicit conformances.
         string source = """
                         entity Foo

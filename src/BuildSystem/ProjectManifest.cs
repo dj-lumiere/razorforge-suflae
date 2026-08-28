@@ -67,6 +67,28 @@ public sealed class BuildTarget
     public List<string> Libraries { get; set; } = [];
 
     /// <summary>
+    /// External C libraries to link (the <c>-l</c> names, e.g. <c>"SDL2"</c>). Names only — the platform
+    /// resolves each to <c>libSDL2.so</c> / <c>SDL2.lib</c> / <c>libSDL2.dylib</c> at link time via the
+    /// bundled clang/lld driver. Search directories come from <see cref="LibraryPaths"/>.
+    /// </summary>
+    public List<string> CLibraries { get; set; } = [];
+
+    /// <summary>
+    /// Additional library search directories (the <c>-L</c> paths) for resolving <see cref="CLibraries"/>.
+    /// Relative entries are resolved against the manifest directory at load time.
+    /// </summary>
+    public List<string> LibraryPaths { get; set; } = [];
+
+    /// <summary>
+    /// Richly-declared foreign libraries, keyed by name — the <c>[libraries.NAME]</c> tables. This is where
+    /// a library's STATIC-vs-DYNAMIC linkage and calling convention live (a packaging decision, kept out of
+    /// source), so switching a library static↔dynamic is a one-line manifest edit that never touches call
+    /// sites. Source associates a <c>C::</c> extern with one of these via <c>@link(lib: "NAME")</c>.
+    /// Coexists with <see cref="CLibraries"/> (the name-only simple form, which defaults to dynamic/C).
+    /// </summary>
+    public Dictionary<string, CLibrary> LibraryConfigs { get; set; } = new(comparer: System.StringComparer.Ordinal);
+
+    /// <summary>
     /// Build mode for the whole build: "debug" (default), "release", "release-time",
     /// "release-space".
     /// </summary>
@@ -91,6 +113,37 @@ public sealed class BuildTarget
     /// Controlled by the <c>show-build-stages</c> field.
     /// </summary>
     public bool ShowBuildStages { get; set; }
+}
+
+/// <summary>How a foreign C library is linked.</summary>
+public enum CLinkKind
+{
+    /// <summary>Linked against a shared object at load time — the <c>.dll</c>/<c>.so</c>/<c>.dylib</c> must be
+    /// present at runtime (staged beside the exe or on the system search path). The default.</summary>
+    Dynamic,
+
+    /// <summary>Pulled from a <c>.a</c>/<c>.lib</c> archive into the executable at link time — no runtime
+    /// dependency.</summary>
+    Static
+}
+
+/// <summary>
+/// A richly-declared foreign C library from a <c>[libraries.NAME]</c> manifest table. Holds the packaging
+/// facts that must NOT live in source: linkage kind and calling convention. Referenced from a <c>C::</c>
+/// extern via <c>@link(lib: "NAME")</c>.
+/// </summary>
+public sealed class CLibrary
+{
+    /// <summary>The library name — the <c>-l</c> link name and the key <c>@link(lib: …)</c> matches.
+    /// Defaults to the table key; override with the table's <c>name</c> field when the link name differs.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Static or dynamic linkage. Default <see cref="CLinkKind.Dynamic"/>.</summary>
+    public CLinkKind Kind { get; set; } = CLinkKind.Dynamic;
+
+    /// <summary>Calling convention for this library's functions (<c>"c"</c> default; <c>"stdcall"</c> etc. for
+    /// e.g. 32-bit Win32 APIs). Stored for the backend to lower; non-<c>c</c> lowering is not yet emitted.</summary>
+    public string CallingConvention { get; set; } = "c";
 }
 
 /// <summary>

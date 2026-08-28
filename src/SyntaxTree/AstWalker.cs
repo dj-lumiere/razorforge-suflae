@@ -100,7 +100,7 @@ public static class AstWalker
             case LoopStatement s:
                 yield return s.Body;
                 break;
-            case ForStatement s:
+            case EachStatement s:
                 if (s.VariablePattern != null) yield return s.VariablePattern;
                 yield return s.Iterable;
                 yield return s.Body;
@@ -226,7 +226,7 @@ public static class AstWalker
             case TypeConversionExpression e:
                 yield return e.Expression;
                 break;
-            case GenericMethodCallExpression e:
+            case GenericMemberRoutineCallExpression e:
                 yield return e.Object;
                 foreach (TypeExpression t in e.TypeArguments) yield return t;
                 foreach (Expression arg in e.Arguments) yield return arg;
@@ -333,7 +333,7 @@ public static class AstWalker
                 break;
             case ChoiceDeclaration d:
                 foreach (ChoiceCase c in d.Cases) yield return c;
-                foreach (RoutineDeclaration m in d.Methods) yield return m;
+                foreach (RoutineDeclaration m in d.MemberRoutines) yield return m;
                 break;
             case CrashableDeclaration d:
                 foreach (Declaration m in d.Members) yield return m;
@@ -343,7 +343,7 @@ public static class AstWalker
                 break;
             case ProtocolDeclaration d:
                 foreach (TypeExpression t in d.ParentProtocols) yield return t;
-                foreach (RoutineSignature m in d.Methods) yield return m;
+                foreach (RoutineSignature m in d.MemberRoutines) yield return m;
                 break;
             case PresetDeclaration d:
                 yield return d.Type;

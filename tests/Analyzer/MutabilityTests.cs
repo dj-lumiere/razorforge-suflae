@@ -118,13 +118,13 @@ public class MutabilityTests
 
     #endregion
 
-    #region Readonly vs Writable Methods
+    #region Readonly vs Writable memberRoutines
     /// <summary>
-    /// Verifies semantic analysis behavior for readonly method mutating and reports the expected error.
+    /// Verifies semantic analysis behavior for readonly memberRoutine mutating and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReadonlyMethodMutating_ReportsError()
+    public void Analyze_ReadonlyMemberRoutineMutating_ReportsError()
     {
         string source = """
                         entity Counter
@@ -140,11 +140,11 @@ public class MutabilityTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for readonly method reading without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for readonly memberRoutine reading without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReadonlyMethodReading_NoError()
+    public void Analyze_ReadonlyMemberRoutineReading_NoError()
     {
         string source = """
                         entity Counter
@@ -159,11 +159,11 @@ public class MutabilityTests
         Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for writable method mutating without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for writable memberRoutine mutating without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_WritableMethodMutating_NoError()
+    public void Analyze_WritableMemberRoutineMutating_NoError()
     {
         string source = """
                         entity Counter
@@ -349,13 +349,13 @@ public class MutabilityTests
 
     #endregion
 
-    #region Readonly Method Call Enforcement
+    #region Readonly memberRoutine Call Enforcement
     /// <summary>
-    /// Verifies semantic analysis behavior for readonly method calls writable and reports the expected error.
+    /// Verifies semantic analysis behavior for readonly memberRoutine calls writable and reports the expected error.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReadonlyMethodCallsWritable_ReportsError()
+    public void Analyze_ReadonlyMemberRoutineCallsWritable_ReportsError()
     {
         string source = """
                         entity Counter
@@ -372,14 +372,14 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMemberRoutine);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for readonly method calls readonly without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for readonly memberRoutine calls readonly without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReadonlyMethodCallsReadonly_NoError()
+    public void Analyze_ReadonlyMemberRoutineCallsReadonly_NoError()
     {
         string source = """
                         entity Counter
@@ -395,14 +395,14 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMemberRoutine);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for readonly method calls on other without unexpected diagnostics.
+    /// Verifies semantic analysis behavior for readonly memberRoutine calls on other without unexpected diagnostics.
     /// </summary>
 
     [Fact]
-    public void Analyze_ReadonlyMethodCallsOnOther_NoError()
+    public void Analyze_ReadonlyMemberRoutineCallsOnOther_NoError()
     {
         string source = """
                         entity Counter
@@ -419,9 +419,9 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        // Calling a mutating method on 'other' (not 'me') is allowed in @readonly
+        // Calling a mutating memberRoutine on 'other' (not 'me') is allowed in @readonly
         Assert.DoesNotContain(result.Errors,
-            e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod
+            e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMemberRoutine
                  && e.Message.Contains("increment"));
     }
 
@@ -498,10 +498,10 @@ public class MutabilityTests
     #region Readonly / Writable Cross-Calls
 
     /// <summary>
-    /// Verifies that a @readonly method can still read a var field without error.
+    /// Verifies that a @readonly memberRoutine can still read a var field without error.
     /// </summary>
     [Fact]
-    public void Analyze_ReadonlyMethod_CanReadVarField_NoError()
+    public void Analyze_ReadonlyMemberRoutine_CanReadVarField_NoError()
     {
         string source = """
                         entity Counter
@@ -514,14 +514,14 @@ public class MutabilityTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMemberRoutine);
     }
 
     /// <summary>
-    /// Verifies that a writable method calling a @readonly method produces no error.
+    /// Verifies that a writable memberRoutine calling a @readonly memberRoutine produces no error.
     /// </summary>
     [Fact]
-    public void Analyze_WritableMethodCallsReadonly_NoError()
+    public void Analyze_WritableMemberRoutineCallsReadonly_NoError()
     {
         string source = """
                         entity Counter
@@ -538,7 +538,7 @@ public class MutabilityTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMemberRoutine);
     }
 
     #endregion

@@ -22,8 +22,8 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           rb = ra
                           return
                         """;
@@ -45,9 +45,9 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
-                          rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
+                          rb = ra.share()
                           return
                         """;
 
@@ -56,9 +56,9 @@ public class ImplicitWrapperCopyAssignmentTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Assignment of a trivially-copyable record copies bitwise — no error.</summary>
+    /// <summary>Assignment of a trivially-Assignable record copies bitwise — no error.</summary>
     [Fact]
-    public void Analyze_Assignment_TriviallyCopyableRecord_IsAccepted()
+    public void Analyze_Assignment_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point
@@ -104,9 +104,9 @@ public class ImplicitWrapperCopyAssignmentTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
-                          rb = ra.track()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
+                          rb = ra.observe()
                           return
                         """;
 

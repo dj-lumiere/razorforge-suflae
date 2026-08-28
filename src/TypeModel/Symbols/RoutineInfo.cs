@@ -77,6 +77,13 @@ public sealed class RoutineInfo
     /// Stable key for registry lookup: "BaseName[TypeArgs]#Param1,Param2".
     /// For non-generic or unresolved routines, the type-argument segment is omitted.
     /// For zero-parameter routines, the key is just "BaseName" or "BaseName[TypeArgs]".
+    /// <para>REALM: a routine whose owner belongs to a NON-ambient (bridged) realm is prefixed
+    /// <c>{realm}::</c> so the two world-lines' same-signature routines are distinct EVERYWHERE this key
+    /// is used in lockstep — the routine registry, <c>InstantiatedGenericBodies</c>, reachability's
+    /// <c>LiveRoutineKeys</c>, and codegen's body lookup. The ambient realm is <c>RF</c> (bare), so every
+    /// RazorForge routine's key is byte-identical to before; only a Suflae-realm (SF) routine gains the
+    /// prefix. Keeping this on the ONE identity all consumers already share is what makes the realm split
+    /// consistent without desyncing the handshake between reachability, monomorphization, and codegen.</para>
     /// </summary>
     public string RegistryKey
     {
@@ -94,11 +101,12 @@ public sealed class RoutineInfo
                 baseName = $"{baseName}[{typeArgs}]";
             }
 
-            if (Parameters.Count == 0) return baseName;
+            string key = Parameters.Count == 0
+                ? baseName
+                : $"{baseName}#{string.Join(separator: ",", values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)))}";
 
-            string paramTypes = string.Join(separator: ",",
-                values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)));
-            return $"{baseName}#{paramTypes}";
+            // Bridged-realm owner → realm-prefixed key (ambient realm "RF" stays bare = RF byte-identical).
+            return OwnerType is { Realm: not "RF" and { } r } ? $"{r}::{key}" : key;
         }
     }
 
@@ -167,7 +175,7 @@ public sealed class RoutineInfo
     /// </summary>
     public List<(string Name, TypeSymbol Type)>? ClosureCaptures { get; set; }
 
-    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
+    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always None or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 
     /// <summary>True if the source wrote the return type with the `T` rvalue mark
@@ -177,7 +185,7 @@ public sealed class RoutineInfo
     public bool IsInFlightReturn { get; init; }
 
     /// <summary>Whether this routine can fail. Set from the declared <c>!</c> suffix at registration,
-    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-5
+    /// then RE-DERIVED by the failability-inference fixpoint (<c>InferFailableRoutines</c>) after Phase-4
     /// body analysis: a routine is failable iff it was declared <c>!</c> OR its body throws/absents OR it
     /// propagates an unhandled failable callee. The <c>internal set</c> lets that pass overwrite the
     /// declared value before codegen keys the failable-carrier ABI on it (mirrors
@@ -186,7 +194,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// Whether this is a WIRED member routine — one the source spells with a leading <c>$</c>
-    /// (<c>$create</c>, <c>$store</c>, <c>$eq</c>, <c>$emit</c>, <c>$destroy</c>, …). The <c>$</c> is
+    /// (<c>create</c>, <c>store</c>, <c>eq</c>, <c>emit</c>, <c>destroy</c>, …). The <c>$</c> is
     /// a STRUCTURED attribute recorded here, NOT part of <see cref="Name"/>: the canonical name is the
     /// bare identifier (<c>create</c>, <c>store</c>, …). Wired routines are always member routines.
     /// </summary>
@@ -202,7 +210,7 @@ public sealed class RoutineInfo
     public bool HasFailableCalls { get; set; }
 
     /// <summary>
-    /// Failable routines directly called by this routine. Populated during Phase 5 verification.
+    /// Failable routines directly called by this routine. Populated during Phase 4 verification.
     /// Used by <c>ErrorHandlingVariantPass</c> to propagate <see cref="HasThrow"/> /
     /// <see cref="HasAbsent"/> / <see cref="ThrowableTypes"/> through the call graph so that
     /// routines whose failability is purely propagated (e.g. <c>return Foo!(...)</c>) get the
@@ -212,21 +220,26 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// Concrete crashable types directly thrown by this routine (or its corresponding
-    /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 5 body analysis.
+    /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 4 body analysis.
     /// Does not include types thrown by called routines (propagated throws).
     /// </summary>
     public List<TypeSymbol> ThrowableTypes { get; set; } = [];
 
-    /// <summary>The declared mutation category for this routine (from source annotation).</summary>
+    /// <summary>The declared mutation category for this routine (from source annotation). Defaults to
+    /// <c>Writable</c> — the same "no annotation" default the resolvers apply (SignatureResolver /
+    /// TypeBodyResolver): a routine mutates unless marked <c>@readonly</c>, and <c>@reshaping</c> is a
+    /// STRONGER claim that must be explicit. (A <c>Reshaping</c> default was a latent bug: any construction
+    /// or copy path that forgot to set the category silently made the routine look maximally-mutating,
+    /// e.g. tripping the RF-S625 reshaping-during-iteration ban on a plainly <c>@readonly</c> call.)</summary>
     public MutationCategory DeclaredMutation { get; init; } =
-        MutationCategory.Migratable;
+        MutationCategory.Writable;
 
     /// <summary>
     /// The inferred/final mutation category for this routine.
     /// Initially set to declared value, then updated by mutation inference.
     /// </summary>
     public MutationCategory MutationCategory { get; set; } =
-        MutationCategory.Migratable;
+        MutationCategory.Writable;
 
     /// <summary>Generic type parameters, if any.</summary>
     public List<string>? GenericParameters { get; init; }
@@ -241,7 +254,7 @@ public sealed class RoutineInfo
     public List<TypeSymbol>? TypeArguments { get; init; }
 
     /// <summary>
-    /// Parameter indices whose declared type is a marker protocol (<c>Referring[T]</c> or
+    /// Parameter indices whose declared type is a marker protocol (<c>Accessing[T]</c> or
     /// <c>Controlling[T]</c>). These slots participate in monomorphization: each concrete
     /// argument type at a call site produces a distinct specialization, so the protocol
     /// name never appears in mangled symbols or LLVM IR.
@@ -268,10 +281,8 @@ public sealed class RoutineInfo
         {
             return false;
         }
-        string fullName = proto.GenericDefinition?.Name ?? proto.Name;
-        int bracket = fullName.IndexOf(value: '[');
-        string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
-        return baseName is RuntimeContract.Referring or RuntimeContract.Controlling;
+        string baseName = (proto.GenericDefinition ?? proto).BareName;
+        return baseName is RuntimeContract.Accessing or RuntimeContract.Controlling;
     }
 
     /// <summary>Visibility modifier.</summary>
@@ -279,6 +290,12 @@ public sealed class RoutineInfo
 
     /// <summary>Source location where this routine is defined.</summary>
     public SourceLocation? Location { get; init; }
+
+    /// <summary>The <c>###</c> documentation-comment text written above the routine's declaration (lines
+    /// joined with newlines), or null. Carried from <c>Declaration.Documentation</c> at registration so
+    /// the language server can show it on hover / completion — for stdlib routines too, since the stdlib
+    /// is parsed the same way.</summary>
+    public string? Documentation { get; init; }
 
     /// <summary>
     /// Structural hash of a CONSTRUCTOR body, set at registration for the divergent-duplicate guard.
@@ -299,9 +316,16 @@ public sealed class RoutineInfo
     /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
     public List<string> Annotations { get; init; } = [];
 
-    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Inspecting).</summary>
+    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Consulting).</summary>
     public bool IsReadOnly =>
         Annotations.Contains(value: "readonly") || MutationCategory == MutationCategory.Readonly;
+
+    /// <summary>Whether this routine RESHAPES its receiver (a container mutator that can invalidate an
+    /// in-progress iteration — drives the RF-S625 reshaping-during-iteration ban). The <c>@reshaping</c>
+    /// annotation is the authoritative marker (container authors put it on mutators); the category is a
+    /// fallback, and is NOT trusted alone because some registration paths leave it at the default.</summary>
+    public bool IsReshaping =>
+        Annotations.Contains(value: "reshaping") || MutationCategory == MutationCategory.Reshaping;
 
     /// <summary>
     /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.
@@ -347,6 +371,46 @@ public sealed class RoutineInfo
     /// <summary>For external routines, the calling convention.</summary>
     public string? CallingConvention { get; init; }
 
+    /// <summary>
+    /// The DECLARED library this foreign routine is linked from — the name in its <c>@link(Lib)</c>
+    /// attribute, matching a <c>library Lib …</c> declaration. Null for a static/ambient <c>C::</c> extern
+    /// (resolved from libc / a toml archive) and for <c>LLVM::</c> intrinsics. Whether that library links
+    /// STATICALLY or DYNAMICALLY, and under which calling convention, is a property of the LIBRARY (the
+    /// <c>library</c> declaration), NOT of this routine — so switching a library static↔dynamic never
+    /// touches call sites. The realm stays <c>C::</c> (= no-mangle C-ABI) regardless, so ABI/mangling are
+    /// unaffected. See <see cref="LinkSymbol"/> for a symbol-name override.
+    /// </summary>
+    public string? LinkLibrary { get; init; }
+
+    /// <summary>
+    /// The actual exported symbol name to link against, when it differs from <see cref="Name"/> — from
+    /// <c>@link(Lib, symbol: "…")</c>. Handles the "same RF name, different link name" cases (versioned
+    /// symbols, <c>stat</c>→<c>stat64</c>, decorated names). Null = link by the bare routine name.
+    /// </summary>
+    public string? LinkSymbol { get; init; }
+
+    /// <summary>
+    /// The realm this routine's implementation lives in. DERIVED from <see cref="CallingConvention"/> for
+    /// the foreign realms (so it rides along automatically wherever CallingConvention is copied —
+    /// monomorphization, reachability, etc.), falling back to the native realm otherwise. A `C::`/`LLVM::`
+    /// declaration sets CallingConvention "C"/"llvm"; a native routine leaves it null and is RF (or SF via
+    /// <see cref="NativeRealm"/>). Replaces the old <c>RoutineKind.External</c> flag.
+    /// </summary>
+    public TypeModel.Enums.RoutineRealm Realm => CallingConvention switch
+    {
+        "C" => TypeModel.Enums.RoutineRealm.C,
+        "llvm" => TypeModel.Enums.RoutineRealm.LLVM,
+        _ => NativeRealm
+    };
+
+    /// <summary>Native realm for a non-foreign routine (RF for a <c>.rf</c> body, SF for a <c>.sf</c> body).
+    /// Defaults to RF; ignored when the routine is C/LLVM foreign.</summary>
+    public TypeModel.Enums.RoutineRealm NativeRealm { get; init; } = TypeModel.Enums.RoutineRealm.RF;
+
+    /// <summary>True if this routine is a FOREIGN declaration (C extern or LLVM intrinsic) — no native
+    /// body; must be called with its realm qualifier. Supersedes <c>Kind == RoutineKind.External</c>.</summary>
+    public bool IsForeign => Realm is TypeModel.Enums.RoutineRealm.C or TypeModel.Enums.RoutineRealm.LLVM;
+
     /// <summary>For external routines, whether it's variadic.</summary>
     public bool IsVariadic { get; init; }
 
@@ -366,16 +430,16 @@ public sealed class RoutineInfo
     public bool IsSynthesized { get; init; }
 
     /// <summary>
-    /// For wrapper-forwarder synthesized routines: the inner-type method that this forwarder
+    /// For wrapper-forwarder synthesized routines: the inner-type member routine that this forwarder
     /// delegates to. Used by monomorphization to re-resolve signatures against the concrete
-    /// inner type when the inner method's return depends on the inner's generic parameter.
+    /// inner type when the inner member routine's return depends on the inner's generic parameter.
     /// </summary>
-    public RoutineInfo? WrapperForwarderInnerMethod { get; init; }
+    public RoutineInfo? WrapperForwarderInnerMemberRoutine { get; init; }
 
     /// <summary>
     /// For wrapper-forwarder synthesized routines: the inner type's generic definition
     /// (e.g. List[T] when wrapping List[T]). Used to look up the concrete inner
-    /// method after monomorphization.
+    /// member routine after monomorphization.
     /// </summary>
     public TypeSymbol? WrapperForwarderInnerGenericDef { get; init; }
 
@@ -470,29 +534,32 @@ public sealed class RoutineInfo
             MutationCategory = MutationCategory,
             TypeArguments = typeArguments,
             // Preserve universal self-type provenance through this resolution layer. For a
-            // self-type extension method (`routine T.share[P]()`), `LookupMethod` returns an
+            // self-type extension member routine (`routine T.share[P]()`), `LookupMemberRoutine` returns an
             // owner-bound intermediate (OwnerType already = the concrete receiver) whose
-            // GenericDefinition points at the original universal method (OwnerType = the bare
+            // GenericDefinition points at the original universal member routine (OwnerType = the bare
             // `T` generic parameter). If we naively set GenericDefinition = this, that universal
             // provenance is buried one level down, and reachability / GMP (which gate the
             // self-type owner→receiver binding on `GenericDefinition.OwnerType is
             // GenericParameterTypeInfo`) can no longer recover `T → receiver` — the concrete
-            // receiver carries no TypeArguments to recover it from, unlike `List[S32].method[U]`.
+            // receiver carries no TypeArguments to recover it from, unlike `List[S32].MemberRoutine[U]`.
             // The result is an emitted call to `Receiver.share[P]` with no matching definition
-            // (LINKERR). Keep the universal method as the definition so that binding survives.
+            // (LINKERR). Keep the universal member routine as the definition so that binding survives.
             GenericDefinition = GenericDefinition?.OwnerType is GenericParameterTypeInfo
                 ? GenericDefinition
                 : this,
             Visibility = Visibility,
             Location = Location,
+            Documentation = Documentation,
             Module = Module,
             ModulePath = ModulePath,
             Annotations = Annotations,
             CallingConvention = CallingConvention,
+            LinkLibrary = LinkLibrary,
+            LinkSymbol = LinkSymbol,
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized,
-            WrapperForwarderInnerMethod = WrapperForwarderInnerMethod,
+            WrapperForwarderInnerMemberRoutine = WrapperForwarderInnerMemberRoutine,
             WrapperForwarderInnerGenericDef = WrapperForwarderInnerGenericDef,
             Storage = Storage,
             AsyncStatus = AsyncStatus,
@@ -537,6 +604,21 @@ public sealed class RoutineInfo
             return ReferenceEquals(objA: newBase, objB: projection.Base)
                 ? projection
                 : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
+        }
+
+        // Comptime const-generic (`${max(T.data_size().byte_size(), 8)}`): once the referenced type
+        // params are bound, fold to a plain ConstGenericValueTypeInfo; otherwise keep it symbolic.
+        if (type is ComptimeConstGenericTypeInfo comptime)
+        {
+            return comptime.TryFold(
+                    resolveTypeParam: name => substitution.TryGetValue(key: name, value: out TypeSymbol? s)
+                        ? s as TypeInfo
+                        : null,
+                    pointerSize: 8, out long folded)
+                ? new ConstGenericValueTypeInfo(literalText: folded.ToString(),
+                    value: folded,
+                    explicitTypeName: "U64")
+                : comptime;
         }
 
         if (substitution.TryGetValue(key: type.Name, value: out TypeSymbol? substituted))
@@ -604,7 +686,7 @@ public sealed class RoutineInfo
                     : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
-            // WrapperTypeInfo (Retained[T], Shared[T], etc.) — if the registry has a RecordTypeInfo
+            // WrapperTypeInfo (Retained[T], Guarded[T], etc.) — if the registry has a RecordTypeInfo
             // for the same base name, prefer that so the concrete type stays RecordTypeInfo everywhere.
             // This avoids the WrapperTypeInfo -> "ptr" codegen mapping mismatch when the actual LLVM
             // function definition uses the struct layout from the RecordTypeInfo.

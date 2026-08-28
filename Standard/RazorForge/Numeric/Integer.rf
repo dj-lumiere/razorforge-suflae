@@ -6,18 +6,18 @@ module Numerics
 ###
 ### Layout:
 ###   handle: CPtr                                  — LibTomMath bigint handle
-###   ctrl:   Hijacked[ImmutableSharedController]   — atomic strong-count cell (or null)
+###   ctrl:   Hijacked[FrozenController]   — atomic strong-count cell (or null)
 ###
 ### `Integer` is a record (value semantics from the user's view) backed by an
 ### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Copyable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
+record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
   ### Stores the native big-integer handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller (null for transient stack values is not
   ### permitted — every Integer either owns or shares a live handle).
-  secret ctrl: Hijacked[ImmutableSharedController]
+  secret ctrl: Hijacked[FrozenController]
 
 # ============================================================================
 # Lifecycle Management
@@ -28,7 +28,7 @@ record Integer obeys Copyable, Integral, Divisible, Negatable, Ordered, Hashable
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
 routine Integer() -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   return int
 
 ### Creates an `Integer` from a signed 64-bit source value.
@@ -37,7 +37,7 @@ routine Integer() -> Integer
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: S64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: value)
   return int
 
@@ -47,7 +47,7 @@ routine Integer(value: S64) -> Integer
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: U64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_set_u64(handle: int.handle, value: value)
   return int
 
@@ -62,11 +62,11 @@ routine Integer(value: U64) -> Integer
 # construct via the real handle/ctrl fields, so they avoid the `Integer(value:)` call form
 # (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: v)
   return int
 routine integer_of_u64(v: U64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_set_u64(handle: int.handle, value: v)
   return int
 
@@ -120,7 +120,7 @@ routine Integer(from: U256) -> Integer
 ### :returns: The resulting `Integer` value.
 ### :throws: {ValueError} if `text` is not a valid integer in `radix`.
 routine Integer!(text: Text, radix: S32 = 10) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
@@ -132,7 +132,7 @@ routine Integer!(text: Text, radix: S32 = 10) -> Integer
 ### :param text: The decimal digit string (no suffix, no separators).
 ### :returns: The resulting `Integer` value.
 common routine Integer.from_literal(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   discard rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   return int
 
@@ -141,10 +141,10 @@ common routine Integer.from_literal(text: Text) -> Integer
 ### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
 ### :returns: The resulting `Integer` value.
 @[readonly, inline]
-routine Integer.store() -> Integer
+routine Integer.assign() -> Integer
   danger
     if not me.ctrl.is_none()
-      me.ctrl.as_entity().increase_strong_count()
+      me.ctrl.as_entity().hold()
   return Integer(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this value's reference. Frees the handle + controller when this
@@ -152,7 +152,7 @@ routine Integer.store() -> Integer
 dangerous routine Integer.destroy()
   if me.ctrl.is_none()
     return
-  var prev = me.ctrl.as_entity().decrease_strong_count()
+  var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
     rf_bigint_clear(me.handle)
     me.ctrl.invalidate()
@@ -168,7 +168,7 @@ dangerous routine Integer.destroy()
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.add(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_add(result.handle, me.handle, other.handle)
   return result
 
@@ -177,7 +177,7 @@ routine Integer.add(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sub(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
 
@@ -186,7 +186,7 @@ routine Integer.sub(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.mul(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
 
@@ -198,8 +198,8 @@ routine Integer.mul(other: Integer) -> Integer
 routine Integer.floordiv!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  var remainder = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var quotient = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
+  var remainder = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
   return quotient
 
@@ -210,7 +210,7 @@ routine Integer.floordiv!(other: Integer) -> Integer
 routine Integer.mod!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_mod(result.handle, me.handle, other.handle)
   return result
 
@@ -218,7 +218,7 @@ routine Integer.mod!(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.neg() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_neg(result: result.handle, a: me.handle)
   return result
 
@@ -255,7 +255,7 @@ routine Integer.cmp(you: Integer) -> ComparisonSign
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitand(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
 
@@ -264,7 +264,7 @@ routine Integer.bitand(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitor(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
 
@@ -273,7 +273,7 @@ routine Integer.bitor(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitxor(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
 
@@ -283,7 +283,7 @@ routine Integer.bitxor(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shl(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_shl(result.handle, me.handle, bits)
   return result
 
@@ -292,7 +292,7 @@ routine Integer.shl(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shr(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_shr(result.handle, me.handle, bits)
   return result
 
@@ -304,7 +304,7 @@ routine Integer.shr(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.abs() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_abs(result: result.handle, a: me.handle)
   return result
 
@@ -313,7 +313,7 @@ routine Integer.abs() -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.pow(exp: U32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_pow(result.handle, me.handle, exp)
   return result
 
@@ -322,7 +322,7 @@ routine Integer.pow(exp: U32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sqrt() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_sqrt(result: result.handle, a: me.handle)
   return result
 
@@ -331,7 +331,7 @@ routine Integer.sqrt() -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.gcd(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_gcd(result.handle, me.handle, other.handle)
   return result
 
@@ -340,7 +340,7 @@ routine Integer.gcd(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.lcm(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_lcm(result.handle, me.handle, other.handle)
   return result
 
@@ -415,8 +415,8 @@ routine Integer.bit_length() -> U64
 @readonly
 routine Integer.min(other: Integer) -> Integer
   if me.cmp(you: other) is ME_LARGE
-    return other.store()
-  return me.store()
+    return other.assign()
+  return me.assign()
 
 ### Returns the larger of this value and `other`.
 ### :param other: The value to compare against.
@@ -424,8 +424,8 @@ routine Integer.min(other: Integer) -> Integer
 @readonly
 routine Integer.max(other: Integer) -> Integer
   if me.cmp(you: other) is ME_SMALL
-    return other.store()
-  return me.store()
+    return other.assign()
+  return me.assign()
 
 ### Clamps this value into the inclusive range `[low, high]`.
 ### :param low: The lower bound.
@@ -434,10 +434,10 @@ routine Integer.max(other: Integer) -> Integer
 @readonly
 routine Integer.clamp(low: Integer, high: Integer) -> Integer
   if me.cmp(you: low) is ME_SMALL
-    return low.store()
+    return low.assign()
   if me.cmp(you: high) is ME_LARGE
-    return high.store()
-  return me.store()
+    return high.assign()
+  return me.assign()
 
 ### Divides by `other`, returning the Euclidean quotient and remainder together.
 ### :param other: The non-zero divisor.
@@ -447,8 +447,8 @@ routine Integer.clamp(low: Integer, high: Integer) -> Integer
 routine Integer.divmod!(other: Integer) -> (Integer, Integer)
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  var remainder = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var quotient = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
+  var remainder = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
   return (quotient, remainder)
 
@@ -466,7 +466,7 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
     throw NumericDomainError(description: "modpow: negative exponent")
   var result = Integer.one()
   var base = me.mod(other: modulus)
-  var e = exp.store()
+  var e = exp.assign()
   while not e.is_zero()
     if e.is_odd()
       result = result.mul(other: base).mod(other: modulus)
@@ -516,13 +516,6 @@ routine Integer.represent_radix(radix: S32) -> Text
 # Hashing
 # ============================================================================
 
-### Returns an xxHash64-based hash of this value.
-### Hashes the canonical base-10 representation, so equal integers hash equally.
-### :returns: The 64-bit hash.
-@readonly
-routine Integer.fast_hash() -> U64
-  return me.represent_radix(radix: 10_s32).fast_hash()
-
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### Hashes the canonical base-10 representation under the supplied key pair.
 ### :param k0: The first 64-bit key word.
@@ -543,7 +536,7 @@ routine Integer.hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
 routine Integer!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
@@ -555,7 +548,7 @@ routine Integer!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_binary!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
@@ -567,7 +560,7 @@ common routine Integer.from_binary!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_hex!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")

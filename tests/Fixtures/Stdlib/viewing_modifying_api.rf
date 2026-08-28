@@ -1,6 +1,6 @@
-﻿module Tests/Stdlib/ViewingModifyingApi
+module Tests/Stdlib/ViewingModifyingApi
 import IO/Console
-import BuilderService
+import BuilderQuery
 
 entity Box
   value: S64

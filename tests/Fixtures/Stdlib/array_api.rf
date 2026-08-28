@@ -30,7 +30,7 @@ routine start()
 
   # Iteration (deterministic — array order is fixed)
   var sum = 0_s64
-  for x in a
+  each x in a
     sum = sum + x
   show(f"sum: {sum}")
 

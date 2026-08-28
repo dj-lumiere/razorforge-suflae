@@ -114,4 +114,25 @@ static inline void rf_cond_wait_forever(rf_cond* c, rf_mutex* m)
 #endif
 }
 
+/* Reader/writer lock: many concurrent SHARED holders XOR one EXCLUSIVE holder. Backs the cycle
+ * collector's stop-the-world barrier — mutators (RoamController hold/unhold) take it SHARED so they run
+ * in parallel, a collection pass takes it EXCLUSIVE so trial-deletion never races a live refcount op.
+ * Statically initializable (RF_RWLOCK_INIT) so process-global locks need no init call. NOT reentrant and
+ * NO shared->exclusive upgrade — a holder must not nest a second shared acquire or try to upgrade. */
+#ifdef _WIN32
+typedef SRWLOCK rf_rwlock;
+#define RF_RWLOCK_INIT SRWLOCK_INIT
+static inline void rf_rwlock_lock_shared(rf_rwlock* l)      { AcquireSRWLockShared(l); }
+static inline void rf_rwlock_unlock_shared(rf_rwlock* l)    { ReleaseSRWLockShared(l); }
+static inline void rf_rwlock_lock_exclusive(rf_rwlock* l)   { AcquireSRWLockExclusive(l); }
+static inline void rf_rwlock_unlock_exclusive(rf_rwlock* l) { ReleaseSRWLockExclusive(l); }
+#else
+typedef pthread_rwlock_t rf_rwlock;
+#define RF_RWLOCK_INIT PTHREAD_RWLOCK_INITIALIZER
+static inline void rf_rwlock_lock_shared(rf_rwlock* l)      { pthread_rwlock_rdlock(l); }
+static inline void rf_rwlock_unlock_shared(rf_rwlock* l)    { pthread_rwlock_unlock(l); }
+static inline void rf_rwlock_lock_exclusive(rf_rwlock* l)   { pthread_rwlock_wrlock(l); }
+static inline void rf_rwlock_unlock_exclusive(rf_rwlock* l) { pthread_rwlock_unlock(l); }
+#endif
+
 #endif /* RF_SYNC_H */

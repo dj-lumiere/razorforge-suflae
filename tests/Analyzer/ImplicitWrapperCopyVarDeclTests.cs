@@ -8,7 +8,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the S420 ImplicitWrapperCopy rule on variable declarations.
 /// `var b = a` where `a` carries a non-trivially-copyable wrapper must spell out
-/// the explicit verb (`steal` / `.retain()` / `.track()`). Trivially-copyable
+/// the explicit verb (`steal` / `.share()`). Trivially-copyable
 /// values (primitives, Hijacked[T], primitive-only records) still copy bitwise.
 /// </summary>
 public class ImplicitWrapperCopyVarDeclTests
@@ -23,7 +23,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           var rb = ra
                           return
                         """;
@@ -32,7 +32,7 @@ public class ImplicitWrapperCopyVarDeclTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "Implicit copy",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                e.Message.Contains(value: "a.retain()",
+                e.Message.Contains(value: "a.share()",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -49,7 +49,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var b = Box(handle: a.retain())
+                          var b = Box(handle: Retained(from: steal a))
                           var taken = b.handle
                           return
                         """;
@@ -70,8 +70,8 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rb = ra.retain()
+                          var ra = Retained(from: steal a)
+                          var rb = ra.share()
                           return
                         """;
 
@@ -80,9 +80,9 @@ public class ImplicitWrapperCopyVarDeclTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Trivially-copyable record (all-primitive) bitwise copies — no error.</summary>
+    /// <summary>Trivially-Assignable record (all-primitive) bitwise copies — no error.</summary>
     [Fact]
-    public void Analyze_VarDecl_TriviallyCopyableRecord_IsAccepted()
+    public void Analyze_VarDecl_TriviallyAssignableRecord_IsAccepted()
     {
         string source = """
                         record Point
@@ -112,7 +112,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
+                          var ra = Retained(from: steal a)
                           return
                         """;
 
@@ -194,8 +194,8 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var t = ra.track()
+                          var ra = Retained(from: steal a)
+                          var t = ra.observe()
                           return
                         """;
 
@@ -220,7 +220,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var w = Wrapper(ref: a.retain())
+                          var w = Wrapper(ref: Retained(from: steal a))
                           var b = Box(inner: w)
                           var taken = b.inner.ref
                           return

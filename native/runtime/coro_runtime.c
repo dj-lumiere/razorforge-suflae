@@ -20,6 +20,7 @@
 
 #include <stdatomic.h> /* atomic sched_state — a worker drains/steals a coroutine off s->lock (step 3) */
 #include <stdlib.h>
+#include <stdio.h> /* fprintf(stderr,…) — the deadlock detector's loud abort message */
 
 #ifdef _WIN32
 #include <windows.h>
@@ -125,6 +126,18 @@ struct rf_coro {
                                     * st==COMPLETED branch of rf_sched_run_coro). Closes the owner-free vs
                                     * worker-pop use-after-free (the M:N libco migration crash).          */
     int cancel_requested;          /* 1 once cooperative cancellation has been requested        */
+    int initial_spawned;           /* 1 once rf_sched_spawn has queued this coroutine for the FIRST time.
+                                    * Makes the initial spawn IDEMPOTENT: the lazy model lets a set be
+                                    * pre-launched (gather/race launch the whole set) and THEN driven via
+                                    * retrieve!, whose own spawn would otherwise double-enqueue + double-
+                                    * count s->live (→ the pool never reaches idle → hang). Re-queues
+                                    * (park→wake) go through make_ready, not rf_sched_spawn, so this only
+                                    * guards the one-time initial enqueue.                              */
+    int detached;                  /* 1 for a fire-and-forget `execute()` coroutine: no consumer will
+                                    * retrieve it, so the worker that completes it frees it itself (like
+                                    * owner_released, but set at SPAWN time — before any worker can touch
+                                    * it — so there is no complete-before-detach race). The matching task
+                                    * is flagged rf_task_set_detached, which self-frees the result box.  */
     struct rf_coro* awaiter;       /* a coroutine parked in retrieve! awaiting THIS one's completion;
                                     * the pool worker wakes it (pushes to the injector) when this
                                     * coroutine completes. NULL = no coroutine is awaiting. Single
@@ -402,6 +415,78 @@ uint64_t rf_current_task_id(void)
     return rf_current_thread_id();
 }
 
+/* ---- §4 nested-monitor deadlock DETECTOR (opt-in: RF_DEADLOCK_DETECT=1) ---------------------
+ * A Roamed escaped-mode field touch takes RoamController's task-keyed reentrant lock. A statement
+ * touching TWO escaped handles holds both locks at once (the lock entry is compiler-inserted by
+ * RoamedLockBracketLoweringPass, so it is invisible at the call site), and two tasks acquiring the
+ * same pair in opposite order deadlock — the classic nested-monitor problem. This detector keeps a
+ * task→held-by wait graph: on each CONTENDED acquire spin, the waiter registers whom it waits for,
+ * then walks the holder chain; if that chain loops back to the waiter, the wait is a cycle → LOUD
+ * abort with the offending task ids, instead of a silent hang (RF's "fail loudly" over a mystery
+ * freeze). OFF by default — zero cost unless enabled for a debugging run. Bounded fixed table; a
+ * table-full / self-wait case degrades to no detection (never a false positive). Its own lock is a
+ * statically-initialized rwlock used exclusively (no init race). */
+#define RF_DD_MAX 256
+static rf_rwlock g_dd_lock = RF_RWLOCK_INIT;
+static struct { uint64_t task; uint64_t holder; int used; } g_dd_wait[RF_DD_MAX];
+
+static int rf_dd_on(void)
+{
+    /* A benign read race (two threads both read the env once) yields the same value — no guard. */
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* e = getenv("RF_DEADLOCK_DETECT");
+        enabled = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return enabled;
+}
+
+void rf_deadlock_wait_begin(uint64_t self, uint64_t holder)
+{
+    if (!rf_dd_on() || holder == 0 || holder == self) return;
+    rf_rwlock_lock_exclusive(&g_dd_lock);
+    /* upsert self→holder */
+    int slot = -1, empty = -1;
+    for (int i = 0; i < RF_DD_MAX; i++) {
+        if (g_dd_wait[i].used && g_dd_wait[i].task == self) { slot = i; break; }
+        if (!g_dd_wait[i].used && empty < 0) empty = i;
+    }
+    if (slot < 0) slot = empty;
+    if (slot < 0) { rf_rwlock_unlock_exclusive(&g_dd_lock); return; } /* table full: skip */
+    g_dd_wait[slot].task = self;
+    g_dd_wait[slot].holder = holder;
+    g_dd_wait[slot].used = 1;
+    /* Walk the holder chain: is any task in it waiting (transitively) on `self`? */
+    uint64_t cur = holder;
+    for (int steps = 0; steps < RF_DD_MAX; steps++) {
+        int found = -1;
+        for (int i = 0; i < RF_DD_MAX; i++)
+            if (g_dd_wait[i].used && g_dd_wait[i].task == cur) { found = i; break; }
+        if (found < 0) break;                        /* cur is not blocked → no cycle */
+        if (g_dd_wait[found].holder == self) {
+            rf_rwlock_unlock_exclusive(&g_dd_lock);
+            fprintf(stderr,
+                "\n[RazorForge] FATAL: Roamed escaped-lock DEADLOCK — task %llu and task %llu "
+                "acquired the same escaped entities in opposite order (nested-monitor lock-order "
+                "inversion). Acquire shared entities in a consistent order.\n",
+                (unsigned long long)self, (unsigned long long)cur);
+            fflush(stderr);
+            abort();
+        }
+        cur = g_dd_wait[found].holder;
+    }
+    rf_rwlock_unlock_exclusive(&g_dd_lock);
+}
+
+void rf_deadlock_wait_end(uint64_t self)
+{
+    if (!rf_dd_on()) return;
+    rf_rwlock_lock_exclusive(&g_dd_lock);
+    for (int i = 0; i < RF_DD_MAX; i++)
+        if (g_dd_wait[i].used && g_dd_wait[i].task == self) { g_dd_wait[i].used = 0; break; }
+    rf_rwlock_unlock_exclusive(&g_dd_lock);
+}
+
 // ==== Cycle collector — Bacon-Rajan synchronous recycler buffers ============================
 //
 // Three growable pointer arrays back the RazorForge-side collector (Core/Memory/CycleCollector.rf):
@@ -409,10 +494,10 @@ uint64_t rf_current_task_id(void)
 //               CollectCycles pass walks). Dedup is the RF side's job (the controller `buffered`
 //               flag); here we only append.
 //   - scratch : the children of ONE controller, filled by a per-type trace hook (which calls
-//               rf_cc_visit_child for each Roamed field) and drained by RF.
+//               rf_cyclic_visit_child for each Roamed field) and drained by RF.
 //   - reap    : the white (garbage) controllers CollectWhite gathers, freed after the walk.
 //
-// A trace/free hook is invoked through rf_cc_invoke_hook (the closure ABI — see there); every other
+// A trace/free hook is invoked through rf_cyclic_invoke_hook (the closure ABI — see there); every other
 // collector operation reads controller fields by name on the RF side, so the algorithm is
 // layout-drift-proof.
 //
@@ -420,17 +505,34 @@ uint64_t rf_current_task_id(void)
 // internal-wiki/v0.4.x-cycle-collector.md §5). These buffers are plain process-global arrays with no
 // lock; concurrent collection across schedulers is a deferred decision.
 
-typedef struct rf_cc_buffer {
+typedef struct rf_cyclic_buffer {
     void** items;
     uint64_t count;
     uint64_t capacity;
-} rf_cc_buffer;
+} rf_cyclic_buffer;
 
-static rf_cc_buffer g_cc_roots = {0};
-static rf_cc_buffer g_cc_scratch = {0};
-static rf_cc_buffer g_cc_reap = {0};
+static rf_cyclic_buffer g_cc_roots = {0};
+static rf_cyclic_buffer g_cc_scratch = {0};
+static rf_cyclic_buffer g_cc_reap = {0};
 
-static void rf_cc_buffer_push(rf_cc_buffer* buf, void* item)
+// Concurrency (Stage 2): the synchronous trial-deletion collector is correct only with no concurrent
+// mutation, so a collection pass STOPS THE WORLD via g_cc_rwlock — mutators (RoamController hold/unhold)
+// take it SHARED (parallel with each other), a pass takes it EXCLUSIVE. g_cc_roots_lock (used EXCLUSIVE
+// only, i.e. as a plain mutex) guards the roots buffer against concurrent mutator appends, since two
+// SHARED holders CAN run at once. rf_in_collector marks the thread running a pass: it already holds the
+// EXCLUSIVE lock, so its OWN finalizer releases (cyclic_free -> entity destroy -> unhold) must skip the
+// shared acquire (re-taking it would self-deadlock) and the roots mutex (no mutator runs under EXCLUSIVE).
+static rf_rwlock g_cc_rwlock = RF_RWLOCK_INIT;
+static rf_rwlock g_cc_roots_lock = RF_RWLOCK_INIT;
+static _Thread_local int rf_in_collector = 0;
+
+// Mutator stop-the-world cooperation. RoamController.hold/unhold bracket their count/state mutation in
+// these, so a collection pass (EXCLUSIVE) never observes a half-updated controller. A no-op on the
+// collector's own thread, which already holds the world EXCLUSIVE.
+void rf_cyclic_lock_shared(void)   { if (!rf_in_collector) rf_rwlock_lock_shared(&g_cc_rwlock); }
+void rf_cyclic_unlock_shared(void) { if (!rf_in_collector) rf_rwlock_unlock_shared(&g_cc_rwlock); }
+
+static void rf_cyclic_buffer_push(rf_cyclic_buffer* buf, void* item)
 {
     if (buf->count == buf->capacity) {
         uint64_t new_cap = buf->capacity == 0 ? 16 : buf->capacity * 2;
@@ -449,22 +551,26 @@ static void rf_cc_buffer_push(rf_cc_buffer* buf, void* item)
 // RoamController.mark_cycle_candidate when a strong decrement leaves the count > 0 (a possible cycle
 // root). Appends to the roots buffer; the RF side guards duplicates via the controller `buffered`
 // flag before calling here.
-void rf_cc_add_candidate(void* obj)
+void rf_cyclic_add_candidate(void* obj)
 {
-    rf_cc_buffer_push(&g_cc_roots, obj);
+    // Under the SHARED stop-the-world lock two mutators can append at once — the buffer push needs its
+    // own mutex. The collector (EXCLUSIVE, rf_in_collector) has no concurrent mutator, so it skips it.
+    if (!rf_in_collector) rf_rwlock_lock_exclusive(&g_cc_roots_lock);
+    rf_cyclic_buffer_push(&g_cc_roots, obj);
+    if (!rf_in_collector) rf_rwlock_unlock_exclusive(&g_cc_roots_lock);
 }
 
 // roots-buffer accessors — the RF CollectCycles pass walks the candidate set through these.
-uint64_t rf_cc_roots_count(void) { return g_cc_roots.count; }
-void* rf_cc_roots_at(uint64_t i) { return i < g_cc_roots.count ? g_cc_roots.items[i] : NULL; }
-void rf_cc_roots_clear(void) { g_cc_roots.count = 0; }
+uint64_t rf_cyclic_roots_count(void) { return g_cc_roots.count; }
+void* rf_cyclic_roots_at(uint64_t i) { return i < g_cc_roots.count ? g_cc_roots.items[i] : NULL; }
+void rf_cyclic_roots_clear(void) { g_cc_roots.count = 0; }
 
-// Removes the first n candidates (those a pass snapshotted and processed via rf_cc_roots_at(0..n)),
+// Removes the first n candidates (those a pass snapshotted and processed via rf_cyclic_roots_at(0..n)),
 // keeping any appended AFTER the snapshot — e.g. a candidate reported by a finalizer-triggered release
 // during the reap phase. cc_collect uses this instead of a blanket clear so such late arrivals are not
 // dropped (they'd be buffered=true yet absent from roots → never re-collected). Manual shift (no
 // <string.h> memmove dependency).
-void rf_cc_roots_remove_front(uint64_t n)
+void rf_cyclic_roots_remove_front(uint64_t n)
 {
     if (n >= g_cc_roots.count) {
         g_cc_roots.count = 0;
@@ -483,38 +589,42 @@ void rf_cc_roots_remove_front(uint64_t n)
 // (roots is threshold-bounded), swap-with-last for O(1) removal (candidate order is irrelevant). Order
 // is unaffected during a pass: MarkRoots snapshots and processes roots[0..n] without triggering
 // releases, so any removal here happens outside that index walk.
-void rf_cc_roots_remove(void* ptr)
+void rf_cyclic_roots_remove(void* ptr)
 {
+    // Mutator eager-free path (a buffered candidate reaching count 0); guard the buffer like
+    // add_candidate. The collector never calls this (its removals go through roots_remove_front).
+    if (!rf_in_collector) rf_rwlock_lock_exclusive(&g_cc_roots_lock);
     for (uint64_t i = 0; i < g_cc_roots.count; i++) {
         if (g_cc_roots.items[i] == ptr) {
             g_cc_roots.items[i] = g_cc_roots.items[g_cc_roots.count - 1];
             g_cc_roots.count--;
-            return;
+            break;
         }
     }
+    if (!rf_in_collector) rf_rwlock_unlock_exclusive(&g_cc_roots_lock);
 }
 
 // scratch protocol — get one controller's children:
-//   rf_cc_scratch_reset(); rf_cc_trace_into_scratch(trace_hook, controller);
-//   for i in 0..rf_cc_scratch_count(): rf_cc_scratch_at(i)   // child controller pointers
-void rf_cc_scratch_reset(void) { g_cc_scratch.count = 0; }
-uint64_t rf_cc_scratch_count(void) { return g_cc_scratch.count; }
-void* rf_cc_scratch_at(uint64_t i) { return i < g_cc_scratch.count ? g_cc_scratch.items[i] : NULL; }
+//   rf_cyclic_scratch_reset(); rf_cyclic_trace_into_scratch(trace_hook, controller);
+//   for i in 0..rf_cyclic_scratch_count(): rf_cyclic_scratch_at(i)   // child controller pointers
+void rf_cyclic_scratch_reset(void) { g_cc_scratch.count = 0; }
+uint64_t rf_cyclic_scratch_count(void) { return g_cc_scratch.count; }
+void* rf_cyclic_scratch_at(uint64_t i) { return i < g_cc_scratch.count ? g_cc_scratch.items[i] : NULL; }
 
 // Called by a per-type trace hook, once per Roamed-typed field, with that field's controller pointer.
 // Appends to the scratch buffer the current trace is filling.
-void rf_cc_visit_child(void* child_ctrl)
+void rf_cyclic_visit_child(void* child_ctrl)
 {
-    rf_cc_buffer_push(&g_cc_scratch, child_ctrl);
+    rf_cyclic_buffer_push(&g_cc_scratch, child_ctrl);
 }
 
 // reap = the white (garbage) controllers CollectWhite gathers; freeing is deferred to after the walk
 // (freeing mid-traversal would dangle the roots/child lists). Separate from scratch, which the trace
 // reuses during the same walk.
-void rf_cc_reap_push(void* ctrl) { rf_cc_buffer_push(&g_cc_reap, ctrl); }
-uint64_t rf_cc_reap_count(void) { return g_cc_reap.count; }
-void* rf_cc_reap_at(uint64_t i) { return i < g_cc_reap.count ? g_cc_reap.items[i] : NULL; }
-void rf_cc_reap_clear(void) { g_cc_reap.count = 0; }
+void rf_cyclic_reap_push(void* ctrl) { rf_cyclic_buffer_push(&g_cc_reap, ctrl); }
+uint64_t rf_cyclic_reap_count(void) { return g_cc_reap.count; }
+void* rf_cyclic_reap_at(uint64_t i) { return i < g_cc_reap.count ? g_cc_reap.items[i] : NULL; }
+void rf_cyclic_reap_clear(void) { g_cc_reap.count = 0; }
 
 // Auto-collection trigger: run a cycle-collection pass once the candidate (roots) set grows past a
 // threshold (a candidate-set heuristic — CPython's "tracked object" style). Default 128, overridable
@@ -523,7 +633,7 @@ void rf_cc_reap_clear(void) { g_cc_reap.count = 0; }
 static uint64_t g_cc_threshold = 0;   // 0 = not yet resolved (lazy, from env on first check)
 static int g_cc_collecting = 0;
 
-static uint64_t rf_cc_get_threshold(void)
+static uint64_t rf_cyclic_get_threshold(void)
 {
     if (g_cc_threshold == 0) {
         g_cc_threshold = 128;
@@ -540,19 +650,32 @@ static uint64_t rf_cc_get_threshold(void)
 
 // True when a collection pass should run now: the candidate set reached the threshold and no pass is
 // already in progress. The RF side (RoamController.mark_cycle_candidate) polls this after buffering.
-int rf_cc_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cc_get_threshold(); }
+int rf_cyclic_should_collect(void) { return !g_cc_collecting && g_cc_roots.count >= rf_cyclic_get_threshold(); }
 
-// Bracket a collection pass so a nested candidate report cannot re-trigger one (CycleCollector.cc_collect
-// calls these around the three passes).
-void rf_cc_enter_collect(void) { g_cc_collecting = 1; }
-void rf_cc_exit_collect(void) { g_cc_collecting = 0; }
+// Bracket a collection pass (CycleCollector.cyclic_collect calls these around the whole pass, including
+// the free/finalizer phase). Two jobs: (1) STOP THE WORLD — take g_cc_rwlock EXCLUSIVE so no mutator's
+// refcount op races trial deletion (and so concurrent collectors serialize on it); (2) mark this thread
+// rf_in_collector so its own finalizer releases skip the shared lock they already hold exclusively.
+// g_cc_collecting stays as the re-entry guard for the (now RF-side removed) threshold auto-trigger.
+void rf_cyclic_enter_collect(void)
+{
+    rf_rwlock_lock_exclusive(&g_cc_rwlock);
+    rf_in_collector = 1;
+    g_cc_collecting = 1;
+}
+void rf_cyclic_exit_collect(void)
+{
+    g_cc_collecting = 0;
+    rf_in_collector = 0;
+    rf_rwlock_unlock_exclusive(&g_cc_rwlock);
+}
 
 // An RF routine reference stored in a CPtr is a CLOSURE VALUE: a heap box whose first word is the
 // vthunk pointer `void(*)(void* closure, <args>)`, followed by any captured variables. The hooks the
 // collector calls (trace / free) take one arg, so the vthunk is `void(void* closure, void* arg)`. To
 // invoke a hook we load the vthunk from the box and pass the box back as the closure receiver. A NULL
 // box means "no hook" (a type with no Roamed fields, or an unwired controller) — a no-op.
-static void rf_cc_invoke_hook(void* closure, void* arg)
+static void rf_cyclic_invoke_hook(void* closure, void* arg)
 {
     if (closure == NULL) {
         return;
@@ -562,18 +685,18 @@ static void rf_cc_invoke_hook(void* closure, void* arg)
 }
 
 // The SOLE indirect-call site for tracing. Invokes a controller's trace hook, passing the CONTROLLER
-// address; the trace reaches the managed entity's Roamed fields and calls rf_cc_visit_child for each,
+// address; the trace reaches the managed entity's Roamed fields and calls rf_cyclic_visit_child for each,
 // so on return the scratch buffer holds this controller's child controllers.
-void rf_cc_trace_into_scratch(void* trace_hook, void* controller)
+void rf_cyclic_trace_into_scratch(void* trace_hook, void* controller)
 {
-    rf_cc_invoke_hook(trace_hook, controller);
+    rf_cyclic_invoke_hook(trace_hook, controller);
 }
 
 // Indirect-call site for reaping a white (garbage) node. Invokes a controller's free hook over the
 // CONTROLLER address: it runs the managed entity's type-correct $destroy then frees the controller.
-void rf_cc_invoke_free(void* free_hook, void* controller)
+void rf_cyclic_invoke_free(void* free_hook, void* controller)
 {
-    rf_cc_invoke_hook(free_hook, controller);
+    rf_cyclic_invoke_hook(free_hook, controller);
 }
 
 /* ---- Cooperative cancellation request (structured concurrency) ---------------------------- */
@@ -615,6 +738,17 @@ void rf_coro_delete(rf_coro* coro)
 #endif
     __rf_stack_coro_destroy(coro->shadow_stack); /* free the migrating call-chain stack */
     free(coro);
+}
+
+// Marks a coroutine as fire-and-forget (`execute()`): the worker that completes it frees it, with no
+// consumer. MUST be called BEFORE rf_sched_spawn_default so the flag is published before any worker can
+// reach the completion path (no complete-before-detach race). The matching result task must also be
+// flagged (rf_task_set_detached) so its result box self-frees.
+void rf_coro_set_detached(rf_coro* coro)
+{
+    if (coro != NULL) {
+        coro->detached = 1;
+    }
 }
 
 /* ---- Cancellation shadow stack (Phase 3) -------------------------------------------------- */
@@ -1169,6 +1303,13 @@ void rf_sched_spawn(rf_sched* s, rf_coro* c)
         return;
     }
     rf_mutex_lock(&s->lock);
+    if (c->initial_spawned) {
+        // Already launched once (e.g. gather/race pre-launched the whole set, and retrieve! is now
+        // re-spawning the same coroutine). Idempotent: do not double-enqueue or double-count live.
+        rf_mutex_unlock(&s->lock);
+        return;
+    }
+    c->initial_spawned = 1;
     rf_sched_enqueue_ready(s, c);
     s->live++;
     /* Signal ONE idle worker (not broadcast): this is one unit of work, so one worker suffices — a
@@ -1358,7 +1499,11 @@ static void rf_sched_run_coro(rf_sched* s, rf_coro* c)
         // If the owning Agent handle was $destroy'd WHILE we (a worker) still held this coroutine,
         // rf_sched_dispose deferred the free to us — we are the last toucher, so free it now. (The result
         // block is a separate rf_task the owner already freed; the coro struct + stack is ours to reclaim.)
-        int free_now = c->owner_released;
+        // owner_released: the owning Agent gave this coroutine up while we held it (deferred free).
+        // detached: a fire-and-forget `execute()` coroutine with no consumer — we are its sole owner,
+        // so free it here on completion. Both are set under s->lock (detached at spawn, before any
+        // worker could reach this), so the read is race-free.
+        int free_now = c->owner_released || c->detached;
         rf_cond_signal(&s->cond);          // an enqueued awaiter coroutine / the legacy driver
         rf_cond_broadcast(&s->block_cond); // top-level blockers re-check their target's completion
         rf_mutex_unlock(&s->lock);
@@ -1511,7 +1656,10 @@ static int rf_sched_step(rf_sched* s)
             rf_mutex_unlock(&s->lock);
             __rf_throw("DeadlockError",
                        "all coroutines are parked and none is runnable — no send, receive, or wake "
-                       "can ever make progress (deadlock)");
+                       "can ever make progress (deadlock). If coroutines communicate (a channel, a "
+                       "SignalCaster), they must all be LAUNCHED before you wait on one: retrieving a "
+                       "consumer before its producer is started parks it forever. Launch background "
+                       "feeders with `.execute()` and await the rest with `.retrieve()`/`.gather()`.");
             return 0; // unreachable: __rf_throw exits
         }
         // A cross-thread wake is outstanding (threaded await / async I/O / signal / race), or other

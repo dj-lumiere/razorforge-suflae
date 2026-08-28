@@ -64,11 +64,11 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts viewing with method call.
+    /// Verifies that the parser accepts viewing with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_ViewingWithMethodCall()
+    public void Parse_ViewingWithMemberRoutineCall()
     {
         string source = """
                         routine test()
@@ -148,18 +148,18 @@ public class AccessBlockTests
 
     #endregion
 
-    #region Inspecting Block Tests (Multi-threaded Read)
+    #region Consulting Block Tests (Multi-threaded Read)
     /// <summary>
-    /// Verifies that the parser accepts simple inspecting.
+    /// Verifies that the parser accepts simple consulting.
     /// </summary>
 
     [Fact]
-    public void Parse_SimpleInspecting()
+    public void Parse_SimpleConsulting()
     {
         string source = """
                         routine test!()
                           var shared = data.share[MultiReadLock]()
-                          using shared.inspect!() as r
+                          using shared.consult!() as r
                             show(r.value)
                           return
                         """;
@@ -167,17 +167,17 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts inspecting multiple readers.
+    /// Verifies that the parser accepts consulting multiple readers.
     /// </summary>
 
     [Fact]
-    public void Parse_InspectingMultipleReaders()
+    public void Parse_ConsultingMultipleReaders()
     {
         string source = """
                         routine test!()
                           var shared = data.share[MultiReadLock]()
-                          using shared.inspect!() as r1
-                            using shared.inspect!() as r2
+                          using shared.consult!() as r1
+                            using shared.consult!() as r2
                               compare(r1, r2)
                           return
                         """;
@@ -198,7 +198,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = data.share[Mutex]()
-                          using shared.claim!() as w
+                          using shared.amend!() as w
                             w.value = 42
                           return
                         """;
@@ -215,7 +215,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = counter.share[Mutex]()
-                          using shared.claim!() as s
+                          using shared.amend!() as s
                             s.count += 1
                             s.last_updated = now()
                             s.notify_listeners()
@@ -234,7 +234,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = data.share[MultiReadLock]()
-                          using shared.claim!() as w
+                          using shared.amend!() as w
                             w.value = 42
                             using w.view() as v
                               show(v.value)
@@ -308,7 +308,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           using open_file!("data.txt") as file
-                            for line in file.lines()
+                            each line in file.lines()
                               if line.starts_with("#")
                                 continue
                               process_line(line)
@@ -326,7 +326,7 @@ public class AccessBlockTests
     {
         string source = """
                         routine process_files!(paths: List[Text])
-                          for path in paths
+                          each path in paths
                             using open_file!(path) as file
                               var content = file.read_all()
                               unless content.is_empty()
@@ -392,11 +392,11 @@ public class AccessBlockTests
                           var shared = remote.share[MultiReadLock]()
 
                           using local.view() as l
-                            using shared.claim!() as s
-                              for item in l.items
+                            using shared.amend!() as s
+                              each item in l.items
                                 s.add(item.clone())
 
-                          using shared.inspect!() as r
+                          using shared.consult!() as r
                             verify!(r.count() > 0, "Sync failed")
                           return
                         """;

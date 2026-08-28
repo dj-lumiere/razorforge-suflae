@@ -1,9 +1,9 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents temporary unmanaged mutable access to an entity.
-### `Modifying[T]` is the non-storable access type used for explicit low-level manipulation outside the borrow-safe wrappers.
+### `Modifying[T]` is the non-Assignable access type used for explicit low-level manipulation outside the scoped-access wrappers.
 ### :typeparam T: The entity type being accessed.
 ### :see: {Viewing[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
@@ -14,7 +14,7 @@ record Modifying[T] obeys Controlling[T], Enterable
 ### :returns: The resulting `Modifying[T]` value.
 ### :note: Entity-only. Records are value-typed — `me` would be a by-value copy, so mutating
 ###        through the returned `Modifying[T]` would write to a stack temporary rather than the
-###        caller's storage. Use `entity` for borrowed mutation.
+###        caller's storage. Use `entity` for scoped mutation.
 routine T.modify() -> Modifying[T]
 needs T is EntityType
   danger
@@ -39,14 +39,14 @@ routine Modifying[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion (refer/control) — yields the inner entity as T
+# Marker-protocol coercion (access/control) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Modifying[T].refer() -> T
+routine Modifying[T].access() -> T
   danger
     return Hijacked[T](me).as_entity()
 

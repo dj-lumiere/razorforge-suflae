@@ -22,6 +22,10 @@ public class EntityTypeInfo : TypeInfo
     /// <summary>MemberVariables declared in this entity.</summary>
     public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
+    /// <summary>Decl-position <c>expand</c> column templates (SoA layout). Populated only on a generic
+    /// definition; the registry materializes one member per source-type field at instantiation.</summary>
+    public List<MemberExpandTemplateInfo> ExpandTemplates { get; set; } = [];
+
     /// <summary>Protocols this entity implements (obeys).</summary>
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
@@ -110,6 +114,21 @@ public class EntityTypeInfo : TypeInfo
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.FullName))}]";
 
+        // The cycle-detection maps below are [ThreadStatic] and SHARED across every entity definition,
+        // so they must be keyed by the MODULE-QUALIFIED resolved name. Two same-Named defs from
+        // different modules/realms — RazorForge `Core.List` and the Suflae-realm overlay `Suflae.List`
+        // — both produce the bare `List[Core.S32]`; without the qualifier, a re-entrant instantiation
+        // of one (triggered while substituting a field of the other) hits the "already in progress"
+        // branch and returns the WRONG module's in-progress entity. The entity's own Name stays bare
+        // (it drives LLVM mangling and the resolution-cache short alias).
+        // …and REALM-qualified too: `Core.List` exists in BOTH the RazorForge realm (real list) and the
+        // Suflae realm (the `{ inner }` wrapper). They share module AND bare resolved name, so a realm-free
+        // cycleKey lets an in-progress SF `Core.List[S32]` be handed back for an RF `Core.List[S32]`
+        // CreateInstance (and vice versa) — the wrapper's `RF::Core.List[T]()` inner would then resolve to
+        // the SF entity and self-recurse. Prefix the non-ambient realm to keep the two world-lines distinct.
+        string moduleQualified = string.IsNullOrEmpty(value: Module) ? resolvedName : $"{Module}.{resolvedName}";
+        string cycleKey = Realm == "RF" ? moduleQualified : $"{Realm}::{moduleQualified}";
+
         // Build the substitution map up front so it can be applied to ImplementedProtocols
         // as well as member-variable types. Without substituting protocols, an obeys-clause
         // referencing a concrete type that does not appear in the entity's own generic
@@ -138,11 +157,11 @@ public class EntityTypeInfo : TypeInfo
         // points to the same object that will have its members filled in below.
         _creatingInstances ??= [];
         _inProgressEntities ??= new Dictionary<string, EntityTypeInfo>();
-        if (!_creatingInstances.Add(item: resolvedName))
+        if (!_creatingInstances.Add(item: cycleKey))
         {
             // Return the partially-built entity if available; a fresh empty shell otherwise
             // (the shell case should not normally occur since we always register below first).
-            return _inProgressEntities.TryGetValue(key: resolvedName, value: out EntityTypeInfo? inProgress)
+            return _inProgressEntities.TryGetValue(key: cycleKey, value: out EntityTypeInfo? inProgress)
                 ? inProgress
                 : new EntityTypeInfo(name: resolvedName)
                 {
@@ -153,7 +172,8 @@ public class EntityTypeInfo : TypeInfo
                     GenericDefinition = this,
                     Visibility = Visibility,
                     Location = Location,
-                    Module = Module
+                    Module = Module,
+                    Realm = Realm
                 };
         }
 
@@ -169,9 +189,10 @@ public class EntityTypeInfo : TypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
-        _inProgressEntities[key: resolvedName] = entity;
+        _inProgressEntities[key: cycleKey] = entity;
 
         try
         {
@@ -187,8 +208,8 @@ public class EntityTypeInfo : TypeInfo
         }
         finally
         {
-            _creatingInstances.Remove(item: resolvedName);
-            _inProgressEntities.Remove(key: resolvedName);
+            _creatingInstances.Remove(item: cycleKey);
+            _inProgressEntities.Remove(key: cycleKey);
         }
     }
 

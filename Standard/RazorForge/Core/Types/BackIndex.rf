@@ -1,49 +1,19 @@
 module Core
 
 
-### Represents an index measured from the end of a collection.
-### `BackIndex` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
-### :see: {Range[T]}, {Containers-And-Iterators}
-@llvm("i64")
-record BackIndex
-  pass
-
-### Creates a back index from an end-relative offset.
+### Resolves an end-relative offset `^offset` against a container `count`.
+### This free routine is the lowering target of the `^n` back-index syntax
+### (`list[^1]`, `text[^3]`, the open-ended slice bound `text[a til ^0]`).
+### `^` is pure syntax sugar carrying no runtime type: `OperatorLoweringPass`
+### rewrites each `coll[^n]` subscript to `coll.getitem!(back_resolve(count: coll.count(), offset: n))`.
+### `^1` resolves to `count - 1` (the last element); `^0` resolves to `count`
+### (one-past-the-end, valid only as a slice bound).
+### :param count: The container length used as the reference point.
 ### :param offset: The end-relative offset where `1` means the last element.
-### :returns: The resulting `BackIndex` value.
-routine BackIndex(offset: U64) -> BackIndex
-  return reinterpret_bits[U64, BackIndex](offset)
-
-### Resolves this back index against a collection length.
-### For example, `^1` resolves to the last valid position and `^length`
-### resolves to the first element.
-### :param length: The collection length used as the reference point.
-### :returns: The resulting `U64` value.
-@readonly
-routine BackIndex.resolve!(length: U64) -> U64
-  var raw = reinterpret_bits[BackIndex, U64](me)
-  if raw > length
-    throw IndexOutOfBoundsError(index: raw, count: length)
-  return length -% raw
-
-### Returns the stored end-relative offset.
-### :returns: The resulting `U64` value.
-@readonly
-routine BackIndex.get_offset() -> U64
-  return reinterpret_bits[BackIndex, U64](me)
-
-### Returns `true` when both back indices represent the same end-relative
-### offset.
-### :param other: The other value to compare against.
-### :returns: The resulting `Bool` value.
-@readonly
-routine BackIndex.eq(other: BackIndex) -> Bool
-  return reinterpret_bits[BackIndex, U64](me) == reinterpret_bits[BackIndex, U64](other)
-
-### Compares this back index with another by effective position from the end.
-### A smaller offset means a position closer to the end of the collection.
-### :param other: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
-@readonly
-routine BackIndex.cmp(other: BackIndex) -> ComparisonSign
-  return reinterpret_bits[BackIndex, U64](other).cmp(reinterpret_bits[BackIndex, U64](me))
+### :returns: The resulting forward `U64` position.
+### :throws: {IndexOutOfBoundsError} when `offset > count`.
+### :see: {Containers-And-Iterators}
+routine back_resolve(count: U64, offset: U64) -> U64
+  if offset > count
+    throw IndexOutOfBoundsError(index: offset, count: count)
+  return count -% offset

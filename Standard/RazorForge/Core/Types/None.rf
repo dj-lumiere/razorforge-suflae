@@ -1,0 +1,25 @@
+module Core
+
+### The zero-sized void / unit type. `None` signals "there is no meaningful value here" while staying
+### type-safe. It is BOTH a value type (the void return / empty payload) AND the canonical variant
+### empty branch — one name for "nothing".
+@llvm("void")
+record None obeys Assignable, Copyable
+  pass
+
+# ============================================================================
+# Text Representation
+# ============================================================================
+
+### Returns the display form of `None`.
+### :returns: The resulting `Text` value.
+@readonly
+routine None.represent() -> Text
+  return "None"
+
+### Returns the diagnostic form of `None`.
+### For this type, the display and diagnostic forms are identical.
+### :returns: The resulting `Text` value.
+@readonly
+routine None.diagnose() -> Text
+  return "None"

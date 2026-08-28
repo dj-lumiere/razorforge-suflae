@@ -53,7 +53,7 @@ routine ExtendEmittable[T, SE1, SE2].emit!() -> T
 ### :param other: The iterable to consume after `me`.
 ### :returns: The resulting `ExtendIterable[T, Me, S2]` value.
 @readonly
-routine Iterable[T].extend[S2](other: Referring[S2]) -> ExtendIterable[T, Me, S2]
+routine Iterable[T].extend[S2](other: Accessing[S2]) -> ExtendIterable[T, Me, S2]
 needs S2 obeys Iterable[T]
   danger
     return ExtendIterable[T, Me, S2](first: me.hijack(), second: other.hijack())

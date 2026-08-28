@@ -1,13 +1,13 @@
 module Core
 
 ### Represents wrappers that transparently forward the full API of an entity.
-### `Controlling[T]` is the borrowed mutable-access abstraction for entity
+### `Controlling[T]` is the scoped mutable-access abstraction for entity
 ### values, exposing both read and write operations through the wrapper.
 ### :typeparam T: The referenced entity type.
-protocol Controlling[T] obeys Referring[T]
+protocol Controlling[T] obeys Accessing[T]
 needs T is EntityType
   ### Yields the inner entity as an in-flight `T` reference for read/write access.
   ### Implicitly inserted by the compiler at call sites whose target parameter is
   ### `Controlling[T]` and whose argument is any obeyer of `Controlling[T]`.
-  ### :returns: The inner entity as `T` (scoped borrow shape).
+  ### :returns: The inner entity as `T` (scoped access shape).
   routine Me.control() -> T

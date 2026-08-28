@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 ### A growable, densely packed sequence of boolean values stored in machine words.
 ###
@@ -64,7 +64,7 @@ routine BitList(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
   danger
-    var data_ptr = Hijacked[U64](rf_allocate_dynamic_uninit(word_size *% 8u64))
+    var data_ptr = Hijacked[U64](C::rf_allocate_dynamic_uninit(word_size *% 8u64))
     # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
     # and mid-word appends only read bits we've already written ourselves.
     return BitList(
@@ -192,19 +192,19 @@ routine BitList.remove_last!() -> Bool
 
 ### Ensures that the packed storage can hold at least `new_capacity` logical bits.
 ### :param new_capacity: The minimum capacity to reserve.
-@migratable
+@reshaping
 routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity
     var new_word_size = (new_capacity +% 63u64) >> 6u32
     danger
-      var new_data = Hijacked[U64](rf_allocate_dynamic_uninit(new_word_size *% 8u64))
+      var new_data = Hijacked[U64](C::rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
       # Copy existing words; remainder stays uninitialized — add_last overwrites
       # whole words at word boundaries, so the untouched tail is never read.
       if me.count > 0u64
         var copy_words = (me.count +% 63u64) >> 6u32
-        rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
+        C::rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
 
       me.data = new_data
     me.capacity = new_capacity
@@ -253,7 +253,7 @@ routine BitList.set_all(value: Bool)
   var byte_count = (me.count +% 7u64) >> 3u32
   var fill_byte = if value then 0xFFu8 else 0x00u8
   danger
-    rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
+    C::rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
   return
 
 ### Toggles the bit at `index`.
@@ -344,7 +344,7 @@ routine BitList.none() -> Bool
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
-routine BitList.bitand(other: Referring[BitList]) -> BitList
+routine BitList.bitand(other: Accessing[BitList]) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -361,7 +361,7 @@ routine BitList.bitand(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
-routine BitList.bitor(other: Referring[BitList]) -> BitList
+routine BitList.bitor(other: Accessing[BitList]) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -379,7 +379,7 @@ routine BitList.bitor(other: Referring[BitList]) -> BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
-routine BitList.bitxor(other: Referring[BitList]) -> BitList
+routine BitList.bitxor(other: Accessing[BitList]) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -487,7 +487,7 @@ routine BitList.reverse() -> BitList
 ### :param other: The other bit list to compare against.
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
-routine BitList.eq(other: Referring[BitList]) -> Bool
+routine BitList.eq(other: Accessing[BitList]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -599,16 +599,14 @@ common routine BitList.from_u32(value: U32) -> BitList
     i = i + 1u32
   return steal result
 
-### Returns a compact display form of the logical bit sequence.
-### :returns: The resulting `Text` value.
 @readonly
 routine BitList.represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return result
@@ -619,10 +617,10 @@ routine BitList.represent() -> Text
 routine BitList.diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", ["
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "])"
   return result

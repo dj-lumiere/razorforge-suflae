@@ -1,0 +1,404 @@
+module BuilderQuery
+
+### Enumerates the high-level type categories exposed by BuilderQuery.
+### These values are returned by `type_kind()` and related reflection-style APIs.
+choice TypeKind
+  ### A record type: value semantics, stack-allocated inline struct.
+  RECORD
+  ### An entity type: reference semantics, heap-allocated with explicit ownership.
+  ENTITY
+  ### A crashable type: entity subclass whose init is always failable.
+  CRASHABLE
+  ### An enumeration type with named cases and optional integer values.
+  CHOICE
+  ### A type-based tagged union whose members are identified by type.
+  VARIANT
+  ### A bitfield enumeration type whose members are powers-of-two flags.
+  FLAGS
+  ### A free-standing routine declaration (not attached to any type).
+  ROUTINE
+  ### A routine declared as a member of a type.
+  MEMBER_ROUTINE
+  ### An abstract protocol declaration that types may implement.
+  PROTOCOL
+
+### Enumerates declaration visibility levels.
+### Visibility metadata is surfaced through BuilderQuery inspection routines.
+choice Visibility
+  ### Readable and writable from anywhere; no keyword is written in source.
+  OPEN
+  ### Readable from anywhere; writable only within the declaring module.
+  POSTED
+  ### Readable and writable only within the declaring type or module.
+  SECRET
+
+### Enumerates supported compiler build modes.
+### The active value is reported by `build_mode()` at compile time.
+choice BuildMode
+  ### Unoptimized build (-O0); includes full debug information.
+  DEBUG
+  ### Standard optimized build (-O2); balances speed and binary size.
+  RELEASE
+  ### Maximum speed optimization (-O3); may increase binary size.
+  RELEASE_TIME
+  ### Minimum binary size optimization (-Os); may reduce peak speed.
+  RELEASE_SPACE
+  ### Test build; activates `@test` and `@bench` annotated routines.
+  TEST
+
+### Describes a member variable declared on a type.
+### Instances of `FieldInfo` are returned by BuilderQuery metadata queries.
+entity FieldInfo
+  ### Stores the declared member variable name.
+  name: Text
+  ### Stores the member variable type name.
+  type_name: Text
+  ### Stores the member variable visibility.
+  visibility: Visibility
+  ### Stores the member variable byte offset when available.
+  offset: U64
+
+### Returns whether this field is equal to another by name.
+### :param you: The other field to compare against.
+### :returns: `true` if both fields have the same name.
+@readonly
+routine FieldInfo.eq(you: Accessing[FieldInfo]) -> Bool
+  return me.name == you.name
+
+### Describes a protocol implemented by a type.
+### This metadata is intended for diagnostics, tooling, and build-time reflection.
+entity ProtocolInfo
+  ### Stores the protocol name.
+  name: Text
+  ### Stores the routine names exposed by the protocol.
+  routine_names: List[Text]
+  ### Indicates whether the protocol implementation is compiler-generated.
+  is_generated: Bool
+
+### Returns whether this protocol info is equal to another by name.
+### :param you: The other protocol info to compare against.
+### :returns: `true` if both have the same name.
+@readonly
+routine ProtocolInfo.eq(you: Accessing[ProtocolInfo]) -> Bool
+  return me.name == you.name
+
+### Describes a routine declared on a type.
+### This metadata captures the declared surface of a routine, not its runtime body.
+entity RoutineInfo
+  ### Stores the routine name.
+  name: Text
+  ### Stores the parameter type names in declaration order.
+  param_types: List[Text]
+  ### Stores the parameter names in declaration order.
+  param_names: List[Text]
+  ### Stores the declared return type name.
+  return_type: Text
+  ### Indicates whether the routine is crashable.
+  is_crashable: Bool
+  ### Indicates whether the routine body is compiler-generated.
+  is_generated: Bool
+  ### Stores the routine visibility.
+  visibility: Visibility
+
+### Returns whether this routine info is equal to another by name.
+### :param you: The other routine info to compare against.
+### :returns: `true` if both have the same name.
+@readonly
+routine RoutineInfo.eq(you: Accessing[RoutineInfo]) -> Bool
+  return me.name == you.name
+
+# ============================================================================
+# Per-type introspection — typewise + member (both forms)
+# ============================================================================
+
+### Returns the unqualified name of this type.
+### This excludes the declaring module path.
+### :returns: The unqualified type name, excluding the module path.
+@readonly
+@innate
+common routine T.type_name() -> Text
+### Returns the unqualified name of this value's type.
+### This excludes the declaring module path and mirrors the common-form routine.
+### :returns: The unqualified type name, excluding the module path.
+@readonly
+@innate
+routine T.type_name() -> Text
+
+### Returns the module this type is declared in.
+### Types in the root module return the empty module name.
+### :returns: The module name, or an empty string for types in the root module.
+@readonly
+@innate
+common routine T.module_name() -> Text
+### Returns the module this value's type is declared in.
+### Types in the root module return the empty module name.
+### :returns: The module name, or an empty string for types in the root module.
+@readonly
+@innate
+routine T.module_name() -> Text
+
+### Returns the fully qualified `Module.TypeName` of this type.
+### This is the canonical textual identity used by reflection helpers.
+### :returns: The fully qualified `Module.TypeName` string.
+@readonly
+@innate
+common routine T.full_type_name() -> Text
+### Returns the fully qualified `Module.TypeName` of this value's type.
+### This is the canonical textual identity used by reflection helpers.
+### :returns: The fully qualified `Module.TypeName` string.
+@readonly
+@innate
+routine T.full_type_name() -> Text
+
+### Returns a stable compile-time hash of the fully qualified type name.
+### The value is deterministic for a given type identity within the compiler.
+### :returns: A stable `U64` hash of the fully qualified type name.
+@readonly
+@innate
+common routine T.type_id() -> U64
+### Returns a stable compile-time hash of this value's fully qualified type name.
+### The value is deterministic for a given type identity within the compiler.
+### :returns: A stable `U64` hash of the fully qualified type name.
+@readonly
+@innate
+routine T.type_id() -> U64
+
+### Returns the byte size of this type's in-memory representation.
+### For reference-like types, this reports the storage size of the reference itself.
+### :returns: The in-memory size of this type's representation.
+@readonly
+@innate
+common routine T.data_size() -> ByteSize
+### Returns the byte size of this value's type in memory.
+### For reference-like types, this reports the storage size of the reference itself.
+### :returns: The in-memory size of this type's representation.
+@readonly
+@innate
+routine T.data_size() -> ByteSize
+
+### Returns the number of member variables declared on this type.
+### Secret, posted, and open members all contribute to this count.
+### :returns: The number of declared member variables across all visibility levels.
+@readonly
+@innate
+common routine T.member_variable_count() -> U64
+### Returns the number of member variables declared on this value's type.
+### Secret, posted, and open members all contribute to this count.
+### :returns: The number of declared member variables across all visibility levels.
+@readonly
+@innate
+routine T.member_variable_count() -> U64
+
+### Returns the compile-time type id of the field named {member_name}, or `0` if not found.
+### This is useful when tooling needs a stable numeric identity for a field type.
+### :param member_name: The name of the field to look up.
+### :returns: The compile-time `U64` type id of the named field, or `0` if not found.
+@readonly
+@innate
+common routine T.member_type_id(member_name: Text) -> U64
+### Returns the compile-time type id of the field named {member_name} on this value's type, or `0` if not found.
+### This is useful when tooling needs a stable numeric identity for a field type.
+### :param member_name: The name of the field to look up.
+### :returns: The compile-time `U64` type id of the named field, or `0` if not found.
+@readonly
+@innate
+routine T.member_type_id(member_name: Text) -> U64
+
+### Returns whether this value is an in-flight entity (not yet bound to a variable or field).
+### Records, choices, variants, and flags are never in-flight — only entities have this state.
+### Bound entities (those held in a `var`/`let` binding or member field) return `false`.
+### :returns: `true` if this value is an in-flight `T`, `false` otherwise.
+@readonly
+@innate
+routine T.is_in_flight() -> Bool
+
+### Returns whether this type is a generic definition.
+### Concrete generic instantiations return `false`.
+### :returns: `true` if this type is a generic definition, `false` for concrete instantiations.
+@readonly
+@innate
+common routine T.is_generic() -> Bool
+### Returns whether this value's type is a generic definition.
+### Concrete generic instantiations return `false`.
+### :returns: `true` if this type is a generic definition, `false` for concrete instantiations.
+@readonly
+@innate
+routine T.is_generic() -> Bool
+
+### Returns the `TypeKind` category of this type.
+### This is the broadest built-in classification exposed by BuilderQuery.
+### :returns: The `TypeKind` classification of this type.
+@readonly
+@innate
+common routine T.type_kind() -> TypeKind
+### Returns the `TypeKind` category of this value's type.
+### This is the broadest built-in classification exposed by BuilderQuery.
+### :returns: The `TypeKind` classification of this type.
+@readonly
+@innate
+routine T.type_kind() -> TypeKind
+
+### Returns the names of all protocols this type implements.
+### The list includes both explicit and compiler-synthesized conformances.
+### :returns: A list of protocol names, including synthesized conformances.
+@readonly
+@innate
+common routine T.protocols() -> List[Text]
+### Returns the names of all protocols this value's type implements.
+### The list includes both explicit and compiler-synthesized conformances.
+### :returns: A list of protocol names, including synthesized conformances.
+@readonly
+@innate
+routine T.protocols() -> List[Text]
+
+### Returns the names of all routines declared on this type.
+### Overloads appear as repeated names when multiple routines share an identifier.
+### :returns: A list of routine names; overloads appear as repeated entries.
+@readonly
+@innate
+common routine T.routine_names() -> List[Text]
+### Returns the names of all routines declared on this value's type.
+### Overloads appear as repeated names when multiple routines share an identifier.
+### :returns: A list of routine names; overloads appear as repeated entries.
+@readonly
+@innate
+routine T.routine_names() -> List[Text]
+
+### Returns the names of all generic type parameters or arguments.
+### Definitions report parameter names; concrete instantiations report bound arguments.
+### :returns: A list of parameter names for generic definitions, or bound argument names for instantiations.
+@readonly
+@innate
+common routine T.generic_args() -> List[Text]
+### Returns the names of all generic type parameters or arguments for this value's type.
+### Definitions report parameter names; concrete instantiations report bound arguments.
+### :returns: A list of parameter names for generic definitions, or bound argument names for instantiations.
+@readonly
+@innate
+routine T.generic_args() -> List[Text]
+
+### Returns the annotation strings attached to this type declaration.
+### The returned values preserve declaration spelling after parsing.
+### :returns: A list of annotation strings as they appear in the source.
+@readonly
+@innate
+common routine T.annotations() -> List[Text]
+### Returns the annotation strings attached to this value's type declaration.
+### The returned values preserve declaration spelling after parsing.
+### :returns: A list of annotation strings as they appear in the source.
+@readonly
+@innate
+routine T.annotations() -> List[Text]
+
+### Returns the names of modules this type's module depends on.
+### This is intended for diagnostics and dependency introspection.
+### :returns: A list of module names that this type's module depends on.
+@readonly
+@innate
+common routine T.dependencies() -> List[Text]
+### Returns the names of modules this value's defining module depends on.
+### This is intended for diagnostics and dependency introspection.
+### :returns: A list of module names that this type's module depends on.
+@readonly
+@innate
+routine T.dependencies() -> List[Text]
+
+### Returns protocol metadata for each protocol this type implements.
+### This is the structured form of `protocols()`.
+### :returns: A list of `ProtocolInfo` records, one per implemented protocol.
+@readonly
+@innate
+common routine T.protocol_info() -> List[ProtocolInfo]
+### Returns protocol metadata for each protocol this value's type implements.
+### This is the structured form of `protocols()`.
+### :returns: A list of `ProtocolInfo` records, one per implemented protocol.
+@readonly
+@innate
+routine T.protocol_info() -> List[ProtocolInfo]
+
+### Returns routine metadata for each routine declared on this type.
+### This is the structured form of `routine_names()`.
+### :returns: A list of `RoutineInfo` records, one per declared routine overload.
+@readonly
+@innate
+common routine T.routine_info() -> List[RoutineInfo]
+### Returns routine metadata for each routine declared on this value's type.
+### This is the structured form of `routine_names()`.
+### :returns: A list of `RoutineInfo` records, one per declared routine overload.
+@readonly
+@innate
+routine T.routine_info() -> List[RoutineInfo]
+
+### Returns full field metadata for every member variable on this type.
+### This is the structured form of the member-variable inspection APIs.
+### :returns: A list of `FieldInfo` records, one per declared member variable.
+@readonly
+@innate
+common routine T.member_variable_info() -> List[FieldInfo]
+### Returns full field metadata for every member variable on this value's type.
+### This is the structured form of the member-variable inspection APIs.
+### :returns: A list of `FieldInfo` records, one per declared member variable.
+@readonly
+@innate
+routine T.member_variable_info() -> List[FieldInfo]
+
+# ============================================================================
+# Per-instance introspection — member only (no typewise form)
+# ============================================================================
+
+### Returns the source variable name at the call site.
+### This is primarily intended for diagnostics and generated error messages.
+### :returns: The variable name as written at the call site.
+@readonly
+@innate
+routine T.var_name() -> Text
+
+# ============================================================================
+# Standalone platform and build constants
+# ============================================================================
+
+### Returns the OS memory page size.
+### This value is fixed at build time for the selected target.
+### :returns: The OS memory page size for the selected target.
+@innate
+routine page_size() -> ByteSize
+
+### Returns the CPU cache line size.
+### This value is fixed at build time for the selected target.
+### :returns: The CPU cache line size for the selected target.
+@innate
+routine cache_line() -> ByteSize
+
+### Returns the native pointer or word size for the selected target.
+### This matches the pointer width assumed by generated code.
+### :returns: The native pointer size for the selected target.
+@innate
+routine word_size() -> ByteSize
+
+### Returns the target operating system name (e.g. `"windows"`, `"linux"`, `"macos"`).
+### :returns: The OS name string, such as `"windows"`, `"linux"`, or `"macos"`.
+@innate
+routine target_os() -> Text
+
+### Returns the target CPU architecture name (e.g. `"x86_64"`, `"aarch64"`).
+### :returns: The architecture name string, such as `"x86_64"` or `"aarch64"`.
+@innate
+routine target_arch() -> Text
+
+### Returns the RazorForge compiler version string.
+### This is derived from the compiler build, not from project metadata.
+### :returns: The compiler version string.
+@innate
+routine builder_version() -> Text
+
+### Returns the ISO-8601 UTC timestamp of this build.
+### This is the compiler-side build timestamp captured during generation.
+### :returns: The ISO-8601 UTC build timestamp string.
+@innate
+routine build_timestamp() -> Text
+
+### Returns the current build mode.
+### This reflects the mode selected for the current compilation.
+### :returns: The active `BuildMode` for this compilation.
+@innate
+routine build_mode() -> BuildMode

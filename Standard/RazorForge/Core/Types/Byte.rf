@@ -4,7 +4,7 @@ module Core
 ### `Byte` is a binary payload type, not a text character, so its display form
 ### always uses an escaped hexadecimal representation.
 @llvm("i8")
-record Byte obeys ConstCompatible
+record Byte obeys ConstCompatible, Assignable, Copyable
   pass
 
 # Creators
@@ -21,7 +21,7 @@ routine Byte(from: Byte) -> Byte
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
 routine Byte(from: U8) -> Byte
-  return reinterpret_bits[U8, Byte](value: from)
+  return LLVM::reinterpret_bits[U8, Byte](value: from)
 
 # Common byte constants
 preset BYTE_NULL: Byte = Byte(0x00u8)
@@ -48,18 +48,18 @@ routine Byte.codepoint() -> U32
   return U32(U8(me))
 
 ### Returns whether both values are equal.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Byte.eq(other: Byte) -> Bool
-  return U8(me) == U8(other)
+routine Byte.eq(you: Byte) -> Bool
+  return U8(me) == U8(you)
 
 ### Compares this value with the other value.
-### :param other: The other value to compare against.
+### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Byte.cmp(other: Byte) -> ComparisonSign
-  return U8(me) <=> U8(other)
+routine Byte.cmp(you: Byte) -> ComparisonSign
+  return U8(me) <=> U8(you)
 
 # ============================================================================
 # Range check
@@ -160,16 +160,10 @@ routine Byte.diagnose() -> Text
 # Hashing
 # ============================================================================
 
-### Returns a hash of this value.
-### :returns: The resulting `U64` value.
-@readonly
-routine Byte.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[Byte, U64](me))
-
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 @readonly
 routine Byte.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[Byte, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[Byte, U64](me), k0: k0, k1: k1)

@@ -22,7 +22,7 @@ namespace SyntaxTree;
 /// <item>Variable access and function calls</item>
 /// <item>Arithmetic and logical operations</item>
 /// <item>Complex operations: member access, indexing, type conversions</item>
-/// <item>Memory operations: slice creators, memory slice method calls</item>
+/// <item>Memory operations: slice creators, memory slice memberRoutine calls</item>
 /// <item>Danger zone operations: raw memory access, type punning</item>
 /// </list>
 /// After semantic analysis, ResolvedType contains the computed type of this expression.
@@ -56,6 +56,16 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     /// type — in-flight-ness is a per-expression production attribute, not a type identity.
     /// </summary>
     public bool IsInFlight { get; set; }
+
+    /// <summary>
+    /// When set, this read was flow-narrowed from a carrier/variant (<c>NarrowedFrom</c>) to a single
+    /// concrete arm/payload type (<see cref="ResolvedType"/>) — e.g. `x` used as `S64` inside the else
+    /// of `if x is None`, or as arm `B` inside the else of `if x is A` on a two-arm variant. SA sets
+    /// this on the narrowed <see cref="IdentifierExpression"/>; a postprocessing pass rewrites such
+    /// reads into a payload extraction (<see cref="CarrierPayloadExpression"/>). Null for ordinary
+    /// (non-narrowed) reads.
+    /// </summary>
+    public TypeInfo? NarrowedFrom { get; set; }
 }
 
 #endregion
@@ -196,7 +206,7 @@ public record DictLiteralExpression(
 /// <item>Single-element: (42,) - trailing comma required to distinguish from parenthesized expression</item>
 /// <item>Nested: (1, (2, 3)) - tuples can contain other tuples</item>
 /// </list>
-/// Note: Empty tuples () are not valid. Use Blank for unit type.
+/// Note: Empty tuples () are not valid. Use None for unit type.
 /// Access elements via .item0, .item1, etc.
 /// </remarks>
 public record TupleLiteralExpression(List<Expression> Elements, SourceLocation Location)
@@ -215,6 +225,7 @@ public record TupleLiteralExpression(List<Expression> Elements, SourceLocation L
 /// </summary>
 /// <param name="Name">The identifier name to look up in the symbol table</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Realm">Optional cross-language realm qualifier (e.g. <c>"RF"</c>) from a <c>Realm::Name</c> prefix.</param>
 /// <remarks>
 /// Identifier resolution follows lexical scoping rules:
 /// <list type="bullet">
@@ -224,10 +235,10 @@ public record TupleLiteralExpression(List<Expression> Elements, SourceLocation L
 /// <item>Qualified names: may represent member access chains</item>
 /// </list>
 /// </remarks>
-public record IdentifierExpression(string Name, SourceLocation Location)
+public record IdentifierExpression(string Name, SourceLocation Location, string? Realm = null)
     : Expression(Location: Location)
 {
-    /// <summary>
+    /// <summary>``
     /// When set, this identifier resolved as a flag member in flag-context (e.g. a bare
     /// `READ` in a flags test). The bit position lets ExpressionLoweringPass emit
     /// the bitmask literal without re-doing the lookup.
@@ -239,9 +250,39 @@ public record IdentifierExpression(string Name, SourceLocation Location)
     /// codegen materializes it as a closure directly, skipping name-based lookup. Used for
     /// references a lowering pass constructs (e.g. an unbound member-routine reference for a cycle-
     /// collector trace/free hook), where the bare name cannot be resolved by lookup because it needs
-    /// the owner type. <see cref="ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
+    /// the owner type. <see cref="Expression.ResolvedType"/> must be the matching <c>RoutineTypeInfo</c>.
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
+
+    /// <summary>
+    /// Set by semantic analysis when this identifier resolved to a Suflae module-level <c>global</c>
+    /// (its <see cref="TypeModel.Symbols.VariableInfo.IsGlobal"/> is true). Because <c>LookupVariable</c>
+    /// checks local scopes BEFORE the global table, a local that shadows a global resolves to the local
+    /// and this flag stays false — so the flag is shadowing-exact. Consumed by
+    /// <c>GlobalEntityRewritePass</c>, which rewrites every flagged reference to a field access on the
+    /// hidden per-program <c>__ModuleGlobals</c> singleton (the thread-safe storage), so no bare global
+    /// identifier survives into codegen.
+    /// </summary>
+    public bool IsModuleGlobal { get; set; }
+
+    /// <summary>
+    /// Set by semantic analysis to the <see cref="VariableInfo"/> this identifier bound to (a local,
+    /// parameter, each-loop/using/pattern binding, global, or preset), or null when it resolved to
+    /// something else (type, choice case, routine) or did not resolve. Because lookup returns the ONE
+    /// stored instance per binding, two references to the same binding carry the SAME object — so
+    /// reference-identity gives scope-precise "same variable" grouping for the language server's
+    /// references / rename / go-to-definition. Not consumed by codegen; purely an IDE aid.
+    /// </summary>
+    public VariableInfo? ResolvedVariable { get; set; }
+
+    /// <summary>
+    /// Set by semantic analysis when this reference reads a variable that is DEAD at this point — its
+    /// ownership was moved out by an earlier <c>steal</c> (or send) and it has not been re-bound since.
+    /// Mirrors the analyzer's flow-sensitive deadref set (with the same if/else merge + rebind revival),
+    /// captured PER OCCURRENCE so the language server can grey out / strike the dead uses. The consuming
+    /// use inside the <c>steal</c> itself stays false (it is still valid — it is what does the moving).
+    /// </summary>
+    public bool IsDeadUse { get; set; }
 
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -256,7 +297,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 
 /// <summary>
 /// Expression representing a compound assignment operation (e.g., a += b).
-/// The semantic analyzer dispatches this to an in-place wired method ($iadd, etc.)
+/// The semantic analyzer dispatches this to an in-place wired memberRoutine (iadd, etc.)
 /// or falls back to create-and-assign (a = a.add(b)) when no in-place operator exists.
 /// </summary>
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
@@ -333,20 +374,20 @@ public record UnaryExpression(UnaryOperator Operator, Expression Operand, Source
 }
 
 /// <summary>
-/// Expression that invokes a function or method with zero or more arguments.
-/// Represents function calls, method invocations, and creator calls.
+/// Expression that invokes a function or memberRoutine with zero or more arguments.
+/// Represents function calls, memberRoutine invocations, and creator calls.
 /// </summary>
-/// <param name="Callee">Expression that evaluates to a callable (function, method, lambda)</param>
+/// <param name="Callee">Expression that evaluates to a callable (function, memberRoutine, lambda)</param>
 /// <param name="Arguments">List of argument expressions to pass to the callable</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Supports various call patterns:
 /// <list type="bullet">
 /// <item>Function calls: routine(a, b, c)</item>
-/// <item>Method calls: me.method(x, y)</item>
+/// <item>memberRoutine calls: me.MemberRoutine(x, y)</item>
 /// <item>Creator calls: Point(x, y)</item>
 /// <item>Lambda calls: ((x) => x + 1)(42)</item>
-/// <item>Operator method calls: me.add(you)</item>
+/// <item>Operator memberRoutine calls: me.add(you)</item>
 /// </list>
 /// </remarks>
 public record CallExpression(
@@ -389,21 +430,21 @@ public record CallExpression(
 
     /// <summary>
     /// The target type being constructed or converted to, when this call-like node represents
-    /// construction rather than a plain routine/method invocation.
+    /// construction rather than a plain routine/memberRoutine invocation.
     /// </summary>
     public TypeInfo? ConstructedType { get; set; }
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List(1, 2, 3), Set(1, 2, 3)).
-    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal function call.
+    /// Codegen should emit create() + repeated add/add_last calls instead of a normal function call.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
 
     /// <summary>
-    /// Method-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
-    /// <c>GenericMethodCallExpression</c> that has explicit type parameters at the call site
+    /// memberRoutine-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
+    /// <c>GenericMemberRoutineCallExpression</c> that has explicit type parameters at the call site
     /// (e.g., <c>buf.read![U8](offset)</c> -> <c>TypeArguments = [U8]</c>).
-    /// Null for calls with no method-level type args.
+    /// Null for calls with no memberRoutine-level type args.
     /// </summary>
     public List<TypeExpression>? TypeArguments { get; set; }
 
@@ -411,7 +452,7 @@ public record CallExpression(
     /// True when this call was synthesized by a compiler lowering pass (e.g.
     /// <c>ControlFlowLoweringPass</c> emitting <c>iter.iter()</c> / <c>iter.try_emit()</c>
     /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
-    /// dunder-private methods directly.
+    /// dunder-private memberRoutines directly.
     /// </summary>
     public bool IsSynthesizedLowering { get; set; }
 }
@@ -498,7 +539,7 @@ public record CreatorExpression(
     public TypeInfo? ConstructedType { get; set; }
 
     /// <summary>
-    /// When the creator's named arguments match a `$create(named:)` overload (rather than
+    /// When the creator's named arguments match a `create(named:)` overload (rather than
     /// field names), SA resolves and stores that creator routine here. Codegen then dispatches
     /// through the routine instead of doing inline field initialization.
     /// </summary>
@@ -569,6 +610,53 @@ public record MemberExpression(Expression Object, string MemberName, SourceLocat
     }
 }
 
+/// <summary>The syntactic position a <c>${...}</c> splice appears in, fixing the kind its inner
+/// expression must fold to at monomorphization.</summary>
+public enum SpliceKind
+{
+    /// <summary>Member-selector position (<c>x.${...}</c>): the inner must fold to a field NAME (Text).</summary>
+    Selector,
+
+    /// <summary>Expression position (<c>${...}</c>): a general comptime value splice.</summary>
+    Value
+}
+
+/// <summary>
+/// A comptime splice <c>${expr}</c> in expression position. The inner expression is a projection
+/// of an <see cref="ExpandStatement"/> handle (e.g. <c>m.name</c>). Never survives monomorphization.
+/// </summary>
+/// <param name="Inner">The spliced projection expression.</param>
+/// <param name="RequiredKind">The kind the position demands (Selector → Text name).</param>
+/// <param name="Location">Source location information.</param>
+public record SpliceExpression(Expression Inner, SpliceKind RequiredKind, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitSpliceExpression(node: this);
+    }
+}
+
+/// <summary>
+/// A member access whose selector is a comptime splice: <c>x.${m.name}</c>. Kept structurally
+/// distinct from a plain <see cref="MemberExpression"/> so the monomorphizer knows to fold the
+/// splice to a concrete field name and rewrite this to a real member access — a plain
+/// <see cref="MemberExpression"/> is never touched by the expander.
+/// </summary>
+/// <param name="Object">The receiver whose field is selected.</param>
+/// <param name="Selector">The <c>${...}</c> splice that folds to the field name.</param>
+/// <param name="Location">Source location information.</param>
+public record SpliceMemberExpression(Expression Object, SpliceExpression Selector, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitSpliceMemberExpression(node: this);
+    }
+}
+
 /// <summary>
 /// Expression that conditionally accesses a member of an object if the object is not none.
 /// Represents the ?. operator for safe navigation / optional chaining.
@@ -619,8 +707,8 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
 
     /// <summary>
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
-    /// to the method-generic-resolved <c>$setitem</c>/<c>$setitem!</c> routine. Codegen uses
-    /// this in place of a fresh registry lookup so method-level generics (e.g.
+    /// to the memberRoutine-generic-resolved <c>setitem</c>/<c>setitem!</c> routine. Codegen uses
+    /// this in place of a fresh registry lookup so memberRoutine-level generics (e.g.
     /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
     /// </summary>
@@ -781,7 +869,7 @@ public record LambdaExpression(
 #region Function Call and Access Expressions
 
 /// <summary>
-/// Represents a parameter definition for functions, methods, and lambdas.
+/// Represents a parameter definition for functions, memberRoutines, and lambdas.
 /// Includes optional type annotation and default value for flexible parameter handling.
 /// </summary>
 /// <param name="Name">Parameter name used for binding in the function body</param>
@@ -817,6 +905,9 @@ public record Parameter(
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
 /// <param name="IsRvalue">True if this type was written with the `T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
+/// <param name="Realm">Optional cross-language realm qualifier (e.g. <c>"RF"</c>); null = ambient realm of the file.</param>
+/// <param name="SpliceHandle">Comptime type-position splice handle name (e.g. from <c>$typeof(m)</c>); null for ordinary types.</param>
+/// <param name="ComptimeValue">Comptime const-generic expression for a value type-arg slot; null for ordinary type-args.</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">
@@ -830,7 +921,20 @@ public record TypeExpression(
     string Name,
     List<TypeExpression>? GenericArguments,
     SourceLocation Location,
-    bool IsRvalue = false) : Expression(Location: Location)
+    bool IsRvalue = false,
+    // Cross-language realm tag from a `Realm::Name` qualifier (e.g. `RF::Core.List`). "RF" = the
+    // RazorForge/bare realm (the resolver skips Suflae's entity->Roamed lowering for it); null = the
+    // ambient realm of the file. Only "RF" is wired for now (Suflae wrappers holding a bare RF entity).
+    string? Realm = null,
+    // Comptime type-position splice: when non-null this whole type IS the `${handle.type}` projection
+    // of an expand handle (e.g. `${m.type}` in `Array[${m.type}, N]`). At expansion it resolves to the
+    // current member/arm's static type. Null for an ordinary written type.
+    string? SpliceHandle = null,
+    // Comptime VALUE-position splice used as a const-generic argument: `${max(T.data_size().byte_size(), 8)}`
+    // in `Array[U8, ${...}]`. When non-null this type-arg is a const-generic whose integer value is the
+    // monomorph-time fold of this expression (see GenericAstRewriter / RewriteContext.TypeSubs). Distinct
+    // from SpliceHandle, which is a TYPE splice; this is a comptime scalar. Null for ordinary type-args.
+    Expression? ComptimeValue = null) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -841,17 +945,17 @@ public record TypeExpression(
 
 /// <summary>
 /// Expression that performs explicit type conversion between compatible types.
-/// Supports both function-style and method-style conversion syntax.
+/// Supports both function-style and memberRoutine-style conversion syntax.
 /// </summary>
 /// <param name="TargetType">Name of the target type to convert to</param>
 /// <param name="Expression">Source expression to convert</param>
-/// <param name="IsMethodStyle">true for method-style (x.s32!()), false for function-style (s32!(x))</param>
+/// <param name="IsMemberRoutineStyle">true for memberRoutine-style (x.s32!()), false for function-style (s32!(x))</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Type conversion styles:
 /// <list type="bullet">
 /// <item>Function-style: s32!(3.14), bool!(1)</item>
-/// <item>Method-style: 3.14.s32!(), 1.bool!()</item>
+/// <item>memberRoutine-style: 3.14.s32!(), 1.bool!()</item>
 /// <item>Safety: explicit conversions may fail at runtime</item>
 /// <item>Checked: conversion failures throw exceptions</item>
 /// </list>
@@ -860,7 +964,7 @@ public record TypeExpression(
 public record TypeConversionExpression(
     string TargetType,
     Expression Expression,
-    bool IsMethodStyle,
+    bool IsMemberRoutineStyle,
     SourceLocation Location) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
@@ -885,26 +989,26 @@ public record TypeConversionExpression(
 #region Memory Operation Expressions
 
 /// <summary>
-/// Expression representing generic method calls with type parameters.
+/// Expression representing generic memberRoutine calls with type parameters.
 /// Used for generic operations like read!&lt;T&gt;() and write!&lt;T&gt;().
 /// </summary>
 /// <param name="Object">Expression representing the object being called</param>
-/// <param name="MethodName">Name of the generic method</param>
-/// <param name="TypeArguments">List of type arguments for the generic method</param>
-/// <param name="Arguments">List of argument expressions passed to the method</param>
-/// <param name="IsMemoryOperation">Whether this method call uses ! syntax (memory operation)</param>
+/// <param name="memberRoutineName">Name of the generic memberRoutine</param>
+/// <param name="TypeArguments">List of type arguments for the generic memberRoutine</param>
+/// <param name="Arguments">List of argument expressions passed to the memberRoutine</param>
+/// <param name="IsMemoryOperation">Whether this memberRoutine call uses ! syntax (memory operation)</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
-/// Generic method calls enable type-safe slice operations:
+/// Generic memberRoutine calls enable type-safe slice operations:
 /// <list type="bullet">
 /// <item>buffer.read!&lt;s32&gt;(0) - read s32 at offset 0</item>
 /// <item>buffer.write!&lt;f64&gt;(8, 3.14) - write f64 at offset 8</item>
 /// <item>Type arguments specify the data type for the operation</item>
 /// </list>
 /// </remarks>
-public record GenericMethodCallExpression(
+public record GenericMemberRoutineCallExpression(
     Expression Object,
-    string MethodName,
+    string MemberRoutineName,
     List<TypeExpression> TypeArguments,
     List<Expression> Arguments,
     bool IsMemoryOperation,
@@ -913,18 +1017,18 @@ public record GenericMethodCallExpression(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
-        return visitor.VisitGenericMethodCallExpression(node: this);
+        return visitor.VisitGenericMemberRoutineCallExpression(node: this);
     }
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List[S64](1, 2, 3)).
-    /// Codegen should emit $create() + repeated add/add_last calls instead of a normal type constructor.
+    /// Codegen should emit create() + repeated add/add_last calls instead of a normal type constructor.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
 
     /// <summary>
-    /// The fully resolved RoutineInfo from semantic analysis (with owner-level and method-level
-    /// generic substitution applied). Set for generic method calls on objects (e.g., obj.method[U](args)).
+    /// The fully resolved RoutineInfo from semantic analysis (with owner-level and memberRoutine-level
+    /// generic substitution applied). Set for generic memberRoutine calls on objects (e.g., obj.MemberRoutine[U](args)).
     /// </summary>
     public RoutineInfo? ResolvedRoutine { get; set; }
 
@@ -966,7 +1070,7 @@ public record GenericMemberExpression(
 /// brackets are a generic type-argument list or a value index — it parses the bracket contents
 /// uniformly as expressions and the <c>BracketReclassifyPass</c>
 /// reclassifies every such node into an existing <see cref="IndexExpression"/>,
-/// <see cref="GenericMethodCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
+/// <see cref="GenericMemberRoutineCallExpression"/>, or <see cref="GenericMemberExpression"/> before the
 /// main semantic resolve runs. No downstream consumer should ever observe this node.
 /// </summary>
 /// <param name="Object">Expression the brackets apply to (identifier, member access, etc.).</param>
@@ -981,8 +1085,8 @@ public record BracketAccessExpression(
 {
     /// <summary>
     /// True when the failable <c>!</c> marker preceded the brackets or the call parens
-    /// (e.g. <c>foo![T](x)</c> / <c>obj.method![T](x)</c>). Maps to
-    /// <see cref="GenericMethodCallExpression.IsMemoryOperation"/> after reclassification.
+    /// (e.g. <c>foo![T](x)</c> / <c>obj.MemberRoutine![T](x)</c>). Maps to
+    /// <see cref="GenericMemberRoutineCallExpression.IsMemoryOperation"/> after reclassification.
     /// </summary>
     public bool IsFailable { get; init; }
 
@@ -1047,7 +1151,7 @@ public record CarrierPayloadExpression(
 /// Steal expression rules:
 /// <list type="bullet">
 /// <item>Can steal: raw entities</item>
-/// <item>Cannot steal: Viewing&lt;T&gt;, Modifying&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Watched&lt;T, P&gt;, Inspecting&lt;T&gt;, Claiming&lt;T&gt;, Hijacked&lt;T&gt;</item>
+/// <item>Cannot steal: Viewing&lt;T&gt;, Modifying&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Guarded&lt;T, P&gt;, Witnessed&lt;T, P&gt;, Consulting&lt;T&gt;, Amending&lt;T&gt;, Hijacked&lt;T&gt;</item>
 /// <item>After stealing, source becomes deadref (using it is a build error)</item>
 /// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
 /// and consuming iteration (for item in steal list)</item>

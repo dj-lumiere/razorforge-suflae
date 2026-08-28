@@ -32,9 +32,9 @@ routine start()
   var sig = SignalCaster()
   danger
     var cell = slot.hijack()         # raw pointer to `slot`, copyable -> both coroutines share it
-    var con = consumer(sig: steal sig.duplicate(), cell: cell)
-    var pro = producer(sig: steal sig, cell: cell)
-    var got = con.retrieve()        # consumer parks on the predicate; producer sets it and casts
-    discard pro.retrieve()
-    show(f"got={got}")
+    # LAZY: launch consumer + producer TOGETHER (`gather`) so the consumer can park on the predicate and
+    # the producer can set it + cast. Retrieving the consumer ALONE would hang. Both complete before we
+    # read the shared cell, so the frame-aliased slot stays valid. Results in input order: [consumer, producer].
+    var results = [consumer(sig: steal sig.duplicate(), cell: cell), producer(sig: steal sig, cell: cell)].gather()
+    show(f"got={results[0]}")
   return

@@ -41,7 +41,7 @@ secret routine json_hex2(cp: U32) -> Text
 ### :returns: The JSON string literal, including the surrounding quotes.
 secret routine json_string(t: Text) -> Text
   var result: Text = "\""
-  for ch in t
+  each ch in t
     var cp = ch.codepoint()
     when cp
       == 0x22u32 =>
@@ -63,7 +63,7 @@ secret routine json_string(t: Text) -> Text
       else =>
         result = result + ch.represent()
   result = result + "\""
-  return steal result
+  return result
 
 ### Encodes this `SerialValue` tree as JSON `Text`. Total — never fails.
 ### :returns: The JSON rendering.
@@ -101,7 +101,7 @@ routine SerialValue.to_json_text() -> Text
     is Bytes v =>
       var body: Text = "["
       var first = true
-      for byte in v
+      each byte in v
         if not first
           body = body + ","
         body = body + U8(from: byte).represent()
@@ -111,7 +111,7 @@ routine SerialValue.to_json_text() -> Text
     is List[SerialValue] xs =>
       var body: Text = "["
       var first = true
-      for x in xs
+      each x in xs
         if not first
           body = body + ","
         body = body + x.to_json_text()

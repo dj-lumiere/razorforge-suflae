@@ -113,6 +113,14 @@ public enum BinaryOperator
     /// <summary>Inequality comparison operator (!=)</summary>
     NotEqual,
 
+    /// <summary>Reference-identity operator (===) — "same object?". A primitive pointer compare on the
+    /// underlying object address; NOT overloadable and NOT lowered to <c>.eq()</c>. Valid only on entity /
+    /// forwarding-wrapper operands.</summary>
+    IdentityEqual,
+
+    /// <summary>Negated reference-identity operator (!==) — "different object?".</summary>
+    IdentityNotEqual,
+
     /// <summary>Less than relational operator (&lt;)</summary>
     Less,
 
@@ -202,7 +210,7 @@ public enum BinaryOperator
 }
 
 /// <summary>
-/// Extension methods for BinaryOperator enum
+/// Extension memberRoutines for BinaryOperator enum
 /// </summary>
 public static class BinaryOperatorExtensions
 {
@@ -244,6 +252,8 @@ public static class BinaryOperatorExtensions
 
                 BinaryOperator.Equal => "==",
                 BinaryOperator.NotEqual => "!=",
+                BinaryOperator.IdentityEqual => "===",
+                BinaryOperator.IdentityNotEqual => "!==",
                 BinaryOperator.Less => "<",
                 BinaryOperator.LessEqual => "<=",
                 BinaryOperator.Greater => ">",
@@ -277,10 +287,10 @@ public static class BinaryOperatorExtensions
             };
         }
         /// <summary>
-        /// Gets the wired method name for operator overloading.
+        /// Gets the wired memberRoutine name for operator overloading.
         /// Returns null if the operator is not overloadable.
         /// </summary>
-        public string? GetMethodName()
+        public string? GetMemberRoutineName()
         {
             return op switch
             {
@@ -306,7 +316,7 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.TrueDivClamp => "truediv_clamp",
                 BinaryOperator.PowerClamp => "pow_clamp",
 
-                // Unchecked arithmetic — dispatch through stdlib methods that contain nsw/nuw IR
+                // Unchecked arithmetic — dispatch through stdlib memberRoutines that contain nsw/nuw IR
                 BinaryOperator.AddUnchecked => "add_unchecked",
                 BinaryOperator.SubtractUnchecked => "sub_unchecked",
                 BinaryOperator.MultiplyUnchecked => "mul_unchecked",
@@ -348,11 +358,11 @@ public static class BinaryOperatorExtensions
         }
 
         /// <summary>
-        /// Gets the in-place wired method name for compound assignment dispatch.
+        /// Gets the in-place wired memberRoutine name for compound assignment dispatch.
         /// Returns null if the operator has no in-place variant (overflow, comparison, etc.).
-        /// In-place methods modify the receiver and return Blank.
+        /// In-place memberRoutines modify the receiver and return None.
         /// </summary>
-        public string? GetInPlaceMethodName()
+        public string? GetInPlaceMemberRoutineName()
         {
             return op switch
             {

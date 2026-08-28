@@ -1,17 +1,22 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents the success-or-crash carrier used by `check_` routines.
 ### A `Result[T]` stores either a successful `T` payload or a crashable error
 ### payload inline. The full layout is codegen-controlled:
 ###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }
-### `type_id == 0` is the Blank state with don't-care payload bytes.
+### `type_id == 0` is the None state with don't-care payload bytes.
 ### :typeparam T: The successful return value type.
 record Result[T]
   ### Identifies the stored payload type.
   ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
+  ### Inline payload buffer, sized to the success `T` but at least 8 bytes so an error entity pointer
+  ### always fits. The `$max(…)` splice folds to a literal element count at monomorphization. The success
+  ### `T` is stored inline at its FULL width (no truncation); an error is stored as its entity pointer
+  ### in the first 8 bytes. type_id disambiguates.
+  secret payload: Array[U8, $max(T.data_size().byte_size(), 8)]
 
 ### Returns the display form of this result: the payload's own `represent` for both the success
 ### (`T`) and crashable arms. `is T` matches the success state (type-id of the concrete `T`); the

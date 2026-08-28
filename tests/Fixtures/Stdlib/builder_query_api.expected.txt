@@ -1,0 +1,20 @@
+S64 type_name: S64
+S64 is_generic: false
+S64 annotations count: 1
+Point type_name: Point
+Point full_type_name: Tests/Stdlib/BuilderQueryApi.Point
+Point member_variable_count: 2
+Point is_generic: false
+Counter type_name: Counter
+Counter member_variable_count: 1
+List[S64] type_name: List[S64]
+Point field: x: S64 @0
+Point field: y: S64 @8
+Point protocol: RecordType routines=0 gen=false
+Point protocol: Assignable routines=1 gen=false
+Point protocol: Copyable routines=1 gen=false
+Point routine represent: return=Text crashable=false params=0
+Point dep: BuilderQuery
+Point dep: IO/Console
+Point annotations count: 0
+DONE

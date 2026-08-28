@@ -19,20 +19,19 @@ suspended routine feed_jobs(out: Sender[S64], n: S64) -> S64
 # Counts how many jobs this worker handled (sum of all workers' counts == jobs fed).
 suspended routine worker(belt: SharedReceiver[S64]) -> S64
   var done = 0_s64
-  for job in belt
+  each job in belt
     done = done + 1
   return done
 
 routine start()
   var (feeder, belt) = make_shared_channel[S64](capacity: 2)
 
-  var fj = feed_jobs(out: steal feeder, n: 6)
-  var w1 = worker(belt: steal belt.duplicate())
-  var w2 = worker(belt: steal belt)
-
   danger
-    discard fj.retrieve()       # drive feeding (channel closes when the Sender drops)
-    var d1 = w1.retrieve()
-    var d2 = w2.retrieve()
-    show(f"total={d1 + d2}")
+    # LAZY model: the feeder runs in the BACKGROUND (`execute`); the two workers are launched TOGETHER
+    # and awaited via `gather` so they run CONCURRENTLY and split the jobs (driving them one-by-one
+    # would let the first worker drain the whole belt before the second ever started). The split is
+    # nondeterministic; the total is not.
+    feed_jobs(out: steal feeder, n: 6).execute()
+    var counts = [worker(belt: steal belt.duplicate()), worker(belt: steal belt)].gather()
+    show(f"total={counts[0] + counts[1]}")
   return

@@ -19,7 +19,16 @@ namespace SyntaxTree;
 /// <item>Modules: imports and module organization</item>
 /// </list>
 /// </remarks>
-public abstract record Declaration(SourceLocation Location) : SyntaxTreeNode(Location: Location);
+public abstract record Declaration(SourceLocation Location) : SyntaxTreeNode(Location: Location)
+{
+    /// <summary>
+    /// The documentation-comment text (the lines of a <c>###</c> doc block) written immediately above
+    /// this declaration, joined with newlines, or null if none. Attached by the parser; carried into
+    /// <c>RoutineInfo.Documentation</c> at registration so hover / completion can surface it (including
+    /// for stdlib symbols, which are parsed the same way). Not consumed by codegen.
+    /// </summary>
+    public string? Documentation { get; set; }
+}
 
 /// <summary>
 /// Empty placeholder declaration used inside type bodies.
@@ -120,12 +129,53 @@ public record VariableDeclaration(
     SourceLocation Location,
     StorageClass Storage = StorageClass.None,
     List<string>? Annotations = null,
-    bool IsLateInit = false) : Declaration(Location: Location)
+    bool IsLateInit = false,
+    bool IsGlobal = false) : Declaration(Location: Location)
 {
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
         return visitor.VisitVariableDeclaration(node: this);
+    }
+}
+
+/// <summary>
+/// One member-variable template inside a decl-position <c>expand</c>: <c>[secret] ${namesplice}: Type</c>
+/// where the name is a <c>${m.name}</c> / <c>${"prefix" + m.name}</c> splice and the type may carry a
+/// <c>${m.type}</c> splice. Materialized once per member of the concrete source type at instantiation.
+/// </summary>
+/// <param name="NamePrefix">The literal prefix before the field name (e.g. <c>"inner_"</c>), or "".</param>
+/// <param name="Type">The column type (may contain a <c>${m.type}</c> <see cref="TypeExpression.SpliceHandle"/>).</param>
+/// <param name="Visibility">Access modifier for the generated member variable.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandMemberTemplate(
+    string NamePrefix,
+    TypeExpression Type,
+    VisibilityModifier Visibility,
+    SourceLocation Location);
+
+/// <summary>
+/// A decl-position comptime member-generation directive inside a record/entity body:
+/// <c>expand m in allmemvarof(T)</c> followed by an indented block of <see cref="ExpandMemberTemplate"/>s.
+/// At instantiation (when the source type <c>T</c> is concrete) each template is materialized once per
+/// member of <c>T</c>, laying out struct-of-arrays column members (SplitArray/SplitList). Never survives
+/// to codegen — the generated <see cref="MemberVariableInfo"/> columns are appended to the concrete
+/// instance's member list by the type registry.
+/// </summary>
+/// <param name="HandleName">The per-member handle identifier (e.g. <c>m</c>).</param>
+/// <param name="SourceType">The type inside <c>allmemvarof(...)</c> — a generic param before instantiation.</param>
+/// <param name="Templates">The per-member column templates.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandMemberDeclaration(
+    string HandleName,
+    TypeExpression SourceType,
+    List<ExpandMemberTemplate> Templates,
+    SourceLocation Location) : Declaration(Location: Location)
+{
+    /// <inheritdoc/>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitExpandMemberDeclaration(node: this);
     }
 }
 
@@ -146,6 +196,7 @@ public record VariableDeclaration(
 /// <param name="Storage">Storage class for the routine.</param>
 /// <param name="Async">Suspended or threaded routine mode.</param>
 /// <param name="IsDangerous">Whether the routine requires a <c>danger</c> context.</param>
+/// <param name="IsWiredMemberRoutine">Whether the routine is a wired (compiler-synthesized) member routine.</param>
 /// <remarks>
 /// Function declarations support:
 /// <list type="bullet">
@@ -207,6 +258,56 @@ public record RoutineDeclaration(
     /// </summary>
     public RoutineInfo? ResolvedInfo { get; set; }
 
+    /// <summary>
+    /// For a member routine (dotted name like <c>T.serialize</c> or <c>List[T].append</c>), the bare
+    /// owner segment BEFORE the type-args and the dot (<c>"T"</c>, <c>"List"</c>); null for a free
+    /// routine. Captured structurally by the parser from the separate owner/memberRoutine tokens so consumers
+    /// (SA template detection, registration) never re-split <see cref="Name"/> with <c>IndexOf('.')</c>
+    /// — the name-canonicalization discipline: the dotted string is a rendering, these are the truth.
+    /// </summary>
+    public string? OwnerName { get; set; }
+
+    /// <summary>The memberRoutine segment AFTER the final dot (<c>"serialize"</c>, <c>"append"</c>); null for
+    /// a free routine (whose memberRoutine name is simply <see cref="Name"/>).</summary>
+    public string? MemberRoutineName { get; set; }
+
+    /// <summary>True when the owner carried type-args (<c>List[T].append</c>) — i.e. a real
+    /// generic-instance receiver, not a bare type-parameter placeholder like <c>T.serialize</c>.</summary>
+    public bool HasReceiverTypeArgs { get; set; }
+
+    /// <summary>The receiver as a STRUCTURED type expression (<c>List[T]</c>, <c>Iterable[Text]</c>),
+    /// captured by the parser instead of being serialized into <see cref="Name"/> and re-parsed by
+    /// consumers via <c>ParseTypeExpressionString</c>. Null for a free routine or a bare
+    /// type-parameter receiver (<c>T.serialize</c>). Name-canonicalization: prefer this over slicing
+    /// the owner substring out of <see cref="Name"/>.</summary>
+    public TypeExpression? ReceiverType { get; set; }
+
+    /// <summary>
+    /// The receiver exactly AS WRITTEN, including any type-args (<c>"List[T]"</c>, <c>"Iterable[Text]"</c>,
+    /// <c>"T"</c>), or null for a free routine. This is the rendered registry-key owner form that several
+    /// resolution/registration sites need (a bracketed owner keys the protocol-extension / concrete-
+    /// specialization bucket). ASSEMBLED BY THE PARSER from the separate owner/bracket/arg tokens as it
+    /// builds <see cref="Name"/> — NOT sliced back out of the concatenated <see cref="Name"/> string. This
+    /// is the name-canonicalization discipline: the pieces come from the tokens the parser already has;
+    /// the dotted <see cref="Name"/> is a rendering. Consumers MUST read this rather than re-split
+    /// <see cref="Name"/>; prefer <see cref="OwnerName"/> (bare) or <see cref="ReceiverType"/> (structured)
+    /// where those suffice.
+    /// </summary>
+    public string? RenderedReceiver { get; set; }
+
+    /// <summary>
+    /// The owner-qualified composite identity (<c>"List[T].append"</c>, <c>"S32.add"</c>) used as a
+    /// registry / reachability-index key; for a free routine (or a type-body member whose owner comes from
+    /// the enclosing <c>_currentType</c>, not extension syntax) this is just the bare <see cref="Name"/>.
+    /// Built from the structured <see cref="RenderedReceiver"/> + <see cref="MemberRoutineName"/> in ONE
+    /// place — the canonical composite. Index/lookup sites that need the owner-qualified form MUST read
+    /// this; <see cref="Name"/> is the bare member. (While the parser still folds the owner into
+    /// <see cref="Name"/> this equals <see cref="Name"/> exactly; once <see cref="Name"/> is bare this is
+    /// the sole owner-qualified renderer.)
+    /// </summary>
+    public string QualifiedName =>
+        RenderedReceiver is { } receiver ? $"{receiver}.{MemberRoutineName}" : Name;
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -220,12 +321,12 @@ public record RoutineDeclaration(
 
 /// <summary>
 /// Entity (class) declaration that defines reference types with inheritance.
-/// Represents object-oriented classes with member variables, methods, and inheritance.
+/// Represents object-oriented classes with member variables, memberRoutines, and inheritance.
 /// </summary>
 /// <param name="Name">Class identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (member variables, methods, properties)</param>
+/// <param name="Members">List of member declarations (member variables, memberRoutines, properties)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -236,8 +337,8 @@ public record RoutineDeclaration(
 /// <item>Single protocol implementation: entity Dog obeys Animal</item>
 /// <item>Multiple protocol implementation: entity Dog obeys Nameable, Trainable</item>
 /// <item>Generic classes: entity Container[T]</item>
-/// <item>Member visibility: public, private, internal member variables/methods</item>
-/// <item>Creators: defined as special routine methods</item>
+/// <item>Member visibility: public, private, internal member variables/memberRoutines</item>
+/// <item>Creators: defined as special routine memberRoutines</item>
 /// </list>
 /// </remarks>
 public record EntityDeclaration(
@@ -267,7 +368,7 @@ public record EntityDeclaration(
 /// <param name="Name">Record identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="Protocols">List of protocols to implement (obeys)</param>
-/// <param name="Members">List of member declarations (member variables and methods)</param>
+/// <param name="Members">List of member declarations (member variables and memberRoutines)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -310,7 +411,7 @@ public record RecordDeclaration(
 /// </summary>
 /// <param name="Name">Choice identifier name</param>
 /// <param name="Cases">List of choice variant definitions with optional values</param>
-/// <param name="Methods">List of methods that can be called on choice values</param>
+/// <param name="member routines">List of memberRoutines that can be called on choice values</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -318,14 +419,14 @@ public record RecordDeclaration(
 /// <list type="bullet">
 /// <item>Simple enums: choice Status { Ok, Error, Pending }</item>
 /// <item>Explicit values: choice HttpCode { Ok = 200, NotFound = 404 }</item>
-/// <item>Methods: choices can have associated behavior</item>
+/// <item>memberRoutines: choices can have associated behavior</item>
 /// <item>Pattern matching: used with when statements</item>
 /// </list>
 /// </remarks>
 public record ChoiceDeclaration(
     string Name,
     List<ChoiceCase> Cases,
-    List<RoutineDeclaration> Methods,
+    List<RoutineDeclaration> MemberRoutines,
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
@@ -428,12 +529,12 @@ public record VariantDeclaration(
 
 /// <summary>
 /// Protocol (trait/interface) declaration that defines behavioral contracts.
-/// Specifies method signatures that implementing types must provide.
+/// Specifies memberRoutine signatures that implementing types must provide.
 /// </summary>
 /// <param name="Name">Protocol identifier name</param>
 /// <param name="GenericParameters">Optional list of generic type parameter names</param>
 /// <param name="ParentProtocols">List of parent protocols this protocol extends (obeys)</param>
-/// <param name="Methods">List of method signatures (without implementations)</param>
+/// <param name="member routines">List of memberRoutine signatures (without implementations)</param>
 /// <param name="Visibility">Access control modifier</param>
 /// <param name="Location">Source location information</param>
 /// <param name="GenericConstraints">Optional generic constraints.</param>
@@ -443,7 +544,7 @@ public record VariantDeclaration(
 /// <item>Interface contracts: protocol Drawable { routine Me.draw() }</item>
 /// <item>Generic protocols: protocol Comparable[T] { routine Me.cmp(you: Me) -> ComparisonSign }</item>
 /// <item>Multiple implementation: types can implement multiple protocols</item>
-/// <item>Default methods: protocols can provide default implementations</item>
+/// <item>Default memberRoutines: protocols can provide default implementations</item>
 /// <item>Protocol bounds: generic constraints (where T obeys Comparable)</item>
 /// <item>Protocol inheritance: protocol DetailedPrintable obeys Printable { ... }</item>
 /// </list>
@@ -452,7 +553,7 @@ public record ProtocolDeclaration(
     string Name,
     List<string>? GenericParameters,
     List<TypeExpression> ParentProtocols,
-    List<RoutineSignature> Methods,
+    List<RoutineSignature> MemberRoutines,
     VisibilityModifier Visibility,
     SourceLocation Location,
     List<GenericConstraintDeclaration>? GenericConstraints = null)
@@ -572,19 +673,19 @@ public enum FailableVariant
     Lookup,
 
     /// <summary>
-    /// Compiler-generated check_ variant: wraps a failable routine to return Result[Blank].
-    /// throw -> error carrier, absent/return -> success zeroinitializer (Blank).
+    /// Compiler-generated check_ variant: wraps a failable routine to return Result[None].
+    /// throw -> error carrier, absent/return -> success zeroinitializer (None).
     /// </summary>
     Check,
 
     /// <summary>
-    /// Compiler-generated try_ variant for Blank-returning failable routines.
+    /// Compiler-generated try_ variant for None-returning failable routines.
     /// Returns Bool (i1): true = success, false = absent or throw.
     /// </summary>
     TryBool,
 
     /// <summary>
-    /// Compiler-generated try_ variant for non-Blank failable routines.
+    /// Compiler-generated try_ variant for non-None failable routines.
     /// Returns Maybe[T] carrier: absent/throw -> zeroinitializer (None), return value -> present.
     /// RoutineInfo.ReturnType is the full Maybe[T] type; codegen uses GetLLVMType directly.
     /// </summary>
@@ -621,17 +722,17 @@ public record VariantMember(TypeExpression Type, SourceLocation Location);
 
 /// <summary>
 /// Routine (function) signature used within Protocol (trait) declarations.
-/// Specifies method contract without implementation.
+/// Specifies memberRoutine contract without implementation.
 /// </summary>
-/// <param name="Name">Method identifier name</param>
+/// <param name="Name">memberRoutine identifier name</param>
 /// <param name="Parameters">List of parameter definitions</param>
-/// <param name="ReturnType">Optional return type; null for void methods</param>
+/// <param name="ReturnType">Optional return type; null for void memberRoutines</param>
 /// <param name="Location">Source location information</param>
 /// <param name="Annotations">Optional protocol annotations.</param>
 /// <remarks>
 /// Function signatures define the contract that implementers must fulfill:
 /// <list type="bullet">
-/// <item>Abstract methods: no body, just signature</item>
+/// <item>Abstract memberRoutines: no body, just signature</item>
 /// <item>Parameter names: used for documentation and named arguments</item>
 /// <item>Type constraints: can include generic bounds</item>
 /// <item>Default implementations: traits can provide default bodies</item>

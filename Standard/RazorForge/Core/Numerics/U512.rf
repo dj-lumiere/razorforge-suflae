@@ -9,33 +9,33 @@ import Collections
 # ============================================================================
 
 @llvm("i512")
-secret record U512 obeys FloorDivisible
+secret record U512 obeys FloorDivisible, Assignable, Copyable
   pass
 
 ### Assemble 8 U64 limbs (little-endian) into a U512.
 @inline
 routine asm512(q0: U64, q1: U64, q2: U64, q3: U64, q4: U64, q5: U64, q6: U64, q7: U64) -> U512
-  var r = zero_extend[U64, U512](q0)
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q1), bits: U512.to_width(s: 64_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q2), bits: U512.to_width(s: 128_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q3), bits: U512.to_width(s: 192_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q4), bits: U512.to_width(s: 256_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q5), bits: U512.to_width(s: 320_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q6), bits: U512.to_width(s: 384_s64)))
-  r = bit_or[U512](a: r, b: shift_left[U512](value: zero_extend[U64, U512](q7), bits: U512.to_width(s: 448_s64)))
+  var r = LLVM::zero_extend[U64, U512](q0)
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q1), bits: U512.to_width(s: 64_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q2), bits: U512.to_width(s: 128_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q3), bits: U512.to_width(s: 192_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q4), bits: U512.to_width(s: 256_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q5), bits: U512.to_width(s: 320_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q6), bits: U512.to_width(s: 384_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](q7), bits: U512.to_width(s: 448_s64)))
   return r
 
 ### nth U64 limb of a U512.
 @inline
 routine limb512(x: U512, i: S64) -> U64
-  return int_truncate[U512, U64](shift_right_unsigned[U512](x, U512.to_width(s: mul[S64](a: i, b: 64_s64))))
+  return LLVM::int_truncate[U512, U64](LLVM::shift_right_unsigned(x, U512.to_width(s: LLVM::mul(a: i, b: 64_s64))))
 
 ### Quotient of num // den (den fits U256) with the round-sticky in bit 0. The n=1 case
 ### (single-limb divisor — e.g. dividing by 2/5/10) is register-resident 8-limb long
 ### division; larger divisors fall back to the generic Knuth kernel.
 routine udiv512_by_u256_sticky(num: U512, den: U512) -> U512
-  if int_eq[U512](a: shift_right_unsigned[U512](den, U512.to_width(s: 64_s64)), b: zero_extend[U64, U512](0_u64))
-    var d0 = int_truncate[U512, U64](den)
+  if LLVM::int_eq(a: LLVM::shift_right_unsigned(den, U512.to_width(s: 64_s64)), b: LLVM::zero_extend[U64, U512](0_u64))
+    var d0 = LLVM::int_truncate[U512, U64](den)
     var dr7 = udivrem128(hi: 0_u64, lo: limb512(x: num, i: 7_s64), d: d0)
     var dr6 = udivrem128(hi: dr7.r, lo: limb512(x: num, i: 6_s64), d: d0)
     var dr5 = udivrem128(hi: dr6.r, lo: limb512(x: num, i: 5_s64), d: d0)
@@ -45,8 +45,8 @@ routine udiv512_by_u256_sticky(num: U512, den: U512) -> U512
     var dr1 = udivrem128(hi: dr2.r, lo: limb512(x: num, i: 1_s64), d: d0)
     var dr0 = udivrem128(hi: dr1.r, lo: limb512(x: num, i: 0_s64), d: d0)
     var q = asm512(q0: dr0.q, q1: dr1.q, q2: dr2.q, q3: dr3.q, q4: dr4.q, q5: dr5.q, q6: dr6.q, q7: dr7.q)
-    if int_ne[U64](a: dr0.r, b: 0_u64)
-      q = bit_or[U512](a: q, b: zero_extend[U64, U512](1_u64))
+    if LLVM::int_ne(a: dr0.r, b: 0_u64)
+      q = LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U512](1_u64))
     return q
   return udiv512_sticky(num: num, den: den)
 
@@ -58,10 +58,10 @@ routine U512.floordiv(you: U512) -> U512
   var rem = Array[U64, 8]()
   danger
     var q = knuth_divide[8](
-      a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
+      a: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](q.hijack()).peek()
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](q.hijack()).peek()
 
 ### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the
 ### division left a nonzero remainder). One Knuth-D call — no separate %/mul-back.
@@ -71,13 +71,13 @@ routine udiv512_sticky(num: U512, den: U512) -> U512
   var rem = Array[U64, 8]()
   danger
     var qa = knuth_divide[8](
-      a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
+      a: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    var q = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](qa.hijack()).peek()
-    var r = reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
-    if int_ne[U512](a: r, b: 0)
-      return bit_or[U512](a: q, b: zero_extend[U64, U512](1_u64))
+    var q = LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](qa.hijack()).peek()
+    var r = LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
+    if LLVM::int_ne[U512](a: r, b: 0)
+      return LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U512](1_u64))
     return q
 
 ### Returns me % you (remainder from the same Knuth-D kernel).
@@ -87,10 +87,10 @@ routine U512.mod(you: U512) -> U512
   var rem = Array[U64, 8]()
   danger
     var q = knuth_divide[8](
-      a: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
-      b: reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
+      a: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
-    return reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 routine U512.represent() -> Text

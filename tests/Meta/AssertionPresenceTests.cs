@@ -7,13 +7,13 @@ using System.Text.RegularExpressions;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// Tests that test methods contain an assertion path.
+/// Tests that test memberRoutines contain an assertion path.
 /// </summary>
 public sealed partial class AssertionPresenceTests
 {
     private static readonly Regex TestAttributePattern = MyRegex();
 
-    private static readonly Regex MethodPattern = MyRegex1();
+    private static readonly Regex memberRoutinePattern = MyRegex1();
 
     private static readonly string[] AssertionMarkers =
     [
@@ -29,13 +29,13 @@ public sealed partial class AssertionPresenceTests
     ];
 
     /// <summary>
-    /// Verifies that the test validates methods contain assertion path.
+    /// Verifies that the test validates memberRoutines contain assertion path.
     /// </summary>
     [Fact]
-    public void TestMethods_ContainAssertionPath()
+    public void TestMemberRoutines_ContainAssertionPath()
     {
         string testRoot = FindTestRoot();
-        List<string> methodsWithoutAssertions = Directory.EnumerateFiles(
+        List<string> memberRoutinesWithoutAssertions = Directory.EnumerateFiles(
                                                               path: testRoot,
                                                               searchPattern: "*.cs",
                                                               searchOption: SearchOption
@@ -47,13 +47,13 @@ public sealed partial class AssertionPresenceTests
                                                                  .Ordinal))
                                                          .SelectMany(
                                                               selector:
-                                                              FindTestMethodsWithoutAssertions)
+                                                              FindTestMemberRoutinesWithoutAssertions)
                                                          .ToList();
 
-        Assert.Empty(collection: methodsWithoutAssertions);
+        Assert.Empty(collection: memberRoutinesWithoutAssertions);
     }
 
-    private static IEnumerable<string> FindTestMethodsWithoutAssertions(string filePath)
+    private static IEnumerable<string> FindTestMemberRoutinesWithoutAssertions(string filePath)
     {
         string[] lines = File.ReadAllLines(path: filePath);
 
@@ -64,31 +64,31 @@ public sealed partial class AssertionPresenceTests
                 continue;
             }
 
-            int methodLine = FindNextMethodLine(lines: lines, startLine: i + 1);
-            if (methodLine < 0)
+            int memberRoutineLine = FindNextMemberRoutineLine(lines: lines, startLine: i + 1);
+            if (memberRoutineLine < 0)
             {
                 continue;
             }
 
-            string methodName = MethodPattern.Match(input: lines[methodLine])
+            string memberRoutineName = memberRoutinePattern.Match(input: lines[memberRoutineLine])
                                              .Groups["name"].Value;
-            string methodBody = ExtractMethodBody(lines: lines, methodLine: methodLine);
+            string memberRoutineBody = ExtractMemberRoutineBody(lines: lines, memberRoutineLine: memberRoutineLine);
 
-            if (!AssertionMarkers.Any(predicate: marker => methodBody.Contains(
+            if (!AssertionMarkers.Any(predicate: marker => memberRoutineBody.Contains(
                     value: marker,
                     comparisonType: StringComparison.Ordinal)))
             {
                 yield return
-                    $"{Path.GetRelativePath(relativeTo: FindTestRoot(), path: filePath)}::{methodName}";
+                    $"{Path.GetRelativePath(relativeTo: FindTestRoot(), path: filePath)}::{memberRoutineName}";
             }
         }
     }
 
-    private static int FindNextMethodLine(string[] lines, int startLine)
+    private static int FindNextMemberRoutineLine(string[] lines, int startLine)
     {
         for (int i = startLine; i < lines.Length; i++)
         {
-            if (MethodPattern.IsMatch(input: lines[i]))
+            if (memberRoutinePattern.IsMatch(input: lines[i]))
             {
                 return i;
             }
@@ -102,13 +102,13 @@ public sealed partial class AssertionPresenceTests
         return -1;
     }
 
-    private static string ExtractMethodBody(string[] lines, int methodLine)
+    private static string ExtractMemberRoutineBody(string[] lines, int memberRoutineLine)
     {
         var bodyLines = new List<string>();
         int braceDepth = 0;
         bool foundOpeningBrace = false;
 
-        for (int i = methodLine; i < lines.Length; i++)
+        for (int i = memberRoutineLine; i < lines.Length; i++)
         {
             string line = lines[i];
             bodyLines.Add(item: line);

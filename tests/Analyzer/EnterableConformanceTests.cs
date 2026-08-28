@@ -10,7 +10,7 @@ using static TestHelpers;
 /// <list type="bullet">
 ///   <item>Failability covariance — a NON-failable implementation satisfies a FAILABLE (<c>!</c>)
 ///         protocol requirement (never-failing is a stronger contract); the reverse is an error.</item>
-///   <item>The <c>?</c> in-flight mark is meaningless on value-type records, so a record method that
+///   <item>The <c>?</c> in-flight mark is meaningless on value-type records, so a record memberRoutine that
 ///         returns the bare type satisfies a protocol requirement written as <c>?Me</c>.</item>
 ///   <item>A user type may obey <c>Enterable</c> with a pass-through <c>$enter</c> and drive a
 ///         <c>using</c> scope.</item>
@@ -55,7 +55,7 @@ public class EnterableConformanceTests
         AnalysisResult result = AssertHasErrorSa(source: source,
             expectedErrorSubstring: "should be non-failable to match protocol 'Plain'");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMethodSignatureMismatch);
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMemberRoutineSignatureMismatch);
     }
 
     #endregion
@@ -117,18 +117,18 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64
 
-                        routine peek(c: Referring[Counter])
+                        routine peek(c: Accessing[Counter])
                           show(f"{c.value}")
                           return
 
                         routine start()
-                          var s = Counter(value: 1).share[MultiRead]()
-                          peek(s.inspect())
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                          peek(s.consult())
                           return
                         """;
 
@@ -143,14 +143,14 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64
 
                         routine start()
-                          var s = Counter(value: 1).share[MultiRead]()
-                          using s.inspect() as v
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                          using s.consult() as v
                             show(f"{v.value}")
                           return
                         """;
@@ -164,14 +164,14 @@ public class EnterableConformanceTests
     {
         string source = """
                         import IO/Console
-                        import BuilderService
+                        import BuilderQuery
 
                         entity Counter
                           value: S64
 
                         routine start()
-                          var s = Counter(value: 1).share[MultiRead]()
-                          var v = s.inspect()
+                          var s = Guarded[Counter, MultiRead](from: Counter(value: 1))
+                          var v = s.consult()
                           return
                         """;
 
@@ -183,7 +183,7 @@ public class EnterableConformanceTests
 
     #endregion
 
-    #region Resources are using-CAPABLE, not using-required (only claim/inspect are required)
+    #region Resources are using-CAPABLE, not using-required (only amend/consult are required)
 
     /// <summary>A `using` target must OBEY Enterable, not merely define $enter/$exit by name.</summary>
     [Fact]

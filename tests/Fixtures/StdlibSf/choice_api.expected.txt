@@ -1,0 +1,9 @@
+c: RED
+c (diagnose): Tests/StdlibSf/ChoiceApi.Color(id: 0, RED)
+c is RED: true
+c is GREEN: false
+c isnot BLUE: true
+  matched RED
+s: OK
+s == OK: true
+DONE

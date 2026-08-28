@@ -1,0 +1,4 @@
+eq: a==b=true a==c=false a!=c=true
+hash: a==b=true a==c=false
+set: count=2 has12=true has99=false
+DONE

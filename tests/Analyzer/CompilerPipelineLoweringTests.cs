@@ -242,10 +242,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for monomorphized method call has concrete return metadata.
+    /// Verifies semantic analysis behavior for monomorphized memberRoutine call has concrete return metadata.
     /// </summary>
     [Fact]
-    public void Analyze_MonomorphizedMethodCall_HasConcreteReturnMetadata()
+    public void Analyze_MonomorphizedMemberRoutineCall_HasConcreteReturnMetadata()
     {
         string source = """
                         record Box[T]
@@ -421,6 +421,50 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
+    /// Regression lock ([[generic-parameter identity = SLOT]]): a user type NAMED like a generic
+    /// parameter must never be confused with that parameter. `record T` shares its name with the `T`
+    /// in the universal `routine T.represent()` derive AND the numeric `common routine T.to_width()` /
+    /// `T.bit()` width helpers. Before the fix the type-level receiver `T` in `T.to_width(...)` resolved
+    /// (global lookup before the in-scope-parameter check) to the user record, so the call bound to
+    /// `record-T.to_width` and codegen emitted garbage (`zext i64 to record-T` → GetLlvmType crash,
+    /// `shl i256 <record-T>`). Driving codegen to completion is the lock — Generate() must not throw.
+    /// </summary>
+    [Fact]
+    public void Codegen_UserRecordNamedLikeGenericParam_DoesNotHijackParam()
+    {
+        string source = """
+                        record T
+                          a: S32
+
+                        routine start()
+                          var s = T(a: 9_s32).represent()
+                          var e = (1.0_d128).erf()
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        var generator = new LlvmCodeGenerator(program: program,
+            registry: result.Registry,
+            stdlibPrograms: result.Registry.StdlibPrograms,
+            synthesizedBodies: result.SynthesizedBodies,
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
+
+        // Before the fix this threw: `GenericParameterTypeInfo 'T' reached GetLlvmType` (the numeric
+        // helper monomorphized `T.to_width` onto the user record `T`).
+        string llvmIr = generator.Generate();
+
+        Assert.Contains(expectedSubstring: "define", actualString: llvmIr);
+        // The numeric width helper must key on the real int types, never the user record `T`: a
+        // `.T.to_width` (record-owned) symbol is the shadow-hijack signature.
+        Assert.DoesNotContain(expectedSubstring: ".T.to_width", actualString: llvmIr);
+    }
+
+    /// <summary>
     /// Verifies code generation behavior for try floordiv variant uses failable operator symbols.
     /// </summary>
     [Fact]
@@ -461,11 +505,12 @@ public class CompilerPipelineLoweringTests
     [Fact]
     public void Codegen_LambdaLift_GeneratesIr()
     {
+        // RazorForge has no module-level mutable state (RF-S435), so the captured binding is a
+        // routine local — the lambda lift still fires on the closure over `factor`.
         string source = """
-                        var global_factor = 100_s32
-
                         routine test() -> S32
-                          var scale = x => x * global_factor
+                          var factor = 100_s32
+                          var scale = x given factor => x * factor
                           return 0_s32
                         """;
 
@@ -641,7 +686,7 @@ public class CompilerPipelineLoweringTests
 
         string llvmIr = generator.Generate();
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
-            functionMarker: "define %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
+            functionMarker: "define internal %\"Record.Core.Maybe[Core.U8]\" @\"[member] Collections.BitList.try_to_u8");
         Assert.Contains(expectedSubstring: "call i64 @\"[dangerous, member] Core.Hijacked[Core.U64].peek()\"",
             actualString: tryToU8Body);
         Assert.DoesNotContain(expectedSubstring: "@\"[dangerous, member] Core.Hijacked[Core.Bytes].peek()\"",
@@ -763,10 +808,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for chained method call on call receiver and emits the expected IR.
+    /// Verifies code generation behavior for chained memberRoutine call on call receiver and emits the expected IR.
     /// </summary>
     [Fact]
-    public void Codegen_ChainedMethodCall_OnCallReceiver_GeneratesIr()
+    public void Codegen_ChainedMemberRoutineCall_OnCallReceiver_GeneratesIr()
     {
         string source = """
                         record Box[T]
@@ -800,10 +845,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for wrapper method call uses concrete generic return type.
+    /// Verifies code generation behavior for wrapper memberRoutine call uses concrete generic return type.
     /// </summary>
     [Fact]
-    public void Codegen_WrapperMethodCall_UsesConcreteGenericReturnType()
+    public void Codegen_WrapperMemberRoutineCall_UsesConcreteGenericReturnType()
     {
         string source = """
                         dangerous routine test(ptr: Hijacked[S64]) -> S64
@@ -830,10 +875,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for method conversion call uses semantic return type.
+    /// Verifies code generation behavior for memberRoutine conversion call uses semantic return type.
     /// </summary>
     [Fact]
-    public void Codegen_MethodConversionCall_UsesSemanticReturnType()
+    public void Codegen_memberRoutineConversionCall_UsesSemanticReturnType()
     {
         string source = """
                         routine helper(value: S32) -> S32
@@ -868,7 +913,7 @@ public class CompilerPipelineLoweringTests
     public void Analyze_StdlibVariantBodies_AttachConstructorMetadata()
     {
         string source = """
-                        routine test() -> Blank
+                        routine test() -> None
                           return
                         """;
 
@@ -1045,7 +1090,7 @@ public class CompilerPipelineLoweringTests
     public void BackendEntryValidator_RejectsResidualIndexWithoutConcreteType()
     {
         string source = """
-                        routine test() -> Blank
+                        routine test() -> None
                           return
                         """;
 
@@ -1189,13 +1234,13 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies code generation behavior for typewise builder service method uses semantic receiver type.
+    /// Verifies code generation behavior for typewise builder service memberRoutine uses semantic receiver type.
     /// </summary>
     [Fact]
-    public void Codegen_TypewiseBuilderServiceMethod_UsesSemanticReceiverType()
+    public void Codegen_TypewiseBuilderQueryMemberRoutine_UsesSemanticReceiverType()
     {
         string source = """
-                        import BuilderService
+                        import BuilderQuery
 
                         routine start() -> ByteSize
                           return S64.data_size()
@@ -1259,10 +1304,10 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for universal owner method is monomorphized on demand.
+    /// Verifies semantic analysis behavior for universal owner memberRoutine is monomorphized on demand.
     /// </summary>
     [Fact]
-    public void Analyze_UniversalOwnerMethod_IsMonomorphizedOnDemand()
+    public void Analyze_UniversalOwnerMemberRoutine_IsMonomorphizedOnDemand()
     {
         string source = """
                         dangerous routine start(value: S64) -> Hijacked[S64]
@@ -1451,10 +1496,10 @@ public class CompilerPipelineLoweringTests
                                         whileStmt.ElseBranch != null &&
                                         ContainsLambda(statement: whileStmt.ElseBranch),
             LoopStatement loop => ContainsLambda(statement: loop.Body),
-            ForStatement forStmt => ContainsLambda(expression: forStmt.Iterable) ||
-                                    ContainsLambda(statement: forStmt.Body) ||
-                                    forStmt.ElseBranch != null &&
-                                    ContainsLambda(statement: forStmt.ElseBranch),
+            EachStatement eachStmt => ContainsLambda(expression: eachStmt.Iterable) ||
+                                    ContainsLambda(statement: eachStmt.Body) ||
+                                    eachStmt.ElseBranch != null &&
+                                    ContainsLambda(statement: eachStmt.ElseBranch),
             WhenStatement whenStmt => ContainsLambda(expression: whenStmt.Expression) ||
                                       whenStmt.Clauses.Any(predicate: clause =>
                                           ContainsLambda(statement: clause.Body)),
@@ -1488,7 +1533,7 @@ public class CompilerPipelineLoweringTests
                 ContainsLambda(expression: conditional.FalseExpression),
             CreatorExpression creator => creator.MemberVariables.Any(predicate: mv =>
                 ContainsLambda(expression: mv.Value)),
-            GenericMethodCallExpression generic => ContainsLambda(expression: generic.Object) ||
+            GenericMemberRoutineCallExpression generic => ContainsLambda(expression: generic.Object) ||
                                                    generic.Arguments.Any(ContainsLambda),
             NamedArgumentExpression named => ContainsLambda(expression: named.Value),
             WithExpression withExpr => ContainsLambda(expression: withExpr.Base) ||
@@ -1731,11 +1776,11 @@ public class CompilerPipelineLoweringTests
                     foreach (Expression e in EnumerateExpressions(statement: whileStmt.ElseBranch))
                         yield return e;
                 yield break;
-            case ForStatement forStmt:
-                foreach (Expression e in EnumerateExpressions(statement: forStmt.Body))
+            case EachStatement eachStmt:
+                foreach (Expression e in EnumerateExpressions(statement: eachStmt.Body))
                     yield return e;
-                if (forStmt.ElseBranch != null)
-                    foreach (Expression e in EnumerateExpressions(statement: forStmt.ElseBranch))
+                if (eachStmt.ElseBranch != null)
+                    foreach (Expression e in EnumerateExpressions(statement: eachStmt.ElseBranch))
                         yield return e;
                 yield break;
             case WhenStatement whenStmt:

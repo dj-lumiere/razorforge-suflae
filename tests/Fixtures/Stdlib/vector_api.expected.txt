@@ -1,0 +1,21 @@
+a: (1, 2, 2)
+b: (4, 0, 0)
+a + b: (5, 2, 2)
+a - b: (-3, 2, 2)
+-a: (-1, -2, -2)
+a scaled 2: (2, 4, 4)
+a dot b: 4
+a cross b: (0, 8, -8)
+a length: 3
+a length_squared: 9
+b normalized: (1, 0, 0)
+a to b distance: 4.123106
+lerp a->b at 0.5: (2.5, 1, 1)
+a == a2: true
+a == b: false
+p: (3, 4)
+p length: 5
+p cross unit_y: 3
+q: (1, 2, 3, 4)
+q dot q: 30
+DONE

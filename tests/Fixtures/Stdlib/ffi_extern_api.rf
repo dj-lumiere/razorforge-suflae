@@ -1,0 +1,26 @@
+module Tests/Stdlib/FfiExtern
+import IO/Console
+
+# Locks user-file `external` (C::) declarations carrying PARAMETERS. The user-file collection path
+# had dropped every param (RF-S501 "expects at most 0 arguments" on any call). Also exercises the FFI
+# surface: RF Text -> CStr (char*) -> C strlen, C char* -> RF Text round-trip, and a `choice` crossing
+# to C as int32_t (its i32 discriminant). strlen/abs are libc (link cross-platform); no stdout-writing
+# C call so the harness delimiters stay clean.
+
+routine C::strlen(s: CStr) -> U64
+
+choice FfiColor
+  RED
+  GREEN
+  BLUE
+
+routine C::abs(x: FfiColor) -> S32
+
+routine start()
+  var c = CStr(from: "hello")
+  show(f"strlen={C::strlen(c)}")
+  show(f"rt={Text(from: c)}")
+  show(f"RED={C::abs(FfiColor.RED)}")
+  show(f"GREEN={C::abs(FfiColor.GREEN)}")
+  show(f"BLUE={C::abs(FfiColor.BLUE)}")
+  return

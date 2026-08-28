@@ -1,0 +1,9 @@
+module Collections
+
+### Suflae SF-realm Collections priority queue — wrapper over RF::Collections.PriorityQueue.
+### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
+entity PriorityQueue[TPriority, TElement]
+  secret inner: RF::Collections.PriorityQueue[TPriority, TElement]
+
+routine PriorityQueue[TPriority, TElement]() -> PriorityQueue[TPriority, TElement]
+  return PriorityQueue[TPriority, TElement](inner: RF::Collections.PriorityQueue[TPriority, TElement]())

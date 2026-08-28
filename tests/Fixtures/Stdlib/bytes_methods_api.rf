@@ -18,7 +18,7 @@ routine start()
 
   # Iteration over bytes
   var sum: U64 = 0_u64
-  for byte in b
+  each byte in b
     sum = sum + U64(from: byte)
   show(f"byte sum: {sum}")
 

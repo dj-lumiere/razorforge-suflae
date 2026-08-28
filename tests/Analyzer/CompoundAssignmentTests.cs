@@ -7,9 +7,9 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for in-place compound assignment dispatch (#40).
-/// Compound assignments (+=, -=, etc.) dispatch to in-place wired methods ($iadd, etc.)
+/// Compound assignments (+=, -=, etc.) dispatch to in-place wired memberRoutines ($iadd, etc.)
 /// first, then fall back to create-and-assign ($add) for non-entity types.
-/// Entities require in-place wired methods (no fallback, since bare entity assignment is prohibited).
+/// Entities require in-place wired memberRoutines (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 public class CompoundAssignmentTests
 {
@@ -23,12 +23,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> None
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.$iadd(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> None
 
                         routine test()
                           var c = Counter(value: 0)
@@ -49,12 +49,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> None
 
                         entity Accumulator obeys InPlaceAddable
                           value: S32
 
-                        routine Accumulator.$iadd(from: Accumulator) -> Blank
+                        routine Accumulator.$iadd(from: Accumulator) -> None
 
                         routine test()
                           var acc = Accumulator(value: 0)
@@ -173,12 +173,12 @@ public class CompoundAssignmentTests
         // var is mutable, so compound assignment should not produce immutable errors
         string source = """
                         protocol InPlaceAddable
-                          routine Me.$iadd(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> None
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.$iadd(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> None
 
                         routine test()
                           var c = Counter(value: 0)
@@ -230,12 +230,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceSubtractable
-                          routine Me.$isub(from: Me) -> Blank
+                          routine Me.$isub(from: Me) -> None
 
                         record Counter obeys InPlaceSubtractable
                           value: S32
 
-                        routine Counter.$isub(from: Counter) -> Blank
+                        routine Counter.$isub(from: Counter) -> None
 
                         routine test()
                           var c = Counter(value: 10)
@@ -256,12 +256,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.$ibitand(from: Me) -> Blank
+                          routine Me.$ibitand(from: Me) -> None
 
                         record Flags obeys InPlaceBitwiseable
                           bits: S32
 
-                        routine Flags.$ibitand(from: Flags) -> Blank
+                        routine Flags.$ibitand(from: Flags) -> None
                           pass
 
                         routine test()
@@ -287,12 +287,12 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceMultiplicable
-                          routine Me.$imul(from: Me) -> Blank
+                          routine Me.$imul(from: Me) -> None
 
                         record Scale obeys InPlaceMultiplicable
                           factor: S32
 
-                        routine Scale.$imul(from: Scale) -> Blank
+                        routine Scale.$imul(from: Scale) -> None
 
                         routine test()
                           var s = Scale(factor: 2)
@@ -313,14 +313,14 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.$ibitand(from: Me) -> Blank
+                          routine Me.$ibitand(from: Me) -> None
 
                         record Mask obeys InPlaceBitwiseable
                           bits: S32
 
-                        routine Mask.$ibitand(from: Mask) -> Blank
+                        routine Mask.$ibitand(from: Mask) -> None
                           pass
-                        routine Mask.$ibitor(from: Mask) -> Blank
+                        routine Mask.$ibitor(from: Mask) -> None
                           pass
 
                         routine test()
@@ -342,14 +342,14 @@ public class CompoundAssignmentTests
     {
         string source = """
                         protocol InPlaceFloorDivisible
-                          routine Me.$ifloordiv(from: Me) -> Blank
+                          routine Me.$ifloordiv(from: Me) -> None
 
                         record Bucket obeys InPlaceFloorDivisible
                           size: S32
 
-                        routine Bucket.$ifloordiv(from: Bucket) -> Blank
+                        routine Bucket.$ifloordiv(from: Bucket) -> None
                           pass
-                        routine Bucket.$imod(from: Bucket) -> Blank
+                        routine Bucket.$imod(from: Bucket) -> None
                           pass
 
                         routine test()
@@ -373,7 +373,7 @@ public class CompoundAssignmentTests
                         record Vector
                           x: S32
 
-                        routine Vector.$iadd(from: Vector) -> Blank
+                        routine Vector.$iadd(from: Vector) -> None
                           pass
 
                         @readonly

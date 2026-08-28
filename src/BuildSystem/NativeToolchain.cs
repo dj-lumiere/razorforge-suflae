@@ -246,7 +246,7 @@ internal static class NativeToolchain
 
     /// <summary>
     /// Resolves an LLVM toolchain tool (clang/opt) to a concrete path. Resolution order:
-    /// 1. $RAZORFORGE_LLVM_HOME/bin/&lt;tool&gt; — explicit user override.
+    /// 1. RAZORFORGE_LLVM_HOME/bin/&lt;tool&gt; — explicit user override.
     /// 2. &lt;dir of RazorForge executable&gt;/toolchain/bin/&lt;tool&gt; — self-contained release
     ///    packages bundle a relocatable LLVM (llvm-mingw on Windows) there.
     /// 3. The bare tool name, resolved from PATH (dev setups).
@@ -483,12 +483,6 @@ internal static class NativeToolchain
     }
 
     /// <summary>
-    /// Links the optimized IR <paramref name="optFile"/> into the native executable
-    /// <paramref name="exeFile"/> via clang, resolving compiler-rt builtins, the platform CRT,
-    /// libm/pthread/dl, and the bundled runtime in <paramref name="runtimeLibDir"/>. Returns 0 on
-    /// success or 1 if linking fails.
-    /// </summary>
-    /// <summary>
     /// Target-architecture codegen feature flags for the clang codegen/link step.
     ///
     /// On x86-64, `F16` (LLVM `half`) requires the F16C hardware conversion instructions
@@ -514,8 +508,42 @@ internal static class NativeToolchain
         };
     }
 
+    /// <summary>Links the optimized IR <paramref name="optFile"/> into the native executable <paramref name="exeFile"/> via clang, bundling the runtime from <paramref name="runtimeLibDir"/>. Returns 0 on success.</summary>
+    /// <summary>
+    /// Builds the clang link-argument fragment for user-declared C libraries: a <c>-L"dir"</c> for each
+    /// search path followed by a <c>-l name</c> for each library. Empty inputs yield an empty string.
+    /// Pure and side-effect free so it can be unit-tested without invoking the toolchain. The link
+    /// driver stays the bundled clang/lld regardless of platform — each <c>-l</c> name resolves to the
+    /// platform's library form (<c>libX.so</c> / <c>X.lib</c> / <c>libX.dylib</c>).
+    /// </summary>
+    internal static string BuildUserLibraryArgs(IReadOnlyList<string>? cLibraries,
+        IReadOnlyList<string>? libraryPaths)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (libraryPaths != null)
+        {
+            foreach (string path in libraryPaths)
+            {
+                if (!string.IsNullOrWhiteSpace(value: path))
+                    sb.Append(value: $" -L\"{path}\"");
+            }
+        }
+
+        if (cLibraries != null)
+        {
+            foreach (string lib in cLibraries)
+            {
+                if (!string.IsNullOrWhiteSpace(value: lib))
+                    sb.Append(value: $" -l{lib.Trim()}");
+            }
+        }
+
+        return sb.ToString();
+    }
+
     internal static int LinkExecutable(string optFile, string exeFile, string runtimeLibDir,
-        RfBuildMode buildMode)
+        RfBuildMode buildMode, IReadOnlyList<string>? cLibraries = null,
+        IReadOnlyList<string>? libraryPaths = null)
     {
         // Compile .ll -> .exe using clang (clang uses -Ox flag style, not opt's -passes= form)
         string clangOptLevel = $"-{OptLevelString(buildMode: buildMode)}";
@@ -589,8 +617,11 @@ internal static class NativeToolchain
                                !string.IsNullOrWhiteSpace(value: MacSdkPath.Value)
             ? $" -isysroot \"{MacSdkPath.Value}\""
             : "";
+        // User-declared C libraries (razorforge.toml [target] c_libraries / library_paths). Placed
+        // after the user object + runtime so `-l` symbol resolution sees the referencing objects first.
+        string userLibArgs = BuildUserLibraryArgs(cLibraries: cLibraries, libraryPaths: libraryPaths);
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{TargetCodegenFlags()}{lldFlag}{macSysrootArg} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
+            $"{clangOptLevel}{framePointerFlag}{TargetCodegenFlags()}{lldFlag}{macSysrootArg} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{userLibArgs}{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
 
         var clangPsi = new ProcessStartInfo
         {

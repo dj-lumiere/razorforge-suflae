@@ -1,9 +1,9 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents an unmanaged typed raw pointer.
-### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and borrow rules.
+### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and access rules.
 ### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
 ### Unlike `steal`, `hijack` does NOT transfer ownership: the original owner keeps its binding, its
 ### lifetime, and its `destroy`. A `Hijacked[T]` is an unsanctioned *alias* into memory you do not
@@ -11,22 +11,22 @@ import BuilderService
 ### :typeparam T: The pointee type.
 ### :see: {Address}, {Modifying[T]}, {Viewing[T]}, {Memory-Types}
 @llvm("ptr")
-record Hijacked[T] obeys Storable
+record Hijacked[T] obeys Assignable
   pass
 
 ### Returns the raw address carried by this pointer.
 ### :returns: The raw address stored in this pointer.
 @readonly
 routine Hijacked[T].get_address() -> Address
-  return pointer_to_int[T, Address](me)
+  return LLVM::pointer_to_int[T, Address](me)
 
 ### Returns a bitwise duplicate of this raw pointer.
-### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Storable`; this
+### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this
 ### trivial opt-in body lets `=` and `with` work, with aliasing left to the user
 ### just like every other operation on this type.
 ### :returns: A bitwise duplicate of this pointer.
 @readonly
-routine Hijacked[T].store() -> Hijacked[T]
+routine Hijacked[T].assign() -> Hijacked[T]
   return me
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.
@@ -37,13 +37,13 @@ routine Hijacked[T].store() -> Hijacked[T]
 ###        error. For entities, the receiver value (already a ptr) is reinterpreted.
 @readonly
 routine T.get_address() -> Address
-  return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
+  return LLVM::pointer_to_int[T, Address](LLVM::reinterpret_bits[T, Hijacked[T]](me))
 
 ### Reinterprets a raw address as `Hijacked[T]`.
 ### :param from: The address to wrap.
 ### :returns: A `Hijacked[T]` pointer wrapping the given raw address.
 routine Hijacked[T](from: Address) -> Hijacked[T]
-  return int_to_pointer[Address, T](from)
+  return LLVM::int_to_pointer[Address, T](from)
 
 ### Produces an unmanaged pointer alias of `me`.
 ### :returns: An unmanaged pointer alias of this value.
@@ -71,7 +71,7 @@ routine T.hijack() -> Hijacked[T]
 ### `Hijacked[Record]`.
 ### :returns: The value at this address (bitwise copy).
 dangerous routine Hijacked[T].peek() -> T
-  return load[T](me)
+  return LLVM::load[T](me)
 
 ### Treats this pointer's bit pattern as if it already *were* a `T`. No load,
 ### no dereference — `Hijacked[T]` and the entity reference share a layout
@@ -84,12 +84,12 @@ dangerous routine Hijacked[T].peek() -> T
 ### :returns: This pointer reinterpreted as `T`.
 dangerous routine Hijacked[T].as_entity() -> T
 needs T is EntityType
-  return reinterpret_bits[Hijacked[T], T](me)
+  return LLVM::reinterpret_bits[Hijacked[T], T](me)
 
 ### Stores `value` at the address referenced by this pointer.
 ### :param value: The value to write.
 dangerous routine Hijacked[T].poke(value: T)
-  store[T](me, value)
+  LLVM::store[T](me, value)
   return
 
 ### Loads the value at this pointer reinterpreted as type `U` without type-system checks.
@@ -108,19 +108,19 @@ dangerous routine Hijacked[T].poke_as[U](value: U)
 ### Returns this pointer reinterpreted as `Hijacked[U]`, without loading or storing.
 ### :returns: This pointer with its type parameter reinterpreted as `U`.
 routine Hijacked[T].recast_as[U]() -> Hijacked[U]
-  return reinterpret_bits[Hijacked[T], Hijacked[U]](me)
+  return LLVM::reinterpret_bits[Hijacked[T], Hijacked[U]](me)
 
 ### Returns the raw address of this pointer.
 ### :returns: The raw address stored in this pointer.
 @readonly
 routine Hijacked[T].address() -> Address
-  return pointer_to_int[Hijacked[T], Address](me)
+  return LLVM::pointer_to_int[Hijacked[T], Address](me)
 
 ### Steps this pointer forward by {count} elements (element-sized stride, may be negative).
 ### :param count: Number of elements to advance.
 ### :returns: This pointer advanced by `count` elements of type `T`.
 routine Hijacked[T].stride(count: S64) -> Hijacked[T]
-  return element_pointer[T](ptr: me, count: count)
+  return LLVM::element_pointer[T](ptr: me, count: count)
 
 ### Returns the value at byte offset {offset} from this pointer without moving the pointer.
 ### :param offset: The byte offset.
@@ -135,9 +135,37 @@ dangerous routine Hijacked[T].poke_at_offset(at: ByteSize, value: T)
   me.offset(bytes: at).poke(value: value)
   return
 
+### Cycle-collector container hook: reports every element of this `count`-length buffer to the
+### collector so container-held objects are visible to cycle collection. `cyclic_visit` is a
+### universal `@overridable` no-op that only `Roamed[T]` overrides, so this walk needs no per-element
+### branching — a buffer of values visits nothing, a buffer of `Roamed` handles reports each one.
+### :param count: The number of live elements in the buffer.
+dangerous routine Hijacked[T].cyclic_trace_buffer(count: U64)
+  var i = 0u64
+  while i < count
+    me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
+    i = i +% 1u64
+  return
+
+### Cycle-collector hook for a SPARSE (open-addressing) container's dense entries buffer, whose slots
+### have holes: reports each LIVE element to the collector, skipping tombstoned/unused slots per the
+### parallel `live` bitmap. This is the `cyclic_trace_buffer` counterpart for Dict/Set (whose `keys`/
+### `vals`/`slots` arrays are indexed 0..`used` with per-entry liveness), so exactly the live elements
+### are reported (R2 — no garbage from empty slots). `cyclic_visit` is the universal no-op that only
+### `Roamed[T]` overrides, so value elements visit nothing.
+### :param live: The parallel `entry_live` bitmap — one `U8` per entry, `1` = live, `0` = tombstone/unused.
+### :param used: The high-water mark of the entries buffer; slots `0..used` are scanned.
+dangerous routine Hijacked[T].cyclic_trace_sparse_buffer(live: Hijacked[U8], used: U64)
+  var i = 0u64
+  while i < used
+    if live.peek_at_offset(offset: U8.data_size() * i) == 1u8
+      me.peek_at_offset(offset: T.data_size() * i).cyclic_visit()
+    i = i +% 1u64
+  return
+
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
-  rf_invalidate(me.address())
+  C::rf_invalidate(me.address())
   return
 
 ### Zeroes out the pointed-to memory without deallocating it.
@@ -163,41 +191,33 @@ routine hijacked_from[T](addr: Address) -> Hijacked[T]
 ### :returns: `true` if this pointer holds address zero.
 @readonly
 routine Hijacked[T].is_none() -> Bool
-  return int_eq[Hijacked[T]](me, hijacked_none[T]())
+  return LLVM::int_eq[Hijacked[T]](me, hijacked_none[T]())
 
 ### Returns this pointer advanced by `bytes` bytes.
 ### :param bytes: The byte distance to advance.
 ### :returns: This pointer shifted forward by the given number of bytes.
 routine Hijacked[T].offset(bytes: ByteSize) -> Hijacked[T]
-  var addr = pointer_to_int[T, Address](me)
+  var addr = LLVM::pointer_to_int[T, Address](me)
   return Hijacked[T](addr + bytes)
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: `true` if both pointers reference the same address.
 routine Hijacked[T].eq(you: Hijacked[T]) -> Bool
-  return int_eq[Hijacked[T]](me, you)
+  return LLVM::int_eq[Hijacked[T]](me, you)
 
 ### Compares this pointer against another by address.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Hijacked[T].cmp(you: Hijacked[T]) -> ComparisonSign
-  danger
-    return me.address().cmp(you: you.address())
-
-### Returns an xxHash64 hash of this pointer's address.
-### :returns: An xxHash64 hash of this pointer's address.
-routine Hijacked[T].fast_hash() -> U64
-  danger
-    return __hash_leaf(v: U64(me.address()))
+  return me.address().cmp(you: you.address())
 
 ### Returns a SipHash-2-4 keyed hash of this pointer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A SipHash-2-4 keyed hash of this pointer's address.
 routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
-  danger
-    return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
+  return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
 
 # NOTE: All operations on Hijacked[T] are inherently unsafe
 # Undefined behavior can occur if:
@@ -221,12 +241,10 @@ routine Hijacked[T].hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].represent() -> Text
-  danger
-    return me.type_name()
+  return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].diagnose() -> Text
-  danger
-    return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"
+  return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

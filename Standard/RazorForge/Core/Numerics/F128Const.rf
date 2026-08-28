@@ -9,119 +9,119 @@ module Core
 
 ### Constant ln2 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln2() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x58b90bfbe8e7bcd5e4f1d9cc01f97b58_u128), exp: -2_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x58b90bfbe8e7bcd5e4f1d9cc01f97b57a079a193394c5b16c5068badc5d57d15_u256, lo: 0xf3dc3b1036f5d64c2acaa97da57d0d887697571ae09c10a213ab9d9488b4dc12_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x58b90bfbe8e7bcd5e4f1d9cc01f97b57a079a193394c5b16c5068badc5d57d16_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant ln2_hi (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln2_hi() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x58b90bfbe8e7bcd50000000000000000_u128), exp: -2_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x58b90bfbe8e7bcd5e4f1d9cc01f97b57a079a193394c5b16c5068badc5d57d15_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x58b90bfbe8e7bcd5e4f1d9cc01f97b5700000000000000000000000000000000_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant ln2_lo (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln2_lo() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x7278ece600fcbdabd03cd0c99ca62d8b_u128), exp: -65_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x79ee1d881b7aeb26156554bed2be86c43b4bab8d704e085109d5ceca445a6e09_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -257_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x503cd0c99ca62d8b628345d6e2eabe8af9ee1d881b7aeb26156554bed2be86c4_u256), exp: -129_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant recip_ln2 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].recip_ln2() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x5c551d94ae0bf85ddf43ff68348e9f44_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x5c551d94ae0bf85ddf43ff68348e9f4475abbd546eb4ad2c45928b3668d09923_u256, lo: 0xef0e21fbaa8bb66b126c97bae0b5f059f5485cf30625484fe25fd781a9ef9cda_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x5c551d94ae0bf85ddf43ff68348e9f4475abbd546eb4ad2c45928b3668d09924_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant ln10 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln10() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x49aec6eed554560b752b6b15c1698514_u128), exp: 0_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x49aec6eed554560b752b6b15c16985147147f67ced2efc8741e30f4100f816b9_u256, lo: 0x4b17816bd8d4082e663865e0162f86b41631120c2085f16d7dc7bc4201728b6b_u256), exp: 0_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x49aec6eed554560b752b6b15c16985147147f67ced2efc8741e30f4100f816b9_u256), exp: 0_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant recip_ln10 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].recip_ln10() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x6f2dec549b9438ca9aadd557d699ee19_u128), exp: -3_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x6f2dec549b9438ca9aadd557d699ee191f71a30122e4d1011d1f96a27bc7529e_u256, lo: 0x3aa1277d0a0179f94911aac96323250a8c671decfe9c6e5e37d15c696466d3d8_u256), exp: -3_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x6f2dec549b9438ca9aadd557d699ee191f71a30122e4d1011d1f96a27bc7529e_u256), exp: -3_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant sqrt_half (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].sqrt_half() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x5a827999fcef32422cbec4d9baa55f50_u128), exp: -2_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x5a827999fcef32422cbec4d9baa55f4f8eb7b05d449dd426768bd642c199cc8a_u256, lo: 0xa57e41821d5c5161d458ff37ee41ed9c87ba542f21ce3da53c02439b1efd13b4_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x5a827999fcef32422cbec4d9baa55f4f8eb7b05d449dd426768bd642c199cc8b_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant one_third (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].one_third() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x55555555555555555555555555555555_u128), exp: -3_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x5555555555555555555555555555555555555555555555555555555555555555_u256, lo: 0x5555555555555555555555555555555555550000000000000000000000000000_u256), exp: -3_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x5555555555555555555555555555555555555555555555555555555555555555_u256), exp: -3_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant cbrt_2 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].cbrt_2() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x50a28be635ca2b888f76adc56f894343_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x50a28be635ca2b888f76adc56f8943430a23c40a458c7ef018600330dbe8b74e_u256, lo: 0x982df40f689bc2103c97305ac3e541d70c259e9ad6b1a09eacc7c1bb7d28d21b_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x50a28be635ca2b888f76adc56f8943430a23c40a458c7ef018600330dbe8b74f_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant cbrt_4 (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].cbrt_4() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x6597fa94f5b8f20ac16666ad0f7137bc_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x6597fa94f5b8f20ac16666ad0f7137bc6601d8856282a057c8a46b033e4c1079_u256, lo: 0x61d7c4d95e90eb70e25b02e570091389c75bda57d0548c11988af15d2cb2babb_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x6597fa94f5b8f20ac16666ad0f7137bc6601d8856282a057c8a46b033e4c1079_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant pi (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].pi() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x6487ed5110b4611a62633145c06e0e69_u128), exp: 0_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x6487ed5110b4611a62633145c06e0e68948127044533e63a0105df531d89cd91_u256, lo: 0x28a5043cc71a026ef7ca8cd9e69d218d98158536f92f8a1ba7f09ab6b6a8e122_u256), exp: 0_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x6487ed5110b4611a62633145c06e0e68948127044533e63a0105df531d89cd91_u256), exp: 0_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant rsqrt_pi (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].rsqrt_pi() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x48375d410a6db446b8ea453fb5ff61a2_u128), exp: -2_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x48375d410a6db446b8ea453fb5ff61a20a04d075d61f3a8b9cd0ac1866731058_u256, lo: 0x603ace7c2c938788a0601b04b663cd75de8fa7772470e53c3a7bb7c3bfff6129_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x48375d410a6db446b8ea453fb5ff61a20a04d075d61f3a8b9cd0ac1866731058_u256), exp: -2_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant ln_pi (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln_pi() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x494341239e86f42f57e55b1aa10fd266_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x494341239e86f42f57e55b1aa10fd266179b76fcecfc981b8ce00bb2bbea4c23_u256, lo: 0x96a9b137d48c5839b4900b095b6c2e199ce2aa1e1d5864dcdddda7a6773b68f0_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x494341239e86f42f57e55b1aa10fd266179b76fcecfc981b8ce00bb2bbea4c24_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
 
 ### Constant ln_2pi (W-dispatched: 126-bit quad / 254-bit octuple / 510-bit dec).
 common routine UnpackedFloat[M, L, W].ln_2pi() -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x759fc72192fad29a4a5e4800a20c9012_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x759fc72192fad29a4a5e4800a20c9011e7d847c689a2c5a6ef6351899ed50aae_u256, lo: 0x9097cebff007435fc9f55fc82e2ab4ddd82e55ab8da66d2de7b37670bb95d6f9_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
   return UnpackedFloat[M, L, W].make(mant: M.from_u256(v: 0x759fc72192fad29a4a5e4800a20c9011e7d847c689a2c5a6ef6351899ed50aaf_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
 
 ### exp_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].exp_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -169,7 +169,7 @@ common routine UnpackedFloat[M, L, W].exp_coef(i: S64) -> UnpackedFloat[M, L, W]
     if i == 22_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x4338e5b6dfe14a5143242dfcce3b1d5e_u128), exp: -71_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x5d86d04c58e06765ee1c1375fd89e613_u128), exp: -76_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -295,7 +295,7 @@ common routine UnpackedFloat[M, L, W].exp_coef(i: S64) -> UnpackedFloat[M, L, W]
 
 ### log_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].log_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: 0_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -343,7 +343,7 @@ common routine UnpackedFloat[M, L, W].log_coef(i: S64) -> UnpackedFloat[M, L, W]
     if i == 22_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x5b05b05b05b05b05b05b05b05b05b05b_u128), exp: -6_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x572620ae4c415c9882b9310572620ae5_u128), exp: -6_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: 0_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -465,7 +465,7 @@ common routine UnpackedFloat[M, L, W].log_coef(i: S64) -> UnpackedFloat[M, L, W]
 
 ### cbrt_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].cbrt_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -477,7 +477,7 @@ common routine UnpackedFloat[M, L, W].cbrt_coef(i: S64) -> UnpackedFloat[M, L, W
     if i == 4_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x49beaee172d4ce7c5010db20a88f4696_u128), exp: -4_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x7fd30cfe3e81ee7113506ac1242b8b6a_u128), exp: -5_s64, fpclass: NEGATIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -503,7 +503,7 @@ common routine UnpackedFloat[M, L, W].cbrt_coef(i: S64) -> UnpackedFloat[M, L, W
 
 ### atan_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].atan_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -539,7 +539,7 @@ common routine UnpackedFloat[M, L, W].atan_coef(i: S64) -> UnpackedFloat[M, L, W
     if i == 16_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x7c1f07c1f07c1f07c1f07c1f07c1f07c_u128), exp: -7_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x75075075075075075075075075075075_u128), exp: -7_s64, fpclass: NEGATIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -623,7 +623,7 @@ common routine UnpackedFloat[M, L, W].atan_coef(i: S64) -> UnpackedFloat[M, L, W
 
 ### sin_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].sin_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -655,7 +655,7 @@ common routine UnpackedFloat[M, L, W].sin_coef(i: S64) -> UnpackedFloat[M, L, W]
     if i == 14_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x4967e62d0d62b5eaf8c39dd9bc4a475a_u128), exp: -104_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x50d34b9e0fd6f10b87b91be9aff0e44f_u128), exp: -114_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -743,7 +743,7 @@ common routine UnpackedFloat[M, L, W].sin_coef(i: S64) -> UnpackedFloat[M, L, W]
 
 ### cos_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].cos_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -777,7 +777,7 @@ common routine UnpackedFloat[M, L, W].cos_coef(i: S64) -> UnpackedFloat[M, L, W]
     if i == 15_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x4e4cb1411f5839832b7b530a62715d2c_u128), exp: -109_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x50d34b9e0fd6f10b87b91be9aff0e44f_u128), exp: -119_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -869,7 +869,7 @@ common routine UnpackedFloat[M, L, W].cos_coef(i: S64) -> UnpackedFloat[M, L, W]
 
 ### tan_coef polynomial coefficient i (W-dispatched: quad / octuple / dec).
 common routine UnpackedFloat[M, L, W].tan_coef(i: S64) -> UnpackedFloat[M, L, W]
-  if int_eq[U64](a: W, b: 128_u64)
+  if LLVM::int_eq[U64](a: W, b: 128_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x40000000000000000000000000000000_u128), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -901,7 +901,7 @@ common routine UnpackedFloat[M, L, W].tan_coef(i: S64) -> UnpackedFloat[M, L, W]
     if i == 14_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x57bcb691d396db1ecf140a2ee187e901_u128), exp: -20_s64, fpclass: POSITIVE_NORMAL)
     return UnpackedFloat[M, L, W].make(mant: M.from_u128(v: 0x471df7e57070340b7244e5883c56e9ea_u128), exp: -21_s64, fpclass: POSITIVE_NORMAL)
-  if int_eq[U64](a: W, b: 512_u64)
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
     if i == 0_s64
       return UnpackedFloat[M, L, W].make(mant: M.from_u256x2(hi: 0x4000000000000000000000000000000000000000000000000000000000000000_u256, lo: 0x0000000000000000000000000000000000000000000000000000000000000000_u256), exp: -1_s64, fpclass: POSITIVE_NORMAL)
     if i == 1_s64
@@ -1064,7 +1064,7 @@ preset RPITAB: Array[U64, 320] = [0x940a2227b7c17c51_u64, 0xe06e9afae8ab13fe_u64
 
 ### Returns byte `idx` (0..2559) of the packed 1/(2pi) table.
 routine rpitab_byte(idx: U64) -> U64
-  var wi = shift_right_unsigned[U64](idx, 3_u64)
+  var wi = LLVM::shift_right_unsigned(idx, 3_u64)
   var w = RPITAB[wi]
-  var sh = mul[U64](a: 8_u64, b: bit_and[U64](a: idx, b: 7_u64))
-  return bit_and[U64](a: shift_right_unsigned[U64](w, sh), b: 0xff_u64)
+  var sh = LLVM::mul(a: 8_u64, b: LLVM::bit_and(a: idx, b: 7_u64))
+  return LLVM::bit_and[U64](a: LLVM::shift_right_unsigned[U64](w, sh), b: 0xff_u64)

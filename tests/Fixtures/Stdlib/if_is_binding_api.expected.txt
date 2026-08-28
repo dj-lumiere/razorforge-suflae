@@ -1,0 +1,8 @@
+s32:7
+text:hi
+none
+small:7
+big:250
+other
+a-not-text
+DONE

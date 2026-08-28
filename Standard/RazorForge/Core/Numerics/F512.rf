@@ -23,7 +23,7 @@ module Core
 
 ### A software binary512 float backed by a raw 512-bit container.
 @llvm("i512")
-secret record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible
+secret record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Assignable, Copyable
   pass
 
 # ============================================================================
@@ -32,37 +32,37 @@ secret record F512 obeys Equatable, Comparable, Negatable, Addable, Subtractable
 
 ### The implicit-bit mask `1 << 488`.
 routine f512a_implicit() -> U512
-  return shift_left[U512](value: 1, bits: U512.to_width(s: 488_s64))
+  return LLVM::shift_left[U512](value: 1, bits: U512.to_width(s: 488_s64))
 
 ### The 488-bit mantissa mask `(1 << 488) - 1`.
 routine f512a_mant_mask() -> U512
-  return sub[U512](a: f512a_implicit(), b: 1)
+  return LLVM::sub[U512](a: f512a_implicit(), b: 1)
 
 ### The sign-bit mask `1 << 511`.
 routine f512a_sign_mask() -> U512
-  return shift_left[U512](value: 1, bits: U512.to_width(s: 511_s64))
+  return LLVM::shift_left[U512](value: 1, bits: U512.to_width(s: 511_s64))
 
 ### The magnitude mask `~(1 << 511)` (all but the sign bit).
 routine f512a_abs_mask() -> U512
-  return sub[U512](a: f512a_sign_mask(), b: 1)
+  return LLVM::sub[U512](a: f512a_sign_mask(), b: 1)
 
 ### The infinity encoding `0x7FFFFF << 488` for the given sign bit.
 routine f512a_inf(sign: U64) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
-  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
-  return bit_or[U512](a: s, b: e)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
+  return LLVM::bit_or(a: s, b: e)
 
 ### The canonical quiet-NaN encoding (exponent all ones, top mantissa bit set).
 routine f512a_qnan() -> U512
-  var e = shift_left[U512](value: zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
-  var q = shift_left[U512](value: 1, bits: U512.to_width(s: 487_s64))
-  return bit_or[U512](a: e, b: q)
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](0x7FFFFF_u64), bits: U512.to_width(s: 488_s64))
+  var q = LLVM::shift_left[U512](value: 1, bits: U512.to_width(s: 487_s64))
+  return LLVM::bit_or(a: e, b: q)
 
 ### Sign-magnitude total-order key for comparison.
 routine f512a_order_key(bits: U512) -> U512
-  if int_ne[U512](a: bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
-    return bit_xor[U512](a: bits, b: sub[U512](a: 0, b: 1))
-  return bit_or[U512](a: bits, b: f512a_sign_mask())
+  if LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
+    return LLVM::bit_xor[U512](a: bits, b: LLVM::sub[U512](a: 0, b: 1))
+  return LLVM::bit_or(a: bits, b: f512a_sign_mask())
 
 # ============================================================================
 # Raw bit access
@@ -70,19 +70,19 @@ routine f512a_order_key(bits: U512) -> U512
 
 ### Reinterprets this value as its raw IEEE 754 bit pattern.
 routine F512.to_bits() -> U512
-  return reinterpret_bits[F512, U512](me)
+  return LLVM::reinterpret_bits[F512, U512](me)
 
 ### Builds a value directly from a raw IEEE 754 bit pattern.
 common routine F512.from_bits(bits: U512) -> F512
-  return reinterpret_bits[U512, F512](bits)
+  return LLVM::reinterpret_bits[U512, F512](bits)
 
 ### Returns the raw biased exponent field (0..8388607).
 routine F512.raw_exponent() -> U64
-  return int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](me.to_bits(), U512.to_width(s: 488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
+  return LLVM::int_truncate[U512, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(me.to_bits(), U512.to_width(s: 488_s64)), b: LLVM::zero_extend[U64, U512](0x7FFFFF_u64)))
 
 ### Returns the raw 488-bit mantissa field (no implicit bit).
 routine F512.raw_mantissa() -> U512
-  return bit_and[U512](a: me.to_bits(), b: f512a_mant_mask())
+  return LLVM::bit_and(a: me.to_bits(), b: f512a_mant_mask())
 
 # ============================================================================
 # Classification
@@ -90,7 +90,7 @@ routine F512.raw_mantissa() -> U512
 
 ### Returns `true` when the value is negative (sign bit set).
 routine F512.is_negative() -> Bool
-  return int_ne[U512](a: bit_and[U512](a: me.to_bits(), b: f512a_sign_mask()), b: 0)
+  return LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: me.to_bits(), b: f512a_sign_mask()), b: 0)
 
 ### Returns `true` when the value is strictly positive.
 routine F512.is_positive() -> Bool
@@ -98,11 +98,11 @@ routine F512.is_positive() -> Bool
 
 ### Returns `true` when the value encodes a NaN.
 routine F512.is_nan() -> Bool
-  return me.raw_exponent() == 0x7FFFFF_u64 and int_ne[U512](a: me.raw_mantissa(), b: 0)
+  return me.raw_exponent() == 0x7FFFFF_u64 and LLVM::int_ne[U512](a: me.raw_mantissa(), b: 0)
 
 ### Returns `true` when the value encodes positive or negative infinity.
 routine F512.is_infinite() -> Bool
-  return me.raw_exponent() == 0x7FFFFF_u64 and int_eq[U512](a: me.raw_mantissa(), b: 0)
+  return me.raw_exponent() == 0x7FFFFF_u64 and LLVM::int_eq[U512](a: me.raw_mantissa(), b: 0)
 
 ### Returns `true` when the value is neither NaN nor infinity.
 routine F512.is_finite() -> Bool
@@ -110,11 +110,11 @@ routine F512.is_finite() -> Bool
 
 ### Returns `true` when the value is zero (either sign).
 routine F512.is_zero() -> Bool
-  return me.raw_exponent() == 0_u64 and int_eq[U512](a: me.raw_mantissa(), b: 0)
+  return me.raw_exponent() == 0_u64 and LLVM::int_eq[U512](a: me.raw_mantissa(), b: 0)
 
 ### Returns `true` when the value is subnormal (denormalized, nonzero).
 routine F512.is_subnormal() -> Bool
-  return me.raw_exponent() == 0_u64 and int_ne[U512](a: me.raw_mantissa(), b: 0)
+  return me.raw_exponent() == 0_u64 and LLVM::int_ne[U512](a: me.raw_mantissa(), b: 0)
 
 # ============================================================================
 # Sign operations
@@ -122,17 +122,17 @@ routine F512.is_subnormal() -> Bool
 
 ### Returns the arithmetic negation (sign bit flipped).
 routine F512.neg() -> F512
-  return F512.from_bits(bits: bit_xor[U512](a: me.to_bits(), b: f512a_sign_mask()))
+  return F512.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: f512a_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
 routine F512.abs() -> F512
-  return F512.from_bits(bits: bit_and[U512](a: me.to_bits(), b: f512a_abs_mask()))
+  return F512.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: f512a_abs_mask()))
 
 ### Returns this magnitude carrying the sign of `sign`.
 routine F512.copysign(sign: F512) -> F512
-  var mag = bit_and[U512](a: me.to_bits(), b: f512a_abs_mask())
-  var sgn = bit_and[U512](a: sign.to_bits(), b: f512a_sign_mask())
-  return F512.from_bits(bits: bit_or[U512](a: mag, b: sgn))
+  var mag = LLVM::bit_and(a: me.to_bits(), b: f512a_abs_mask())
+  var sgn = LLVM::bit_and(a: sign.to_bits(), b: f512a_sign_mask())
+  return F512.from_bits(bits: LLVM::bit_or(a: mag, b: sgn))
 
 # ============================================================================
 # Comparison (pure sign-magnitude bit logic)
@@ -144,7 +144,7 @@ routine F512.eq(you: F512) -> Bool
     return false
   if me.is_zero() and you.is_zero()
     return true
-  return int_eq[U512](a: me.to_bits(), b: you.to_bits())
+  return LLVM::int_eq(a: me.to_bits(), b: you.to_bits())
 
 ### Compares this value with `you` under IEEE ordered semantics.
 routine F512.cmp(you: F512) -> ComparisonSign
@@ -154,9 +154,9 @@ routine F512.cmp(you: F512) -> ComparisonSign
     return SAME
   var ka = f512a_order_key(bits: me.to_bits())
   var kb = f512a_order_key(bits: you.to_bits())
-  if unsigned_lt[U512](a: ka, b: kb)
+  if LLVM::unsigned_lt(a: ka, b: kb)
     return ME_SMALL
-  if unsigned_gt[U512](a: ka, b: kb)
+  if LLVM::unsigned_gt(a: ka, b: kb)
     return ME_LARGE
   return SAME
 
@@ -167,44 +167,44 @@ routine F512.cmp(you: F512) -> ComparisonSign
 ### Decodes this `F512` into the engine unpacked value (exact).
 routine F512.to_uf() -> UnpackedFloat[U512, U1024, 512]
   var bits = me.to_bits()
-  var sign = int_ne[U512](a: bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
-  var e = int_truncate[U512, U64](bit_and[U512](a: shift_right_unsigned[U512](bits, U512.to_width(s: 488_s64)), b: zero_extend[U64, U512](0x7FFFFF_u64)))
-  var f = bit_and[U512](a: bits, b: f512a_mant_mask())
+  var sign = LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: bits, b: f512a_sign_mask()), b: 0)
+  var e = LLVM::int_truncate[U512, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, U512.to_width(s: 488_s64)), b: LLVM::zero_extend[U64, U512](0x7FFFFF_u64)))
+  var f = LLVM::bit_and(a: bits, b: f512a_mant_mask())
   if e == 0x7FFFFF_u64
-    if int_ne[U512](a: f, b: 0)
+    if LLVM::int_ne[U512](a: f, b: 0)
       return UnpackedFloat[U512, U1024, 512].nan()
     return UnpackedFloat[U512, U1024, 512].inf(sign: sign)
-  if e == 0_u64 and int_eq[U512](a: f, b: 0)
+  if e == 0_u64 and LLVM::int_eq[U512](a: f, b: 0)
     return UnpackedFloat[U512, U1024, 512].zero(sign: sign)
   if e == 0_u64
-    var msbf = int_truncate[U512, S64](sub[U512](a: zero_extend[U64, U512](511_u64), b: leading_zeros[U512](f)))
-    var shift = sub[S64](a: 510_s64, b: msbf)
-    var mant = shift_left[U512](value: f, bits: U512.to_width(s: shift))
-    return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: msbf, b: 4194791_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
-  var sig = bit_or[U512](a: f, b: f512a_implicit())
-  var mant = shift_left[U512](value: sig, bits: U512.to_width(s: 22_s64))
-  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: sub[S64](a: reinterpret_bits[U64, S64](e), b: 4194304_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var msbf = LLVM::int_truncate[U512, S64](LLVM::sub(a: LLVM::zero_extend[U64, U512](511_u64), b: LLVM::leading_zeros(f)))
+    var shift = LLVM::sub(a: 510_s64, b: msbf)
+    var mant = LLVM::shift_left(value: f, bits: U512.to_width(s: shift))
+    return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: LLVM::sub(a: msbf, b: 4194791_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  var sig = LLVM::bit_or(a: f, b: f512a_implicit())
+  var mant = LLVM::shift_left(value: sig, bits: U512.to_width(s: 22_s64))
+  return UnpackedFloat[U512, U1024, 512].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 4194304_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Packs the implicit-stripped significand and exponent into binary512 bits.
 routine f512a_pack(sign: U64, biased: U64, sig: U512) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
-  var e = shift_left[U512](value: zero_extend[U64, U512](biased), bits: U512.to_width(s: 488_s64))
-  var f = bit_and[U512](a: sig, b: f512a_mant_mask())
-  return bit_or[U512](a: bit_or[U512](a: s, b: e), b: f)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
+  var e = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](biased), bits: U512.to_width(s: 488_s64))
+  var f = LLVM::bit_and(a: sig, b: f512a_mant_mask())
+  return LLVM::bit_or(a: LLVM::bit_or(a: s, b: e), b: f)
 
 ### Builds a subnormal binary512 encoding by shifting the significand down.
 routine f512a_finish_subnormal(sign: U64, sig: U512, under: S64) -> U512
-  var s = shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
-  if signed_gt[S64](a: under, b: 488_s64)
+  var s = LLVM::shift_left(value: LLVM::zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64))
+  if LLVM::signed_gt(a: under, b: 488_s64)
     return s
-  var lost = bit_and[U512](a: sig, b: U512.low_mask(n: under))
-  var half = shift_left[U512](value: 1, bits: U512.to_width(s: sub[S64](a: under, b: 1_s64)))
-  var q = shift_right_unsigned[U512](sig, U512.to_width(s: under))
-  if unsigned_gt[U512](a: lost, b: half)
-    q = add[U512](a: q, b: 1)
-  elseif int_eq[U512](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: q, b: 1), b: 0)
-    q = add[U512](a: q, b: 1)
-  return bit_or[U512](a: s, b: q)
+  var lost = LLVM::bit_and(a: sig, b: U512.low_mask(n: under))
+  var half = LLVM::shift_left[U512](value: 1, bits: U512.to_width(s: LLVM::sub[S64](a: under, b: 1_s64)))
+  var q = LLVM::shift_right_unsigned(sig, U512.to_width(s: under))
+  if LLVM::unsigned_gt(a: lost, b: half)
+    q = LLVM::add[U512](a: q, b: 1)
+  elseif LLVM::int_eq[U512](a: lost, b: half) and LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: q, b: 1), b: 0)
+    q = LLVM::add[U512](a: q, b: 1)
+  return LLVM::bit_or(a: s, b: q)
 
 ### Rounds any engine value back to an `F512` (round-to-nearest-even).
 ### The mantissa shift is `W - 490` (22 for the 512-bit engine).
@@ -217,24 +217,24 @@ routine UnpackedFloat[M, L, W].to_f512a() -> F512
   if me.isinf()
     return F512.from_bits(bits: f512a_inf(sign: sign))
   if me.iszero()
-    return F512.from_bits(bits: shift_left[U512](value: zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64)))
-  var biased = add[S64](a: me.exp, b: 4194304_s64)
-  var sh = sub[S64](a: reinterpret_bits[U64, S64](W), b: 490_s64)
-  var lost = bit_and[M](a: me.mant, b: M.low_mask(n: sh))
-  var half = shift_left[M](value: 1, bits: M.to_width(s: sub[S64](a: sh, b: 1_s64)))
-  var sig = int_truncate[L, U512](zero_extend[M, L](shift_right_unsigned[M](me.mant, M.to_width(s: sh))))
-  if unsigned_gt[M](a: lost, b: half)
-    sig = add[U512](a: sig, b: 1)
-  elseif int_eq[M](a: lost, b: half) and int_ne[U512](a: bit_and[U512](a: sig, b: 1), b: 0)
-    sig = add[U512](a: sig, b: 1)
-  if int_ne[U512](a: bit_and[U512](a: sig, b: shift_left[U512](value: 1, bits: U512.to_width(s: 489_s64))), b: 0)
-    sig = shift_right_unsigned[U512](sig, U512.to_width(s: 1_s64))
-    biased = add[S64](a: biased, b: 1_s64)
-  if signed_ge[S64](a: biased, b: 8388607_s64)
+    return F512.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U512](sign), bits: U512.to_width(s: 511_s64)))
+  var biased = LLVM::add(a: me.exp, b: 4194304_s64)
+  var sh = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](W), b: 490_s64)
+  var lost = LLVM::bit_and(a: me.mant, b: M.low_mask(n: sh))
+  var half = LLVM::shift_left[M](value: 1, bits: M.to_width(s: LLVM::sub[S64](a: sh, b: 1_s64)))
+  var sig = LLVM::int_truncate[L, U512](LLVM::zero_extend[M, L](LLVM::shift_right_unsigned(me.mant, M.to_width(s: sh))))
+  if LLVM::unsigned_gt(a: lost, b: half)
+    sig = LLVM::add[U512](a: sig, b: 1)
+  elseif LLVM::int_eq[M](a: lost, b: half) and LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: sig, b: 1), b: 0)
+    sig = LLVM::add[U512](a: sig, b: 1)
+  if LLVM::int_ne[U512](a: LLVM::bit_and[U512](a: sig, b: LLVM::shift_left[U512](value: 1, bits: U512.to_width(s: 489_s64))), b: 0)
+    sig = LLVM::shift_right_unsigned(sig, U512.to_width(s: 1_s64))
+    biased = LLVM::add(a: biased, b: 1_s64)
+  if LLVM::signed_ge(a: biased, b: 8388607_s64)
     return F512.from_bits(bits: f512a_inf(sign: sign))
-  if signed_lt[S64](a: biased, b: 1_s64)
-    return F512.from_bits(bits: f512a_finish_subnormal(sign: sign, sig: sig, under: sub[S64](a: 1_s64, b: biased)))
-  return F512.from_bits(bits: f512a_pack(sign: sign, biased: zero_extend[U32, U64](int_truncate[S64, U32](biased)), sig: sig))
+  if LLVM::signed_lt(a: biased, b: 1_s64)
+    return F512.from_bits(bits: f512a_finish_subnormal(sign: sign, sig: sig, under: LLVM::sub(a: 1_s64, b: biased)))
+  return F512.from_bits(bits: f512a_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
 
 # ============================================================================
 # Software arithmetic (delegated to the engine)
@@ -286,7 +286,7 @@ routine F512.fdim(you: F512) -> F512
     return F512.from_bits(bits: f512a_qnan())
   if me > you
     return me - you
-  return F512.from_bits(bits: zero_extend[U64, U512](0_u64))
+  return F512.from_bits(bits: LLVM::zero_extend[U64, U512](0_u64))
 
 ### Truncates toward zero to an integer value.
 routine F512.trunc() -> F512

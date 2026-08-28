@@ -89,7 +89,7 @@ routine ChannelClosedError.crash_message() -> Text
   return "Cannot send to a closed channel (no consumer can receive the item)."
 
 ### Raised when a thread tries to acquire an exclusive lock it already holds — a re-entrant
-### `claim()` (or `claim()` while `inspect()`-blocked under exclusion). The acquire would spin
+### `amend()` (or `amend()` while `consult()`-blocked under exclusion). The acquire would spin
 ### forever, so it is reported as a self-deadlock crash rather than hanging.
 crashable ReentrantLockError
   pass

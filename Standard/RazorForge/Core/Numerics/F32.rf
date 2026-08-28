@@ -8,7 +8,7 @@ import Collections
 ### for graphics, simulation, and general-purpose numeric code where 24 bits of
 ### significand precision are acceptable.
 @llvm("float")
-record F32 obeys Numeric, Ordered
+record F32 obeys Numeric, Ordered, Assignable, Copyable
   pass
 
 # IEEE 754 single precision constants
@@ -33,21 +33,21 @@ preset F32_LN_10: F32 = 2.3025851_f32
 ### :returns: The corresponding `F32` value.
 @inline
 routine F32(from: S8) -> F32
-  return signed_to_float[S8, F32](from)
+  return LLVM::signed_to_float[S8, F32](from)
 
 ### Converts an `S16` into single-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
 routine F32(from: S16) -> F32
-  return signed_to_float[S16, F32](from)
+  return LLVM::signed_to_float[S16, F32](from)
 
 ### Converts an `S32` into single-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
 routine F32(from: S32) -> F32
-  return signed_to_float[S32, F32](from)
+  return LLVM::signed_to_float[S32, F32](from)
 
 ### Converts an `S64` into single-precision floating-point form.
 ### Precision may be rounded when the integer cannot be represented exactly.
@@ -55,42 +55,42 @@ routine F32(from: S32) -> F32
 ### :returns: The closest representable `F32` value.
 @inline
 routine F32(from: S64) -> F32
-  return signed_to_float[S64, F32](from)
+  return LLVM::signed_to_float[S64, F32](from)
 
 ### Converts an `S128` into single-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F32` value under the target rounding rules.
 @inline
 routine F32(from: S128) -> F32
-  return signed_to_float[S128, F32](from)
+  return LLVM::signed_to_float[S128, F32](from)
 
 ### Converts a `U8` into single-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
 routine F32(from: U8) -> F32
-  return unsigned_to_float[U8, F32](from)
+  return LLVM::unsigned_to_float[U8, F32](from)
 
 ### Converts a `U16` into single-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F32` value.
 @inline
 routine F32(from: U16) -> F32
-  return unsigned_to_float[U16, F32](from)
+  return LLVM::unsigned_to_float[U16, F32](from)
 
 ### Converts a `U32` into single-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
 routine F32(from: U32) -> F32
-  return unsigned_to_float[U32, F32](from)
+  return LLVM::unsigned_to_float[U32, F32](from)
 
 ### Converts a `U64` into single-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F32` value.
 @inline
 routine F32(from: U64) -> F32
-  return unsigned_to_float[U64, F32](from)
+  return LLVM::unsigned_to_float[U64, F32](from)
 
 ### Converts a `U128` into single-precision floating-point form. Failable: throws when the
 ### value exceeds the F32 range (overflow to +inf) — handle with `F32!`/`when`/`try_`.
@@ -98,28 +98,28 @@ routine F32(from: U64) -> F32
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
 routine F32!(from: U128) -> F32
-  return unsigned_to_float[U128, F32](from).finite()
+  return LLVM::unsigned_to_float[U128, F32](from).finite()
 
 ### Converts an `S256` to `F32`. Failable: throws if the value exceeds the F32 range.
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
 routine F32!(from: S256) -> F32
-  return signed_to_float[S256, F32](from).finite()
+  return LLVM::signed_to_float[S256, F32](from).finite()
 
 ### Converts a `U256` to `F32`. Failable: throws if the value exceeds the F32 range.
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F32` value (finite).
 ### :throws: {NumericOverflowError} if the value is out of the F32 range.
 routine F32!(from: U256) -> F32
-  return unsigned_to_float[U256, F32](from).finite()
+  return LLVM::unsigned_to_float[U256, F32](from).finite()
 
 ### Widens a half-precision float to single precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F32` carrying the same numeric value when representable.
 @inline
 routine F32(from: F16) -> F32
-  return float_extend[F16, F32](from)
+  return LLVM::float_extend[F16, F32](from)
 
 ### Returns an existing `F32` unchanged.
 ### :param from: The single-precision value to forward.
@@ -133,7 +133,7 @@ routine F32(from: F32) -> F32
 ### :returns: The nearest representable `F32` value.
 @inline
 routine F32(from: F64) -> F32
-  return float_narrow[F64, F32](from)
+  return LLVM::float_narrow[F64, F32](from)
 
 ### (`F32(from: F128)` is provided by the quadruple-precision engine — `F128.rf` — which owns
 ### the bit-surgery narrowing; a forwarding stub here would recurse into itself.)
@@ -169,7 +169,7 @@ routine F32(from: D128) -> F32
 ### :param you: The addend.
 ### :returns: The single-precision sum (always finite).
 routine F32.add!(you: F32) -> F32
-  var r = float_add[F32](a: me, b: you)
+  var r = LLVM::float_add[F32](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -181,7 +181,7 @@ routine F32.add!(you: F32) -> F32
 ### :param you: The value to subtract.
 ### :returns: The single-precision difference (always finite).
 routine F32.sub!(you: F32) -> F32
-  var r = float_sub[F32](a: me, b: you)
+  var r = LLVM::float_sub[F32](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -193,7 +193,7 @@ routine F32.sub!(you: F32) -> F32
 ### :param you: The multiplier.
 ### :returns: The single-precision product (always finite).
 routine F32.mul!(you: F32) -> F32
-  var r = float_mul[F32](a: me, b: you)
+  var r = LLVM::float_mul[F32](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -206,7 +206,7 @@ routine F32.mul!(you: F32) -> F32
 ### :param you: The divisor.
 ### :returns: The single-precision quotient (always finite).
 routine F32.truediv!(you: F32) -> F32
-  var r = float_div[F32](a: me, b: you)
+  var r = LLVM::float_div[F32](a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
@@ -227,26 +227,26 @@ routine F32.finite!() -> F32
 ### Returns the negated value.
 ### :returns: The resulting `F32` value.
 routine F32.neg() -> F32
-  return float_neg[F32](me)
+  return LLVM::float_neg[F32](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). Plain
 # (NOT `dangerous`): inf/NaN are valid IEEE values, the `_unchecked` spelling is the marker.
 
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
 routine F32.truediv_unchecked(you: F32) -> F32
-  return float_div[F32](a: me, b: you)
+  return LLVM::float_div[F32](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F32.add_unchecked(you: F32) -> F32
-  return float_add[F32](a: me, b: you)
+  return LLVM::float_add[F32](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F32.sub_unchecked(you: F32) -> F32
-  return float_sub[F32](a: me, b: you)
+  return LLVM::float_sub[F32](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
 routine F32.mul_unchecked(you: F32) -> F32
-  return float_mul[F32](a: me, b: you)
+  return LLVM::float_mul[F32](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -256,15 +256,15 @@ routine F32.mul_unchecked(you: F32) -> F32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F32.eq(you: F32) -> Bool
-  return float_eq[F32](a: me, b: you)
+  return LLVM::float_eq[F32](a: me, b: you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F32.cmp(you: F32) -> ComparisonSign
-  if float_lt[F32](a: me, b: you)
+  if LLVM::float_lt[F32](a: me, b: you)
     return ME_SMALL
-  if float_gt[F32](a: me, b: you)
+  if LLVM::float_gt[F32](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -284,42 +284,42 @@ routine F32.sqrt!() -> F32
 
 ### Square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN). Thin wrapper over LLVM `sqrt`.
 routine F32.sqrt_unchecked() -> F32
-  return sqrt[F32](me)
+  return LLVM::sqrt[F32](me)
 
 ### Returns the absolute value.
 ### :returns: The resulting `F32` value.
 routine F32.abs() -> F32
-  return float_abs[F32](me)
+  return LLVM::float_abs[F32](me)
 
 ### Rounds this value toward negative infinity.
 ### :returns: The greatest integral-valued `F32` not larger than `me`.
 routine F32.floor() -> F32
-  return floor[F32](me)
+  return LLVM::floor[F32](me)
 
 ### Rounds this value toward positive infinity.
 ### :returns: The smallest integral-valued `F32` not smaller than `me`.
 routine F32.ceil() -> F32
-  return ceil[F32](me)
+  return LLVM::ceil[F32](me)
 
 ### Rounds this value to the nearest integral-valued `F32`.
 ### :returns: The rounded result in single precision.
 routine F32.round() -> F32
-  return round[F32](me)
+  return LLVM::round[F32](me)
 
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in single precision.
 routine F32.int_truncate() -> F32
-  return float_truncate[F32](me)
+  return LLVM::float_truncate[F32](me)
 
 ### Returns the sine of this value, interpreting it as radians.
 ### :returns: The single-precision sine result.
 routine F32.sin() -> F32
-  return sin[F32](me)
+  return LLVM::sin[F32](me)
 
 ### Returns the cosine of this value, interpreting it as radians.
 ### :returns: The single-precision cosine result.
 routine F32.cos() -> F32
-  return cos[F32](me)
+  return LLVM::cos[F32](me)
 
 ### Returns `e` raised to this value.
 ### :returns: The single-precision exponential result.
@@ -333,7 +333,7 @@ routine F32.exp!() -> F32
 
 ### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps LLVM `exp`.
 routine F32.exp_unchecked() -> F32
-  return exp[F32](me)
+  return LLVM::exp[F32](me)
 
 ### Returns the natural logarithm of this value.
 ### :returns: The single-precision natural-log result.
@@ -347,7 +347,7 @@ routine F32.log!() -> F32
 
 ### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over LLVM `log`.
 routine F32.log_unchecked() -> F32
-  return log[F32](me)
+  return LLVM::log[F32](me)
 
 ### Returns the base-10 logarithm of this value.
 ### :returns: The single-precision common-log result.
@@ -361,12 +361,12 @@ routine F32.log10!() -> F32
 
 ### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over LLVM `log10`.
 routine F32.log10_unchecked() -> F32
-  return log10[F32](me)
+  return LLVM::log10[F32](me)
 
 ### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps LLVM
 ### `pow`.
 routine F32.pow_unchecked(exp: F32) -> F32
-  return pow[F32](me, exp)
+  return LLVM::pow[F32](me, exp)
 
 ### Raises this value to `exp` (IEEE semantics: overflow/domain errors yield inf/NaN).
 ### :param exp: The exponent applied to `me`.
@@ -383,7 +383,7 @@ routine F32.pow!(exp: F32) -> F32
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F32.copysign(sign: F32) -> F32
-  return copysign[F32](me, sign)
+  return LLVM::copysign[F32](me, sign)
 
 # ============================================================================
 # Utility Methods
@@ -428,20 +428,20 @@ routine F32.is_zero() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F32.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa != 0_u32
 
 ### True when this is a SIGNALING NaN (quiet bit clear). Arithmetic only makes quiet NaN.
 routine F32.is_signaling() -> Bool
-  return me.is_nan() and bit_and[U32](a: me.to_bits(), b: 0x00400000_u32) == 0_u32
+  return me.is_nan() and LLVM::bit_and(a: me.to_bits(), b: 0x00400000_u32) == 0_u32
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F32.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa == 0_u32
 
 ### Returns `true` when this value is neither NaN nor infinity.
@@ -464,13 +464,13 @@ routine F32.signum() -> F32
 ### Reinterprets this float as its raw IEEE 754 bit pattern.
 ### :returns: The underlying `U32` encoding of this value.
 routine F32.to_bits() -> U32
-  return reinterpret_bits[F32, U32](me)
+  return LLVM::reinterpret_bits[F32, U32](me)
 
 ### Reinterprets a raw IEEE 754 bit pattern as an `F32`.
 ### :param bits: The exact single-precision encoding to decode.
 ### :returns: The `F32` value with that bit pattern.
 common routine F32.from_bits(bits: U32) -> F32
-  return reinterpret_bits[U32, F32](bits)
+  return LLVM::reinterpret_bits[U32, F32](bits)
 
 ### Returns a signaling NaN (interop/testing; never produced by arithmetic).
 common routine F32.signaling_nan() -> F32
@@ -485,13 +485,13 @@ common routine F32.signaling_nan() -> F32
 routine F32.represent() -> Text
   if me.is_signaling()
     return "snan"
-  var cstr_result = rf_format_F32(me)
+  var cstr_result = C::rf_format_F32(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine F32.diagnose() -> Text
-  var cstr_result = rf_format_F32(me)
+  var cstr_result = C::rf_format_F32(me)
   return "F32(" + Text(from: CStr(from_ptr: cstr_result)) + ")"
 
 ### Implements the wired routine behavior for this value.
@@ -553,16 +553,11 @@ routine F32!(from_text: Text) -> F32
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F32")
   var cstr_val = CStr(from: from_text)
-  return rf_parse_F32(cstr_val)
+  return C::rf_parse_F32(cstr_val)
 
 # ============================================================================
 # Hashing
 # ============================================================================
-
-### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
-### :returns: A `U64` hash of the 32-bit float encoding.
-routine F32.fast_hash() -> U64
-  return __hash_leaf(v: zero_extend[U32, U64](reinterpret_bits[F32, U32](me)))
 
 # ============================================================================
 # Byte Representation
@@ -571,23 +566,23 @@ routine F32.fast_hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 4]` value.
 routine F32.to_bytes_le() -> Array[Byte, 4]
-  var raw = reinterpret_bits[F32, U32](me)
+  var raw = LLVM::reinterpret_bits[F32, U32](me)
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U32, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 4]` value.
 routine F32.to_bytes_be() -> Array[Byte, 4]
-  var raw = byte_swap[U32](reinterpret_bits[F32, U32](me))
+  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[F32, U32](me))
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U32, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
-  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
-  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
+  result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U32, U8](raw))
+  result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 8_u32)))
+  result = LLVM::set_byte_at(array: result, index: 2_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 16_u32)))
+  result = LLVM::set_byte_at(array: result, index: 3_u64, value: LLVM::int_truncate[U32, U8](LLVM::shift_right_unsigned(raw, 24_u32)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -595,86 +590,86 @@ routine F32.to_bytes_be() -> Array[Byte, 4]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine F32.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zero_extend[U32, U64](reinterpret_bits[F32, U32](me)), k0: k0, k1: k1)
+  return __secure_hash_u64(v: LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[F32, U32](me)), k0: k0, k1: k1)
 
 # ============================================================================
 # Full libm parity (rf_f32_* runtime, TLFloat/libm-backed). Basic ops above use
 # LLVM intrinsics; the extended surface binds the single-precision runtime.
 # ============================================================================
 ### C libm extern: tangent (radians).
-external("C") routine rf_f32_tan(value: F32) -> F32
+routine C::rf_f32_tan(value: F32) -> F32
 ### C libm extern: arc sine.
-external("C") routine rf_f32_asin(value: F32) -> F32
+routine C::rf_f32_asin(value: F32) -> F32
 ### C libm extern: arc cosine.
-external("C") routine rf_f32_acos(value: F32) -> F32
+routine C::rf_f32_acos(value: F32) -> F32
 ### C libm extern: arc tangent.
-external("C") routine rf_f32_atan(value: F32) -> F32
+routine C::rf_f32_atan(value: F32) -> F32
 ### C libm extern: two-argument arc tangent atan2(y, x).
-external("C") routine rf_f32_atan2(y: F32, x: F32) -> F32
+routine C::rf_f32_atan2(y: F32, x: F32) -> F32
 ### C libm extern: hyperbolic sine.
-external("C") routine rf_f32_sinh(value: F32) -> F32
+routine C::rf_f32_sinh(value: F32) -> F32
 ### C libm extern: hyperbolic cosine.
-external("C") routine rf_f32_cosh(value: F32) -> F32
+routine C::rf_f32_cosh(value: F32) -> F32
 ### C libm extern: hyperbolic tangent.
-external("C") routine rf_f32_tanh(value: F32) -> F32
+routine C::rf_f32_tanh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic sine.
-external("C") routine rf_f32_asinh(value: F32) -> F32
+routine C::rf_f32_asinh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic cosine.
-external("C") routine rf_f32_acosh(value: F32) -> F32
+routine C::rf_f32_acosh(value: F32) -> F32
 ### C libm extern: inverse hyperbolic tangent.
-external("C") routine rf_f32_atanh(value: F32) -> F32
+routine C::rf_f32_atanh(value: F32) -> F32
 ### C libm extern: cube root.
-external("C") routine rf_f32_cbrt(value: F32) -> F32
+routine C::rf_f32_cbrt(value: F32) -> F32
 ### C libm extern: base-2 exponential 2^x.
-external("C") routine rf_f32_exp2(value: F32) -> F32
+routine C::rf_f32_exp2(value: F32) -> F32
 ### C libm extern: exp(x) - 1, accurate near zero.
-external("C") routine rf_f32_expm1(value: F32) -> F32
+routine C::rf_f32_expm1(value: F32) -> F32
 ### C libm extern: log(1 + x), accurate near zero.
-external("C") routine rf_f32_log1p(value: F32) -> F32
+routine C::rf_f32_log1p(value: F32) -> F32
 ### C libm extern: base-2 logarithm.
-external("C") routine rf_f32_log2(value: F32) -> F32
+routine C::rf_f32_log2(value: F32) -> F32
 ### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
-external("C") routine rf_f32_hypot(x: F32, y: F32) -> F32
+routine C::rf_f32_hypot(x: F32, y: F32) -> F32
 ### C libm extern: fused multiply-add x*y + z with a single rounding.
-external("C") routine rf_f32_fma(x: F32, y: F32, z: F32) -> F32
+routine C::rf_f32_fma(x: F32, y: F32, z: F32) -> F32
 ### C libm extern: floating-point remainder (C fmod).
-external("C") routine rf_f32_fmod(x: F32, y: F32) -> F32
+routine C::rf_f32_fmod(x: F32, y: F32) -> F32
 ### C libm extern: IEEE remainder (C remainder).
-external("C") routine rf_f32_remainder(x: F32, y: F32) -> F32
+routine C::rf_f32_remainder(x: F32, y: F32) -> F32
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
-external("C") routine rf_f32_fdim(x: F32, y: F32) -> F32
+routine C::rf_f32_fdim(x: F32, y: F32) -> F32
 ### C libm extern: larger of x and y (C fmax).
-external("C") routine rf_f32_fmax(x: F32, y: F32) -> F32
+routine C::rf_f32_fmax(x: F32, y: F32) -> F32
 ### C libm extern: smaller of x and y (C fmin).
-external("C") routine rf_f32_fmin(x: F32, y: F32) -> F32
+routine C::rf_f32_fmin(x: F32, y: F32) -> F32
 ### C libm extern: base-10 exponential 10^x.
-external("C") routine rf_f32_exp10(value: F32) -> F32
+routine C::rf_f32_exp10(value: F32) -> F32
 ### C libm extern: sin(pi*x).
-external("C") routine rf_f32_sinpi(value: F32) -> F32
+routine C::rf_f32_sinpi(value: F32) -> F32
 ### C libm extern: cos(pi*x).
-external("C") routine rf_f32_cospi(value: F32) -> F32
+routine C::rf_f32_cospi(value: F32) -> F32
 ### C libm extern: tan(pi*x).
-external("C") routine rf_f32_tanpi(value: F32) -> F32
+routine C::rf_f32_tanpi(value: F32) -> F32
 ### C libm extern: next representable value after x toward y.
-external("C") routine rf_f32_nextafter(x: F32, y: F32) -> F32
+routine C::rf_f32_nextafter(x: F32, y: F32) -> F32
 ### C libm extern: x * 2^n (C scalbn).
-external("C") routine rf_f32_scalbn(value: F32, n: S64) -> F32
+routine C::rf_f32_scalbn(value: F32, n: S64) -> F32
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
-external("C") routine rf_f32_ilogb(value: F32) -> S64
+routine C::rf_f32_ilogb(value: F32) -> S64
 ### C libm extern: round to nearest integer in the current rounding mode (C rint).
-external("C") routine rf_f32_rint(value: F32) -> F32
+routine C::rf_f32_rint(value: F32) -> F32
 ### C libm extern: error function.
-external("C") routine rf_f32_erf(value: F32) -> F32
+routine C::rf_f32_erf(value: F32) -> F32
 ### C libm extern: complementary error function.
-external("C") routine rf_f32_erfc(value: F32) -> F32
+routine C::rf_f32_erfc(value: F32) -> F32
 ### C libm extern: gamma function.
-external("C") routine rf_f32_tgamma(value: F32) -> F32
+routine C::rf_f32_tgamma(value: F32) -> F32
 ### C libm extern: natural log of the absolute value of gamma.
-external("C") routine rf_f32_lgamma(value: F32) -> F32
+routine C::rf_f32_lgamma(value: F32) -> F32
 
 ### Tangent (radians).
 routine F32.tan() -> F32
-  return rf_f32_tan(value: me)
+  return C::rf_f32_tan(value: me)
 
 ### Arc sine.
 routine F32.asin!() -> F32
@@ -687,7 +682,7 @@ routine F32.asin!() -> F32
 
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_asin`.
 routine F32.asin_unchecked() -> F32
-  return rf_f32_asin(value: me)
+  return C::rf_f32_asin(value: me)
 
 ### Arc cosine.
 routine F32.acos!() -> F32
@@ -700,15 +695,15 @@ routine F32.acos!() -> F32
 
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_acos`.
 routine F32.acos_unchecked() -> F32
-  return rf_f32_acos(value: me)
+  return C::rf_f32_acos(value: me)
 
 ### Arc tangent.
 routine F32.atan() -> F32
-  return rf_f32_atan(value: me)
+  return C::rf_f32_atan(value: me)
 
 ### Two-argument arc tangent atan2(me, x).
 routine F32.atan2(x: F32) -> F32
-  return rf_f32_atan2(y: me, x: x)
+  return C::rf_f32_atan2(y: me, x: x)
 
 ### Hyperbolic sine.
 routine F32.sinh!() -> F32
@@ -721,7 +716,7 @@ routine F32.sinh!() -> F32
 
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_f32_sinh`.
 routine F32.sinh_unchecked() -> F32
-  return rf_f32_sinh(value: me)
+  return C::rf_f32_sinh(value: me)
 
 ### Hyperbolic cosine.
 routine F32.cosh!() -> F32
@@ -734,15 +729,15 @@ routine F32.cosh!() -> F32
 
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_cosh`.
 routine F32.cosh_unchecked() -> F32
-  return rf_f32_cosh(value: me)
+  return C::rf_f32_cosh(value: me)
 
 ### Hyperbolic tangent.
 routine F32.tanh() -> F32
-  return rf_f32_tanh(value: me)
+  return C::rf_f32_tanh(value: me)
 
 ### Inverse hyperbolic sine.
 routine F32.asinh() -> F32
-  return rf_f32_asinh(value: me)
+  return C::rf_f32_asinh(value: me)
 
 ### Inverse hyperbolic cosine.
 routine F32.acosh!() -> F32
@@ -755,7 +750,7 @@ routine F32.acosh!() -> F32
 
 ### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps `rf_f32_acosh`.
 routine F32.acosh_unchecked() -> F32
-  return rf_f32_acosh(value: me)
+  return C::rf_f32_acosh(value: me)
 
 ### Inverse hyperbolic tangent.
 routine F32.atanh!() -> F32
@@ -768,11 +763,11 @@ routine F32.atanh!() -> F32
 
 ### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps `rf_f32_atanh`.
 routine F32.atanh_unchecked() -> F32
-  return rf_f32_atanh(value: me)
+  return C::rf_f32_atanh(value: me)
 
 ### Cube root.
 routine F32.cbrt() -> F32
-  return rf_f32_cbrt(value: me)
+  return C::rf_f32_cbrt(value: me)
 
 ### Base-2 exponential.
 routine F32.exp2!() -> F32
@@ -785,7 +780,7 @@ routine F32.exp2!() -> F32
 
 ### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_exp2`.
 routine F32.exp2_unchecked() -> F32
-  return rf_f32_exp2(value: me)
+  return C::rf_f32_exp2(value: me)
 
 ### exp(me) - 1, accurate near zero.
 routine F32.expm1!() -> F32
@@ -798,7 +793,7 @@ routine F32.expm1!() -> F32
 
 ### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over `rf_f32_expm1`.
 routine F32.expm1_unchecked() -> F32
-  return rf_f32_expm1(value: me)
+  return C::rf_f32_expm1(value: me)
 
 ### log(1 + me), accurate near zero.
 routine F32.log1p!() -> F32
@@ -811,7 +806,7 @@ routine F32.log1p!() -> F32
 
 ### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over `rf_f32_log1p`.
 routine F32.log1p_unchecked() -> F32
-  return rf_f32_log1p(value: me)
+  return C::rf_f32_log1p(value: me)
 
 ### Base-2 logarithm.
 routine F32.log2!() -> F32
@@ -824,7 +819,7 @@ routine F32.log2!() -> F32
 
 ### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_f32_log2`.
 routine F32.log2_unchecked() -> F32
-  return rf_f32_log2(value: me)
+  return C::rf_f32_log2(value: me)
 
 ### Base-10 exponential 10**me.
 routine F32.exp10!() -> F32
@@ -837,7 +832,7 @@ routine F32.exp10!() -> F32
 
 ### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_exp10`.
 routine F32.exp10_unchecked() -> F32
-  return rf_f32_exp10(value: me)
+  return C::rf_f32_exp10(value: me)
 
 ### Hypotenuse sqrt(me^2 + you^2) without overflow.
 routine F32.hypot!(you: F32) -> F32
@@ -850,7 +845,7 @@ routine F32.hypot!(you: F32) -> F32
 
 ### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_f32_hypot`.
 routine F32.hypot_unchecked(you: F32) -> F32
-  return rf_f32_hypot(x: me, y: you)
+  return C::rf_f32_hypot(x: me, y: you)
 
 ### Fused multiply-add me*b + c with a single rounding.
 routine F32.fma!(b: F32, c: F32) -> F32
@@ -863,63 +858,63 @@ routine F32.fma!(b: F32, c: F32) -> F32
 
 ### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_f32_fma`.
 routine F32.fma_unchecked(b: F32, c: F32) -> F32
-  return rf_f32_fma(x: me, y: b, z: c)
+  return C::rf_f32_fma(x: me, y: b, z: c)
 
 ### Floating-point remainder of me/you (C fmod).
 routine F32.fmod(you: F32) -> F32
-  return rf_f32_fmod(x: me, y: you)
+  return C::rf_f32_fmod(x: me, y: you)
 
 ### IEEE remainder of me/you (C remainder).
 routine F32.remainder(you: F32) -> F32
-  return rf_f32_remainder(x: me, y: you)
+  return C::rf_f32_remainder(x: me, y: you)
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine F32.fdim(you: F32) -> F32
-  return rf_f32_fdim(x: me, y: you)
+  return C::rf_f32_fdim(x: me, y: you)
 
 ### Larger of me and you (C fmax).
 routine F32.fmax(you: F32) -> F32
-  return rf_f32_fmax(x: me, y: you)
+  return C::rf_f32_fmax(x: me, y: you)
 
 ### Smaller of me and you (C fmin).
 routine F32.fmin(you: F32) -> F32
-  return rf_f32_fmin(x: me, y: you)
+  return C::rf_f32_fmin(x: me, y: you)
 
 ### sin(pi*me).
 routine F32.sinpi() -> F32
-  return rf_f32_sinpi(value: me)
+  return C::rf_f32_sinpi(value: me)
 
 ### cos(pi*me).
 routine F32.cospi() -> F32
-  return rf_f32_cospi(value: me)
+  return C::rf_f32_cospi(value: me)
 
 ### tan(pi*me).
 routine F32.tanpi() -> F32
-  return rf_f32_tanpi(value: me)
+  return C::rf_f32_tanpi(value: me)
 
 ### Next representable value after me toward you.
 routine F32.nextafter(you: F32) -> F32
-  return rf_f32_nextafter(x: me, y: you)
+  return C::rf_f32_nextafter(x: me, y: you)
 
 ### me * 2^n (C scalbn).
 routine F32.scalbn(n: S64) -> F32
-  return rf_f32_scalbn(value: me, n: n)
+  return C::rf_f32_scalbn(value: me, n: n)
 
 ### Alias of scalbn (C ldexp).
 routine F32.ldexp(n: S64) -> F32
-  return rf_f32_scalbn(value: me, n: n)
+  return C::rf_f32_scalbn(value: me, n: n)
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F32.rint() -> F32
-  return rf_f32_rint(value: me)
+  return C::rf_f32_rint(value: me)
 
 ### Error function.
 routine F32.erf() -> F32
-  return rf_f32_erf(value: me)
+  return C::rf_f32_erf(value: me)
 
 ### Complementary error function.
 routine F32.erfc() -> F32
-  return rf_f32_erfc(value: me)
+  return C::rf_f32_erfc(value: me)
 
 ### Gamma function.
 routine F32.tgamma!() -> F32
@@ -933,41 +928,41 @@ routine F32.tgamma!() -> F32
 ### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
 ### `rf_f32_tgamma`.
 routine F32.tgamma_unchecked() -> F32
-  return rf_f32_tgamma(value: me)
+  return C::rf_f32_tgamma(value: me)
 
 ### Natural log of |gamma(me)|.
 routine F32.lgamma() -> F32
-  return rf_f32_lgamma(value: me)
+  return C::rf_f32_lgamma(value: me)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine F32.trunc() -> F32
-  return float_truncate[F32](me)
+  return LLVM::float_truncate[F32](me)
 
 ### Fractional part me - trunc(me).
 routine F32.frac() -> F32
-  return me - float_truncate[F32](me)
+  return me - LLVM::float_truncate[F32](me)
 
 ### Integer and fractional parts (C modf); both carry me's sign.
 routine F32.modf() -> (F32, F32)
-  var ip = float_truncate[F32](me)
+  var ip = LLVM::float_truncate[F32](me)
   return (ip, me - ip)
 
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
 routine F32.frexp() -> (F32, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
-  var e = add[S64](a: rf_f32_ilogb(value: me), b: 1_s64)
-  return (rf_f32_scalbn(value: me, n: sub[S64](a: 0_s64, b: e)), e)
+  var e = LLVM::add(a: C::rf_f32_ilogb(value: me), b: 1_s64)
+  return (C::rf_f32_scalbn(value: me, n: LLVM::sub(a: 0_s64, b: e)), e)
 
 ### True if the sign bit is set (C signbit).
 routine F32.signbit() -> Bool
-  return int_ne[U32](a: bit_and[U32](a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
+  return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x80000000_u32), b: 0_u32)
 
 ### True for a subnormal (denormalized, nonzero) value.
 routine F32.is_subnormal() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
-  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
+  var exponent = LLVM::bit_and(a: bits, b: 0x7F800000_u32)
+  var mantissa = LLVM::bit_and(a: bits, b: 0x007FFFFF_u32)
   return exponent == 0_u32 and mantissa != 0_u32
 
 ### True for a finite, normal value (nonzero and not subnormal).
@@ -995,9 +990,9 @@ routine F32.fpclassify() -> FpClass
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
 routine f32_order_key(bits: U32) -> U32
-  if int_ne[U32](a: bit_and[U32](a: bits, b: 0x80000000_u32), b: 0_u32)
-    return bit_xor[U32](a: bits, b: 0xFFFFFFFF_u32)
-  return bit_or[U32](a: bits, b: 0x80000000_u32)
+  if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: 0x80000000_u32), b: 0_u32)
+    return LLVM::bit_xor(a: bits, b: 0xFFFFFFFF_u32)
+  return LLVM::bit_or(a: bits, b: 0x80000000_u32)
 
 ### IEEE 754 totalOrder: a total order over all values including signed zeros and NaNs
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
@@ -1010,7 +1005,7 @@ routine F32.total_order(you: F32) -> Bool
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
 routine F32.total_order_mag(you: F32) -> Bool
-  return bit_and[U32](a: me.to_bits(), b: 0x7FFFFFFF_u32) <= bit_and[U32](a: you.to_bits(), b: 0x7FFFFFFF_u32)
+  return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFF_u32) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFF_u32)
 
 # ============================================================================
 # IEEE 754 Tier 2 — stepping, exponent extraction, scaling, selection, rounding
@@ -1036,7 +1031,7 @@ routine F32.logb() -> F32
     return F32_INFINITY
   if me.is_zero()
     return -F32_INFINITY
-  return F32(from: rf_f32_ilogb(value: me))
+  return F32(from: C::rf_f32_ilogb(value: me))
 
 ### IEEE 754 scaleB: `me * 2^n`. Checked: crashes if a finite `me` overflows to ±infinity.
 ### :param n: The power-of-two exponent to apply.

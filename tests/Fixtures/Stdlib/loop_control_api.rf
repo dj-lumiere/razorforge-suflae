@@ -4,13 +4,13 @@ import IO/Console
 # `break` and `continue` in for/while/loop blocks.
 routine start()
   show("--- continue in for ---")
-  for x in 1 to 5
+  each x in 1 to 5
     if x == 3
       continue
     show(f"  for x={x}")
 
   show("--- break in for ---")
-  for x in 1 to 10
+  each x in 1 to 10
     if x > 4
       break
     show(f"  for x={x}")

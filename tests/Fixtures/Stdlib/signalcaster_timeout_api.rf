@@ -4,6 +4,12 @@ module Tests/Stdlib/SignalCasterTimeoutApi
 #   A) no caster ever arrives -> wait_within returns false (timed out).
 #   B) a caster casts well within the deadline -> wait_within returns true (woken in time).
 # All-coroutine on one scheduler: the timed wait parks on a deadline timer that a cast can also wake.
+#
+# B uses the CORRECT condvar contract — a shared predicate tested UNDER the lock (see
+# signalcaster_predicate_api) — so the woken result is race-free at N>1 workers. Without it, a cast that
+# lands before the waiter parks is lost (casts to no waiter are dropped by design), and the wait would
+# run the full deadline and report a timeout. The predicate cell is a raw `Hijacked[S64]` aliasing a slot
+# on start()'s frame, shared by value across the two cooperative coroutines (only one touches it at a time).
 
 import IO/Console
 
@@ -14,28 +20,38 @@ suspended routine wait_alone(sig: SignalCaster) -> S64
   sig.unlock()
   return if woken then 1 else 0
 
-# B: waits up to 10s; a sibling caster wakes it almost immediately -> true -> 1.
-suspended routine wait_for_cast(sig: SignalCaster) -> S64
+# B: waits up to 10s under a shared predicate; a sibling caster sets the flag + wakes it almost
+# immediately. The predicate loop makes this race-free — if the cast lands before we park, the flag is
+# already set and we never wait (woken stays true); if we park first, wait_within returns true on the cast.
+suspended routine wait_for_cast(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+  var woken = true
   sig.lock()
-  var woken = sig.wait_within(deadline: Duration.from_seconds(s: 10))
+  danger
+    while cell.peek() == 0_s64        # predicate, tested under the lock
+      woken = sig.wait_within(deadline: Duration.from_seconds(s: 10))
+      if not woken
+        break                          # deadline elapsed (does not happen here) -> report a timeout
   sig.unlock()
   return if woken then 1 else 0
 
-suspended routine caster(sig: SignalCaster) -> S64
-  sig.cast_one()
+suspended routine caster(sig: SignalCaster, cell: Hijacked[S64]) -> S64
+  danger
+    cell.poke(value: 1_s64)           # make the predicate true...
+  sig.cast_one()                       # ...then wake the waiter
   return 0
 
 routine start()
+  # A: waits alone with nobody to cast -> times out. A single coroutine, so a plain retrieve.
   var sig_a = SignalCaster()
-  var wa = wait_alone(sig: steal sig_a)
+  var timed_out = wait_alone(sig: steal sig_a).retrieve()
 
+  # B: LAZY — launch the waiter + caster TOGETHER (`gather`, input order). Both complete before we read
+  # the shared cell, so the frame-aliased slot stays valid. The shared predicate removes the ordering race.
+  var slot = 0_s64
   var sig_b = SignalCaster()
-  var wb = wait_for_cast(sig: steal sig_b.duplicate())
-  var cb = caster(sig: steal sig_b)
-
   danger
-    var timed_out = wa.retrieve()
-    var woken = wb.retrieve()
-    discard cb.retrieve()
+    var cell = slot.hijack()           # raw pointer to `slot`, copyable -> both coroutines share it
+    var results = [wait_for_cast(sig: steal sig_b.duplicate(), cell: cell), caster(sig: steal sig_b, cell: cell)].gather()
+    var woken = results[0]
     show(f"timed_out={timed_out} woken={woken}")
   return

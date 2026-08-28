@@ -59,7 +59,7 @@ routine start()
 
   # --- Round-trip property: parse(format(x)) == x for many values ---
   var ok = true
-  for x in -100 to 100
+  each x in -100 to 100
     var bytes_opt = try_to_digit_bytes_s64(v: S64(from: x))
     when bytes_opt
       is None => ok = false

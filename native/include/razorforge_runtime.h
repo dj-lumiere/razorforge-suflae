@@ -90,6 +90,17 @@ uintptr_t rf_proc_output_len(void);
 char* rf_proc_errors(void);          /* captured stderr (malloc'd, NUL-terminated) */
 uintptr_t rf_proc_errors_len(void);
 
+/* Current-process signal handlers (Signals.rf: when_interrupted / when_terminated). Registering a
+ * handler suppresses the default termination; the RF closure runs on a dedicated dispatch thread,
+ * outside signal context. which: 0 = interrupt (SIGINT/Ctrl-C), 1 = terminate (SIGTERM/console-close).
+ * handler_box is an RF `Routine[(), None]` closure box (field 0 = void(*)(void*), the lambda ABI). */
+void rf_signal_register(int32_t which, void* handler_box);
+
+/* As rf_signal_register, but the handler is `Routine[(Ctx,), None]` and receives `context` — the raw
+ * pointer of a Roamed[T] / Guarded[T,P] handle (both a single pointer), retained for the process
+ * lifetime by the RF wrapper. On fire the handler is invoked as fn(box, context). */
+void rf_signal_register_ctx(int32_t which, void* handler_box, void* context);
+
 /* Argv builder: spawn an executable directly with an explicit argument vector (no shell). begin sets
  * argv[0] = file; add_arg appends; set_cwd is optional (empty = inherit); run_built launches it
  * (same parking/blocking + accessors as rf_proc_run) and consumes the builder. */
@@ -107,6 +118,13 @@ const char* rf_task_completion_name(rf_task_completion_kind kind);
 
 rf_task* rf_task_create(rf_task_kind kind);
 void rf_task_destroy(rf_task* task);
+void rf_task_release(rf_task* task);
+/* Mark a result task as fire-and-forget (`execute()`): rf_task_complete_value frees it + its result
+ * box, no consumer. Set before the coroutine/thread runs (no complete-before-detach race). */
+void rf_task_set_detached(rf_task* task);
+/* Whether a task is fire-and-forget (`execute()`). Read by the generated entry thunk to destroy the
+ * result instead of boxing it when detached (so an owned return does not leak). */
+uint8_t rf_task_is_detached(rf_task* task);
 
 uint64_t rf_task_id(rf_task* task);
 
@@ -119,34 +137,44 @@ uint64_t rf_current_thread_id(void);
  * thread — else the OS thread id. Only equality matters. See rf_current_task_id in coro_runtime.c. */
 uint64_t rf_current_task_id(void);
 
+/* §4 nested-monitor deadlock detector (opt-in via RF_DEADLOCK_DETECT=1). A contended Roamed
+ * escaped-lock acquire registers its wait (self waits for holder) then walks the wait graph; a
+ * cycle aborts loudly. wait_end clears the wait once acquired. No-ops unless enabled. */
+void rf_deadlock_wait_begin(uint64_t self, uint64_t holder);
+void rf_deadlock_wait_end(uint64_t self);
+
 // Cycle collector (Bacon-Rajan synchronous recycler) — native buffers backing the RF-side collector
 // (Core/Memory/CycleCollector.rf). See internal-wiki/v0.4.x-cycle-collector.md.
 //
-// rf_cc_add_candidate is the SOLE collector entry point: a Roamed strong-decrement that leaves the
+// rf_cyclic_add_candidate is the SOLE collector entry point: a Roamed strong-decrement that leaves the
 // count > 0 reports the controller here as a possible cycle root (the RF side dedups via the
 // controller `buffered` flag first). Pure-RF programs with no Roamed cycles never call it.
-void rf_cc_add_candidate(void* obj);
-uint64_t rf_cc_roots_count(void);
-void* rf_cc_roots_at(uint64_t i);
-void rf_cc_roots_clear(void);
-void rf_cc_roots_remove_front(uint64_t n);  // drop the first n (processed) candidates, keep late ones
-void rf_cc_roots_remove(void* ptr);         // drop one candidate about to be freed (eager release path)
+void rf_cyclic_add_candidate(void* obj);
+uint64_t rf_cyclic_roots_count(void);
+void* rf_cyclic_roots_at(uint64_t i);
+void rf_cyclic_roots_clear(void);
+void rf_cyclic_roots_remove_front(uint64_t n);  // drop the first n (processed) candidates, keep late ones
+void rf_cyclic_roots_remove(void* ptr);         // drop one candidate about to be freed (eager release path)
 // scratch = one controller's children, filled by its trace hook and drained by RF.
-void rf_cc_scratch_reset(void);
-uint64_t rf_cc_scratch_count(void);
-void* rf_cc_scratch_at(uint64_t i);
-void rf_cc_visit_child(void* child_ctrl);      // called by a per-type trace hook
+void rf_cyclic_scratch_reset(void);
+uint64_t rf_cyclic_scratch_count(void);
+void* rf_cyclic_scratch_at(uint64_t i);
+void rf_cyclic_visit_child(void* child_ctrl);      // called by a per-type trace hook
 // reap = deferred-free buffer for collected white controllers.
-void rf_cc_reap_push(void* ctrl);
-uint64_t rf_cc_reap_count(void);
-void* rf_cc_reap_at(uint64_t i);
-void rf_cc_reap_clear(void);
-void rf_cc_trace_into_scratch(void* trace_hook, void* controller);  // SOLE trace indirect-call site
-void rf_cc_invoke_free(void* free_hook, void* controller);          // free indirect-call site
+void rf_cyclic_reap_push(void* ctrl);
+uint64_t rf_cyclic_reap_count(void);
+void* rf_cyclic_reap_at(uint64_t i);
+void rf_cyclic_reap_clear(void);
+void rf_cyclic_trace_into_scratch(void* trace_hook, void* controller);  // SOLE trace indirect-call site
+void rf_cyclic_invoke_free(void* free_hook, void* controller);          // free indirect-call site
 // Auto-collection trigger (candidate-set threshold; RF_CC_THRESHOLD env, default 128).
-int rf_cc_should_collect(void);
-void rf_cc_enter_collect(void);
-void rf_cc_exit_collect(void);
+int rf_cyclic_should_collect(void);
+void rf_cyclic_enter_collect(void);
+void rf_cyclic_exit_collect(void);
+// Stop-the-world cooperation: mutators (RoamController hold/unhold) bracket their count/state mutation in
+// the shared lock; enter/exit_collect above take it EXCLUSIVE. See coro_runtime.c for the full protocol.
+void rf_cyclic_lock_shared(void);
+void rf_cyclic_unlock_shared(void);
 
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
@@ -247,6 +275,10 @@ rf_coro_status rf_coro_status_get(rf_coro* coro);
 /* Free the coroutine and its stack. Caller must not delete a coroutine that is currently
  * running, nor one parked with live cancellation frames — use rf_coro_abandon for that. */
 void rf_coro_delete(rf_coro* coro);
+
+/* Mark a coroutine as fire-and-forget (`execute()`): the worker that completes it frees it, no
+ * consumer. Call BEFORE rf_sched_spawn_default so it is published before any worker runs it. */
+void rf_coro_set_detached(rf_coro* coro);
 
 /* Cancellation shadow stack (Phase 3). Push/pop are called by code running INSIDE the
  * coroutine (scope entry / normal scope exit); abandon is called by the host on a parked or

@@ -5,7 +5,7 @@ using TypeModel.Enums;
 namespace TypeModel.Types;
 
 /// <summary>
-/// Represents the 'Me' type in protocol method signatures.
+/// Represents the 'Me' type in protocol memberRoutine signatures.
 /// This is a placeholder that represents the implementing type.
 /// Similar to 'Self' in Rust or 'Self' in Swift.
 /// </summary>

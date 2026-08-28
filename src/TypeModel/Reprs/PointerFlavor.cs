@@ -17,18 +17,18 @@ public enum PointerFlavor
     Viewing,
     /// <summary>Modifying borrow (Modifying[T]).</summary>
     Modifying,
-    /// <summary>Inspecting borrow (read-only, internal use).</summary>
-    Inspecting,
-    /// <summary>Claiming borrow (exclusive, internal use).</summary>
-    Claiming,
+    /// <summary>Consulting borrow (read-only, internal use).</summary>
+    Consulting,
+    /// <summary>Amending borrow (exclusive, internal use).</summary>
+    Amending,
     /// <summary>Reference-counted shared pointer (Retained[T]).</summary>
     Retained,
     /// <summary>Tracked ownership pointer (Tracked[T]).</summary>
     Tracked,
-    /// <summary>Shared ownership pointer (deferred concurrency use).</summary>
-    Shared,
-    /// <summary>Watched wrapper pointer (marker-protocol conformance).</summary>
-    Watched,
+    /// <summary>Guarded ownership pointer (deferred concurrency use).</summary>
+    Guarded,
+    /// <summary>Witnessed wrapper pointer (marker-protocol conformance).</summary>
+    Witnessed,
     /// <summary>Unsafe hijack borrow (Hijacked[T]).</summary>
     Hijacked,
     /// <summary>Untyped raw pointer (CPtr / Address).</summary>

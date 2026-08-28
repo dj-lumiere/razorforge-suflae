@@ -55,7 +55,7 @@ routine back_to_front() -> S64
 routine zombie_negation!(x: S8) -> S8
   if x == -128_s8
     throw IntegerOverflowError()
-  return sub[S8](a: 0, b: x)
+  return LLVM::sub[S8](a: 0, b: x)
 
 # loop_the_loop: bare loop with break, counting by wrapping increments
 routine loop_the_loop() -> S64

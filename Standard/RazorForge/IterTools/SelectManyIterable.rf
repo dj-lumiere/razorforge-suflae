@@ -46,7 +46,7 @@ needs Sub obeys Iterable[U]
 ### Returns the next value from the current inner buffer, refilling it as needed.
 ### The emitter calls `emit!` on the outer source whenever the buffer is exhausted.
 ### :returns: The resulting `U` value.
-@migratable
+@reshaping
 routine SelectManyEmittable[T, U, Sub, SE].emit!() -> U
   danger
     loop

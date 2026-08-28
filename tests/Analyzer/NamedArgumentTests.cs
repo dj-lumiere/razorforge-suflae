@@ -308,7 +308,7 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_MemberRoutine_OneNonMeParam_Positional_NoS510()
+    public void Analyze_memberRoutine_OneNonMeParam_Positional_NoS510()
     {
         string source = """
                         record Point
@@ -336,7 +336,7 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_MemberRoutine_ThreeNonMeParams_Positional_ReportsS510()
+    public void Analyze_memberRoutine_ThreeNonMeParams_Positional_ReportsS510()
     {
         // `me` is excluded from the param count; 3 explicit positional args trip S510.
         string source = """
@@ -460,6 +460,25 @@ public class NamedArgumentTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+    }
+    /// <summary>
+    /// Foreign (C::) routines are positional by nature — their parameter identity is argument
+    /// order + types, not names — so a 3+-param all-positional C:: call must NOT report S510.
+    /// This is the gap the SDL2 FFI milestone surfaced (SDL_CreateWindow has 6 params).
+    /// </summary>
+    [Fact]
+    public void Analyze_ForeignRoutine_ThreeParams_AllPositional_NoS510()
+    {
+        string source = """
+                        routine C::sdl_make(a: S32, b: S32, c: S32) -> S32
+                        routine main()
+                          C::sdl_make(1, 2, 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
 

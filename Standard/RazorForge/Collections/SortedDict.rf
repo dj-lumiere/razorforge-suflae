@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 secret preset B_DICT: U64 = 64u64
 secret preset MIN_KEYS_DICT: U64 = 31u64
@@ -110,7 +110,7 @@ routine BTreeDictNode[K, V].value_get(i: U64) -> V
 ### Builds a {DictEntry[K, V]} from the entry at slot `i`, taking OWNED copies of the key and value.
 ### The key/value are bound to locals first so the copy pass injects a retaining `store` (a bare
 ### `key_get(i)` call-result argument would NOT be copied, leaving the entry aliasing the buffer's
-### refcounted controller — a double-free when the entry is torn down). Mirrors FastDict's iterator.
+### refcounted controller — a double-free when the entry is torn down). Mirrors Dict's iterator.
 ### :param i: Zero-based entry index.
 ### :returns: An owning {DictEntry[K, V]} copy of the entry at position `i`.
 @readonly
@@ -295,7 +295,7 @@ routine BTreeDictNode[K, V].children_truncate(n: U64)
 ### :param other: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of entries to copy.
-routine BTreeDictNode[K, V].entries_add_range_from(other: Referring[BTreeDictNode[K, V]], start: U64, count: U64)
+routine BTreeDictNode[K, V].entries_add_range_from(other: Accessing[BTreeDictNode[K, V]], start: U64, count: U64)
   if count > 0u64
     danger
       var k_elem_size = K.data_size()
@@ -313,7 +313,7 @@ routine BTreeDictNode[K, V].entries_add_range_from(other: Referring[BTreeDictNod
 ### :param other: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of child pointers to copy.
-routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNode[K, V]], start: U64, count: U64)
+routine BTreeDictNode[K, V].children_add_range_from(other: Accessing[BTreeDictNode[K, V]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = Address.data_size()
@@ -329,9 +329,9 @@ routine BTreeDictNode[K, V].children_add_range_from(other: Referring[BTreeDictNo
 
 routine BTreeDictNode[K, V](is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
-    entry_keys: zero_value[Array[K, 63]](),
-    entry_values: zero_value[Array[V, 63]](),
-    children: zero_value[Array[BTreeDictNode[K, V], 64]](),
+    entry_keys: LLVM::zero_value[Array[K, 63]](),
+    entry_values: LLVM::zero_value[Array[V, 63]](),
+    children: LLVM::zero_value[Array[BTreeDictNode[K, V], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -377,11 +377,11 @@ routine SortedDict[K, V].clear()
 ### :returns: Smallest index `i` where `node.keys[i] >= key`, or `keys_count()` if all keys are smaller.
 @readonly
 @inline
-routine SortedDict[K, V].lower_bound(node: Referring[BTreeDictNode[K, V]], key: K) -> U64
+routine SortedDict[K, V].lower_bound(node: Accessing[BTreeDictNode[K, V]], key: K) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
-    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.key_get(mid) < key
       lo = mid +% 1u64
     else
@@ -409,7 +409,7 @@ routine SortedDict[K, V].contains(key: K) -> Bool
 ### :returns: `true` if found anywhere in the subtree.
 @readonly
 @inline
-routine SortedDict[K, V].search_node(node: Referring[BTreeDictNode[K, V]], key: K) -> Bool
+routine SortedDict[K, V].search_node(node: Accessing[BTreeDictNode[K, V]], key: K) -> Bool
   danger
     var i = me.lower_bound(node: node, key: key)
     if i < node.keys_count() and key == node.key_get(i)
@@ -423,7 +423,7 @@ routine SortedDict[K, V].search_node(node: Referring[BTreeDictNode[K, V]], key: 
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-routine SortedDict[K, V].getitem!(key: Referring[K]) -> V
+routine SortedDict[K, V].getitem!(key: Accessing[K]) -> V
   if me.root is None
     throw KeyNotFoundError(key: key.represent())
   danger
@@ -436,7 +436,7 @@ routine SortedDict[K, V].getitem!(key: Referring[K]) -> V
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[K, V]], key: K) -> V
+routine SortedDict[K, V].get_from_node!(node: Accessing[BTreeDictNode[K, V]], key: K) -> V
   danger
     var i = me.lower_bound(node: node, key: key)
     if i < node.keys_count() and key == node.key_get(i)
@@ -449,7 +449,7 @@ routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[K, V]], ke
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine SortedDict[K, V].setitem!(key: Referring[K], value: V)
+routine SortedDict[K, V].setitem!(key: Accessing[K], value: V)
   if key notin me
     absent
   discard me.add(key: key, value: value)
@@ -532,7 +532,7 @@ routine SortedDict[K, V].insert_non_full(node: Controlling[BTreeDictNode[K, V]],
 routine SortedDict[K, V].split_child(parent_node: Controlling[BTreeDictNode[K, V]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = unsigned_div[U64](B_DICT -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div(B_DICT -% 1u64, 2u64)
 
     var new_node_ptr = BTreeDictNode[K, V](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()
@@ -644,7 +644,7 @@ routine SortedDict[K, V].remove_from_node(node: Controlling[BTreeDictNode[K, V]]
 ### :param idx: Index of the separator entry whose left child to descend.
 ### :returns: The in-order predecessor entry.
 @inline
-routine SortedDict[K, V].get_predecessor(node: Referring[BTreeDictNode[K, V]], idx: U64) -> DictEntry[K, V]
+routine SortedDict[K, V].get_predecessor(node: Accessing[BTreeDictNode[K, V]], idx: U64) -> DictEntry[K, V]
   danger
     var current = node.children_get(idx).as_entity()
     while not current.is_leaf
@@ -657,7 +657,7 @@ routine SortedDict[K, V].get_predecessor(node: Referring[BTreeDictNode[K, V]], i
 ### :param idx: Index of the separator entry whose right child to descend.
 ### :returns: The in-order successor entry.
 @inline
-routine SortedDict[K, V].get_successor(node: Referring[BTreeDictNode[K, V]], idx: U64) -> DictEntry[K, V]
+routine SortedDict[K, V].get_successor(node: Accessing[BTreeDictNode[K, V]], idx: U64) -> DictEntry[K, V]
   danger
     var current = node.children_get(idx +% 1u64).as_entity()
     while not current.is_leaf
@@ -786,25 +786,12 @@ routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
     var root_ref = me.root!!.as_entity()
     return me.get_by_rank_node(node: root_ref, rank: i)
 
-### Returns the entry addressed by a back index in sorted order.
-### `^1` is the entry with the largest key, `^2` the second-largest, and so on.
-### :param i: The backward sorted rank to resolve.
-### :returns: The {DictEntry[K, V]} at the resolved sorted position.
-@readonly
-routine SortedDict[K, V].get_by_rank!(i: BackIndex) -> DictEntry[K, V]
-  var rank = i.resolve(me.count)
-  if rank >= me.count
-    throw IndexOutOfBoundsError(index: rank, count: me.count)
-  danger
-    var root_ref = me.root!!.as_entity()
-    return me.get_by_rank_node(node: root_ref, rank: rank)
-
 ### Returns the entry at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The {DictEntry[K, V]} at that rank.
 @readonly
-routine SortedDict[K, V].get_by_rank_node(node: Referring[BTreeDictNode[K, V]], rank: U64) -> DictEntry[K, V]
+routine SortedDict[K, V].get_by_rank_node(node: Accessing[BTreeDictNode[K, V]], rank: U64) -> DictEntry[K, V]
   danger
     if node.is_leaf
       return node.entry_get(rank)
@@ -841,7 +828,7 @@ routine SortedDict[K, V].get_or(key: K, default: V) -> V
 ### :param default: The fallback value returned when `key` is absent.
 ### :returns: The mapped value if found, otherwise `default`.
 @readonly
-routine SortedDict[K, V].get_or_from_node(node: Referring[BTreeDictNode[K, V]], key: K, default: V) -> V
+routine SortedDict[K, V].get_or_from_node(node: Accessing[BTreeDictNode[K, V]], key: K, default: V) -> V
   danger
     var i = me.lower_bound(node: node, key: key)
     if i < node.keys_count() and key == node.key_get(i)
@@ -916,7 +903,7 @@ routine SortedDict[K, V].keys() -> List[K]
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append keys into.
 @readonly
-routine SortedDict[K, V].collect_keys(node: Referring[BTreeDictNode[K, V]], result: Controlling[List[K]])
+routine SortedDict[K, V].collect_keys(node: Accessing[BTreeDictNode[K, V]], result: Controlling[List[K]])
   danger
     var i = 0u64
     while i < node.keys_count()
@@ -945,7 +932,7 @@ routine SortedDict[K, V].values() -> List[V]
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append values into.
 @readonly
-routine SortedDict[K, V].collect_values(node: Referring[BTreeDictNode[K, V]], result: Controlling[List[V]])
+routine SortedDict[K, V].collect_values(node: Accessing[BTreeDictNode[K, V]], result: Controlling[List[V]])
   danger
     var i = 0u64
     while i < node.keys_count()
@@ -966,7 +953,7 @@ routine SortedDict[K, V].collect_values(node: Referring[BTreeDictNode[K, V]], re
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The entry at that rank.
 @readonly
-routine SortedDict[K, V].get_by_rank(node: Referring[BTreeDictNode[K, V]], rank: U64) -> DictEntry[K, V]
+routine SortedDict[K, V].get_by_rank(node: Accessing[BTreeDictNode[K, V]], rank: U64) -> DictEntry[K, V]
   danger
     if node.is_leaf
       return node.entry_get(rank)
@@ -1011,7 +998,7 @@ routine List[DictEntry[K, V]](from: SortedDict[K, V]) -> List[DictEntry[K, V]]
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append entries into.
 @readonly
-routine SortedDict[K, V].collect_inorder(node: Referring[BTreeDictNode[K, V]], result: Controlling[List[DictEntry[K, V]]])
+routine SortedDict[K, V].collect_inorder(node: Accessing[BTreeDictNode[K, V]], result: Controlling[List[DictEntry[K, V]]])
   danger
     var i = 0u64
     while i < node.keys_count()
@@ -1046,36 +1033,35 @@ routine SortedDictEmittable[K, V].emit!() -> DictEntry[K, V]
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine SortedDict[K, V].represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     i = i +% 1u64
   result = result + "})"
   return steal result
 
-@readonly
+@[readonly, override]
 routine SortedDict[K, V].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var i = 0u64
-  for entry in me
+  each entry in me
     if i > 0u64
       result = result + ", "
-    result = result + entry.key.represent() + ": " + entry.value.represent()
+    result = result + nested_repr(entry.key) + ": " + nested_repr(entry.value)
     i = i +% 1u64
   result = result + "})"
   return steal result
 
 ### Serializes this dictionary to a `SerialValue.Dict`; keys render via `represent`, values serialize.
 ### :returns: The `SerialValue.Dict` mapping each key's text to its value's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine SortedDict[K, V].serialize() -> SerialValue
-needs V obeys Serializable
   var __sv = Dict[Text, SerialValue]()
-  for __e in me
+  each __e in me
     discard __sv.add(key: __e.key.represent(), value: __e.value.serialize())
   return SerialValue(steal __sv)

@@ -9,10 +9,10 @@ using static TestHelpers;
 /// Tests for the generalized <c>needs T in [Types]</c> (type-equality) constraint when the
 /// constrained parameter is INHERITED FROM THE RECEIVER rather than supplied as an explicit type
 /// argument at the call site — e.g. <c>Box[T].only_ab() needs T in [Alpha, Beta]</c> called on a
-/// <c>Box[Gamma]</c>, or the stdlib <c>Shared[T, P].claim() needs P in [Exclusive, MultiRead]</c>.
+/// <c>Box[Gamma]</c>, or the stdlib <c>Guarded[T, P].amend() needs P in [Exclusive, MultiRead]</c>.
 ///
-/// Such constraints used to be silently dropped during method resolution (the resolved instance
-/// method kept only constraints on its OWN generic params, discarding owner-param constraints), so
+/// Such constraints used to be silently dropped during memberRoutine resolution (the resolved instance
+/// memberRoutine kept only constraints on its OWN generic params, discarding owner-param constraints), so
 /// they went unchecked. The fix preserves owner-param TypeEquality constraints through resolution
 /// and validates them at the call site against the receiver's bound argument (RF-S160).
 /// </summary>
@@ -67,11 +67,11 @@ public class ReceiverInheritedConstraintTests
 
     #endregion
 
-    #region Stdlib lock-policy instantiation (Shared[T, P].inspect/claim)
+    #region Stdlib lock-policy instantiation (Guarded[T, P].consult/amend)
 
     private const string LockPrelude = """
                                        import IO/Console
-                                       import BuilderService
+                                       import BuilderQuery
 
                                        entity Counter
                                          value: S64
@@ -83,8 +83,8 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[ReadOnly]()
-                                        using s.claim() as c
+                                        var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
+                                        using s.amend() as c
                                           show("nope")
                                         return
                                       """;
@@ -100,8 +100,8 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[Exclusive]()
-                                        using s.inspect() as v
+                                        var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
+                                        using s.consult() as v
                                           show("nope")
                                         return
                                       """;
@@ -119,10 +119,10 @@ public class ReceiverInheritedConstraintTests
                                         return
 
                                       routine start()
-                                        var s = Counter(value: 10).share[MultiRead]()
-                                        using s.inspect() as v
+                                        var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
+                                        using s.consult() as v
                                           show(f"value: {v.value}")
-                                        using s.claim() as c
+                                        using s.amend() as c
                                           c.bump(inc: 5)
                                         return
                                       """;
@@ -140,8 +140,8 @@ public class ReceiverInheritedConstraintTests
                                         return
 
                                       routine start()
-                                        var s = Counter(value: 1).share[Exclusive]()
-                                        using s.claim() as c
+                                        var s = Guarded[Counter, Exclusive](from: Counter(value: 1))
+                                        using s.amend() as c
                                           c.bump(inc: 1)
                                         return
                                       """;
@@ -155,8 +155,8 @@ public class ReceiverInheritedConstraintTests
     {
         string source = LockPrelude + """
                                       routine start()
-                                        var s = Counter(value: 1).share[ReadOnly]()
-                                        using s.inspect() as v
+                                        var s = Guarded[Counter, ReadOnly](from: Counter(value: 1))
+                                        using s.consult() as v
                                           show(f"{v.value}")
                                         return
                                       """;

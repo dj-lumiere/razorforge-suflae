@@ -32,7 +32,7 @@ title: "글감 메모 (발행 안 됨 — _drafts 폴더는 사이트에 노출�
            (주의: 한 문장 양념으로만 — 기둥 논거로 쓰면 역공 빌미)
     - 대신 RazorForge가 하는 것: 스코프에 묶인 빌림 (반환/저장 불가), `steal` 명시 이전,
       탈출하는 참조는 Hijacked/RC
-    - "거절"이 아니라 "유예": readers-XOR-writer는 멀티스레드 티어(Inspecting/Claiming)에서
+    - "거절"이 아니라 "유예": readers-XOR-writer는 멀티스레드 티어(Consulting/Amending)에서
       돌아옴 — 멀티스레드에서는 필요함을 강조
 2. 굳이 키워드를 전통적인 이름으로 쓰지 않고 다른 이름을 쓰는 이유
     - 자연어 친화적인 키워드를 고집하게 됨

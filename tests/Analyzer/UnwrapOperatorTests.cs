@@ -341,7 +341,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region $unwrap / $unwrap_or are recognized as valid wired methods
+    #region $unwrap / $unwrap_or are recognized as valid wired memberRoutines
 
     /// <summary>
     /// Verifies that the test validates declared on record no unknown wired error.
@@ -481,26 +481,26 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region GetMethodName mapping ??$unwrap and $unwrap_or registered
+    #region GetMemberRoutineName mapping ??$unwrap and $unwrap_or registered
 
     /// <summary>
-    /// Verifies that the test validates unwrap get method name and returns the unwrap method name.
+    /// Verifies that the test validates unwrap get memberRoutine name and returns the unwrap memberRoutine name.
     /// </summary>
     [Fact]
-    public void ForceUnwrap_GetMethodName_ReturnsUnwrap()
+    public void ForceUnwrap_GetMemberRoutineName_ReturnsUnwrap()
     {
         UnaryOperator op = UnaryOperator.ForceUnwrap;
-        Assert.Equal(expected: "unwrap", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap", actual: op.GetMemberRoutineName());
     }
 
     /// <summary>
-    /// Verifies that the test validates coalesce get method name and returns the unwrap-or method name.
+    /// Verifies that the test validates coalesce get memberRoutine name and returns the unwrap-or memberRoutine name.
     /// </summary>
     [Fact]
-    public void NoneCoalesce_GetMethodName_ReturnsUnwrapOr()
+    public void NoneCoalesce_GetMemberRoutineName_ReturnsUnwrapOr()
     {
         BinaryOperator op = BinaryOperator.NoneCoalesce;
-        Assert.Equal(expected: "unwrap_or", actual: op.GetMethodName());
+        Assert.Equal(expected: "unwrap_or", actual: op.GetMemberRoutineName());
     }
 
     #endregion

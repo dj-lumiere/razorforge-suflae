@@ -1,29 +1,37 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
-### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Shared[T, P]}.
+### Biased-reference-counted handle — the auto-promoting hybrid of {Retained[T]} and {Guarded[T, P]}.
 ### Thin pointer to {RoamController[T]}. Backs Suflae's `entity` (the monitor-flavored actor): behaves
 ### like {Retained[T]} (non-atomic, unlocked, fast) while it stays on one thread, and — the moment it
 ### escapes across a concurrency boundary — promotes itself to atomic reference counting plus a
 ### reentrant, task-keyed exclusive lock that serializes all access (the actor "one at a time"
 ### guarantee). Aliasing is free (`.roam()`), so `b = a` maps here, NOT to a bare single-owner entity.
 ###
-### **Access is lock-wrapped, NEVER coerced.** `Roamed` deliberately does NOT `obeys Controlling[T]`
-### and has NO `refer`/`control`: those hand out a raw inner reference that would bypass the lock
-### and break escaped-mode serialization. Real access goes through compiler-inserted `lock_enter` /
-### `lock_exit` wrapping (Stage 2). The `borrow()` here is a Stage-1 test hatch only.
+### **Access is coerced through `control`/`access`, with the lock applied TRANSPARENTLY.** `Roamed`
+### `obeys Controlling[T]`: a deref (method dispatch on a `Roamed` receiver, or passing one to a
+### `Controlling[T]`/`Accessing[T]` parameter) coerces to the inner entity via `control()`/`access()`.
+### That coercion does NOT bypass serialization — the compiler's lock-bracket lowering wraps the
+### enclosing access scope in `lock_enter`/`lock_exit` (no-op in LOCAL mode, a reentrant task-keyed
+### acquire once ESCAPED), so Suflae code never sees the lock while access stays serialized. Holding a
+### handle is a strong reference, so the inner is never dangling. (The scope is per-access on the
+### explicit RazorForge side, per-access-scope on the Suflae side, chosen by the lock-bracket pass.)
 ###
-### **Stage 1 (this file): manually driven.** `.roam()` / `.promote()` / `lock_enter()` are called by
-### hand; the compiler does not yet auto-insert them. The cycle collector
-### (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion recycler — it is just
-### Stage-1 manually driven: hooks are wired by hand and `cc_collect` is called explicitly, so cycles
-### are reclaimed only where the collector is actually run (they are NOT auto-collected yet, but the
-### collector is not a stub). `Roamed` is a plain record, not yet registered as an RC wrapper in
-### RuntimeContract.
+### **Insertion is compiler-driven in Suflae.** `Roamed` IS registered as an RC wrapper
+### (`RuntimeContract.RcWrapperBaseNames` / `RcCopyVerb`); the aliasing `roam()`, spawn-boundary
+### `promote()`, and field-access `lock_enter()`/`lock_exit()` are auto-inserted — `roam` by
+### `SuflaeEntityLoweringPass` on entity bindings, `promote`/`lock_enter`/`lock_exit` by codegen
+### (Stage 2b/2c). Reachability seeds these via `ImplicitCallContract` (they have no surface AST call).
+### In pure RazorForge the same handles are driven explicitly (see `roamed_cycle_api.rf`: `.roam()` /
+### `.raw_inner()` by hand). Display is TRANSPARENT: `Roamed` declares no `represent`/`diagnose` —
+### codegen's `RoamedTransparency` re-resolves `f"{roamed}"` to the inner value's.
+### The cycle collector (`Core/Memory/CycleCollector.rf`) is a COMPLETE Bacon-Rajan trial-deletion
+### recycler; its trace hooks are auto-synthesized, but `cyclic_collect` is still invoked explicitly
+### (no auto-scheduling yet), so cycles are reclaimed only where the collector is actually run.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
-record Roamed[T]
+record Roamed[T] obeys Controlling[T]
 needs T is EntityType
   pass
 
@@ -31,15 +39,12 @@ needs T is EntityType
 # Construction
 # ============================================================================
 
-### Wraps this entity in a {Roamed[T]} (LOCAL mode: non-atomic, unlocked). Named `roam` to match the
-### {Retained} pattern (`T.retain()` constructs, `Retained.retain()` copies): here `T.roam()`
-### constructs and `Roamed.roam()` copies, so the RC machinery's single copy-verb model applies.
-### Ownership transfers to the RC system; the original binding is invalidated.
-### :returns: The resulting `Roamed[T]` value.
-routine T.roam() -> Roamed[T]
+### Constructor form: `Roamed[T](from: n)` routes here. Ownership of the entity moves into the RC system.
+### This is what an SF `entity` slot lowers to (SuflaeEntityLoweringPass builds this constructor call).
+routine Roamed[T].create(from: T) -> Roamed[T]
 needs T is EntityType
   danger
-    var ctrl = RoamController[T](data: me.hijack()).hijack()
+    var ctrl = RoamController[T](data: from.hijack()).hijack()
     return Roamed[T](ctrl)
 
 ### The absent `Roamed[T]` — a null handle owning nothing. Lets an entity with a `Roamed[T]` field be
@@ -70,20 +75,13 @@ needs T is EntityType
 ### Returns a new alias to the same object (biased retain), or the absent handle unchanged. This is
 ### what `b = a` lowers to.
 ### :returns: A new handle sharing the same underlying entity.
-routine Roamed[T].roam() -> Roamed[T]
+routine Roamed[T].share() -> Roamed[T]
   danger
     if me.controller_address() != 0_addr
       var ctrl = Hijacked[RoamController[T]](me).as_entity()
-      ctrl.retain()
+      ctrl.hold()
   return me
 
-### Decrements the strong count, destroying the entity at zero. A no-op on the absent handle.
-dangerous routine Roamed[T].release()
-  if me.controller_address() == 0_addr
-    return
-  var ctrl = Hijacked[RoamController[T]](me).as_entity()
-  ctrl.release()
-  return
 
 # ============================================================================
 # Escape + access lock. In Stage 2 the compiler inserts these automatically (promote at the
@@ -127,13 +125,25 @@ routine Roamed[T].strong_count() -> U64
     var ctrl = Hijacked[RoamController[T]](me).as_entity()
     return ctrl.strong_count()
 
+### Mints a NON-PINNING weak observation of this entity — ObjectHacker's `watch`. The returned
+### {Watching[T]} does NOT keep the entity alive, but survives its death as a tombstone view so
+### `is_alive()`/`is_destroyed()` stay answerable. The absent handle yields an absent observation.
+### :returns: A `Watching[T]` observing this entity's controller.
+routine Roamed[T].watch() -> Watching[T]
+  danger
+    if me.controller_address() == 0_addr
+      return Watching[T](ctrl: 0_addr)
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    ctrl.observe()
+    return Watching[T](ctrl: me.controller_address())
+
 ### Reports this handle's controller to the collector as a traced child. The compiler-synthesized
 ### `roam_trace_impl` calls this for each `Roamed` field of an entity, so the collector sees the
 ### object graph's strong edges. A none handle owns no edge and is skipped. Runs inside the (dangerous)
 ### synthesized trace, so no `danger` here.
-dangerous routine Roamed[T].cc_visit_self()
+dangerous routine Roamed[T].cyclic_visit()
   if me.controller_address() != 0_addr
-    rf_cc_visit_child(child_ctrl: me.controller_address())
+    C::rf_cyclic_visit_child(child_ctrl: me.controller_address())
   return
 
 ### The address of the underlying {RoamController[T]} — the collector's currency and a Stage-1 test
@@ -144,34 +154,54 @@ dangerous routine Roamed[T].cc_visit_self()
 routine Roamed[T].controller_address() -> Address
   return Hijacked[RoamController[T]](me).get_address()
 
-### The inner entity as a raw, UNLOCKED reference — STAGE-1/2 TEST HATCH ONLY. Real access is lock-wrapped
-### by the compiler (Stage 2c); this must never become `refer`/`control` (they would hand out a
-### lock-bypassing reference).
+### The inner entity as a raw reference. Real access is lock-wrapped by the compiler's lock-bracket
+### lowering around the enclosing access scope, so this coercion is safe: it is the deref half, the
+### bracket pass is the lock half. Kept as the low-level plumbing name behind `access`/`control`.
 ### :returns: The inner entity.
 dangerous routine Roamed[T].raw_inner() -> T
   var ctrl = Hijacked[RoamController[T]](me).as_entity()
   return ctrl.data_ptr().as_entity()
 
 # ============================================================================
+# Marker-protocol coercion (access/control) — yields the inner entity as T. The access lock is applied
+# transparently by the compiler's lock-bracket lowering around the enclosing scope (see class doc),
+# so these do NOT bypass escaped-mode serialization.
+# ============================================================================
+
+### Yields the inner entity as an in-flight `T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
+### :returns: The inner entity as `T`.
+@[readonly, inline]
+routine Roamed[T].access() -> T
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.data_ptr().as_entity()
+
+### Yields the inner entity as an in-flight `T` reference for read/write access.
+### Inserted implicitly at call sites whose parameter is `Controlling[T]`, and at method-dispatch
+### deref on a `Roamed` receiver.
+### :returns: The inner entity as `T`.
+@inline
+routine Roamed[T].control() -> T
+  danger
+    var ctrl = Hijacked[RoamController[T]](me).as_entity()
+    return ctrl.data_ptr().as_entity()
+
+# ============================================================================
 # Display (opaque — the inner value is reachable only through the lock in real use)
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
-@readonly
-routine Roamed[T].represent() -> Text
-  danger
-    return me.type_name()
+# `represent`/`diagnose` are intentionally NOT declared on `Roamed[T]`: the wrapper is display-
+# transparent, so codegen's `RoamedTransparency.Project` re-resolves `f"{roamed}"` / `roamed.diagnose()`
+# to the INNER value's display routine (never showing "Roamed[...]"). Declaring them here would shadow
+# the inner and reintroduce the opaque-wrapper rendering.
 
-### Returns the diagnostic representation of this value.
-### :returns: The resulting `Text` value.
-@readonly
-routine Roamed[T].diagnose() -> Text
-  danger
-    var ctrl = Hijacked[RoamController[T]](me).as_entity()
-    var rc = ctrl.strong_count()
-    return me.type_name() + "(holding: " + rc.represent() + ", escaped: " + ctrl.is_escaped().represent() + ")"
-
+### Decrements the biased count, tearing down the entity at zero. A no-op on the absent handle. This IS
+### the decrement — no separate `release` verb; `destroy` is the teardown (calls the RoamController's
+### own `release` count primitive, a different type — no recursion).
 dangerous routine Roamed[T].destroy()
-  me.release()
+  if me.controller_address() == 0_addr
+    return
+  var ctrl = Hijacked[RoamController[T]](me).as_entity()
+  ctrl.unhold()
   return

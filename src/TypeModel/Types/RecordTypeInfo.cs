@@ -23,6 +23,10 @@ public class RecordTypeInfo : TypeInfo
     /// <summary>MemberVariables declared in this record.</summary>
     public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
+    /// <summary>Decl-position <c>expand</c> column templates (SoA layout). Populated only on a generic
+    /// definition; the registry materializes one member per source-type field at instantiation.</summary>
+    public List<MemberExpandTemplateInfo> ExpandTemplates { get; set; } = [];
+
     /// <summary>Protocols this record implements (obeys).</summary>
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
@@ -87,7 +91,7 @@ public class RecordTypeInfo : TypeInfo
         foreach (MemberVariableInfo mv in MemberVariables)
         {
             int memberSize = mv.Type.SizeBytes(pointerSize: pointerSize);
-            int alignment = Math.Max(val1: Math.Min(val1: memberSize, val2: 16), val2: 1);
+            int alignment = mv.Type.Alignment(pointerSize: pointerSize);
             maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
             size = AlignTo(size: size, alignment: alignment);
             size += memberSize;
@@ -95,12 +99,42 @@ public class RecordTypeInfo : TypeInfo
         return AlignTo(size: size, alignment: maxAlignment);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A record's natural alignment is the MAX of its members' alignments — NOT its total size. An
+    /// <c>@llvm</c>-annotated record uses the alignment of its backend type (array → element alignment,
+    /// struct literal → max field alignment); a Result/Lookup carrier is <c>{i64 tag, payload}</c> so its
+    /// alignment is <c>max(8, payload alignment)</c>. This keeps <see cref="SizeBytes"/> and every
+    /// offset/ABI computation consistent with the C/LLVM layout codegen emits.
+    /// </remarks>
+    public override int Alignment(int pointerSize)
+    {
+        if (BackendType != null && !IsGenericDefinition)
+        {
+            return AlignOfLlvmType(llvmType: BackendType, pointerSize: pointerSize);
+        }
+
+        if (CarrierKind is CarrierKind.Result or CarrierKind.Lookup
+            && TypeArguments is { Count: 1 } args)
+        {
+            return Math.Max(val1: 8, val2: args[index: 0].Alignment(pointerSize: pointerSize));
+        }
+
+        int maxAlignment = 1;
+        foreach (MemberVariableInfo mv in MemberVariables)
+        {
+            maxAlignment = Math.Max(val1: maxAlignment, val2: mv.Type.Alignment(pointerSize: pointerSize));
+        }
+
+        return maxAlignment;
+    }
+
     /// <summary>RC wrapper base names that need retain-on-copy / release-on-drop.</summary>
     private static readonly HashSet<string> RCWrapperBaseNames =
-        [RuntimeContract.Retained, RuntimeContract.Shared, RuntimeContract.Tracked, RuntimeContract.Watched];
+        [RuntimeContract.Retained, RuntimeContract.Guarded, RuntimeContract.Tracked, RuntimeContract.Witnessed];
 
     /// <summary>Whether this record has RC wrapper fields needing retain-on-copy / release-on-drop.</summary>
-    public bool HasRCFields => MemberVariables.Any(predicate: f =>
+    public bool HasRCMemberVariables => MemberVariables.Any(predicate: f =>
         f.Type is WrapperTypeInfo w && RCWrapperBaseNames.Contains(item: w.Name));
 
     /// <summary>
@@ -193,7 +227,8 @@ public class RecordTypeInfo : TypeInfo
                     typeArguments: typeArguments),
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 
@@ -497,6 +532,22 @@ public class RecordTypeInfo : TypeInfo
             return ReferenceEquals(objA: newBase, objB: projection.Base)
                 ? projection
                 : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
+        }
+
+        // Comptime const-generic (`${max(T.data_size().byte_size(), 8)}`): fold to a concrete value
+        // once its referenced type params are bound, else keep symbolic (mirror of the RoutineInfo
+        // overload's fold on the TypeSymbol map).
+        if (type is ComptimeConstGenericTypeInfo comptime)
+        {
+            return comptime.TryFold(
+                    resolveTypeParam: name => substitution.TryGetValue(key: name, value: out TypeInfo? bound)
+                        ? bound
+                        : null,
+                    pointerSize: 8, out long folded)
+                ? new ConstGenericValueTypeInfo(literalText: folded.ToString(),
+                    value: folded,
+                    explicitTypeName: "U64")
+                : comptime;
         }
 
         // If it's a type parameter, substitute it

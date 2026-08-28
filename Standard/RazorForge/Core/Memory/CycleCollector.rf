@@ -5,17 +5,17 @@ module Core
 ### counts above zero). See internal-wiki/v0.4.x-cycle-collector.md.
 ###
 ### Every candidate reported through {RoamController.mark_cycle_candidate} lands in the native roots
-### buffer (`rf_cc_roots_*`). {cc_collect} runs the three passes — MarkRoots, ScanRoots, CollectRoots —
+### buffer (`rf_cyclic_roots_*`). {cyclic_collect} runs the three passes — MarkRoots, ScanRoots, CollectRoots —
 ### over that buffer and reaps whatever is provably cyclic garbage.
 ###
 ### **Type erasure.** A candidate is held as a raw {Address}; every access reinterprets it as
 ### `RoamController[RoamErased]`. The controller layout is T-independent (the managed pointer is just a
-### `ptr`), so the collector's field accesses — color / count / buffered — are correct for any real T.
+### `ptr`), so the collector's field accesses — state / count / buffered — are correct for any real T.
 ### The two T-specific operations, tracing a node's {Roamed} children and freeing it, go through
 ### per-type hooks stored on the controller (`trace_hook` / `free_hook`) and invoked via the native
 ### indirect-call shims.
 ###
-### **Stage 1: manually driven.** Hooks are wired by hand (test hatch); {cc_collect} is called
+### **Stage 1: manually driven.** Hooks are wired by hand (test hatch); {cyclic_collect} is called
 ### explicitly. Stage 2 auto-wires the compiler-generated hooks and triggers collection on a threshold.
 
 ### Type-erased stand-in for the managed entity — never constructed or dereferenced. It exists only so
@@ -27,189 +27,236 @@ entity RoamErased
 ### scratch buffer, so we must copy it out BEFORE any recursive trace clobbers it.
 ### :param addr: The controller address to trace.
 ### :returns: The addresses of its `Roamed`-field child controllers.
-routine cc_children(addr: Address) -> List[Address]
+routine cyclic_children(addr: Address) -> List[Address]
   var kids = List[Address]()
   danger
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    var hook = c.cc_trace_hook()
-    var target = c.cc_data_addr()
-    rf_cc_scratch_reset()
-    rf_cc_trace_into_scratch(trace_hook: hook.get_address(), controller: target)
-    var n = rf_cc_scratch_count()
+    var hook = c.cyclic_trace_hook()
+    var target = c.cyclic_data_addr()
+    C::rf_cyclic_scratch_reset()
+    C::rf_cyclic_trace_into_scratch(trace_hook: hook.get_address(), controller: target)
+    var n = C::rf_cyclic_scratch_count()
     var i = 0_u64
     while i < n
-      kids.add_last(value: rf_cc_scratch_at(i: i))
+      kids.add_last(value: C::rf_cyclic_scratch_at(i: i))
       i = i + 1_u64
   return kids
 
-### MarkGray: paint the node gray and trial-decrement each child's count (subtracting the cycle's
-### internal references), recursing into children not yet gray.
+### MarkScanning: paint the node scanning and trial-decrement each child's count (subtracting the cycle's
+### internal references), recursing into children not yet scanning.
 ### :param addr: The controller address.
-routine cc_mark_gray(addr: Address)
+### Iterative (explicit worklist, NOT recursion — a deep object graph would overflow the call stack).
+### Each EDGE trial-decrements its child once; each NODE is set SCANNING and has its out-edges walked
+### once. Popping order does not affect the result (every reachable node is painted SCANNING regardless).
+routine cyclic_mark_scanning(addr: Address)
   var already = false
   danger
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if c.cc_color() is GRAY
+    if c.cyclic_state() is SCANNING
       already = true
     else
-      c.cc_set_color(c: RoamColor.GRAY)
+      c.cyclic_set_state(c: RoamState.SCANNING)
   if already
     return
-  var kids = cc_children(addr: addr)
-  var i = 0_u64
-  while i < kids.count()
-    var kid = kids.get_raw(index: i)
-    danger
-      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
-      kc.cc_dec()
-    cc_mark_gray(addr: kid)
-    i = i + 1_u64
-  return
-
-### Scan: a gray node with a surviving external reference (count > 0 after trial deletion) is live —
-### repaint it and its subgraph black (ScanBlack). Otherwise it is provisionally garbage — paint it
-### white and scan its children.
-### :param addr: The controller address.
-routine cc_scan(addr: Address)
-  var live = false
-  var garbage = false
-  danger
-    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if c.cc_color() is GRAY
-      if c.cc_count() > 0_u64
-        live = true
-      else
-        c.cc_set_color(c: RoamColor.WHITE)
-        garbage = true
-  if live
-    cc_scan_black(addr: addr)
-  elseif garbage
-    var kids = cc_children(addr: addr)
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var kids = cyclic_children(addr: a)
     var i = 0_u64
     while i < kids.count()
-      cc_scan(addr: kids.get_raw(index: i))
+      var kid = kids.get_raw(index: i)
+      var descend = false
+      danger
+        var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+        kc.cyclic_dec()
+        if not (kc.cyclic_state() is SCANNING)
+          kc.cyclic_set_state(c: RoamState.SCANNING)
+          descend = true
+      if descend
+        work.add_last(value: kid)
       i = i + 1_u64
   return
 
-### ScanBlack: undo a MarkGray subtree that turned out to be live — repaint black and restore each
-### child's trial-decremented count, recursing into children not yet black.
+### Scan: a scanning node with a surviving external reference (count > 0 after trial deletion) is live —
+### repaint it and its subgraph live (ScanLive). Otherwise it is provisionally garbage — paint it
+### garbage and scan its children.
 ### :param addr: The controller address.
-routine cc_scan_black(addr: Address)
-  danger
-    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    c.cc_set_color(c: RoamColor.BLACK)
-  var kids = cc_children(addr: addr)
-  var i = 0_u64
-  while i < kids.count()
-    var kid = kids.get_raw(index: i)
-    var recurse = false
+### Iterative (explicit worklist). A SCANNING node with a surviving external reference is live (hand it
+### to `cyclic_scan_live`, itself iterative); otherwise it is provisional garbage — paint it and push its
+### children to scan. Already-processed (non-SCANNING) nodes popped from the worklist are skipped.
+routine cyclic_scan(addr: Address)
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var live = false
+    var garbage = false
     danger
-      var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
-      kc.cc_inc()
-      if not (kc.cc_color() is BLACK)
-        recurse = true
-    if recurse
-      cc_scan_black(addr: kid)
-    i = i + 1_u64
+      var c = Hijacked[RoamController[RoamErased]](a).as_entity()
+      if c.cyclic_state() is SCANNING
+        if c.cyclic_count() > 0_u64
+          live = true
+        else
+          c.cyclic_set_state(c: RoamState.GARBAGE)
+          garbage = true
+    if live
+      cyclic_scan_live(addr: a)
+    elseif garbage
+      var kids = cyclic_children(addr: a)
+      var i = 0_u64
+      while i < kids.count()
+        work.add_last(value: kids.get_raw(index: i))
+        i = i + 1_u64
   return
 
-### CollectWhite: gather the white (garbage) subgraph onto the native reap buffer, repainting black to
+### ScanLive: undo a MarkScanning subtree that turned out to be live — repaint live and restore each
+### child's trial-decremented count, recursing into children not yet live.
+### :param addr: The controller address.
+### Iterative (explicit worklist). Undo a MarkScanning subtree that turned out live: repaint LIVE and
+### restore each child's trial-decremented count. Each EDGE re-increments its child once; each NODE is
+### repainted LIVE and walked once.
+routine cyclic_scan_live(addr: Address)
+  danger
+    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
+    c.cyclic_set_state(c: RoamState.LIVE)
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var kids = cyclic_children(addr: a)
+    var i = 0_u64
+    while i < kids.count()
+      var kid = kids.get_raw(index: i)
+      var descend = false
+      danger
+        var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
+        kc.cyclic_inc()
+        if not (kc.cyclic_state() is LIVE)
+          kc.cyclic_set_state(c: RoamState.LIVE)
+          descend = true
+      if descend
+        work.add_last(value: kid)
+      i = i + 1_u64
+  return
+
+### CollectGarbage: gather the garbage (garbage) subgraph onto the native reap buffer, repainting live to
 ### prevent re-entry. Freeing is DEFERRED to after the whole traversal — freeing mid-walk would leave
 ### the roots/child lists holding dangling pointers. (The reap buffer, not an RF list, because an RF
 ### list parameter is consuming — it cannot serve as a recursion accumulator.)
 ### :param addr: The controller address.
-routine cc_collect_white(addr: Address)
-  var take = false
-  danger
-    var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if (c.cc_color() is WHITE) and (not c.cc_buffered())
-      c.cc_set_color(c: RoamColor.BLACK)
-      take = true
-  if take
-    var kids = cc_children(addr: addr)
-    var i = 0_u64
-    while i < kids.count()
-      cc_collect_white(addr: kids.get_raw(index: i))
-      i = i + 1_u64
+### Iterative (explicit worklist). Gather the garbage subgraph onto the reap buffer, repainting LIVE to
+### prevent re-entry. Freeing is DEFERRED to after the whole traversal (see `cyclic_collect`), so the reap
+### ORDER is irrelevant — pushing a node before its children (pre-order) reaps the same set as the old
+### post-order recursion.
+routine cyclic_collect_garbage(addr: Address)
+  var work = List[Address]()
+  work.add_last(value: addr)
+  while not work.is_empty()
+    var a = work.remove_last!()
+    var take = false
     danger
-      rf_cc_reap_push(ctrl: addr)
+      var c = Hijacked[RoamController[RoamErased]](a).as_entity()
+      if (c.cyclic_state() is GARBAGE) and (not c.cyclic_buffered())
+        c.cyclic_set_state(c: RoamState.LIVE)
+        take = true
+    if take
+      danger
+        C::rf_cyclic_reap_push(ctrl: a)
+      var kids = cyclic_children(addr: a)
+      var i = 0_u64
+      while i < kids.count()
+        work.add_last(value: kids.get_raw(index: i))
+        i = i + 1_u64
   return
 
 ### Reaps a controller: runs the entity-based free hook (`roam_free_impl`: tears down the entity's
 ### non-`Roamed` fields + frees its allocation) over the managed entity, then frees the controller
 ### itself (type-independent — the controller layout does not depend on `T`).
 ### :param addr: The controller address.
-routine cc_free(addr: Address)
+routine cyclic_free(addr: Address)
   danger
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    var hook = c.cc_free_hook()
-    var target = c.cc_data_addr()
-    rf_cc_invoke_free(free_hook: hook.get_address(), controller: target)
-    Hijacked[RoamController[RoamErased]](addr).as_entity().destroy()
+    var hook = c.cyclic_free_hook()
+    var target = c.cyclic_data_addr()
+    C::rf_cyclic_invoke_free(free_hook: hook.get_address(), controller: target)
+    # Tombstone-aware finalize: marks the controller dead and frees the controller struct only when no
+    # weak observer remains (else it lives on so `is_destroyed()` stays answerable). Was a bare destroy().
+    Hijacked[RoamController[RoamErased]](addr).as_entity().cyclic_finalize()
   return
 
 ### Runs one full cycle-collection pass over the current roots buffer: MarkRoots → ScanRoots →
 ### CollectRoots. Empties the roots buffer and reaps every controller found to be cyclic garbage.
 ### Runs one synchronous Bacon-Rajan cycle-collection pass over the buffered candidates and returns the
-### number of objects reclaimed (the size of the reaped white subgraph). 0 means nothing was collected.
+### number of objects reclaimed (the size of the reaped garbage subgraph). 0 means nothing was collected.
 ### :returns: The count of objects freed this pass.
-routine cc_collect() -> U64
+routine cyclic_collect() -> U64
   # Mark a pass in progress so a candidate reported mid-collection cannot auto-trigger a nested pass.
   danger
-    rf_cc_enter_collect()
-  # MarkRoots: purple roots seed the trace (MarkGray); anything else is stale and simply un-buffered.
-  var gray_roots = List[Address]()
+    C::rf_cyclic_enter_collect()
+  # MarkRoots: suspected roots seed the trace (MarkScanning); anything else is stale and simply un-buffered.
+  var scanning_roots = List[Address]()
   var n = 0_u64
   danger
-    n = rf_cc_roots_count()
+    n = C::rf_cyclic_roots_count()
   var i = 0_u64
   while i < n
     var addr = 0_addr
-    var purple = false
+    var suspected = false
     danger
-      addr = rf_cc_roots_at(i: i)
+      addr = C::rf_cyclic_roots_at(i: i)
       var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-      if c.cc_color() is PURPLE
-        purple = true
+      if c.cyclic_state() is SUSPECTED
+        suspected = true
       else
-        c.cc_set_buffered(b: false)
-    if purple
-      cc_mark_gray(addr: addr)
-      gray_roots.add_last(value: addr)
+        c.cyclic_set_buffered(b: false)
+    if suspected
+      cyclic_mark_scanning(addr: addr)
+      scanning_roots.add_last(value: addr)
     i = i + 1_u64
   # Drop exactly the `n` candidates this pass snapshotted — NOT a blanket clear. The reap phase below
-  # can append fresh candidates (a finalizer-triggered release inside `cc_free`), and those must
+  # can append fresh candidates (a finalizer-triggered release inside `cyclic_free`), and those must
   # survive to a later pass; a clear-all would strip them while leaving `buffered=true` → a permanent
   # leak (they'd never be re-buffered). Also robust if a future change makes MarkRoots add candidates.
   danger
-    rf_cc_roots_remove_front(n: n)
+    C::rf_cyclic_roots_remove_front(n: n)
 
   # ScanRoots
   i = 0_u64
-  while i < gray_roots.count()
-    cc_scan(addr: gray_roots.get_raw(index: i))
+  while i < scanning_roots.count()
+    cyclic_scan(addr: scanning_roots.get_raw(index: i))
     i = i + 1_u64
 
-  # CollectRoots: un-buffer each root, gather the white subgraph onto the reap buffer, then free.
+  # CollectRoots: un-buffer each root, gather the garbage subgraph onto the reap buffer, then free.
   danger
-    rf_cc_reap_clear()
+    C::rf_cyclic_reap_clear()
   i = 0_u64
-  while i < gray_roots.count()
-    var addr = gray_roots.get_raw(index: i)
+  while i < scanning_roots.count()
+    var addr = scanning_roots.get_raw(index: i)
     danger
       var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-      c.cc_set_buffered(b: false)
-    cc_collect_white(addr: addr)
+      c.cyclic_set_buffered(b: false)
+    cyclic_collect_garbage(addr: addr)
     i = i + 1_u64
 
   var reaped = 0_u64
   danger
-    var m = rf_cc_reap_count()
+    var m = C::rf_cyclic_reap_count()
     reaped = m
     var j = 0_u64
     while j < m
-      cc_free(addr: rf_cc_reap_at(i: j))
+      cyclic_free(addr: C::rf_cyclic_reap_at(i: j))
       j = j + 1_u64
-    rf_cc_reap_clear()
-    rf_cc_exit_collect()
+    C::rf_cyclic_reap_clear()
+    C::rf_cyclic_exit_collect()
   return reaped
+
+### Universal cycle-collector visit hook. Only a `Roamed[T]` handle owns a strong edge the collector
+### must follow — every OTHER type (values, plain records, container buffers of values) participates in
+### no cycle, so the default is a no-op. `Roamed[T].cyclic_visit` (in Roamed.rf) is the hand-written
+### override that actually reports the controller. This universal default lets a generic container
+### buffer-walk call `element.cyclic_visit()` uniformly: a value element compiles to nothing, a
+### `Roamed` element reports itself — no per-element-type branching in the compiler/codegen.
+@overridable
+dangerous routine T.cyclic_visit()
+  return

@@ -19,7 +19,7 @@ routine start()
   # exclude — set-style difference
   var a: List[S64] = [1, 2, 3, 4, 5]
   var b: List[S64] = [2, 4]
-  show(f"exclude: {a.exclude(other: b).List()}")
+  show(f"exclude: {a.exclude(you: b).List()}")
 
   # get_count(predicate)
   show(f"count > 3: {src.get_count(predicate: x => x > 3_s64)}")

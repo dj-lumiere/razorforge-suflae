@@ -17,7 +17,7 @@ routine start()
   show(f"after_close={after_close}")
 
   var total = 0_s64
-  for v in hop
+  each v in hop
     total = total + v
   show(f"drained={total}")                    # 7 + 8 = 15 (the post-close send was rejected)
   return

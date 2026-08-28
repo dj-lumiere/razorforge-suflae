@@ -9,11 +9,11 @@ module Numerics
 ### the transcendentals round to a generous default working precision under
 ### round-to-nearest-ties-to-even.
 ### :see: {Integer}, {Decimal}
-record Real obeys Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable, FastHashable
+record Real obeys Assignable, Copyable, Equatable, Comparable, Negatable, Addable, Subtractable, Multiplicable, Divisible, Exponentiable, Hashable
   ### The native libbf handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count cell (or null) governing the shared handle lifetime.
-  secret ctrl: Hijacked[ImmutableSharedController]
+  secret ctrl: Hijacked[FrozenController]
 
 # ============================================================================
 # Construction
@@ -22,13 +22,13 @@ record Real obeys Copyable, Equatable, Comparable, Negatable, Addable, Subtracta
 ### Constructs the real value zero.
 ### :returns: The resulting `Real` value.
 routine Real() -> Real
-  return Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  return Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
 
 ### Constructs a `Real` from a signed 64-bit integer (exact).
 ### :param value: The initial signed value.
 ### :returns: The resulting `Real` value.
 routine Real(value: S64) -> Real
-  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var r = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_set_i64(handle: r.handle, value: value)
   return r
 
@@ -36,7 +36,7 @@ routine Real(value: S64) -> Real
 ### :param value: The initial double value.
 ### :returns: The resulting `Real` value.
 routine Real(value: F64) -> Real
-  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var r = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_set_f64(handle: r.handle, value: value)
   return r
 
@@ -56,7 +56,7 @@ common routine Real.one() -> Real
 ### :returns: The resulting `Real` value.
 ### :throws: {ValueError} if `text` is not a valid real in `radix`.
 routine Real!(text: Text, radix: S32 = 10) -> Real
-  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var r = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   var status = rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: radix)
   if status != 0_s32
     throw InvalidValueError(input: text, target: "Real")
@@ -66,7 +66,7 @@ routine Real!(text: Text, radix: S32 = 10) -> Real
 ### :param text: The decimal string (no suffix, no separators).
 ### :returns: The resulting `Real` value.
 common routine Real.from_literal(text: Text) -> Real
-  var r = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var r = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   discard rf_real_set_str(handle: r.handle, str: text.to_cstr(), radix: 10_s32)
   return r
 
@@ -77,17 +77,17 @@ common routine Real.from_literal(text: Text) -> Real
 ### Returns a copy with the underlying refcount bumped; the handle is shared.
 ### :returns: The resulting `Real` value.
 @[readonly, inline]
-routine Real.store() -> Real
+routine Real.assign() -> Real
   danger
     if not me.ctrl.is_none()
-      me.ctrl.as_entity().increase_strong_count()
+      me.ctrl.as_entity().hold()
   return Real(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this reference; frees the handle when this was the last live ref.
 dangerous routine Real.destroy()
   if me.ctrl.is_none()
     return
-  var prev = me.ctrl.as_entity().decrease_strong_count()
+  var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
     rf_real_clear(handle: me.handle)
     me.ctrl.invalidate()
@@ -98,46 +98,46 @@ dangerous routine Real.destroy()
 # ============================================================================
 
 ### Adds `other` to this value (exact).
-### :param other: The value to add.
+### :param you: The value to add.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.add(other: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_add(result: result.handle, a: me.handle, b: other.handle)
+routine Real.add(you: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_add(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Subtracts `other` from this value (exact).
-### :param other: The value to subtract.
+### :param you: The value to subtract.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.sub(other: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_sub(result: result.handle, a: me.handle, b: other.handle)
+routine Real.sub(you: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_sub(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Multiplies this value by `other` (exact).
-### :param other: The value to multiply by.
+### :param you: The value to multiply by.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.mul(other: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_mul(result: result.handle, a: me.handle, b: other.handle)
+routine Real.mul(you: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_mul(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Divides this value by `other`, rounded to the working precision.
-### :param other: The divisor.
+### :param you: The divisor.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.truediv(other: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_div(result: result.handle, a: me.handle, b: other.handle)
+routine Real.truediv(you: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_div(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.neg() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_neg(result: result.handle, a: me.handle)
   return result
 
@@ -159,7 +159,7 @@ routine Real.is_zero() -> Bool
 routine Real.abs() -> Real
   if me.is_negative()
     return me.neg()
-  return me.store()
+  return me.assign()
 
 # ============================================================================
 # Comparison
@@ -192,7 +192,7 @@ routine Real.cmp(you: Real) -> ComparisonSign
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.sqrt() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sqrt(result: result.handle, a: me.handle)
   return result
 
@@ -200,7 +200,7 @@ routine Real.sqrt() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.exp() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_exp(result: result.handle, a: me.handle)
   return result
 
@@ -208,7 +208,7 @@ routine Real.exp() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.log() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log(result: result.handle, a: me.handle)
   return result
 
@@ -217,7 +217,7 @@ routine Real.log() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.pow!(exp: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_pow(result: result.handle, a: me.handle, b: exp.handle)
   return result
 
@@ -225,7 +225,7 @@ routine Real.pow!(exp: Real) -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.sin() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sin(result: result.handle, a: me.handle)
   return result
 
@@ -233,112 +233,112 @@ routine Real.sin() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.cos() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cos(result: result.handle, a: me.handle)
   return result
 
 ### Tangent (radians).
 @readonly
 routine Real.tan() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_tan(result: result.handle, a: me.handle)
   return result
 
 ### Inverse sine (radians).
 @readonly
 routine Real.asin() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_asin(result: result.handle, a: me.handle)
   return result
 
 ### Inverse cosine (radians).
 @readonly
 routine Real.acos() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_acos(result: result.handle, a: me.handle)
   return result
 
 ### Inverse tangent (radians).
 @readonly
 routine Real.atan() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atan(result: result.handle, a: me.handle)
   return result
 
 ### Two-argument inverse tangent of `me / x` (radians), quadrant-aware.
 @readonly
 routine Real.atan2(x: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atan2(result: result.handle, y: me.handle, x: x.handle)
   return result
 
 ### Hyperbolic sine.
 @readonly
 routine Real.sinh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sinh(result: result.handle, a: me.handle)
   return result
 
 ### Hyperbolic cosine.
 @readonly
 routine Real.cosh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cosh(result: result.handle, a: me.handle)
   return result
 
 ### Hyperbolic tangent.
 @readonly
 routine Real.tanh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_tanh(result: result.handle, a: me.handle)
   return result
 
 ### Inverse hyperbolic sine.
 @readonly
 routine Real.asinh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_asinh(result: result.handle, a: me.handle)
   return result
 
 ### Inverse hyperbolic cosine.
 @readonly
 routine Real.acosh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_acosh(result: result.handle, a: me.handle)
   return result
 
 ### Inverse hyperbolic tangent.
 @readonly
 routine Real.atanh() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atanh(result: result.handle, a: me.handle)
   return result
 
 ### Base-2 logarithm.
 @readonly
 routine Real.log2() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log2(result: result.handle, a: me.handle)
   return result
 
 ### Base-10 logarithm.
 @readonly
 routine Real.log10() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log10(result: result.handle, a: me.handle)
   return result
 
 ### Euclidean distance `sqrt(me^2 + other^2)` without intermediate overflow.
 @readonly
-routine Real.hypot(other: Real) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_hypot(result: result.handle, a: me.handle, b: other.handle)
+routine Real.hypot(you: Real) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_hypot(result: result.handle, a: me.handle, b: you.handle)
   return result
 
 ### Cube root.
 @readonly
 routine Real.cbrt() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cbrt(result: result.handle, a: me.handle)
   return result
 
@@ -346,155 +346,155 @@ routine Real.cbrt() -> Real
 
 ### Divides this value by `other`, rounding to `precision` decimal digits.
 @readonly
-routine Real.divide(other: Real, precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_div_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
+routine Real.divide(you: Real, precision: S32) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_div_p(result: result.handle, a: me.handle, b: you.handle, prec: precision)
   return result
 
 ### Square root to `precision` decimal digits.
 @readonly
 routine Real.sqrt(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sqrt_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Natural exponential to `precision` decimal digits.
 @readonly
 routine Real.exp(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_exp_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Natural logarithm to `precision` decimal digits.
 @readonly
 routine Real.log(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Raises this value to `exp` to `precision` decimal digits.
 @readonly
 routine Real.pow(exp: Real, precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_pow_p(result: result.handle, a: me.handle, b: exp.handle, prec: precision)
   return result
 
 ### Sine (radians) to `precision` decimal digits.
 @readonly
 routine Real.sin(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sin_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Cosine (radians) to `precision` decimal digits.
 @readonly
 routine Real.cos(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cos_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Tangent (radians) to `precision` decimal digits.
 @readonly
 routine Real.tan(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_tan_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse sine (radians) to `precision` decimal digits.
 @readonly
 routine Real.asin(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_asin_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse cosine (radians) to `precision` decimal digits.
 @readonly
 routine Real.acos(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_acos_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse tangent (radians) to `precision` decimal digits.
 @readonly
 routine Real.atan(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atan_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Two-argument inverse tangent to `precision` decimal digits.
 @readonly
 routine Real.atan2(x: Real, precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atan2_p(result: result.handle, y: me.handle, x: x.handle, prec: precision)
   return result
 
 ### Hyperbolic sine to `precision` decimal digits.
 @readonly
 routine Real.sinh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_sinh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Hyperbolic cosine to `precision` decimal digits.
 @readonly
 routine Real.cosh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cosh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Hyperbolic tangent to `precision` decimal digits.
 @readonly
 routine Real.tanh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_tanh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse hyperbolic sine to `precision` decimal digits.
 @readonly
 routine Real.asinh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_asinh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse hyperbolic cosine to `precision` decimal digits.
 @readonly
 routine Real.acosh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_acosh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Inverse hyperbolic tangent to `precision` decimal digits.
 @readonly
 routine Real.atanh(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_atanh_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Base-2 logarithm to `precision` decimal digits.
 @readonly
 routine Real.log2(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log2_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Base-10 logarithm to `precision` decimal digits.
 @readonly
 routine Real.log10(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_log10_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
 ### Euclidean distance to `precision` decimal digits.
 @readonly
-routine Real.hypot(other: Real, precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
-  rf_real_hypot_p(result: result.handle, a: me.handle, b: other.handle, prec: precision)
+routine Real.hypot(you: Real, precision: S32) -> Real
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
+  rf_real_hypot_p(result: result.handle, a: me.handle, b: you.handle, prec: precision)
   return result
 
 ### Cube root to `precision` decimal digits.
 @readonly
 routine Real.cbrt(precision: S32) -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_cbrt_p(result: result.handle, a: me.handle, prec: precision)
   return result
 
@@ -520,22 +520,22 @@ routine Real.signum() -> Real
   return Real(value: 1_s64)
 
 ### Returns the smaller of this value and `other`.
-### :param other: The value to compare against.
+### :param you: The value to compare against.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.min(other: Real) -> Real
-  if me.cmp(you: other) is ME_LARGE
-    return other.store()
-  return me.store()
+routine Real.min(you: Real) -> Real
+  if me.cmp(you: you) is ME_LARGE
+    return you.assign()
+  return me.assign()
 
 ### Returns the larger of this value and `other`.
-### :param other: The value to compare against.
+### :param you: The value to compare against.
 ### :returns: The resulting `Real` value.
 @readonly
-routine Real.max(other: Real) -> Real
-  if me.cmp(you: other) is ME_SMALL
-    return other.store()
-  return me.store()
+routine Real.max(you: Real) -> Real
+  if me.cmp(you: you) is ME_SMALL
+    return you.assign()
+  return me.assign()
 
 ### Returns this value's magnitude carrying the sign of `you`.
 ### :param you: The value supplying the sign.
@@ -550,7 +550,7 @@ routine Real.copysign(you: Real) -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.floor() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_floor(result: result.handle, a: me.handle)
   return result
 
@@ -558,7 +558,7 @@ routine Real.floor() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.ceil() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_ceil(result: result.handle, a: me.handle)
   return result
 
@@ -566,7 +566,7 @@ routine Real.ceil() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.trunc() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_trunc(result: result.handle, a: me.handle)
   return result
 
@@ -574,7 +574,7 @@ routine Real.trunc() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.round() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_round(result: result.handle, a: me.handle)
   return result
 
@@ -582,7 +582,7 @@ routine Real.round() -> Real
 ### :returns: The resulting `Real` value.
 @readonly
 routine Real.rint() -> Real
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_rint(result: result.handle, a: me.handle)
   return result
 
@@ -597,7 +597,7 @@ routine Real.frac() -> Real
 @readonly
 routine Real.exp2() -> Real
   var base = Real(value: 2_s64)
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_pow(result: result.handle, a: base.handle, b: me.handle)
   return result
 
@@ -606,7 +606,7 @@ routine Real.exp2() -> Real
 @readonly
 routine Real.exp10() -> Real
   var base = Real(value: 10_s64)
-  var result = Real(handle: rf_real_new(), ctrl: ImmutableSharedController().hijack())
+  var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
   rf_real_pow(result: result.handle, a: base.handle, b: me.handle)
   return result
 
@@ -658,9 +658,3 @@ routine Real.represent() -> Text
 @readonly
 routine Real.hash(k0: U64, k1: U64) -> U64
   return me.represent().hash(k0: k0, k1: k1)
-
-### Fast (non-cryptographic) hash of the canonical representation.
-### :returns: The resulting `U64` value.
-@readonly
-routine Real.fast_hash() -> U64
-  return me.represent().fast_hash()

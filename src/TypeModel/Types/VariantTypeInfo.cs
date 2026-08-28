@@ -7,14 +7,14 @@ namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for variants (type-based tagged unions).
-/// Variants are local-only and unmodifiable with no methods.
+/// Variants are local-only and unmodifiable with no memberRoutines.
 /// Members are types — the type IS the tag. No named cases.
 /// </summary>
 // Variant is a value type ({ i64 tag, [payload] } aggregate, like a record) → extends RecordTypeInfo,
 // sharing MemberVariables / ImplementedProtocols / AssociatedTypeBindings / GenericDefinition. Variant
 // arm data lives in Members. NOTE: any codegen/lifecycle switch that handles RecordTypeInfo must place
 // a `case VariantTypeInfo` FIRST where variant semantics differ (tag+payload layout, not record fields)
-// — a missing Variant case silently treats a variant as a record (wrong copy/$diagnose/serialize).
+// — a missing Variant case silently treats a variant as a record (wrong copy/diagnose/serialize).
 public sealed class VariantTypeInfo : RecordTypeInfo
 {
     /// <inheritdoc/>
@@ -107,7 +107,8 @@ public sealed class VariantTypeInfo : RecordTypeInfo
             GenericDefinition = this,
             Visibility = Visibility,
             Location = Location,
-            Module = Module
+            Module = Module,
+            Realm = Realm
         };
     }
 

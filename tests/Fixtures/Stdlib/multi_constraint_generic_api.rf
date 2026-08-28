@@ -3,11 +3,11 @@ import IO/Console
 
 # Generics with multiple protocol constraints — `T obeys A + B` style (whatever
 # the actual syntax is). Tests that the routine sees both protocol surfaces.
-routine in_set_and_max[T](items: Referring[List[T]], target: T) -> Bool
+routine in_set_and_max[T](items: Accessing[List[T]], target: T) -> Bool
 needs T obeys Equatable, Hashable
   # Hashable lets us build a Set; Equatable lets us check contains
   var s: Set[T] = Set[T]()
-  for x in items
+  each x in items
     discard s.add(value: x)
   return target in s
 

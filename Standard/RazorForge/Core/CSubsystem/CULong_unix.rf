@@ -1,0 +1,18 @@
+@target(os: "linux", "macos")
+module Core
+
+### C `unsigned long` under the LP64 data model (Linux, macOS): 64-bit unsigned. The Windows (LLP64,
+### 32-bit) width lives in the `#@target(os: "windows")` sibling; conditional compilation loads exactly one.
+@llvm("i64")
+record CULong
+  pass
+
+### Widens a C `unsigned long` to `U64` (identity on LP64).
+@readonly
+routine U64(from: CULong) -> U64
+  return LLVM::reinterpret_bits[CULong, U64](from)
+
+### Narrows a `U64` to a C `unsigned long` (identity on LP64).
+@readonly
+routine CULong(from: U64) -> CULong
+  return LLVM::reinterpret_bits[U64, CULong](from)

@@ -28,6 +28,11 @@
     "keywords": {
       "patterns": [
         {
+          "comment": "Annotations (@positional, @inline, @readonly, @writable, @override, @generated, ...)",
+          "name": "storage.modifier.annotation.sf",
+          "match": "@\\w+"
+        },
+        {
           "comment": "Type declarations",
           "name": "storage.type.sf",
           "match": "\\b(routine|entity|record|variant|choice|protocol|flags|crashable)\\b"
@@ -45,7 +50,12 @@
         {
           "comment": "Control flow",
           "name": "keyword.control.sf",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
+          "match": "\\b(if|elseif|else|then|unless|each|expand|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
+        },
+        {
+          "comment": "Compile-time reflection sources (expand m in memvarof(T)/branchof(T)/caseof(T))",
+          "name": "support.function.builtin.sf",
+          "match": "\\b(memvarof|branchof|caseof)\\b"
         },
         {
           "comment": "Type and pattern operations",
@@ -61,11 +71,6 @@
           "comment": "Resource management",
           "name": "keyword.control.sf",
           "match": "\\b(using)\\b"
-        },
-        {
-          "comment": "Async",
-          "name": "keyword.control.sf",
-          "match": "\\b(waitfor|within|after)\\b"
         },
         {
           "comment": "Generic constraints",
@@ -103,7 +108,7 @@
           "match": "\\b(None)\\b"
         },
         {
-          "comment": "none value literal (absent value for Maybe/Lookup/Result[Blank]/variant-with-None)",
+          "comment": "none value literal (absent value for Maybe/Lookup/Result[None]/variant-with-None)",
           "name": "constant.language.null.sf",
           "match": "\\b(none)\\b"
         }

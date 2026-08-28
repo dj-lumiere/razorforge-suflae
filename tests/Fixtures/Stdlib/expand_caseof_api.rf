@@ -1,0 +1,30 @@
+module Tests/Stdlib/ExpandCaseofApi
+import IO/Console
+import BuilderExpansion
+
+# Exercises `expand c in caseof(T)`: unrolls once per choice case (S32 discriminant) or per flags
+# member (U64 bit value), exposing nameof(c) / orderof(c) / valueof(c) (the numeric constant).
+
+choice Color
+  RED
+  GREEN
+  BLUE
+
+flags Perms
+  READ
+  WRITE
+  EXEC
+
+routine dump_cases[T]() -> Text
+  var out = ""
+  expand c in caseof(T)
+    if orderof(c) > 0u64
+      out = out + ", "
+    out = out + nameof(c) + "=" + valueof(c).represent()
+  return out
+
+routine start()
+  show("Color: " + dump_cases[Color]())
+  show("Perms: " + dump_cases[Perms]())
+  show("DONE")
+  return

@@ -3,7 +3,10 @@ module Core
 ### Represents the protocol for value equality.
 ### Types that obey `Equatable` define whether two values should be treated as
 ### the same logical value for comparisons, lookups, and container semantics.
+### `needs Equatable everywhere` auto-confers Equatable on any member-bearing type all of whose
+### members are themselves Equatable — the structural gate that drives the auto-derived `eq`.
 protocol Equatable
+needs Equatable everywhere
   ### Returns whether both values are equal.
   ### Equality should be reflexive, symmetric, and stable for the compared
   ### values.

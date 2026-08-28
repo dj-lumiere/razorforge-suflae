@@ -28,9 +28,9 @@ public class PortedFixtureTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var ra = a.retain()
-                          var rt = ra.track()
-                          when rt.try_recover()
+                          var ra = Retained(from: steal a)
+                          var rt = ra.observe()
+                          when rt.try_hold()
                             is None => return
                             else rc => return
                         """;

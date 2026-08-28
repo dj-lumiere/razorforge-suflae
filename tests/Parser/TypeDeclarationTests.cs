@@ -257,7 +257,7 @@ public class TypeDeclarationTests
                         entity SortedCache[K, V]
                         needs K obeys Comparable
                         needs K obeys Hashable
-                        needs V is entity
+                        needs V is EntityType
                           entries: Dict[K, V]
                         """;
 
@@ -401,14 +401,14 @@ public class TypeDeclarationTests
         ProtocolDeclaration protocol = GetDeclaration<ProtocolDeclaration>(program: program);
 
         Assert.Equal(expected: "Displayable", actual: protocol.Name);
-        Assert.Single(collection: protocol.Methods);
+        Assert.Single(collection: protocol.MemberRoutines);
     }
     /// <summary>
-    /// Verifies that the parser accepts protocol multiple methods.
+    /// Verifies that the parser accepts protocol multiple memberRoutines.
     /// </summary>
 
     [Fact]
-    public void Parse_Protocol_MultipleMethods()
+    public void Parse_Protocol_MultipleMemberRoutines()
     {
         string source = """
                         protocol Container
@@ -422,7 +422,7 @@ public class TypeDeclarationTests
         Program program = AssertParses(source: source);
         ProtocolDeclaration protocol = GetDeclaration<ProtocolDeclaration>(program: program);
 
-        Assert.Equal(expected: 2, actual: protocol.Methods.Count);
+        Assert.Equal(expected: 2, actual: protocol.MemberRoutines.Count);
     }
     /// <summary>
     /// Verifies that the parser accepts generic protocol.

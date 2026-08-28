@@ -15,11 +15,11 @@ public class ExpressionTests
 {
     #region Routine Call Tests
     /// <summary>
-    /// Verifies that the parser accepts simple method call.
+    /// Verifies that the parser accepts simple memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_SimpleMethodCall()
+    public void Parse_SimpleMemberRoutineCall()
     {
         string source = """
                         routine test()
@@ -30,11 +30,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call with multiple args.
+    /// Verifies that the parser accepts memberRoutine call with multiple args.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallWithMultipleArgs()
+    public void Parse_memberRoutineCallWithMultipleArgs()
     {
         string source = """
                         routine test()
@@ -45,11 +45,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call with named args.
+    /// Verifies that the parser accepts memberRoutine call with named args.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallWithNamedArgs()
+    public void Parse_memberRoutineCallWithNamedArgs()
     {
         string source = """
                         routine test()
@@ -60,11 +60,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call chain.
+    /// Verifies that the parser accepts memberRoutine call chain.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallChain()
+    public void Parse_memberRoutineCallChain()
     {
         string source = """
                         routine test()
@@ -75,11 +75,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call on literal.
+    /// Verifies that the parser accepts memberRoutine call on literal.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallOnLiteral()
+    public void Parse_memberRoutineCallOnLiteral()
     {
         string source = """
                         routine test()
@@ -90,11 +90,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts method call with conversion.
+    /// Verifies that the parser accepts memberRoutine call with conversion.
     /// </summary>
 
     [Fact]
-    public void Parse_MethodCallWithConversion()
+    public void Parse_memberRoutineCallWithConversion()
     {
         string source = """
                         routine test()
@@ -105,11 +105,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts static method call.
+    /// Verifies that the parser accepts static memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_StaticMethodCall()
+    public void Parse_StaticMemberRoutineCall()
     {
         string source = """
                         routine test()
@@ -121,12 +121,12 @@ public class ExpressionTests
     }
     /// <summary>
     /// Verifies that a static call on a generic type with multiple type arguments parses —
-    /// <c>Type[A, B, C].method(arg: x)</c>. The top-level commas mark type arguments (indexing
+    /// <c>Type[A, B, C].MemberRoutine(arg: x)</c>. The top-level commas mark type arguments (indexing
     /// has none), so this must not be misparsed as a single-index expression.
     /// </summary>
 
     [Fact]
-    public void Parse_GenericTypeStaticMethodCall()
+    public void Parse_GenericTypeStaticMemberRoutineCall()
     {
         string source = """
                         routine test()
@@ -187,11 +187,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts mixed member variable and method access.
+    /// Verifies that the parser accepts mixed member variable and memberRoutine access.
     /// </summary>
 
     [Fact]
-    public void Parse_MixedMemberVariableAndMethodAccess()
+    public void Parse_MixedMemberVariableAndMemberRoutineAccess()
     {
         string source = """
                         routine test()
@@ -591,11 +591,11 @@ public class ExpressionTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts interpolation with method call.
+    /// Verifies that the parser accepts interpolation with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_InterpolationWithMethodCall()
+    public void Parse_InterpolationWithMemberRoutineCall()
     {
         string source = """
                         routine test()
@@ -821,11 +821,11 @@ public class ExpressionTests
 
     #region Type Conversion Tests
     /// <summary>
-    /// Verifies that the parser accepts type conversion method.
+    /// Verifies that the parser accepts type conversion memberRoutine.
     /// </summary>
 
     [Fact]
-    public void Parse_TypeConversionMethod()
+    public void Parse_TypeConversionMemberRoutine()
     {
         string source = """
                         routine test()

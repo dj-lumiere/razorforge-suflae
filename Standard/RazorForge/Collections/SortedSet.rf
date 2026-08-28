@@ -1,6 +1,6 @@
 module Collections
 
-import BuilderService
+import BuilderQuery
 
 # B-tree order (max children per node)
 # B = 64 means each node has 31-63 keys (except root)
@@ -207,23 +207,23 @@ routine BTreeSetNode[T].children_truncate(n: U64)
   me.child_count = n
   return
 
-# Append `count` elements from `other.keys[start..start+count)` to me.keys.
-routine BTreeSetNode[T].keys_add_range_from(other: Referring[BTreeSetNode[T]], start: U64, count: U64)
+# Append `count` elements from `you.keys[start..start+count)` to me.keys.
+routine BTreeSetNode[T].keys_add_range_from(you: Accessing[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = T.data_size()
-      var src_addr = other.keys_base().stride(count: start.S64()).get_address()
+      var src_addr = you.keys_base().stride(count: start.S64()).get_address()
       var dst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
       rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * count)
   me.key_count = me.key_count +% count
   return
 
-# Append `count` children from `other.children[start..start+count)` to me.children.
-routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]], start: U64, count: U64)
+# Append `count` children from `you.children[start..start+count)` to me.children.
+routine BTreeSetNode[T].children_add_range_from(you: Accessing[BTreeSetNode[T]], start: U64, count: U64)
   if count > 0u64
     danger
       var elem_size = Address.data_size()
-      var src_addr = other.children_base().stride(count: start.S64()).get_address()
+      var src_addr = you.children_base().stride(count: start.S64()).get_address()
       var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
       rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * count)
   me.child_count = me.child_count +% count
@@ -275,8 +275,8 @@ relates SortedSetEmittable[T] as Iter
 ### :returns: The resulting `BTreeSetNode[T]` value.
 routine BTreeSetNode[T](is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
-    keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[Hijacked[BTreeSetNode[T]], 64]](),
+    keys: LLVM::zero_value[Array[T, 63]](),
+    children: LLVM::zero_value[Array[Hijacked[BTreeSetNode[T]], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -341,7 +341,7 @@ routine SortedSet[T].contains(value: T) -> Bool
 ### :returns: `true` if `value` is found anywhere in the subtree; `false` otherwise.
 @readonly
 @inline
-routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> Bool
+routine SortedSet[T].search_node(node: Accessing[BTreeSetNode[T]], value: T) -> Bool
   danger
     # Binary search: find the first index where keys[i] >= value.
     var i = me.lower_bound(node: node, value: value)
@@ -370,13 +370,13 @@ routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> 
 ### :returns: The first index where keys[index] >= value.
 @readonly
 @inline
-routine SortedSet[T].lower_bound(node: Referring[BTreeSetNode[T]], value: T) -> U64
+routine SortedSet[T].lower_bound(node: Accessing[BTreeSetNode[T]], value: T) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   # Invariant: all keys[0..lo) < value, all keys[hi..count) >= value.
   # We narrow [lo, hi) until lo == hi, which is the answer.
   while lo < hi
-    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
+    var mid = lo +% LLVM::unsigned_div(hi -% lo, 2u64)
     if node.keys_get(mid) < value
       # keys[mid] is too small, so the answer is at least mid+1.
       lo = mid +% 1u64
@@ -480,18 +480,18 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
 routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], child_idx: U64)
   danger
     var child = parent_node.children_get(child_idx).as_entity()
-    var mid = unsigned_div[U64](BTREE_ORDER -% 1u64, 2u64)
+    var mid = LLVM::unsigned_div(BTREE_ORDER -% 1u64, 2u64)
 
     # Create the right half node (manual Hijacked graph node; build via an entity view).
     var new_node_ptr = BTreeSetNode[T](is_leaf: child.is_leaf).hijack()
     var new_node = new_node_ptr.as_entity()
 
     # Copy the upper keys (indices mid+1 .. end) into the new node.
-    new_node.keys_add_range_from(other: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
+    new_node.keys_add_range_from(you: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
 
     # For internal nodes, copy the upper children (indices mid+1 .. end).
     if not child.is_leaf
-      new_node.children_add_range_from(other: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
+      new_node.children_add_range_from(you: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
 
     # Save the median key before truncating — it will be promoted to the parent.
     var mid_key = child.keys_get(mid)
@@ -636,7 +636,7 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
 ### :param idx: Index into node.keys whose left subtree to descend.
 ### :returns: The in-order predecessor of keys[idx].
 @inline
-routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_predecessor(node: Accessing[BTreeSetNode[T]], idx: U64) -> T
   danger
     var current = node.children_get(idx).as_entity()
     while not current.is_leaf
@@ -649,7 +649,7 @@ routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64)
 ### :param idx: Index into node.keys whose right subtree to descend.
 ### :returns: The in-order successor of keys[idx].
 @inline
-routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_successor(node: Accessing[BTreeSetNode[T]], idx: U64) -> T
   danger
     var current = node.children_get(idx +% 1u64).as_entity()
     while not current.is_leaf
@@ -670,11 +670,11 @@ routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U6
     left.keys_add_last(node.keys_get(i))
 
     # Step 2: append all of right's keys into left.
-    left.keys_add_range_from(other: right, start: 0u64, count: right.keys_count())
+    left.keys_add_range_from(you: right, start: 0u64, count: right.keys_count())
 
     # Step 3: for internal nodes, adopt right's children.
     if not right.is_leaf
-      left.children_add_range_from(other: right, start: 0u64, count: right.children_count())
+      left.children_add_range_from(you: right, start: 0u64, count: right.children_count())
 
     # Step 4: update left's subtree_size.
     left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
@@ -815,7 +815,7 @@ routine SortedSet[T].get_by_rank!(rank: U64) -> T
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
 @readonly
-routine SortedSet[T].get_at_subtree_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> T
+routine SortedSet[T].get_at_subtree_rank(node: Accessing[BTreeSetNode[T]], rank: U64) -> T
   danger
     if node.is_leaf
       return node.keys_get(rank)
@@ -867,7 +867,7 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
 ### :param max_val: The inclusive upper bound.
 ### :param result: The destination list for matching values.
 @readonly
-routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
+routine SortedSet[T].range_collect(node: Accessing[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
   danger
     var i = 0u64
 
@@ -958,7 +958,7 @@ routine List[T](from: SortedSet[T]) -> List[T]
 ### :param node: The subtree root to visit.
 ### :param result: The destination list for collected values.
 @readonly
-routine SortedSet[T].collect_inorder(node: Referring[BTreeSetNode[T]], result: Controlling[List[T]])
+routine SortedSet[T].collect_inorder(node: Accessing[BTreeSetNode[T]], result: Controlling[List[T]])
   danger
     var i = 0u64
     while i < node.keys_count()
@@ -994,55 +994,52 @@ routine SortedSetEmittable[T].emit!() -> T
 # Comparison
 # ============================================================================
 
-### Returns a compact display form of the set contents in ascending order.
-### :returns: The resulting `Text` value.
-@readonly
+@[readonly, override]
 routine SortedSet[T].represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "})"
   return steal result
 
 ### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
-@readonly
+@[readonly, override]
 routine SortedSet[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var i = 0u64
-  for v in me
+  each v in me
     if i > 0u64
       result = result + ", "
-    result = result + v.represent()
+    result = result + nested_repr(v)
     i = i +% 1u64
   result = result + "})"
   return steal result
 
 ### Returns true if both sets contain exactly the same values.
 ### Because duplicates are disallowed and elements are ordered, this is element-wise equality.
-### :param other: The other set to compare against.
+### :param you: The other set to compare against.
 ### :returns: `true` if both sets have equal count and all corresponding elements are equal.
 @readonly
-routine SortedSet[T].eq(other: Referring[SortedSet[T]]) -> Bool
-  if me.count != other.count
+routine SortedSet[T].eq(you: Accessing[SortedSet[T]]) -> Bool
+  if me.count != you.count
     return false
   var i = 0u64
   while i < me.count
-    if me.try_get_by_rank(rank: i)!! != other.try_get_by_rank(rank: i)!!
+    if me.try_get_by_rank(rank: i)!! != you.try_get_by_rank(rank: i)!!
       return false
     i = i +% 1u64
   return true
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine SortedSet[T].serialize() -> SerialValue
-needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

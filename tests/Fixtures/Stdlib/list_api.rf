@@ -26,7 +26,7 @@ routine start()
 
   # Iteration (deterministic — list preserves insertion order)
   var sum = 0
-  for x in a
+  each x in a
     sum = sum + x
   show(f"sum via for: {sum}")
 

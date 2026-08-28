@@ -1,0 +1,35 @@
+module Tests/Stdlib/ExpandMemvarofApi
+import IO/Console
+import BuilderExpansion
+
+# Exercises the comptime `expand m in allmemvarof(T)` loop + `$nameof(m)` splice: a single generic
+# `dump_fields[T]` reflects over any record's member variables, unrolled per field at
+# monomorphization (nameof(m) -> field name, orderof(m) -> ordinal, x.$nameof(m) -> real field access).
+
+record Point
+  x: S64
+  y: S64
+
+record Named
+  id: S64
+  tag: Text
+
+record Trio
+  a: S64
+  b: S64
+  c: S64
+
+routine dump_fields[T](x: T) -> Text
+  var result = ""
+  expand m in allmemvarof(T)
+    if orderof(m) > 0u64
+      result = result + ", "
+    result = result + nameof(m) + "=" + x.$nameof(m).represent()
+  return result
+
+routine start()
+  show(dump_fields(x: Point(x: 3_s64, y: 7_s64)))
+  show(dump_fields(x: Named(id: 42_s64, tag: "hi")))
+  show(dump_fields(x: Trio(a: 1_s64, b: 2_s64, c: 3_s64)))
+  show("DONE")
+  return

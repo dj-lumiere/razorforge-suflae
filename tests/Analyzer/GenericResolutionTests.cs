@@ -1,4 +1,5 @@
 using System.Linq;
+using Compiler.Diagnostics;
 using Verification;
 using Verification.Results;
 using SyntaxTree;
@@ -13,15 +14,15 @@ using static TestHelpers;
 /// </summary>
 public class GenericResolutionTests
 {
-    #region S191 — Void return on generic method calls
+    #region S191 — Void return on generic memberRoutine calls
     /// <summary>
-    /// Verifies semantic analysis behavior for generic void method returns blank.
+    /// Verifies semantic analysis behavior for generic void memberRoutine returns blank.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericVoidMethod_ReturnsBlank()
+    public void Analyze_GenericVoidMemberRoutine_ReturnsNone()
     {
-        // S191: Calling a void method on a generic resolution should return Blank, not <error>
+        // S191: Calling a void memberRoutine on a generic resolution should return None, not <error>
         string source = """
                         record Box[T]
                           value: T
@@ -41,15 +42,15 @@ public class GenericResolutionTests
 
     #endregion
 
-    #region S192 — Double-generic method return type
+    #region S192 — Double-generic memberRoutine return type
     /// <summary>
-    /// Verifies semantic analysis behavior for method level generic return type resolves correctly.
+    /// Verifies semantic analysis behavior for memberRoutine level generic return type resolves correctly.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodLevelGenericReturnType_ResolvesCorrectly()
+    public void Analyze_memberRoutineLevelGenericReturnType_ResolvesCorrectly()
     {
-        // S192: Method-level generic params + owner-level generic params
+        // S192: memberRoutine-level generic params + owner-level generic params
         // convert[U](new_val: U) -> Box[U] should resolve Box[U] with the call-site type arg
         string source = """
                         record Box[T]
@@ -68,11 +69,11 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for method level generic return type infers without annotation.
+    /// Verifies semantic analysis behavior for memberRoutine level generic return type infers without annotation.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodLevelGenericReturnType_InfersWithoutAnnotation()
+    public void Analyze_memberRoutineLevelGenericReturnType_InfersWithoutAnnotation()
     {
         // S192: Without explicit type annotation, var c should infer as Box[Bool]
         string source = """
@@ -93,13 +94,13 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for method level generic direct return resolves correctly.
+    /// Verifies semantic analysis behavior for memberRoutine level generic direct return resolves correctly.
     /// </summary>
 
     [Fact]
-    public void Analyze_MethodLevelGenericDirectReturn_ResolvesCorrectly()
+    public void Analyze_memberRoutineLevelGenericDirectReturn_ResolvesCorrectly()
     {
-        // S192: Method returning U directly (not wrapped in owner type)
+        // S192: memberRoutine returning U directly (not wrapped in owner type)
         string source = """
                         record Box[T]
                           value: T
@@ -121,14 +122,14 @@ public class GenericResolutionTests
 
     #region S193 — $eq on generic record types
     /// <summary>
-    /// Verifies semantic analysis behavior for generic record method lookup works on resolution.
+    /// Verifies semantic analysis behavior for generic record memberRoutine lookup works on resolution.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericRecordMethodLookup_WorksOnResolution()
+    public void Analyze_GenericRecordMemberRoutineLookup_WorksOnResolution()
     {
-        // S193: Methods registered on generic def (Wrapper) should be found for Wrapper[S32]
-        // LookupMethod falls back from Wrapper[S32] → Wrapper to find user-defined methods
+        // S193: memberRoutines registered on generic def (Wrapper) should be found for Wrapper[S32]
+        // LookupMemberRoutine falls back from Wrapper[S32] → Wrapper to find user-defined memberRoutines
         string source = """
                         record Wrapper[T]
                           value: T
@@ -148,15 +149,15 @@ public class GenericResolutionTests
 
     #endregion
 
-    #region LookupMethod fully-resolved results
+    #region LookupMemberRoutine fully-resolved results
     /// <summary>
-    /// Verifies semantic analysis behavior for generic owner method param type substituted.
+    /// Verifies semantic analysis behavior for generic owner memberRoutine param type substituted.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericOwnerMethod_ParamTypeSubstituted()
+    public void Analyze_GenericOwnerMemberRoutine_ParamTypeSubstituted()
     {
-        // LookupMethod on List[S32].$add should return param type S32 (not T)
+        // LookupMemberRoutine on List[S32].$add should return param type S32 (not T)
         // After fix, no manual SubstituteTypeParameters needed at call site
         string source = """
                         record Pair[T]
@@ -176,13 +177,13 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for generic owner method return type substituted.
+    /// Verifies semantic analysis behavior for generic owner memberRoutine return type substituted.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericOwnerMethod_ReturnTypeSubstituted()
+    public void Analyze_GenericOwnerMemberRoutine_ReturnTypeSubstituted()
     {
-        // LookupMethod on generic owner should substitute T in return type
+        // LookupMemberRoutine on generic owner should substitute T in return type
         string source = """
                         record Container[T]
                           item: T
@@ -200,11 +201,11 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for generic owner method nested generic substitution.
+    /// Verifies semantic analysis behavior for generic owner memberRoutine nested generic substitution.
     /// </summary>
 
     [Fact]
-    public void Analyze_GenericOwnerMethod_NestedGenericSubstitution()
+    public void Analyze_GenericOwnerMemberRoutine_NestedGenericSubstitution()
     {
         // Dict[Text, List[S32]].$getitem should return List[S32], not T
         string source = """
@@ -279,7 +280,7 @@ public class GenericResolutionTests
     [Fact]
     public void Analyze_VoidMemberCallOnGenericResolution_StoresResolvedRoutine()
     {
-        // P1: Void method on generic resolution should still store ResolvedRoutine
+        // P1: Void memberRoutine on generic resolution should still store ResolvedRoutine
         string source = """
                         record Box[T]
                           value: T
@@ -311,12 +312,12 @@ public class GenericResolutionTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for generic method call and stores the resolved routine metadata.
+    /// Verifies semantic analysis behavior for generic memberRoutine call and stores the resolved routine metadata.
     /// </summary>
     [Fact]
-    public void Analyze_GenericMethodCall_StoresResolvedRoutine()
+    public void Analyze_GenericMemberRoutineCall_StoresResolvedRoutine()
     {
-        // P1: Generic method call (obj.method[U](args)) stores ResolvedRoutine
+        // P1: Generic memberRoutine call (obj.MemberRoutine[U](args)) stores ResolvedRoutine
         string source = """
                         record Box[T]
                           value: T
@@ -331,7 +332,7 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        // Needs full pipeline: GenericCallLoweringPass (Phase 4) lowers GenericMethodCallExpression → CallExpression
+        // Needs full pipeline: GenericCallLoweringPass (Phase 4) lowers GenericMemberRoutineCallExpression → CallExpression
         var analyzer = new SemanticVerifier(language: Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
@@ -362,7 +363,7 @@ public class GenericResolutionTests
     public void Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate()
     {
         // P2: After UpdateRecordMemberVariables, GenericDefinition must survive
-        // so that method lookup on the resolved type can substitute T → S32
+        // so that memberRoutine lookup on the resolved type can substitute T → S32
         string source = """
                         record Cell[T]
                           data: T
@@ -406,15 +407,15 @@ public class GenericResolutionTests
 
     #endregion
 
-    #region P1 — Protocol method lookup on instantiated generic protocols
+    #region P1 — Protocol memberRoutine lookup on instantiated generic protocols
 
     /// <summary>
-    /// Verifies semantic analysis behavior for generic protocol method and substitutes the return type.
+    /// Verifies semantic analysis behavior for generic protocol memberRoutine and substitutes the return type.
     /// </summary>
     [Fact]
-    public void Analyze_GenericProtocolMethod_SubstitutesReturnType()
+    public void Analyze_GenericProtocolMemberRoutine_SubstitutesReturnType()
     {
-        // P1: Calling a protocol method on a type that obeys a generic protocol
+        // P1: Calling a protocol memberRoutine on a type that obeys a generic protocol
         // should substitute T in the return type
         string source = """
                         protocol Supplier[T]
@@ -439,20 +440,20 @@ public class GenericResolutionTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for generic protocol method and substitutes the parameter type.
+    /// Verifies semantic analysis behavior for generic protocol memberRoutine and substitutes the parameter type.
     /// </summary>
     [Fact]
-    public void Analyze_GenericProtocolMethod_SubstitutesParamType()
+    public void Analyze_GenericProtocolMemberRoutine_SubstitutesParamType()
     {
-        // P1: Protocol method with generic parameter type should substitute correctly
+        // P1: Protocol memberRoutine with generic parameter type should substitute correctly
         string source = """
                         protocol Acceptor[T]
-                          routine Me.accept(item: T) -> Blank
+                          routine Me.accept(item: T) -> None
 
                         record S32Acceptor obeys Acceptor[S32]
                           count: S32
 
-                        routine S32Acceptor.accept(item: S32) -> Blank
+                        routine S32Acceptor.accept(item: S32) -> None
                           return
 
                         routine test()
@@ -472,7 +473,7 @@ public class GenericResolutionTests
     public void Analyze_GenericProtocol_MultiParam_SubstitutesCorrectly()
     {
         // P1: Generic protocol with multiple type parameters — both K and V
-        // should be substituted in method signatures
+        // should be substituted in memberRoutine signatures
         string source = """
                         protocol Mapper[K, V]
                           @readonly
@@ -580,6 +581,53 @@ public class GenericResolutionTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region S161 — Uninferable type argument reports cleanly (not a codegen crash)
+
+    /// <summary>
+    /// A generic routine whose type parameter appears ONLY in the return type, called with
+    /// no expected-type context, cannot bind that parameter. This must surface as RF-S161
+    /// during SA rather than silently passing and crashing in codegen.
+    /// </summary>
+    [Fact]
+    public void Analyze_ReturnOnlyTypeParam_NoContext_ReportsCannotInfer()
+    {
+        string source = """
+                        routine pick[T](flag: Bool) -> T
+                          return pick[T](flag: flag)
+
+                        routine test()
+                          var r = pick(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CannotInferTypeArgument);
+    }
+
+    /// <summary>
+    /// The same call binds cleanly when the return-only type parameter has expected-type
+    /// context (a typed variable annotation), so no RF-S161 fires.
+    /// </summary>
+    [Fact]
+    public void Analyze_ReturnOnlyTypeParam_WithContext_NoCannotInfer()
+    {
+        string source = """
+                        routine pick[T](flag: Bool) -> T
+                          return pick[T](flag: flag)
+
+                        routine test()
+                          var r: S64 = pick(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CannotInferTypeArgument);
     }
 
     #endregion

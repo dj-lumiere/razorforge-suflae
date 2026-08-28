@@ -59,10 +59,10 @@ public class TextBytesInteropTests
                                            return
                                          """);
         // `is_letter()` calls a routine that does not exist on Character (the API is
-        // `is_alphabetic`), so it is a MethodNotFound — `.name()` is a routine call, distinct
+        // `is_alphabetic`), so it is a memberRoutineNotFound — `.name()` is a routine call, distinct
         // from `.name` member access, and an unresolved routine call is RF-S458.
         Assert.Contains(invalid.Errors,
-            e => e.Code == SemanticDiagnosticCode.MethodNotFound);
+            e => e.Code == SemanticDiagnosticCode.MemberRoutineNotFound);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public class TextBytesInteropTests
         AnalysisResult result = AnalyzeSa("""
                                         routine test!()
                                           var bytes: Bytes = "Hi".encode_as_utf8()
-                                          for ch in bytes.interpret_as_utf8!()
+                                          each ch in bytes.interpret_as_utf8!()
                                             var cp: U32 = ch.codepoint()
                                           return
                                         """);
@@ -114,7 +114,7 @@ public class TextBytesInteropTests
                                         routine test()
                                           var bytes: Bytes = b"\x80ABC"
                                           var text: Text = bytes.decode_as_utf8_lossy()
-                                          for ch in bytes.interpret_as_utf8_lossy()
+                                          each ch in bytes.interpret_as_utf8_lossy()
                                             var cp: U32 = ch.codepoint()
                                           return
                                         """);
@@ -133,7 +133,7 @@ public class TextBytesInteropTests
                                           var bytes: Bytes = b"ABC"
                                           var text: Text = bytes.decode_as_utf8!()
                                           var view = bytes.interpret_as_utf8!()
-                                          for ch in view
+                                          each ch in view
                                             var cp: U32 = ch.codepoint()
                                           absent
                                         """);

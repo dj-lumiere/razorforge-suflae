@@ -1,0 +1,3 @@
+Color: RED=0, GREEN=1, BLUE=2
+Perms: READ=1, WRITE=2, EXEC=4
+DONE

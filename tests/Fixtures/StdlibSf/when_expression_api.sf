@@ -1,0 +1,51 @@
+module Tests/StdlibSf/WhenExpressionApi
+import Numerics
+import IO/Console
+
+# Verifies subjectless (condition-based) `when` in expression and statement positions.
+# Regression lock for the `var x = when` misparse: a bare-identifier condition
+# (`flag => 1_s64`) was previously consumed as a lambda expression, cascading into
+# RF-G106/RF-G112 parse errors. Covers: bare-identifier conditions, comparison and
+# boolean-operator conditions, both value types (S64/Text), the false branch, and
+# the statement form.
+
+routine start()
+  var flag = true
+
+  # Expression form, bare-identifier condition (the original repro)
+  var x = when
+    flag => 1_s64
+    else => 2_s64
+  var t = when
+    flag => "tls"
+    else => "plain"
+  show(f"{x} {t}")
+
+  # Comparison + multi-arm conditions
+  var n = 5_s64
+  var label = when
+    n > 10 => "big"
+    n > 3 => "medium"
+    else => "small"
+  show(label)
+
+  # Boolean operators in conditions
+  var verdict = when
+    flag and n > 3 => "both"
+    flag => "flag only"
+    else => "neither"
+  show(verdict)
+
+  # False branch takes the else arm
+  var off = false
+  var y = when
+    off => 10_s64
+    else => 20_s64
+  show(f"{y}")
+
+  # Statement form with bare-identifier condition
+  when
+    flag => show("flag set")
+    else => show("flag unset")
+
+  return

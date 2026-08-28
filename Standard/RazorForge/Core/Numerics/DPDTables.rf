@@ -142,8 +142,8 @@ secret preset DPD2BIN: Array[U16, 1024] = [
 
 ### The 10-bit DPD declet encoding a 3-digit value `v` (0..999).
 routine bin_to_dpd(v: U64) -> U64
-  return zero_extend[U16, U64](BIN2DPD[v])
+  return LLVM::zero_extend[U16, U64](BIN2DPD[v])
 
 ### The 3-digit value (0..999) of a 10-bit DPD declet `d` (0..1023).
 routine dpd_to_bin(d: U64) -> U64
-  return zero_extend[U16, U64](DPD2BIN[d])
+  return LLVM::zero_extend[U16, U64](DPD2BIN[d])

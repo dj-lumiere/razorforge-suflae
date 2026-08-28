@@ -9,9 +9,9 @@ module IO/Console
 ### :param end: The trailing text to append.
 routine show(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 ### Writes raw bytes to standard output.
@@ -20,9 +20,9 @@ routine show(value: Text, end: Text = "\n")
 ### :param end: The trailing text to append.
 routine show(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 ### Writes a single value to standard output using its representable form.
@@ -31,9 +31,9 @@ routine show(value: Bytes, end: Text = "\n")
 routine show[T](value: T, end: Text = "\n")
   var text = value.represent()
   var value_cstr = CStr(from: text)
-  rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_show(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_show(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 # ============================================================================
@@ -45,9 +45,9 @@ routine show[T](value: T, end: Text = "\n")
 ### :param end: The trailing text to append.
 routine alert(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 ### Writes raw bytes to standard error.
@@ -55,9 +55,9 @@ routine alert(value: Text, end: Text = "\n")
 ### :param end: The trailing text to append.
 routine alert(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
-  rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 ### Writes a single value to standard error using its diagnostic form.
@@ -66,9 +66,9 @@ routine alert(value: Bytes, end: Text = "\n")
 routine alert[T](value: T, end: Text = "\n")
   var text = value.diagnose()
   var value_cstr = CStr(from: text)
-  rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
+  C::rf_console_alert(ptr: value_cstr.ptr(), len: value_cstr.count())
   var end_cstr = CStr(from: end)
-  rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
+  C::rf_console_alert(ptr: end_cstr.ptr(), len: end_cstr.count())
   return
 
 # ============================================================================
@@ -79,7 +79,7 @@ routine alert[T](value: T, end: Text = "\n")
 ### Line termination is not included in the returned text.
 ### :returns: The resulting `Text` value.
 routine ask_line() -> Text
-  var ptr = rf_console_ask_line()
+  var ptr = C::rf_console_ask_line()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -88,7 +88,7 @@ routine ask_line() -> Text
 ### Reads one whitespace-delimited word from standard input.
 ### :returns: The resulting `Text` value.
 routine ask_word() -> Text
-  var ptr = rf_console_ask_word()
+  var ptr = C::rf_console_ask_word()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -97,7 +97,7 @@ routine ask_word() -> Text
 ### Reads all remaining text from standard input.
 ### :returns: The resulting `Text` value.
 routine ask_all() -> Text
-  var ptr = rf_console_ask_all()
+  var ptr = C::rf_console_ask_all()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -124,7 +124,7 @@ routine ask_words() -> List[Text]
 ### Reads all remaining standard input as raw bytes.
 ### :returns: The resulting `Bytes` value.
 routine ask_raw() -> Bytes
-  var ptr = rf_console_ask_all()
+  var ptr = C::rf_console_ask_all()
   if ptr.is_none()
     return Bytes()
   return Bytes(ptr: ptr)
@@ -133,7 +133,7 @@ routine ask_raw() -> Bytes
 ### :param count: The maximum number of bytes to read.
 ### :returns: The resulting `Bytes` value.
 routine ask_bytes(count: U64) -> Bytes
-  var ptr = rf_console_ask_bytes(count)
+  var ptr = C::rf_console_ask_bytes(count)
   if ptr.is_none()
     return Bytes()
   return Bytes(ptr: ptr)

@@ -1,0 +1,18 @@
+@target(os: "linux", "macos")
+module Core
+
+### C `long` under the LP64 data model (Linux, macOS): 64-bit signed. The Windows (LLP64, 32-bit)
+### width lives in the `#@target(os: "windows")` sibling; conditional compilation loads exactly one.
+@llvm("i64")
+record CLong
+  pass
+
+### Widens a C `long` to `S64` (identity on LP64).
+@readonly
+routine S64(from: CLong) -> S64
+  return LLVM::reinterpret_bits[CLong, S64](from)
+
+### Narrows an `S64` to a C `long` (identity on LP64).
+@readonly
+routine CLong(from: S64) -> CLong
+  return LLVM::reinterpret_bits[S64, CLong](from)

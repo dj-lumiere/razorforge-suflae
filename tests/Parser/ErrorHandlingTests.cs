@@ -48,11 +48,11 @@ public class ErrorHandlingTests
         Assert.Single(collection: routine.Parameters);
     }
     /// <summary>
-    /// Verifies that the parser accepts failable method with bang.
+    /// Verifies that the parser accepts failable memberRoutine with bang.
     /// </summary>
 
     [Fact]
-    public void Parse_FailableMethod_WithBang()
+    public void Parse_FailableMemberRoutine_WithBang()
     {
         string source = """
                         routine User.validate!() -> bool
@@ -62,7 +62,12 @@ public class ErrorHandlingTests
         Program program = AssertParses(source: source);
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
 
-        Assert.Equal(expected: "User.validate", actual: routine.Name);
+        // Name is the BARE member; the owner lives in the structured fields, and the owner-qualified
+        // composite is rebuilt via QualifiedName (name-canonicalization).
+        Assert.Equal(expected: "validate", actual: routine.Name);
+        Assert.Equal(expected: "User", actual: routine.OwnerName);
+        Assert.Equal(expected: "validate", actual: routine.MemberRoutineName);
+        Assert.Equal(expected: "User.validate", actual: routine.QualifiedName);
         Assert.True(condition: routine.IsFailable);
     }
     /// <summary>

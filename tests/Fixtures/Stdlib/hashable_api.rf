@@ -15,7 +15,7 @@ routine Point.eq(you: Point) -> Bool
   return me.x == you.x and me.y == you.y
 
 routine Point.hash(k0: U64, k1: U64) -> U64
-  return reinterpret_bits[S64, U64](me.x) ^ reinterpret_bits[S64, U64](me.y)
+  return LLVM::reinterpret_bits[S64, U64](me.x) ^ LLVM::reinterpret_bits[S64, U64](me.y)
 
 routine start()
   var p = Point(x: 1, y: 2)

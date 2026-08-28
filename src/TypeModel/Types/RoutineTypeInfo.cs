@@ -17,7 +17,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// <summary>Parameter types for this function type.</summary>
     public List<TypeInfo> ParameterTypes { get; }
 
-    /// <summary>Return type for this function type. Null means no return (Blank).</summary>
+    /// <summary>Return type for this function type. Null means no return (None).</summary>
     public TypeInfo? ReturnType { get; }
 
     /// <summary>Whether this function type is failable (can throw/absent).</summary>
@@ -27,7 +27,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// Creates a new routine type with the given parameter and return types.
     /// </summary>
     /// <param name="parameterTypes">The parameter types.</param>
-    /// <param name="returnType">The return type (null for Blank/void).</param>
+    /// <param name="returnType">The return type (null for None/void).</param>
     public RoutineTypeInfo(List<TypeInfo> parameterTypes, TypeInfo? returnType) : base(
         name: BuildName(parameterTypes: parameterTypes, returnType: returnType))
     {
@@ -37,19 +37,22 @@ public sealed class RoutineTypeInfo : TypeInfo
 
     /// <summary>
     /// Builds the display name for a function type.
-    /// Examples: "Routine[(S32, S32), S32]", "Routine[(), Bool]", "Routine[(Text,), Blank]"
+    /// Examples: "Routine[(S32, S32), S32]", "Routine[(), Bool]", "Routine[(Text,), None]"
+    /// The parameter list is ALWAYS tuple-notation so the display matches the writable source
+    /// spelling: "()" for zero parameters (NOT "None", which in a parameter position parses as a
+    /// single unit-typed parameter — a different type), "(T,)" for one, "(A, B)" for more.
     /// </summary>
     private static string BuildName(List<TypeInfo> parameterTypes, TypeInfo? returnType)
     {
         string paramList = parameterTypes.Count switch
         {
-            0 => "Blank",
+            0 => "()",
             1 => "(" + parameterTypes[index: 0].Name + ",)",
             _ => "(" + string.Join(separator: ", ",
                 values: parameterTypes.Select(selector: p => p.Name)) + ")"
         };
 
-        string returnName = returnType?.Name ?? "Blank";
+        string returnName = returnType?.Name ?? "None";
         return $"Routine[{paramList}, {returnName}]";
     }
 

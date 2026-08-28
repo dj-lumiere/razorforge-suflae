@@ -5,7 +5,7 @@ using TypeModel.Enums;
 namespace TypeModel.Types;
 
 /// <summary>
-/// Builder-synthesized wrapper types (Viewing, Modifying, Retained, Tracked, Shared, Watched, Inspecting, Claiming, Hijacked).
+/// Builder-synthesized wrapper types (Viewing, Modifying, Retained, Tracked, Guarded, Witnessed, Consulting, Amending, Hijacked).
 /// These types transparently forward member access to their inner type while providing
 /// ownership and access control semantics.
 /// </summary>
@@ -17,7 +17,7 @@ public sealed class WrapperTypeInfo : TypeInfo
     /// <summary>The inner type being wrapped (T in Wrapper&lt;T&gt;).</summary>
     public TypeInfo InnerType { get; }
 
-    /// <summary>Whether this is a read-only wrapper (Viewing, Inspecting).</summary>
+    /// <summary>Whether this is a read-only wrapper (Viewing, Consulting).</summary>
     public bool IsReadOnly { get; }
 
     /// <summary>
@@ -46,7 +46,7 @@ public sealed class WrapperTypeInfo : TypeInfo
 
         return new WrapperTypeInfo(wrapperName: Name,
             innerType: typeArguments[index: 0],
-            isReadOnly: IsReadOnly) { Module = Module };
+            isReadOnly: IsReadOnly) { Module = Module, Realm = Realm };
     }
 
     /// <summary>
@@ -73,21 +73,21 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// <summary>
         /// Read-only multi-threaded wrapper. Thread-safe unmodifiable view.
         /// </summary>
-        public static readonly WrapperTypeInfo InspectingDefinition = new(
-            wrapperName: Compiler.Resolution.RuntimeContract.Inspecting,
+        public static readonly WrapperTypeInfo ConsultingDefinition = new(
+            wrapperName: Compiler.Resolution.RuntimeContract.Consulting,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: true) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
         /// Exclusive-write multi-threaded wrapper. Thread-safe modifiable access with exclusive ownership.
         /// </summary>
-        public static readonly WrapperTypeInfo ClaimingDefinition = new(
-            wrapperName: Compiler.Resolution.RuntimeContract.Claiming,
+        public static readonly WrapperTypeInfo AmendingDefinition = new(
+            wrapperName: Compiler.Resolution.RuntimeContract.Amending,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
-        /// Reference-counted single-threaded handle. Shared ownership with automatic cleanup.
+        /// Reference-counted single-threaded handle. Guarded ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo RetainedDefinition = new(
             wrapperName: Compiler.Resolution.RuntimeContract.Retained,
@@ -103,10 +103,10 @@ public sealed class WrapperTypeInfo : TypeInfo
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
-        /// Reference-counted wrapper. Shared ownership with automatic cleanup.
+        /// Reference-counted wrapper. Guarded ownership with automatic cleanup.
         /// </summary>
         public static readonly WrapperTypeInfo SharedDefinition = new(
-            wrapperName: Compiler.Resolution.RuntimeContract.Shared,
+            wrapperName: Compiler.Resolution.RuntimeContract.Guarded,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -114,7 +114,7 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// Weak-reference wrapper. Non-owning reference that can become invalid.
         /// </summary>
         public static readonly WrapperTypeInfo WatchedDefinition = new(
-            wrapperName: Compiler.Resolution.RuntimeContract.Watched,
+            wrapperName: Compiler.Resolution.RuntimeContract.Witnessed,
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -133,8 +133,8 @@ public sealed class WrapperTypeInfo : TypeInfo
             ModifyingDefinition,
             RetainedDefinition,
             TrackedWeakDefinition,
-            InspectingDefinition,
-            ClaimingDefinition,
+            ConsultingDefinition,
+            AmendingDefinition,
             SharedDefinition,
             WatchedDefinition,
             HijackedDefinition,

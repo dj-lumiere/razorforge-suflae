@@ -3,7 +3,7 @@ module Core
 ### A 64-bit unsigned integer in the range 0 to 18,446,744,073,709,551,615.
 ### `U64` is the default word-sized counter and index type in RazorForge.
 @llvm("i64")
-record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
+record U64 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType, Assignable, Copyable
   pass
 
 # Constants for U64 limits
@@ -23,7 +23,7 @@ preset U64_ONE: U64 = 1_u64
 routine U64!(from: S8) -> U64
   if from < 0_s8
     throw IntegerOverflowError()
-  return sign_extend[S8, U64](from)
+  return LLVM::sign_extend[S8, U64](from)
 
 ### Converts a signed 16-bit integer to `U64`.
 ### :param from: The source value.
@@ -32,7 +32,7 @@ routine U64!(from: S8) -> U64
 routine U64!(from: S16) -> U64
   if from < 0_s16
     throw IntegerOverflowError()
-  return sign_extend[S16, U64](from)
+  return LLVM::sign_extend[S16, U64](from)
 
 ### Converts a signed 32-bit integer to `U64`.
 ### :param from: The source value.
@@ -41,7 +41,7 @@ routine U64!(from: S16) -> U64
 routine U64!(from: S32) -> U64
   if from < 0_s32
     throw IntegerOverflowError()
-  return sign_extend[S32, U64](from)
+  return LLVM::sign_extend[S32, U64](from)
 
 ### Converts a signed 64-bit integer to `U64`.
 ### :param from: The source value.
@@ -50,7 +50,7 @@ routine U64!(from: S32) -> U64
 routine U64!(from: S64) -> U64
   if from < 0_s64
     throw IntegerOverflowError()
-  return reinterpret_bits[S64, U64](from)
+  return LLVM::reinterpret_bits[S64, U64](from)
 
 ### Converts a signed 128-bit integer to `U64`.
 ### :param from: The source value.
@@ -59,25 +59,25 @@ routine U64!(from: S64) -> U64
 routine U64!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
     throw IntegerOverflowError()
-  return int_truncate[S128, U64](from)
+  return LLVM::int_truncate[S128, U64](from)
 
 ### Zero-extends an unsigned 8-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 routine U64(from: U8) -> U64
-  return zero_extend[U8, U64](from)
+  return LLVM::zero_extend[U8, U64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 routine U64(from: U16) -> U64
-  return zero_extend[U16, U64](from)
+  return LLVM::zero_extend[U16, U64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
 routine U64(from: U32) -> U64
-  return zero_extend[U32, U64](from)
+  return LLVM::zero_extend[U32, U64](from)
 
 ### Returns `from` unchanged (identity conversion).
 ### :param from: The source value.
@@ -92,7 +92,7 @@ routine U64(from: U64) -> U64
 routine U64!(from: U128) -> U64
   if from > 18446744073709551615_u128
     throw IntegerOverflowError()
-  return int_truncate[U128, U64](from)
+  return LLVM::int_truncate[U128, U64](from)
 
 ### Converts an `S256` to `U64`, throwing if the value is negative or exceeds U64_MAX.
 ### :param from: The `S256` value to convert.
@@ -101,7 +101,7 @@ routine U64!(from: U128) -> U64
 routine U64!(from: S256) -> U64
   if not (0_s256 <= from <= 18446744073709551615_s256)
     throw IntegerOverflowError()
-  return int_truncate[S256, U64](from)
+  return LLVM::int_truncate[S256, U64](from)
 
 ### Converts a `U256` to `U64`, throwing if the value exceeds U64_MAX.
 ### :param from: The `U256` value to convert.
@@ -110,7 +110,7 @@ routine U64!(from: S256) -> U64
 routine U64!(from: U256) -> U64
   if from > 18446744073709551615_u256
     throw IntegerOverflowError()
-  return int_truncate[U256, U64](from)
+  return LLVM::int_truncate[U256, U64](from)
 
 ### Truncates a 16-bit float to `U64` by first widening to `F32`.
 ### :param from: The source float value.
@@ -124,7 +124,7 @@ routine U64!(from: F16) -> U64
 routine U64!(from: F32) -> U64
   if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
     throw IntegerOverflowError()
-  return float_to_unsigned[F32, U64](from)
+  return LLVM::float_to_unsigned[F32, U64](from)
 
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
@@ -132,7 +132,7 @@ routine U64!(from: F32) -> U64
 routine U64!(from: F64) -> U64
   if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
     throw IntegerOverflowError()
-  return float_to_unsigned[F64, U64](from)
+  return LLVM::float_to_unsigned[F64, U64](from)
 
 ### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
 ### :param from: The source float value.
@@ -166,19 +166,19 @@ routine U64!(from: D128) -> U64
 ### :param you: The right operand.
 ### :returns: A tuple of `(sum, overflow_flag)`.
 routine U64.add_with_overflow(you: U64) -> (U64, Bool)
-  return unsigned_add_checked[U64](me, you)
+  return LLVM::unsigned_add_checked[U64](me, you)
 
 ### Returns the difference `me - you`, and a flag indicating whether the result wrapped.
 ### :param you: The value to subtract.
 ### :returns: A tuple of `(difference, overflow_flag)`.
 routine U64.sub_with_overflow(you: U64) -> (U64, Bool)
-  return unsigned_sub_checked[U64](me, you)
+  return LLVM::unsigned_sub_checked[U64](me, you)
 
 ### Returns the product of this value and `you`, and a flag indicating whether the result wrapped.
 ### :param you: The right operand.
 ### :returns: A tuple of `(product, overflow_flag)`.
 routine U64.mul_with_overflow(you: U64) -> (U64, Bool)
-  return unsigned_mul_checked[U64](me, you)
+  return LLVM::unsigned_mul_checked[U64](me, you)
 
 ### Returns `me + you`, throwing on overflow.
 ### :param you: The right operand.
@@ -217,7 +217,7 @@ routine U64.mul!(you: U64) -> U64
 routine U64.floordiv!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U64](a: me, b: you)
+  return LLVM::unsigned_div(a: me, b: you)
 
 ### Returns `me % you`, throwing if `you` is zero.
 ### :param you: The divisor.
@@ -226,7 +226,7 @@ routine U64.floordiv!(you: U64) -> U64
 routine U64.mod!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_rem[U64](a: me, b: you)
+  return LLVM::unsigned_rem(a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -236,19 +236,19 @@ routine U64.mod!(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The wrapped sum.
 routine U64.add_wrap(you: U64) -> U64
-  return add[U64](a: me, b: you)
+  return LLVM::add(a: me, b: you)
 
 ### Returns `(me - you) mod 2⁶⁴` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The wrapped difference.
 routine U64.sub_wrap(you: U64) -> U64
-  return sub[U64](a: me, b: you)
+  return LLVM::sub(a: me, b: you)
 
 ### Returns `(me * you) mod 2⁶⁴` without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped product.
 routine U64.mul_wrap(you: U64) -> U64
-  return mul[U64](a: me, b: you)
+  return LLVM::mul(a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -258,31 +258,31 @@ routine U64.mul_wrap(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The sum.
 dangerous routine U64.add_unchecked(you: U64) -> U64
-  return unsigned_add_exact[U64](a: me, b: you)
+  return LLVM::unsigned_add_exact[U64](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference.
 dangerous routine U64.sub_unchecked(you: U64) -> U64
-  return unsigned_sub_exact[U64](a: me, b: you)
+  return LLVM::unsigned_sub_exact[U64](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product.
 dangerous routine U64.mul_unchecked(you: U64) -> U64
-  return unsigned_mul_exact[U64](a: me, b: you)
+  return LLVM::unsigned_mul_exact[U64](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient.
 dangerous routine U64.floordiv_unchecked(you: U64) -> U64
-  return unsigned_div[U64](a: me, b: you)
+  return LLVM::unsigned_div(a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The remainder.
 dangerous routine U64.mod_unchecked(you: U64) -> U64
-  return unsigned_rem[U64](a: me, b: you)
+  return LLVM::unsigned_rem(a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -292,22 +292,22 @@ dangerous routine U64.mod_unchecked(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The sum, or `U64_MAX` if it would overflow.
 routine U64.add_clamp(you: U64) -> U64
-  return unsigned_add_sat[U64](a: me, b: you)
+  return LLVM::unsigned_add_sat[U64](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U64_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would underflow.
 routine U64.sub_clamp(you: U64) -> U64
-  return unsigned_sub_sat[U64](a: me, b: you)
+  return LLVM::unsigned_sub_sat[U64](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U64_MAX` on overflow.
 ### :param you: The right operand.
 ### :returns: The product, or `U64_MAX` if it would overflow.
 routine U64.mul_clamp(you: U64) -> U64
-  var wide = mul[U128](zero_extend[U64, U128](me), zero_extend[U64, U128](you))
-  if unsigned_gt[U128](wide, 18446744073709551615_u128)
+  var wide = LLVM::mul(LLVM::zero_extend[U64, U128](me), LLVM::zero_extend[U64, U128](you))
+  if LLVM::unsigned_gt(wide, 18446744073709551615_u128)
     return U64_MAX
-  return int_truncate[U128, U64](wide)
+  return LLVM::int_truncate[U128, U64](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -381,24 +381,24 @@ routine U64.pow_clamp(exp: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The bitwise intersection.
 routine U64.bitand(you: U64) -> U64
-  return bit_and[U64](a: me, b: you)
+  return LLVM::bit_and(a: me, b: you)
 
 ### Returns `me | you` (bitwise OR).
 ### :param you: The right operand.
 ### :returns: The bitwise union.
 routine U64.bitor(you: U64) -> U64
-  return bit_or[U64](a: me, b: you)
+  return LLVM::bit_or(a: me, b: you)
 
 ### Returns `me ^ you` (bitwise XOR).
 ### :param you: The right operand.
 ### :returns: The bitwise exclusive-or.
 routine U64.bitxor(you: U64) -> U64
-  return bit_xor[U64](a: me, b: you)
+  return LLVM::bit_xor(a: me, b: you)
 
 ### Returns `~me` (bitwise NOT).
 ### :returns: The bitwise complement.
 routine U64.bitnot() -> U64
-  return bit_xor[U64](a: me, b: U64_MAX)
+  return LLVM::bit_xor(a: me, b: U64_MAX)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -409,25 +409,25 @@ routine U64.bitnot() -> U64
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine U64.ashl(bits: U32) -> U64
-  return shift_left[U64](me, U64(bits))
+  return LLVM::shift_left(me, U64(bits))
 
 ### Returns `me >> bits` (arithmetic right shift, zero-filling for unsigned).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine U64.ashr(bits: U32) -> U64
-  return shift_right_unsigned[U64](me, U64(bits))
+  return LLVM::shift_right_unsigned(me, U64(bits))
 
 ### Returns `me << bits` (logical left shift).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine U64.lshl(bits: U32) -> U64
-  return shift_left[U64](me, U64(bits))
+  return LLVM::shift_left(me, U64(bits))
 
 ### Returns `me >> bits` (logical right shift, zero-filling).
 ### :param bits: The number of bit positions to shift.
 ### :returns: The shifted value.
 routine U64.lshr(bits: U32) -> U64
-  return shift_right_unsigned[U64](me, U64(bits))
+  return LLVM::shift_right_unsigned(me, U64(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -437,15 +437,15 @@ routine U64.lshr(bits: U32) -> U64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`.
 routine U64.eq(you: U64) -> Bool
-  return int_eq[U64](a: me, b: you)
+  return LLVM::int_eq(a: me, b: you)
 
 ### Returns the ordering relationship between this value and `you`.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine U64.cmp(you: U64) -> ComparisonSign
-  if unsigned_lt[U64](me, you)
+  if LLVM::unsigned_lt(me, you)
     return ME_SMALL
-  if unsigned_gt[U64](me, you)
+  if LLVM::unsigned_gt(me, you)
     return ME_LARGE
   return SAME
 
@@ -480,7 +480,7 @@ routine U64.clamp(min_val: U64, max_val: U64) -> U64
 ### Returns the number of bits set to one (popcount).
 ### :returns: The count of set bits in the 64-bit representation.
 routine U64.count_ones() -> U64
-  return count_ones[U64](me)
+  return LLVM::count_ones[U64](me)
 
 ### Returns the number of bits set to zero.
 ### :returns: `64` minus the popcount.
@@ -490,12 +490,12 @@ routine U64.count_zeros() -> U64
 ### Returns the number of consecutive zero bits before the highest set bit.
 ### :returns: The leading zero count; `64` if the value is zero.
 routine U64.leading_zeros() -> U64
-  return leading_zeros[U64](me)
+  return LLVM::leading_zeros(me)
 
 ### Returns the number of consecutive zero bits starting from the least significant bit.
 ### :returns: The trailing zero count; `64` if the value is zero.
 routine U64.trailing_zeros() -> U64
-  return trailing_zeros[U64](me)
+  return LLVM::trailing_zeros(me)
 
 ### Returns the number of consecutive one bits before the highest clear bit.
 ### :returns: The leading one count.
@@ -510,12 +510,12 @@ routine U64.trailing_ones() -> U64
 ### Returns this value with the bit order reversed.
 ### :returns: The bit-reversed value.
 routine U64.reverse_bits() -> U64
-  return reverse_bits[U64](me)
+  return LLVM::reverse_bits[U64](me)
 
 ### Returns this value with the byte order reversed (big/little endian swap).
 ### :returns: The byte-swapped value.
 routine U64.swap_bytes() -> U64
-  return byte_swap[U64](me)
+  return LLVM::byte_swap(me)
 
 ### Returns true if this value is an exact power of two.
 ### :returns: `true` if `me != 0 and (me & (me - 1)) == 0`.
@@ -529,9 +529,9 @@ routine U64.rotate_left(bits: U32) -> U64
   var n = bits % 64_u32
   if n == 0_u32
     return me
-  var left = shift_left[U64](me, U64(n))
-  var right = shift_right_unsigned[U64](me, U64(64_u32 -% n))
-  return bit_or[U64](a: left, b: right)
+  var left = LLVM::shift_left(me, U64(n))
+  var right = LLVM::shift_right_unsigned(me, U64(64_u32 -% n))
+  return LLVM::bit_or(a: left, b: right)
 
 ### Returns this value rotated right by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
@@ -540,17 +540,17 @@ routine U64.rotate_right(bits: U32) -> U64
   var n = bits % 64_u32
   if n == 0_u32
     return me
-  var right = shift_right_unsigned[U64](me, U64(n))
-  var left = shift_left[U64](me, U64(64_u32 -% n))
-  return bit_or[U64](a: right, b: left)
+  var right = LLVM::shift_right_unsigned(me, U64(n))
+  var left = LLVM::shift_left(me, U64(64_u32 -% n))
+  return LLVM::bit_or(a: right, b: left)
 
 ### Returns the raw byte representation of this value in little-endian order.
 routine U64.to_bytes_le() -> Array[Byte, 8]
   var result = Array[Byte, 8]()
   var i = 0_u64
   while i < 8_u64
-    var b = int_truncate[U64, U8](shift_right_unsigned[U64](me, i * 8_u64))
-    result = set_byte_at(array: result, index: i, value: b)
+    var b = LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(me, i * 8_u64))
+    result = LLVM::set_byte_at(array: result, index: i, value: b)
     i = i + 1_u64
   return result
 
@@ -563,8 +563,8 @@ common routine U64.from_bytes_le(bytes: Array[Byte, 8]) -> U64
   var result = 0_u64
   var i = 0_u64
   while i < 8_u64
-    var part = shift_left[U64](zero_extend[U8, U64](byte_at(array: bytes, index: i)), i * 8_u64)
-    result = bit_or[U64](a: result, b: part)
+    var part = LLVM::shift_left(LLVM::zero_extend[U8, U64](LLVM::byte_at(array: bytes, index: i)), i * 8_u64)
+    result = LLVM::bit_or(a: result, b: part)
     i = i + 1_u64
   return result
 
@@ -584,8 +584,8 @@ routine U64.is_zero() -> Bool
 ### Returns true if this value is even.
 ### :returns: `true` when the least significant bit is clear.
 routine U64.is_even() -> Bool
-  var result = bit_and[U64](a: me, b: 1_u64)
-  return int_eq[U64](a: result, b: 0u64)
+  var result = LLVM::bit_and(a: me, b: 1_u64)
+  return LLVM::int_eq(a: result, b: 0u64)
 
 ### Returns true if this value is odd.
 ### :returns: `true` when the least significant bit is set.
@@ -604,8 +604,8 @@ routine U64.represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u64
-    var digit = U8(unsigned_rem[U64](a: remaining, b: 10u64))
-    remaining = unsigned_div[U64](a: remaining, b: 10u64)
+    var digit = U8(LLVM::unsigned_rem(a: remaining, b: 10u64))
+    remaining = LLVM::unsigned_div(a: remaining, b: 10u64)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
@@ -635,11 +635,6 @@ routine U64!(from_text: Text) -> U64
 # ============================================================================
 # Hashing
 # ============================================================================
-
-### Returns an xxHash64-based hash of this value.
-### :returns: The 64-bit hash.
-routine U64.fast_hash() -> U64
-  return __hash_leaf(v: me)
 
 ### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.

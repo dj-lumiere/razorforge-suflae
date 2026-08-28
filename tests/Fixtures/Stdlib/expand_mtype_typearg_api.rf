@@ -1,0 +1,30 @@
+module Tests/Stdlib/ExpandMtypeTypeargApi
+import IO/Console
+import BuilderExpansion
+import Collections
+
+# Exercises `$typeof(m)` in TYPE-ARGUMENT position (the sibling of the expression-position splice): inside
+# `expand m in allmemvarof(T)`, the comptime member type splices into a generic argument — `Hijacked[$typeof(m)]`
+# and `hijacked_from[$typeof(m)]` — folding to the field's concrete type at monomorphization ($Col ->
+# S64/F32/Bool). Allocates a 1-slot typed raw buffer per field, pokes the field value in, peeks it back.
+
+record Trio
+  a: S64
+  b: F32
+  c: Bool
+
+routine roundtrip[T](value: T) -> Text
+  var out = ""
+  expand m in allmemvarof(T)
+    if orderof(m) > 0u64
+      out = out + ", "
+    danger
+      var buf = hijacked_from[$typeof(m)](rf_allocate_dynamic_uninit($typeof(m).data_size()))
+      buf.poke(value.$nameof(m))
+      out = out + nameof(m) + "=" + buf.peek().represent()
+  return out
+
+routine start()
+  show(roundtrip[Trio](value: Trio(a: 42_s64, b: 3.5f32, c: true)))
+  show("DONE")
+  return

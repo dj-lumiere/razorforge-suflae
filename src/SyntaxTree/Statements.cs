@@ -37,7 +37,7 @@ public abstract record Statement(SourceLocation Location) : SyntaxTreeNode(Locat
 /// Common uses include:
 /// <list type="bullet">
 /// <item>Function calls that modify state: print("Hello"), array.append(item)</item>
-/// <item>Method invocations: object.doSomething()</item>
+/// <item>memberRoutine invocations: object.doSomething()</item>
 /// <item>Assignment operators: x += 5</item>
 /// </list>
 /// </remarks>
@@ -94,6 +94,12 @@ public record DeclarationStatement(Declaration Declaration, SourceLocation Locat
 public record AssignmentStatement(Expression Target, Expression Value, SourceLocation Location)
     : Statement(Location: Location)
 {
+    /// <summary>True for the compiler-synthesized assignment that initializes a Suflae module-level
+    /// <c>global</c> at the top of <c>start()</c>. Signals the Roamed promotion pass to escape the
+    /// global's handle to ESCAPED (armed-lock) mode right after init — a global is reachable from every
+    /// task, so its access lock must engage for thread-safe concurrent mutation.</summary>
+    public bool IsGlobalInit { get; init; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -199,6 +205,7 @@ public record BecomesStatement(Expression Value, SourceLocation Location)
 /// </summary>
 /// <param name="Error">Expression that evaluates to a Crashable error type</param>
 /// <param name="Location">Source location information</param>
+/// <param name="IsFatal">When true this is a <c>pierce</c> (fatal, uncatchable); when false a recoverable <c>throw</c>.</param>
 /// <remarks>
 /// The throw statement is used for expected throwures that should be handled:
 /// <code>
@@ -407,7 +414,16 @@ public record LoopStatement(
     /// <c>IteratorInlineLoweringPass</c> can find the iterator-advance loops to rewrite, instead of
     /// brittle shape-matching against every <c>loop</c>.
     /// </summary>
-    public bool IsIteratorForLoop { get; init; }
+    public bool IsIteratorEachLoop { get; init; }
+
+    /// <summary>
+    /// For a lowered <c>each x in a</c> loop whose iteration source is a plain variable, the name of
+    /// that variable (<c>"a"</c>); otherwise <c>null</c>. ControlFlowLoweringPass (Phase 7) rewrites
+    /// the surface <see cref="EachStatement"/> away before Phase 5 body analysis, so this marker is
+    /// how the reshaping-during-iteration check (SemanticVerifier) recovers the source name to
+    /// populate its active-iteration set.
+    /// </summary>
+    public string? IterationSourceName { get; init; }
 }
 
 /// <summary>
@@ -431,7 +447,7 @@ public record LoopStatement(
 /// <item>Python-style else: else branch executes if loop completes without break</item>
 /// </list>
 /// </remarks>
-public record ForStatement(
+public record EachStatement(
     string? Variable,
     DestructuringPattern? VariablePattern,
     Expression Iterable,
@@ -442,8 +458,94 @@ public record ForStatement(
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
-        return visitor.VisitForStatement(node: this);
+        return visitor.VisitEachStatement(node: this);
     }
+}
+
+/// <summary>The comptime source an <see cref="ExpandStatement"/> iterates over.</summary>
+public enum ExpandSourceKind
+{
+    /// <summary><c>openmemvarof(T)</c> — the OPEN ∪ POSTED (publicly readable) member variables,
+    /// declaration order. Filters out <c>secret</c> fields. Use for public serialization.</summary>
+    OpenMemberVariables,
+
+    /// <summary><c>allmemvarof(T)</c> — ALL member variables incl <c>secret</c>, declaration order.
+    /// Use for full-state internal derives (hash/cmp/represent/diagnose/destroy).</summary>
+    AllMemberVariables,
+
+    /// <summary><c>branchof(T)</c> — the arms of a variant, tag order. Used inside a <c>when</c> to
+    /// generate one type-dispatch clause per arm.</summary>
+    Arms,
+
+    /// <summary><c>caseof(T)</c> — the cases of a choice (S32 discriminants) or the members of a flags
+    /// (U64 bit values), declaration order. The handle exposes <c>c.name</c>, <c>c.id</c> (ordinal) and
+    /// <c>c.value</c> (the case's numeric constant, spliced via <c>${c.value}</c>).</summary>
+    Cases
+}
+
+/// <summary>
+/// Compile-time member-expansion loop: <c>expand m in allmemvarof(T)</c>. Unlike the runtime
+/// <see cref="EachStatement"/>, this never survives to codegen — it is UNROLLED at monomorphization
+/// (once per member of the concrete <c>T</c>) by the generic AST rewriter, with the handle
+/// projections (<c>m.name</c>, <c>m.id</c>) folded to literals and <c>x.${m.name}</c> splices
+/// rewritten to real member accesses.
+/// </summary>
+/// <param name="HandleName">The per-part handle identifier (e.g. <c>m</c>).</param>
+/// <param name="SourceType">The type inside <c>allmemvarof(...)</c> (a generic param before monomorph).</param>
+/// <param name="SourceKind">Which reflection source is iterated (Phase 1: MemberVariables only).</param>
+/// <param name="Body">The loop body, cloned per part at monomorphization.</param>
+/// <param name="Location">Source location information.</param>
+public record ExpandStatement(
+    string HandleName,
+    string SourceName,
+    TypeExpression SourceType,
+    Statement Body,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>
+    /// The reflection kind, classified from the source intrinsic NAME (`allmemvarof`/`openmemvarof`/
+    /// `caseof`). The parser is name-agnostic — it stores whatever identifier follows `in` as
+    /// <see cref="SourceName"/> (the sources are BuilderExpansion module intrinsics, not keywords); this
+    /// maps it to the kind the unroller branches on. SemanticVerifier validates the name + import-gates
+    /// on <c>import BuilderExpansion</c> before the unroll runs.
+    /// </summary>
+    public ExpandSourceKind SourceKind => ExpandSources.KindOf(name: SourceName);
+
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitExpandStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Classifies a BuilderExpansion reflection-source intrinsic name (<c>allmemvarof</c>/<c>openmemvarof</c>/
+/// <c>caseof</c>/<c>branchof</c>) into an <see cref="ExpandSourceKind"/>. Lives in the AST layer (not the
+/// parser grammar, which is name-agnostic) so both <see cref="ExpandStatement"/> and the analyzer agree on
+/// the mapping. Unknown names fall back to <see cref="ExpandSourceKind.AllMemberVariables"/>; the analyzer
+/// rejects them first (a name that is not a real source is a semantic error, gated on the module import).
+/// </summary>
+public static class ExpandSources
+{
+    /// <summary>The recognized reflection-source intrinsic names.</summary>
+    public static readonly System.Collections.Generic.IReadOnlySet<string> Names =
+        new System.Collections.Generic.HashSet<string>(comparer: System.StringComparer.Ordinal)
+        {
+            "openmemvarof", "allmemvarof", "caseof", "branchof"
+        };
+
+    /// <summary>True if <paramref name="name"/> is a recognized reflection-source intrinsic.</summary>
+    public static bool IsSource(string name) => Names.Contains(item: name);
+
+    /// <summary>Maps a source intrinsic name to its <see cref="ExpandSourceKind"/>.</summary>
+    public static ExpandSourceKind KindOf(string name) => name switch
+    {
+        "openmemvarof" => ExpandSourceKind.OpenMemberVariables,
+        "allmemvarof" => ExpandSourceKind.AllMemberVariables,
+        "caseof" => ExpandSourceKind.Cases,
+        "branchof" => ExpandSourceKind.Arms,
+        _ => ExpandSourceKind.AllMemberVariables
+    };
 }
 
 /// <summary>
@@ -478,6 +580,7 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 /// <param name="Expression">Expression whose value will be matched against patterns</param>
 /// <param name="Clauses">List of pattern-action pairs with optional guard conditions</param>
 /// <param name="Location">Source location information</param>
+/// <param name="ArmExpansion">Comptime arm-expansion template; when set, clauses are unrolled per variant arm at monomorphization. Null for ordinary <c>when</c>.</param>
 /// <remarks>
 /// Advanced pattern matching features:
 /// <list type="bullet">
@@ -490,7 +593,11 @@ public record BlockStatement(List<Statement> Statements, SourceLocation Location
 public record WhenStatement(
     Expression Expression,
     List<WhenClause> Clauses,
-    SourceLocation Location) : Statement(Location: Location)
+    SourceLocation Location,
+    // Comptime arm-expansion: `when me` / `expand m in branchof(T)` / `is ${m.type} x => …`. When set,
+    // the (initially empty) Clauses are UNROLLED from this template at monomorphization — one clause
+    // per variant arm, with `${m.type}` folded to the arm type. Null for an ordinary `when`.
+    WhenArmExpansion? ArmExpansion = null) : Statement(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
@@ -510,6 +617,14 @@ public record WhenStatement(
 /// Guards provide additional filtering beyond structural pattern matching.
 /// </remarks>
 public record WhenClause(Pattern Pattern, Statement Body, SourceLocation Location);
+
+/// <summary>
+/// A comptime clause-template for <c>expand m in branchof(T)</c> inside a <c>when</c>. Carries the
+/// handle name, the variant source type, and the single template clause (whose pattern is a
+/// <see cref="SpliceTypePattern"/>). Monomorphization unrolls this into one concrete
+/// <see cref="WhenClause"/> per arm.
+/// </summary>
+public record WhenArmExpansion(string HandleName, TypeExpression SourceType, WhenClause Template);
 
 /// <summary>
 /// Control flow statement that immediately exits the innermost loop.
@@ -624,6 +739,17 @@ public record TypePattern(
     TypeExpression Type,
     string? VariableName,
     List<DestructuringBinding>? Bindings,
+    SourceLocation Location) : Pattern(Location: Location);
+
+/// <summary>
+/// A comptime type-splice pattern: <c>is ${m.type} x</c> inside an <c>expand m in branchof(T)</c>.
+/// The concrete arm type is unknown until monomorphization, where this is replaced by a
+/// <see cref="TypePattern"/> bound to the current arm's type. <see cref="VariableName"/> is null
+/// for a payload-less arm (<c>is ${m.type} =></c>).
+/// </summary>
+public record SpliceTypePattern(
+    string HandleName,
+    string? VariableName,
     SourceLocation Location) : Pattern(Location: Location);
 
 /// <summary>

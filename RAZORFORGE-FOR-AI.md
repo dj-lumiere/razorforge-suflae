@@ -49,6 +49,44 @@ When unsure, consult ground truth in the repo/package:
 12. **Printing is `show(...)`** (after `import IO/Console`), not print/println.
 13. **The entry point is `routine start()`**, not `main`.
 
+## 1b. Naming, terminology, and conventions (use the RIGHT word)
+
+RazorForge has its own idiom — do not import Rust/serde/C# vocabulary.
+
+- function → **routine**; method → **member routine** (`Type.name()`).
+- struct/class → **record** (value) or **entity** (heap reference). Never
+  "class"/"struct".
+- field → **member variable**, declared as a bare `name: Type` line — **no `var`,
+  no `open`**. Only restricted visibility is written: `posted` (module-write) /
+  `secret` (type/module-private). `open` is the unwritten default. There is no
+  static `let`/`var` distinction for members. Locals inside routines still use
+  `var` / `lateinit var`.
+- tagged union / sum type → **variant**; plain enum → **choice**; bitfield →
+  **flags**. `choice`/`flags` **variant names are SCREAMING_SNAKE_CASE**
+  (`LIVE`, `READ`, `NEGATIVE_INF`); routine names and locals stay `snake_case`.
+  A `choice` auto-provides `Equatable`/`Comparable`/`Hashable` — no `obeys` and no
+  method bodies needed.
+- **`Me` (capital) = the receiver's TYPE (the Self type); `me` (lowercase) = the
+  receiver INSTANCE.** Do not conflate them.
+- The generic-constraint keyword is **`needs`** (e.g. `needs T obeys P`), **not
+  `where`** — `where` is not RF syntax.
+- Say **"buildtime dispatch" / "runtime dispatch"**, not "static / dynamic".
+  Everything monomorphizes; RF's default is buildtime dispatch, no runtime dispatch.
+- varargs parameter notation is **`name...: Type`** (the `...` follows the param
+  NAME, before the colon); it binds to a `List[Type]`.
+- **RazorForge has NO "borrow" concept** (that is Rust). Do not use the word
+  "borrow" in prose or API names. Ownership is expressed via entities + `steal`
+  + RC wrappers + **access tokens** (below).
+- compiler-synthesized per-type routines are **wired routines** (`represent`,
+  `diagnose`, `serialize`, `create`, `eq`, `cmp`, `hash`, …) — named with **NO
+  sigil**; wired-ness is INFERRED from protocol conformance. Not
+  "derives"/"macros"/"trait impls". (The `$` sigil is a separate, unrelated
+  feature — a comptime SPLICE, e.g. `$nameof(m)`.)
+- **user prefers methods over free routines.** Prefer `routine Type.name(...)`
+  (implicit `me`) over a free routine; putting capability-generic dispatch on a
+  free routine is an anti-pattern (make it a method whose bound type is `Me`).
+- One TYPE declaration per file (its routines/conversions may accompany it).
+
 ## 2. Program skeleton
 
 ```razorforge
@@ -62,9 +100,21 @@ routine start()
 
 Every file begins with `module <Path>`. Imports use `/` separators.
 
+**Two import forms, distinct meaning:** `import Foo/Bar` is a **module** import
+(`Bar` is a submodule of `Foo`). `import Foo.bar` is a **member** import (`bar` is
+a type/routine/preset in module `Foo`). `Core` is auto-imported everywhere.
+
+**No module-level mutable state (RazorForge).** There is no module global `var` and no
+module `const`. Thread shared state through parameters or a heap entity; for constants,
+use a `preset` (or inline the literal). This is a consequence of deterministic scope
+teardown — a mutable global has no owning scope to anchor its `destroy`. A `var` at module
+level is an error (RF-S435); the `global` keyword is **Suflae-only** and rejected in RF
+(see SUFLAE-FOR-AI §2). `preset` (a build-time constant, inlined) is the only module-level
+binding RazorForge has.
+
 ## 3. Types
 
-- Signed ints: `S8 S16 S32 S64 S128` · unsigned: `U8 U16 U32 U64 U128`
+- Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
 - Floats: `F16 F32 F64 F128` · decimals: `D32 D64 D128`
 - Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`)
 - Complex: `j32/j64/j128/jn` literal suffixes (e.g. `3j64`)
@@ -73,8 +123,22 @@ Every file begins with `module <Path>`. Imports use `/` separators.
 - Collections: `List[T]`, `Dict[K,V]`, `Set[T]`, `Deque[T]`, `BitList`, `PriorityQueue[TPriority, TElement]`,
   `SortedDict[K, V]`, `SortedList[T]`, `SortedSet[T]`, fixed-size `Array[T, N]`, `BitArray[N]`
 - Tuples: `(T, U)` / `Tuple[T, U]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]`, `Result[T]`, `Lookup[T]`
+- Carriers: `Maybe[T]`, `Result[T]`, `Lookup[T]` (compiler-synthesized only —
+  user routines cannot declare them as return types; you get them from the
+  generated `try_`/`check_`/`lookup_` variants).
 - Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
+
+**Optionals and `none`:**
+- **`T?` (postfix `?`)** = `Maybe[T]` optional shorthand — the ONLY `?`-on-a-type
+  form. There is no prefix `?T`.
+- **`None` (capital)** is the type / pattern marker (`when x is None`, type
+  position). **`none` (lowercase)** is the value literal (like `true`/`false`).
+- `none` is legal ONLY where the target type is a carrier with an absent arm
+  (`Maybe[T]`, `Lookup[T]`, `Result[Blank]`) or a variant with a `None` member.
+  `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
+  errors — `none` has no free-standing type.
+- Absent is matched by `is None` on `Maybe[T]` / `Lookup[T]` / a variant's zero
+  tag. `Result[T]` has no absent state (only `Crashable | T`).
 
 ## 4. Variables and operators
 
@@ -87,7 +151,7 @@ preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type requir
 
 There is **no `let` and no `const`** — `var` for bindings, `preset` for
 constants. (`lateinit var x: T` defers initialization: storage is allocated at
-the declaration — entities get a real zeroed block, `$create` not run — so the
+the declaration — entities get a real zeroed block, `create` not run — so the
 binding is immediately valid and borrowable; assign before reading.)
 
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
@@ -96,6 +160,9 @@ binding is immediately valid and borrowable; assign before reading.)
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
   idiom is `x.try_abs()!!`
+- Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
+  compares whether two references are the SAME object (entities / access-token /
+  RC-wrapper operands only — RF-S440 on value types). See §7.
 
 ## 5. Control flow
 
@@ -103,7 +170,7 @@ binding is immediately valid and borrowable; assign before reading.)
 if x == 3
   show("three")
 
-for x in 1 to 5          # range iteration
+each x in 1 to 5          # range iteration
   if x == 3
     continue
   if x > 4
@@ -159,12 +226,17 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   `try_get_text(n: 0)` → `Maybe[Text]`/`Text?` automatically. If the routine
   can throw, it also generates `check_...`; if it can both throw and be absent,
   it generates `lookup_...`.
-- `$`-prefixed routines are lifecycle/operator hooks: `$create`, `$destroy`,
-  `$copy`, `$eq`, `$cmp`, `$represent` (to-text), `$diagnose` (debug text),
-  `$getitem!`/`$setitem` (indexing), `$iter`/`$next` (iteration), `$add` etc.
-  (operator overloads).
+- **Wired routines** are compiler-synthesized lifecycle/operator hooks (NO sigil):
+  `create`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
+  (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
+  etc. (operator overloads). Wired-ness is inferred from protocol conformance.
 - Failure inside a failable routine: `throw SomeError(...)` or `absent`
   (absence without an error object).
+- The `!` is part of the routine NAME, before the argument list, in both static
+  and method calls: `S64.from_digit_bytes_at!(bytes: bs)`, `x.divmod!(other: m)`.
+  Writing `foo(args)!` (bang after the parens) is a parse error. Constructor
+  overload resolution picks `create` vs `create!` for you — the call site
+  writes neither `!` nor ceremony.
 - Bare routine names are first-class values: `select(transform: double)`
   (free routines only).
 
@@ -177,32 +249,69 @@ record Point          # VALUE type: copied, no identity, no destructor
 # construct memberwise, strictly named:
 var p = Point(x: 3, y: 4)
 
-entity Resource       # HEAP type: single owner, deterministic $destroy
+entity Resource       # HEAP type: single owner, deterministic destroy
   tag: S64
 
 var b = Resource(tag: 7s32)
 consume(r: steal b)   # ownership moves; using b afterwards = compile error
-# $destroy runs exactly once, at the owner's scope exit (anchored at `return`)
+# destroy runs exactly once, at the owner's scope exit (anchored at `return`)
 ```
 
 - Containment is ownership: one owner at a time; `steal` marks every transfer.
-- Returning a bare entity transfers ownership to the caller.
-- Scoped borrows: `view` (read intent) / `modify` (write intent) are
-  scope-bound — they cannot be returned or stored, and you should not bind them
-  with `var`. Inline `item.view()` / `item.modify()` is fine for a single call;
-  use `using item.view() as v` / `using item.modify() as m` when a borrow needs
-  a name or spans multiple statements. To lend storably without ownership, use `Hijacked[T]`
-  (non-owning handle, no-op destroy). Shared ownership is opt-in via
-  `Retained[T]` / `Tracked[T]` (reference counting).
-- `Retained[T]` is different from `Viewing[T]`/`Modifying[T]`: it is storable,
-  and it forwards direct access to the retained entity (`r.payload`,
-  `r.method(...)`). Copying/sharing a retained handle must be explicit via
-  `.retain()`; weak handles use `.track()`.
-- Records never use `view`/`modify`/`as_entity` — those are entity concepts.
-- Unsafe operations live in `danger` blocks; `dangerous` routines can only be
-  called inside them.
-- There is **no borrow checker** and no lifetime syntax; safety comes from
-  single ownership + marked transfers.
+  Returning a bare entity transfers ownership to the caller (`var a = make()`
+  owns it, torn down at scope exit). A routine handing back an entity it does NOT
+  own (e.g. a container's element) must return an access token, never a bare
+  entity — else the caller becomes a second owner and double-frees.
+- **Access tokens** (RF's answer to "borrow" — never call them borrows). They are
+  scope-bound: they cannot be returned, stored, or bound with `var x = a.view()`.
+  Use them inline for a single call, or `using ... as` when a name is needed.
+  - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
+    entity. Produced by `a.view()` / `a.modify()`.
+  - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
+    a `Guarded[T,P]`, lock-guarded by the policy `P`. Produced by `s.consult()` /
+    `s.amend()`, always via a `using` block; `s.try_amend()` is the failable form.
+- **RC wrappers** (opt-in shared ownership, reference-counted):
+  - **`Retained[T]`** — single-thread strong handle (copy verb `.retain()`);
+    forwards direct access to the retained entity.
+  - **`Guarded[T,P]`** — multi-thread strong handle (atomic, copy verb `.share()`);
+    reaching its inner value goes through a `Consulting`/`Amending` token.
+  - **`Tracked[T]`** (single-thread) / **`Witnessed[T]`** (multi-thread) — weak handles.
+- **`Hijacked[T]`** — a non-owning raw handle (no-op destroy); the stdlib's
+  internal buffer/pointer mechanism, used inside `danger`.
+- Records never use tokens or `as_entity` — those are entity concepts.
+- `danger` blocks / `dangerous` routines mark **only** operations that can
+  ACTUALLY cause memory-unsafety — UB, a memory race, use-after-free,
+  double-free, or a memory leak. Ordinary code (arithmetic, collection ops,
+  channels, failable calls) is **never** wrapped in `danger`; it is not a
+  catch-all for "risky" or "advanced". A `dangerous` routine can only be called
+  inside a `danger` block.
+- No lifetime syntax; safety comes from single ownership + marked transfers
+  (`steal`) + scope-bound access tokens.
+
+```razorforge
+using c.view() as v          # Viewing[Counter], read-only, dead at block end
+  show(f"count = {v.value}")
+using c.modify() as m        # Modifying[Counter], write intent
+  m.increment()
+```
+
+- **Identity comparison `===` / `!==`** — "are these two the SAME object?", distinct
+  from value equality `==`. Valid only on reference-carrying operands: an `entity` or
+  a forwarding wrapper (`Viewing`/`Modifying`/`Consulting`/`Amending`/`Retained`/
+  `Guarded`/`Tracked`/`Witnessed`). A value type (record/scalar) is a compile error
+  (**RF-S440**) — values have no identity; use `==`. `Hijacked` is excluded (its `==`
+  is already identity — you `peek` to see its value). It is a primitive pointer
+  compare, never a `.eq()` call, so it is not overloadable. For single-owner entities
+  `a === b` is trivially `false` between distinct bindings; it earns its keep where
+  aliasing exists — two `Retained[T]` (or two `Viewing`/`Modifying` tokens) that may
+  point at the same entity.
+
+```razorforge
+var r1 = a.retain()          # Retained[Node]
+var r2 = r1.retain()         # second handle to the SAME node
+show(r1 === r2)              # true  — same object
+show(a === make_other())    # false — different objects
+```
 
 ## 8. Generics and protocols
 
@@ -216,7 +325,7 @@ record Pair[A, B]
 
 protocol Iterable[T]
 relates Iter obeys Iterator[T]        # associated type slot
-  routine $iter() -> Me/Iter          # `/` projects an associated type
+  routine iter() -> Me/Iter          # `/` projects an associated type
 
 entity List[T] obeys Iterable[T]
 relates ListEmitter[T] as Iter        # associated type binding
@@ -237,6 +346,17 @@ show(f"debug: {value:?}")     # :? = diagnose (debug) format spec
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type
 `Byte`; `b"..."` has type `Bytes`.
 
+- **`Text` slicing** uses a range subscript: `text[a til b]` / `text[a to b]`
+  (subscript forces `U64` indices), open-ended `text[a til ^0]` to the end.
+  Beyond the basics, `Text` carries a rich pure-RF method set (search, split,
+  case, padding) — e.g. `count_of`, `find!`/`find_last!`, `split_once!`,
+  `replace_first`, `capitalize`, `center`, `eq_ignore_case`. Verify exact names
+  in `Standard/RazorForge/Core/Types/Text.rf`.
+- **`Bytes` `obeys Ordered, Hashable`** — usable as a `Dict` key and sortable.
+  It supports range slicing (`bs[a til b]`), sub-sequence `contains`/`find!`/
+  `split`, and hex `to_hex`/`from_hex!`. Container `represent` quotes elements
+  by type (Text/Bytes → `"…"`, Char/Byte → `'…'`).
+
 ## 10. Collections quick reference
 
 Verify exact signatures in `Standard/RazorForge/Collections/` — highlights
@@ -248,20 +368,69 @@ that differ from other languages:
 - `set.add(value: v)` returns Bool — `discard` it if unused.
 - `dict.add(key: k, value: v)` returns Bool; indexing is failable under the
   hood, so use `dict.try_getitem(key: k)` when you want `Maybe[V]`.
-- Indexing `coll[i]` is failable under the hood (`$getitem!`); back-indexing
+- Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
+- **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
+  `List`/`Deque` yields a new `List`/`Deque`, on `Array[T, N]` a `List[T]`
+  (slice length is a runtime value, so it cannot be a fixed `Array`). Mutating
+  the slice never touches the original. Open-ended `xs[a til ^0]` slices to the
+  end. Element type must be `Copyable` (slicing a `List[Entity]` is a compile
+  error). For a lazy, no-copy window use the iterator combinator
+  `xs.skip(a).take(n)` instead — copy-vs-view is spelled by which you call.
 - `List[T]`, `Dict[K, V]`, `Set[T]`, `Deque[T]`, and sorted collections are
   entities. Do not pass a container as a bare parameter when read-only access is
   enough; use `Viewing[List[T]]` and pass `items.view()` inline for one call.
-  Use `using items.view() as v` only when the borrow needs a name or spans
+  Use `using items.view() as v` only when the token needs a name or spans
   multiple statements. Do not write `var v = items.view()`.
 - `SortedList`/`SortedSet` have **no positional indexing** — rank access is
   `get_by_rank!(...)`.
 - Iterator adapters (from `IterTools`): `select`, `where`, `zip`, `enumerate`,
   `chain`, `distinct`, `select_many`, `min_by`, … — lazily evaluated, chainable,
   lambdas like `x => x % 2 == 0`.
-- Ranges: `1 to 5` inclusive, `1 til 5` exclusive, optional step with `by`
-  (e.g. `1 to 10 by 2`).
+- Ranges use word operators: `1 to 5` inclusive, `1 til 5` exclusive; direction
+  is inferred from the endpoints (`10 to 1` counts down — there is no `step -1`).
+  `by N` sets a positive step magnitude (`1 to 10 by 2`); direction stays driven
+  by the endpoints.
+- `List`, `Set`, `Dict` live in **`Core`** (always available — never suggest
+  `using Collections`). Only these three canonical collections have literal
+  syntax (`[]`/`{}`); specialized containers (`SortedSet`, `Deque`, `Array`,
+  `BitList`, `PriorityQueue`, …) are constructor-only
+  (`SortedSet.from([1, 2, 3])`, `Array[3](1, 2, 3)`).
+- Tuple fields are accessed as `t.item0`, `t.item1`, … (NOT `t.0`/`t.first`);
+  destructure with `var (q, r) = pair`.
+
+**Mutating a collection while `each`-looping it is banned** (RF-S625): calling a
+`@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
+build-time error — after a structural change the loop can no longer trust its
+next element. Finish the loop, then mutate.
+
+## 10b. Filesystem and paths (`IO/FileSystem`)
+
+Synchronous path/filesystem operations live in `import IO/FileSystem` as **free
+routines** (not methods on a path type — RF has no `Path` type; paths are plain
+`Text`). This is distinct from the *async* file-content I/O in §14 (`IO/File`).
+Highlights, with the gotchas that differ from Python `os`/`pathlib`:
+
+- **Existence (pure, non-throwing):** `exists`, `is_file`, `is_directory`,
+  `can_read`/`can_write`/`can_execute`.
+- **Mutation (failable):** `create_dir!`/`create_dir_all!`, `delete_path!`/
+  `delete_path_all!`, `move!`, `move_if_absent!` (→ `Bool`, false if the dest
+  existed), `touch!`, `set_readonly!`. **Copy is `copy_path!` / `copy_path_all!`,
+  NOT `copy!`** — a bare `copy` collides with the structural `copy` derive verb.
+- **Path builders (pure, no OS call):** `join_path(a:, b:)`, `parent_path`,
+  `file_name`, `file_stem`, `extension`, `split_extension` (→ `(stem, ext)`
+  tuple), `with_extension(path:, ext:)`, `with_file_name`. **`extension()`
+  returns WITHOUT the leading dot** (`"txt"`, not `".txt"`), and round-trips
+  through `with_extension`.
+- **Listing / walking:** `list_dir!` (→ `List[Text]` bare names), `list_dir_entries!`
+  (→ `List[DirEntry]` with `name`/`is_directory`/`modified` in ONE read — prefer
+  it when walking, no per-entry stat on Windows), `walk_dir!` (→ full descendant
+  paths, recursive, symlink-safe).
+- **Metadata:** `metadata!` (→ `FileMetadata`), `file_size!`.
+- **Dirs:** `current_dir!`/`set_current_dir!`, `home_dir!`, `temp_dir` (never fails).
+
+Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
+`symlink!`/`hard_link!`) and `glob`.
 
 ## 11. CLI and project manifest
 
@@ -317,7 +486,7 @@ record Item
   qty: S64
 
 routine find_qty!(items: Viewing[List[Item]], name: Text) -> S64
-  for item in items
+  each item in items
     if item.name == name
       return item.qty
   absent
@@ -357,8 +526,7 @@ suspended routine fetch(id: S64) -> S64
 
 routine start()
   var a = fetch(id: 1)           # call = start NOW + get an Agent[S64]
-  danger
-    show(f"result => {a.retrieve!()}")   # drive to completion, get the value
+  show(f"result => {a.retrieve!()}")   # drive to completion, get the value
   return
 ```
 
@@ -370,28 +538,144 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
   `Duration.from_milliseconds(ms: n)`.
 - `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
   `agent.waitfor(d).try_retrieve()` returns `None` on timeout instead of throwing.
-- `race![T](of: ?List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
-- `gather![T](of: ?List[Agent[T]]) -> ?List[T]` — drive all, wait for ALL; results in input order.
+- `race![T](of: List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
+- `gather![T](of: List[Agent[T]]) -> List[T]` — drive all, wait for ALL; results in input order.
 - `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.
 - A `List[Agent[T]]` may mix coroutine- and thread-backed agents (one `Agent[T]` type backs both).
-- **Dropping** an Agent without retrieving ABANDONS it: a parked coroutine runs its `$destroy`
+- **Dropping** an Agent without retrieving ABANDONS it: a parked coroutine runs its `destroy`
   teardown; a running thread is joined then discarded.
 
 ```razorforge
 var jobs = List[Agent[S64]]()
 jobs.add_last(value: fetch(id: 1))
 jobs.add_last(value: fetch(id: 2))
-danger
-  var results = gather!(of: steal jobs)   # both run concurrently; wait for all
-  show(f"{results[0]} {results[1]}")
+var results = gather!(of: steal jobs)   # both run concurrently; wait for all
+show(f"{results[0]} {results[1]}")
 ```
 
 Async file I/O (uncolored — parks a coroutine while waiting), in `IO/File`:
 `read_text(path: Text) -> Text` and `write_text(path: Text, content: Text) -> S64`. Prefer these to
 opening a `FileHandle` inside a coroutine.
 
+**Channels** (`Core`, no import) — typed producer/consumer queues:
+- `make_channel[T](capacity: U64) -> (Sender[T], Receiver[T])` — single consumer. `capacity` 0 =
+  rendezvous (send waits for a taker); N = bounded buffer (send blocks when full = backpressure).
+- `make_shared_channel[T](capacity: U64) -> (Sender[T], SharedReceiver[T])` — multiple consumers
+  COMPETE for each item (fan-out, not broadcast).
+- `sender.send(item: x)` moves `x` in; FAILABLE (`ChannelClosedError` if closed / no consumers).
+  `sender.duplicate()` clones a producer for fan-in; `sender.close()` / `is_closed()`.
+- `Receiver`/`SharedReceiver` are `Iterable[T]` — drain with `each x in rx` (ends when closed + empty).
+
+```razorforge
+var (tx, rx) = make_channel[S64](capacity: 4)
+tx.send(item: 10)
+tx.send(item: 20)
+tx.close()
+each n in rx
+  show(f"{n}")
+```
+
 **Not implemented yet** (do not generate these — they do not exist): async networking
-(sockets/HTTP/WebSocket) and channels. They are on the roadmap, not in the language today.
+(sockets/HTTP/WebSocket). It is on the roadmap, not in the language today.
+
+## 14b. Process signals (`Signals`)
+
+`import Signals` to react to the OS asking the process to stop:
+
+```razorforge
+import Signals
+
+routine on_stop()                    # a NAMED routine — lambdas are expression-only,
+  show("cleaning up")                # so a multi-statement handler cannot be a lambda
+  return
+
+routine start()
+  when_interrupted(handler: on_stop)   # Ctrl-C / SIGINT
+  when_terminated(handler: on_stop)    # SIGTERM / console-close
+  ...                                  # your own loop — see below
+  return
+```
+
+- **Registering a handler SUPPRESSES the default termination.** The process no longer
+  dies on Ctrl-C / SIGTERM; your handler decides. Registering does NOT keep the
+  program alive — it must run its own loop; the handler typically flips a flag the
+  loop checks, then the loop exits. (SIGKILL / OOM-killer cannot be caught.)
+- **The handler runs on a dedicated dispatch thread**, not the main thread — keep it
+  small (set a flag, log, save) and thread-aware. Multiple handlers per class all run,
+  in registration order.
+- The handler type is **`Routine[(), None]`** — a no-argument, no-return routine value.
+  (`()` is the empty parameter tuple; `None` is the void return. The parameter list is
+  always tuple-notation: `()`, `(T,)`, `(A, B)`.)
+- **Carrying state — the context overload.** Because the handler runs on another thread,
+  shared state it touches must be a thread-safe, storable handle: a `Guarded[T, P]`
+  (RazorForge multi-thread RC) or a `Roamed[T]`. Pass it with the copy verb and the
+  handler receives it back on every fire — no capture, no global:
+
+  ```razorforge
+  routine on_stop(box: Guarded[Flags, Exclusive])   # or Roamed[T]
+    ...
+  when_interrupted(handler: on_stop, context: flags.share())   # .share() / (Roamed) .share()
+  ```
+
+  The registration retains the handle for the process lifetime (a `Roamed` context is
+  also promoted to its atomic escaped mode). One overload set accepts either handle
+  type — the compiler picks by the argument type.
+
+## 15. Foreign functions and conditional compilation
+
+- **Foreign routines are realm-qualified**, not an `external` keyword (there is no
+  `external` keyword). Declare a C function as `routine C::name(...)` and an LLVM
+  intrinsic as `routine LLVM::name(...)`. `dangerous routine C::name(...)` works
+  (the `dangerous` prefix precedes). Call sites use the same qualifier:
+  `C::labs(n: x)`. External calls are positional.
+- **`@link("SDL2")`** on a `C::` extern names the C library that resolves its
+  symbols (Rust `#[link]` style); merged with `[target] c_libraries` in the
+  manifest into clang `-l` flags. Library search paths (`-L`) live in the
+  manifest's `library_paths`.
+- **`@target(...)`** = file-granularity conditional compilation (RF-only; Suflae
+  is never gated). Place it as a leading annotation BEFORE `module`:
+  `@target(os: "windows")`, `@target(os: "linux", "macos")`,
+  `@target(arch: "arm64")`. Keys are AND-ed; comma-separated values within a key
+  are OR-ed; keys are `os` (windows/linux/macos) and `arch` (x64/x86_64,
+  arm64/aarch64). There is no block-level `#if` — platform code splits into
+  separate files (`foo_windows.rf` / `foo_linux.rf`), one type per file.
+
+## 16. Keyword inventory
+
+Every reserved word the tokenizer recognizes. Words marked **†** are **RF-only**
+(Suflae does not reserve them — see SUFLAE-FOR-AI §2). Everything else is shared by
+both realms. There is NO `for`, `external`, `async`, `spawn`, `let`, `const`, `fn`,
+`class`, `struct`, `enum`, `match`, `trait`, or `impl` keyword — if you reach for one,
+you are writing another language.
+
+- **Declarations**: `routine` `entity` `record` `choice` `flags` `crashable`
+  `variant` `protocol`
+- **Bindings**: `var` `preset` `lateinit`
+- **Visibility / receiver**: `secret` `posted` `common`
+- **Self**: `me` `Me`
+- **Protocols & constraints**: `obeys` `disobeys` `needs` `relates` `everywhere`
+- **Control flow**: `if` `elseif` `else` `then` `unless` `when` `is` `isnot` `loop`
+  `while` `each` `break` `continue` `return` `throw` `pierce` `absent` `becomes`
+- **Iteration / range / ownership**: `in` `notin` `to` `til` `by` `steal`†
+- **Module system**: `import` `module`
+- **Other statements**: `using` `as` `define` `pass` `with` `given` `discard`
+- **Logical operators**: `and` `or` `not` `but`
+- **Literals**: `true` `false` `None` `none`
+- **Concurrency**: `suspended` `threaded`†
+- **Danger**†: `danger` (block) `dangerous` (modifier)
+- **Comptime reflection**†: `expand` (loop) — the ONLY reflection keyword.
+
+The reflection **sources** `openmemvarof` `allmemvarof` `branchof` `caseof` (there is no
+`memvarof`) and the metadata **accessors** `nameof` `orderof` `placeof` `sizeof` `typeof`
+`typeidof` `valueof` `visibilityof` are **comptime builtin intrinsics, NOT reserved
+keywords** — they tokenize as ordinary identifiers and are recognized in SA only when
+`import BuilderExpansion` is in effect (bare `nameof(m)` or `$`-spliced `me.$nameof(m)`),
+each reading a comptime property off the active `expand` handle or a type. Without that
+import, using `expand` or any source/accessor is a compile error (RF-S952).
+
+`$` (wired-routine marker / `${…}` comptime splice) and `!` (failable marker) are
+**structural sigils on a name, not keywords** — the name stays bare (RoutineInfo
+carries the flags). See §1b.
 
 ---
 

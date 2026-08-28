@@ -1,0 +1,12 @@
+a < b: true
+a <= b: true
+a == c: true
+a != b: true
+a >= c: true
+b > a: true
+1 < 2 < 3: true
+max chain: 7
+'abc' < 'abd': true
+'abc' < 'abcd': true
+'A' < 'a': true
+DONE

@@ -6,7 +6,7 @@ namespace TypeModel.Types;
 /// Information about a single member in a type-based variant.
 /// Members are either real types (S64, Text, etc.) or the None state (zero-sized, no payload).
 /// </summary>
-// TODO: Blank is no payload state and it is real payload, and type=null should not be the zero sized no payload state
+// TODO: None is no payload state and it is real payload, and type=null should not be the zero sized no payload state
 public sealed class VariantMemberInfo
 {
     /// <summary>The member type, or null for the None state.</summary>
@@ -18,8 +18,12 @@ public sealed class VariantMemberInfo
     /// <summary>Display name: the type name, or "None" for the None state.</summary>
     public string Name => Type?.Name ?? "None";
 
-    /// <summary>The tag value for this member.</summary>
-    public int TagValue { get; init; }
+    /// <summary>Zero-based declaration ordinal of this member (None first when present). This is a
+    /// reflection/<c>branchof</c> index only — it is NOT the runtime discriminant. Codegen stores the
+    /// arm's FNV-1a <c>type_id</c> (<c>ComputeTypeId(Type.FullName)</c>, 0 for None) in the variant's
+    /// tag field, and PatternLoweringPass matches on that type_id, so nothing compares this ordinal at
+    /// runtime.</summary>
+    public int Ordinal { get; init; }
 
     /// <summary>Source location where this member is defined.</summary>
     public SourceLocation? Location { get; init; }
@@ -43,9 +47,9 @@ public sealed class VariantMemberInfo
     /// <summary>
     /// Creates a None state member with the specified location and tag.
     /// </summary>
-    public static VariantMemberInfo CreateNone(int tagValue, SourceLocation? location = null)
+    public static VariantMemberInfo CreateNone(int ordinal, SourceLocation? location = null)
     {
-        return new VariantMemberInfo { TagValue = tagValue, Location = location };
+        return new VariantMemberInfo { Ordinal = ordinal, Location = location };
     }
 
     /// <summary>
@@ -53,6 +57,6 @@ public sealed class VariantMemberInfo
     /// </summary>
     public VariantMemberInfo WithSubstitutedType(TypeInfo newType)
     {
-        return new VariantMemberInfo(type: newType) { TagValue = TagValue, Location = Location };
+        return new VariantMemberInfo(type: newType) { Ordinal = Ordinal, Location = Location };
     }
 }

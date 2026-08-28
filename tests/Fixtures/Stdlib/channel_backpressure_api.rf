@@ -19,17 +19,19 @@ suspended routine produce(out: Sender[S64], n: S64) -> S64
 
 suspended routine consume(inbox: Receiver[S64]) -> S64
   var total = 0_s64
-  for v in inbox
+  each v in inbox
     total = total + v
   return total
 
 routine start()
   var (feeder, hop) = make_channel[S64](capacity: 4)
 
-  var p = produce(out: steal feeder, n: 500)
-  var c = consume(inbox: steal hop)
-
-  var sum = c.retrieve()      # drains until the producer's Sender drops and the channel closes
-  discard p.retrieve()
+  # LAZY model: a `suspended`/`threaded` call captures a RECIPE and does not start it — a verb does.
+  # The producer is fire-and-forget (we don't need its count), so `execute()` launches it DETACHED in
+  # the background; the consumer is what we await, so `retrieve()` launches + drives it. Both run
+  # concurrently on the pool, so the capacity-4 channel hands off under backpressure until the
+  # producer's Sender drops and the channel closes.
+  produce(out: steal feeder, n: 500).execute()
+  var sum = consume(inbox: steal hop).retrieve()
   show(f"backpressure sum 1..500: {sum}")
   return

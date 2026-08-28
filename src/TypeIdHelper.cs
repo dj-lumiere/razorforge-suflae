@@ -9,12 +9,12 @@ internal static class TypeIdHelper
 {
     /// <summary>
     /// Computes the FNV-1a hash of <paramref name="fullName"/> as a type identifier.
-    /// Returns 0 for <c>Blank</c> (the reserved absent sentinel).
-    /// Returns 1 if the hash would otherwise be 0 (reserved for Blank).
+    /// Returns 0 for <c>None</c> (the reserved absent sentinel).
+    /// Returns 1 if the hash would otherwise be 0 (reserved for None).
     /// </summary>
     internal static ulong ComputeTypeId(string fullName)
     {
-        if (fullName is "Blank" || fullName.EndsWith(value: ".Blank"))
+        if (fullName is "None" || fullName.EndsWith(value: ".None"))
             return 0UL;
         ulong hash = 14695981039346656037UL; // FNV-1a offset basis
         foreach (byte b in Encoding.UTF8.GetBytes(s: fullName))

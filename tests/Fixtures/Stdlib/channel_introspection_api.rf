@@ -20,7 +20,7 @@ routine start()
   show(f"closed_after={hop.is_closed()}")
 
   var total = 0_s64
-  for v in hop
+  each v in hop
     total = total + v
   show(f"drained={total} empty_now={hop.is_empty()}")
 

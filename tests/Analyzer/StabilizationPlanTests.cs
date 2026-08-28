@@ -10,16 +10,16 @@ using static TestHelpers;
 /// </summary>
 public class StabilizationPlanTests
 {
-    #region P1 -> Protocol method lookup on instantiated generics
+    #region P1 -> Protocol memberRoutine lookup on instantiated generics
 
     /// <summary>
-    /// Verifies that the test validates protocol method on generic owner and substitutes the parameter type.
+    /// Verifies that the test validates protocol memberRoutine on generic owner and substitutes the parameter type.
     /// </summary>
     [Fact]
-    public void P1_ProtocolMethodOnGenericOwner_SubstitutesParamType()
+    public void P1_ProtocolMemberRoutineOnGenericOwner_SubstitutesParamType()
     {
-        // Protocol method declared with T param, called on resolved owner
-        // LookupMethod should substitute T -> S32 in parameter type
+        // Protocol memberRoutine declared with T param, called on resolved owner
+        // LookupMemberRoutine should substitute T -> S32 in parameter type
         string source = """
                         protocol Summable
                           @readonly
@@ -44,12 +44,12 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that the test validates generic method on generic owner both levels substituted.
+    /// Verifies that the test validates generic memberRoutine on generic owner both levels substituted.
     /// </summary>
     [Fact]
-    public void P1_GenericMethodOnGenericOwner_BothLevelsSubstituted()
+    public void P1_GenericMemberRoutineOnGenericOwner_BothLevelsSubstituted()
     {
-        // Owner-level T and method-level U should both resolve
+        // Owner-level T and memberRoutine-level U should both resolve
         string source = """
                         record Store[T]
                           item: T
@@ -68,10 +68,10 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that the test validates generic method return type uses owner type arg.
+    /// Verifies that the test validates generic memberRoutine return type uses owner type arg.
     /// </summary>
     [Fact]
-    public void P1_GenericMethodReturnType_UsesOwnerTypeArg()
+    public void P1_GenericMemberRoutineReturnType_UsesOwnerTypeArg()
     {
         // Return type T should resolve to the owner's type argument
         string source = """
@@ -92,10 +92,10 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that the test validates protocol method on nested generic owner uses concrete nested type.
+    /// Verifies that the test validates protocol memberRoutine on nested generic owner uses concrete nested type.
     /// </summary>
     [Fact]
-    public void P1_ProtocolMethodOnNestedGenericOwner_UsesConcreteNestedType()
+    public void P1_ProtocolMemberRoutineOnNestedGenericOwner_UsesConcreteNestedType()
     {
         string source = """
                         protocol Clonable
@@ -130,7 +130,7 @@ public class StabilizationPlanTests
     public void P2_GenericRecord_PreservesDefinitionAfterProtocolUpdate()
     {
         // GenericDefinition must survive UpdateRecordProtocols
-        // so method lookup on Pair[S32] can substitute T -> S32
+        // so memberRoutine lookup on Pair[S32] can substitute T -> S32
         string source = """
                         protocol Showable
                           @readonly
@@ -508,8 +508,8 @@ public class StabilizationPlanTests
     [Fact]
     public void Combined_GenericWithProtocolAndOverloads()
     {
-        // Complex scenario: generic type obeys protocol, has overloaded methods,
-        // method lookup + body matching + type substitution all must work together
+        // Complex scenario: generic type obeys protocol, has overloaded memberRoutines,
+        // memberRoutine lookup + body matching + type substitution all must work together
         string source = """
                         protocol Clearable
                           routine Me.clear() -> Me

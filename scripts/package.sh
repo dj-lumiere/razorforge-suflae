@@ -62,6 +62,14 @@ cp LICENSE README.md "$OUT/"
 # Foundry's `forge`.)
 ln -sf RazorForge "$OUT/rf"
 
+# Suflae aliases. COPIES, not symlinks: the binary keys its Suflae branding + default
+# language off its own invoked name (Environment.ProcessPath), and on Linux ProcessPath
+# resolves a symlink back to RazorForge — a copy preserves the `suflae`/`sf` name. The
+# apphost stub locates RazorForge.dll by name in its own directory, so the renamed copy
+# still launches the same compiler.
+cp "$OUT/RazorForge" "$OUT/suflae"
+cp "$OUT/RazorForge" "$OUT/sf"
+
 echo "=== bundle self-contained LLVM toolchain ==="
 # The compiler resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
 # and uses that toolchain's ld.lld/ld64.lld for linking. Linux still needs the

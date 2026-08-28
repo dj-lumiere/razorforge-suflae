@@ -16,7 +16,7 @@ routine start()
   show(f"after 30/10/20/10, size: {sl.count()}")
 
   # iteration is sorted
-  for x in sl
+  each x in sl
     show(f"  iter: {x}")
 
   # Rank access (O(log n) — named to signal cost)

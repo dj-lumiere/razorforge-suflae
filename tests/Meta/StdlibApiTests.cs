@@ -32,6 +32,21 @@ public sealed class StdlibApiTests
 
     private const string HarnessModule = "StdlibHarness";
 
+    // Suflae (.sf) sibling harness. SF fixtures live under a DISTINCT namespace prefix
+    // (Tests/StdlibSf/*) and their own fixtures dir so the SF bundle's prefix import pulls only `.sf`
+    // files — a shared prefix would drag `.rf` fixtures into the SF project and trip BuildDriver's
+    // cross-language import guard. SF reuses the RazorForge stdlib wholesale (SF's Core IS RF's Core),
+    // so the ONLY difference here is the fixtures dir, entry extension, module name, and library path.
+    private static readonly string SuflaeFixturesDir = Path.Combine(RepoRoot,
+        "tests",
+        "Fixtures",
+        "StdlibSf");
+
+    private static readonly string SuflaeHarnessDir =
+        Path.Combine(RepoRoot, "tests", "Fixtures", "SuflaeHarness");
+
+    private const string SuflaeHarnessModule = "SuflaeHarness";
+
     private static readonly System.Text.RegularExpressions.Regex ModuleRe =
         new(@"^\s*module\s+(\S+)\s*$");
 
@@ -45,13 +60,95 @@ public sealed class StdlibApiTests
     [Fact]
     public void StdlibHarness_AllFixturesOutputMatchExpected()
     {
+        int fixtureCount = RunFixtureBundle(fixturesDir: FixturesDir, glob: "*.rf", harnessDir: HarnessDir,
+            harnessModule: HarnessModule, bundleFileName: "all_stdlib.rf",
+            packageName: "stdlib-harness", libraryRel: "../Stdlib");
+        // Guard against a silently-empty bundle passing vacuously (e.g. fixtures dir moved/renamed).
+        Assert.True(fixtureCount > 0, "No RazorForge stdlib fixtures were discovered — the harness ran nothing.");
+    }
+
+    /// <summary>
+    /// Suflae (.sf) sibling of the stdlib harness. Bundles every <c>StdlibSf/*.sf</c> fixture into one
+    /// <c>all_suflae.sf</c> (an SF project — entry extension picks the language), compiles + runs it
+    /// ONCE over the shared RazorForge stdlib, and diffs each fixture's section against its snapshot.
+    /// Proves SF programs behave correctly on the borrowed RF Core; where a <c>StdlibSf</c> fixture
+    /// shares a stem with a <c>Stdlib</c> fixture, the equivalence test below locks their snapshots
+    /// identical so the two frontends are held to the same observable behavior.
+    /// </summary>
+    [Fact]
+    public void SuflaeHarness_AllFixturesOutputMatchExpected()
+    {
+        if (!Directory.Exists(SuflaeFixturesDir) ||
+            !Directory.EnumerateFiles(SuflaeFixturesDir, "*.sf").Any())
+        {
+            return; // No SF fixtures authored yet — nothing to assert.
+        }
+
+        int fixtureCount = RunFixtureBundle(fixturesDir: SuflaeFixturesDir, glob: "*.sf",
+            harnessDir: SuflaeHarnessDir, harnessModule: SuflaeHarnessModule,
+            bundleFileName: "all_suflae.sf", packageName: "suflae-harness", libraryRel: "../StdlibSf");
+        // The early return above guarantees at least one .sf fixture; confirm the bundle actually ran it.
+        Assert.True(fixtureCount > 0, "SF fixtures exist but the harness discovered none to run.");
+    }
+
+    /// <summary>
+    /// Equivalence lock: every fixture stem present in BOTH <c>Stdlib</c> (.rf) and <c>StdlibSf</c>
+    /// (.sf) must have byte-identical (normalized) expected output. This is what makes the SF fixture
+    /// an equivalence test rather than a standalone one — porting a .rf fixture to .sf and keeping the
+    /// same snapshot asserts the two frontends produce the SAME observable behavior over the shared
+    /// stdlib. If the SF output legitimately differs (e.g. a genuinely SF-only surface), give that
+    /// fixture a stem with no .rf counterpart so it is exempt.
+    /// </summary>
+    [Fact]
+    public void SuflaeAndRazorForge_SharedFixtures_HaveIdenticalExpected()
+    {
+        if (!Directory.Exists(SuflaeFixturesDir)) return;
+
+        var mismatches = new List<string>();
+        foreach (string sfExpected in Directory.EnumerateFiles(SuflaeFixturesDir, "*.expected.txt"))
+        {
+            string stem = Path.GetFileName(sfExpected);
+            string rfExpected = Path.Combine(FixturesDir, stem);
+            if (!File.Exists(rfExpected)) continue; // SF-only fixture — exempt.
+
+            // Canonicalize the namespace before comparing. SF fixtures live under `Tests/StdlibSf/*`
+            // (their own namespace so the SF bundle's prefix import pulls only `.sf` files), so any
+            // fixture that prints its own fully-qualified type name (via `diagnose` / `:?`) emits
+            // `Tests/StdlibSf/...` where its `.rf` twin emits `Tests/Stdlib/...`. That's a naming
+            // artifact of the split, NOT a behavioral difference — fold it out so equivalence tracks
+            // real observable behavior only.
+            static string Canon(string s) => NormalizeForCompare(s).Replace("Tests/StdlibSf", "Tests/Stdlib");
+            if (Canon(File.ReadAllText(rfExpected)) != Canon(File.ReadAllText(sfExpected)))
+            {
+                mismatches.Add(stem);
+            }
+        }
+
+        Assert.True(mismatches.Count == 0,
+            "Guarded RF/SF fixtures have divergent expected output (equivalence broken): " +
+            string.Join(", ", mismatches) +
+            ". Reconcile the snapshots, or rename the SF fixture stem to exempt it.");
+    }
+
+    /// <summary>
+    /// Generates a single-program harness from every fixture in <paramref name="fixturesDir"/> matching
+    /// <paramref name="glob"/> (importing each by its declared module, calling its <c>start()</c> via the
+    /// module leaf), compiles + runs the ONE program, splits combined stdout on the
+    /// <c>##### stem #####</c> delimiters, and diffs each section against its <c>.expected.txt</c>. Guarded
+    /// by the RazorForge (.rf) and Suflae (.sf) harnesses — the language is selected by the entry file's
+    /// extension, so the only per-language inputs are the fixtures dir, glob, module name, and paths.
+    /// Returns the number of fixtures discovered and bundled (0 = nothing ran).
+    /// </summary>
+    private static int RunFixtureBundle(string fixturesDir, string glob, string harnessDir,
+        string harnessModule, string bundleFileName, string packageName, string libraryRel)
+    {
         // 1) Generate the harness program + manifest from the fixtures.
         var entries = new List<(string Stem, string Module, string Leaf)>();
         var leaves = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-        foreach (string rf in Directory.EnumerateFiles(FixturesDir, "*.rf")
+        foreach (string src in Directory.EnumerateFiles(fixturesDir, glob)
                                        .OrderBy(keySelector: p => p, comparer: StringComparer.Ordinal))
         {
-            string? module = ReadDeclaredModule(rfPath: rf);
+            string? module = ReadDeclaredModule(rfPath: src);
             if (module == null) continue;
             string leaf = module.Contains('/') ? module[(module.LastIndexOf('/') + 1)..] : module;
             if (leaves.TryGetValue(leaf, out string? other))
@@ -61,11 +158,11 @@ public sealed class StdlibApiTests
                     "would be ambiguous (RF-S513). Rename one fixture's module leaf.");
             }
             leaves[leaf] = module;
-            entries.Add((Path.GetFileNameWithoutExtension(rf), module, leaf));
+            entries.Add((Path.GetFileNameWithoutExtension(src), module, leaf));
         }
 
-        Directory.CreateDirectory(HarnessDir);
-        var lines = new List<string> { $"module {HarnessModule}", "", "import IO/Console" };
+        Directory.CreateDirectory(harnessDir);
+        var lines = new List<string> { $"module {harnessModule}", "", "import IO/Console" };
         // Prefix/package import: a single `import Tests/Stdlib` pulls in every Tests/Stdlib/* fixture
         // module (all fixtures share that namespace), replacing one `import` line per fixture. Falls
         // back to per-module imports if the fixtures ever stop sharing a common namespace prefix.
@@ -86,16 +183,16 @@ public sealed class StdlibApiTests
         }
         lines.Add("  return");
         lines.Add("");
-        string harnessRf = Path.Combine(HarnessDir, "all_stdlib.rf");
-        File.WriteAllText(harnessRf, string.Join("\n", lines));
+        string harnessSrc = Path.Combine(harnessDir, bundleFileName);
+        File.WriteAllText(harnessSrc, string.Join("\n", lines));
 
         string manifest =
-            $"[package]\nname = \"stdlib-harness\"\nversion = \"0.0.1\"\nrazorforge-version = \"0.1.0\"\n\n" +
-            $"[target]\nexecutable = \"{HarnessModule}\"\nmode = \"debug\"\nlibrary = [\"../Stdlib\"]\n";
-        File.WriteAllText(Path.Combine(HarnessDir, "razorforge.toml"), manifest);
+            $"[package]\nname = \"{packageName}\"\nversion = \"0.0.1\"\nrazorforge-version = \"0.1.0\"\n\n" +
+            $"[target]\nexecutable = \"{harnessModule}\"\nmode = \"debug\"\nlibrary = [\"{libraryRel}\"]\n";
+        File.WriteAllText(Path.Combine(harnessDir, "razorforge.toml"), manifest);
 
         // 2) Compile + run the ONE program (cwd = repo root so relative resource paths resolve).
-        FixtureRun run = RunHarness(harnessRf: harnessRf);
+        FixtureRun run = RunHarness(harnessRf: harnessSrc);
         Assert.True(run is { ExitCode: 0, TimedOut: false },
             $"Harness buildandrun failed (exit={run.ExitCode}, timedOut={run.TimedOut}).\n" +
             $"--- stdout ---\n{run.Stdout}\n--- stderr ---\n{run.Stderr}");
@@ -103,7 +200,7 @@ public sealed class StdlibApiTests
         // 2b) stderr must be CLEAN. The build's own progress banners go to stdout; anything on stderr is
         // a diagnostic — a compiler warning/error or a runtime fault. These are silently swallowed if we
         // only check stdout+exit (that is exactly how a flood of "Synthesized body codegen failed" /
-        // "Unresolved generic method 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
+        // "Unresolved generic memberRoutine 'Core.Dict.create'" warnings hid for so long). Fail on any of them.
         string[] offending = run.Stderr
             .Split('\n')
             .Select(selector: l => l.TrimEnd('\r'))
@@ -121,7 +218,7 @@ public sealed class StdlibApiTests
         var mismatches = new List<string>();
         foreach ((string stem, _, _) in entries)
         {
-            string expectedPath = Path.Combine(FixturesDir, $"{stem}.expected.txt");
+            string expectedPath = Path.Combine(fixturesDir, $"{stem}.expected.txt");
             if (!File.Exists(expectedPath)) continue;
             string expected = NormalizeForCompare(s: File.ReadAllText(expectedPath));
             string actual = NormalizeForCompare(s: sections.GetValueOrDefault(stem, "<no output section emitted>"));
@@ -133,11 +230,13 @@ public sealed class StdlibApiTests
             // Surface the first mismatch in full for a quick read.
             string first = mismatches[0];
             AssertOutputEqual(fixtureName: first,
-                expected: NormalizeForCompare(s: File.ReadAllText(Path.Combine(FixturesDir, $"{first}.expected.txt"))),
+                expected: NormalizeForCompare(s: File.ReadAllText(Path.Combine(fixturesDir, $"{first}.expected.txt"))),
                 actual: NormalizeForCompare(s: sections.GetValueOrDefault(first, "<no output section emitted>")));
             throw new Xunit.Sdk.XunitException(
                 $"{mismatches.Count} harness fixture(s) mismatched: {string.Join(", ", mismatches)}");
         }
+
+        return entries.Count;
     }
 
     /// <summary>Reads the declared <c>module</c> path of a fixture (utf-8-sig for BOM), or null.</summary>

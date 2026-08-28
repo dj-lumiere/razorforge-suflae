@@ -67,7 +67,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine find!(items: List[S32], target: S32) -> S32
-                          for item in items
+                          each item in items
                             if item == target
                               return item
                           absent
@@ -163,7 +163,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             if i == 5
                               break
                           return
@@ -181,7 +181,7 @@ public class ControlFlowAnalysisTests
     {
         string source = """
                         routine test()
-                          for i in 0 til 10
+                          each i in 0 til 10
                             if i == 5
                               continue
                             show(i)
@@ -277,6 +277,116 @@ public class ControlFlowAnalysisTests
         Assert.NotNull(@object: result);
         // Should be valid
     }
+
+    #endregion
+
+    #region Infinite Loop Termination (RF-S305)
+    // An unconditional `loop` has a fall-through edge ONLY through a `break` that targets it. With no
+    // such break the loop can only be left via return/throw/absent, so control never falls past it and
+    // the routine always terminates. These lock `StatementAlwaysTerminates`/`LoopBodyCanBreakOut` so the
+    // missing-return check neither rejects a valid infinite loop (false positive) nor accepts a real
+    // fall-off through a break (false negative).
+
+    /// <summary>A `loop` whose body immediately returns needs no trailing return — it never falls through.</summary>
+    [Fact]
+    public void Analyze_InfiniteLoopReturnsValue_NoMissingReturn()
+    {
+        string source = """
+                        routine spin() -> S32
+                          loop
+                            return 1
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MissingReturn);
+    }
+
+    /// <summary>
+    /// The real-world shape (this is exactly what stdlib `CWStr.eq`/`cmp` look like): an infinite loop
+    /// exited only by conditional returns, with no trailing return after the loop.
+    /// </summary>
+    [Fact]
+    public void Analyze_InfiniteLoopConditionalReturnsOnly_NoMissingReturn()
+    {
+        string source = """
+                        routine scan(n: S32) -> S32
+                          var i = 0
+                          loop
+                            if i >= n
+                              return 0 - 1
+                            if i == 3
+                              return i
+                            i = i + 1
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MissingReturn);
+    }
+
+    /// <summary>
+    /// A `loop` that CAN break with nothing after it genuinely falls off the routine end — the missing
+    /// return must still fire (guards against a blanket `loop => true` false negative).
+    /// </summary>
+    [Fact]
+    public void Analyze_InfiniteLoopWithBreak_NoTrailingReturn_ReportsMissingReturn()
+    {
+        string source = """
+                        routine scan(n: S32) -> S32
+                          loop
+                            if n > 0
+                              break
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MissingReturn);
+    }
+
+    /// <summary>A breakable loop followed by a return terminates on every path.</summary>
+    [Fact]
+    public void Analyze_InfiniteLoopWithBreakThenReturn_NoMissingReturn()
+    {
+        string source = """
+                        routine scan(n: S32) -> S32
+                          loop
+                            if n > 0
+                              break
+                          return n
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MissingReturn);
+    }
+
+    /// <summary>
+    /// A break in an INNER loop targets that inner loop, not the enclosing one — the outer `loop` stays
+    /// infinite and terminating, so no trailing return is required.
+    /// </summary>
+    [Fact]
+    public void Analyze_NestedInnerBreak_OuterInfinite_NoMissingReturn()
+    {
+        string source = """
+                        routine scan(n: S32) -> S32
+                          loop
+                            var i = 0
+                            loop
+                              if i >= n
+                                break
+                              i = i + 1
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MissingReturn);
+    }
+
+    #endregion
+
+    #region Failable Routine Analysis (continued)
+
     /// <summary>
     /// Verifies semantic analysis behavior for throw in failable without unexpected diagnostics.
     /// </summary>

@@ -1,18 +1,18 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 
 ### Represents temporary read-only access to an entity.
-### `Viewing[T]` is the non-storable borrow type produced by `.view()` for single-threaded observation.
+### `Viewing[T]` is the non-Assignable access token produced by `.view()` for single-threaded observation.
 ### :typeparam T: The entity type being viewed.
-### :see: {Modifying[T]}, {Claiming[T]}, {Inspecting[T]}, {Access-Types}
+### :see: {Modifying[T]}, {Amending[T]}, {Consulting[T]}, {Access-Types}
 @llvm("ptr")
-record Viewing[T] obeys Referring[T], Enterable
+record Viewing[T] obeys Accessing[T], Enterable
   pass
 
 ### Produces a temporary read-only view of `me`.
 ### :returns: The resulting `Viewing[T]` value.
-### :note: Entity-only. Records are value-typed — borrowed access to record-typed values is
+### :note: Entity-only. Records are value-typed — scoped access to record-typed values is
 ###        not supported in v0.0.1a. Use `entity` if you need a viewable reference.
 routine T.view() -> Viewing[T]
 needs T is EntityType
@@ -38,14 +38,14 @@ routine Viewing[T].exit()
   return
 
 # ============================================================================
-# Marker-protocol coercion (refer) — yields the inner entity as T
+# Marker-protocol coercion (access) — yields the inner entity as T
 # ============================================================================
 
 ### Yields the inner entity as an in-flight `T` reference for read-only access.
-### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### Inserted implicitly at call sites whose parameter is `Accessing[T]`.
 ### :returns: The inner entity as `T`.
 @[readonly, inline]
-routine Viewing[T].refer() -> T
+routine Viewing[T].access() -> T
   danger
     return Hijacked[T](me).as_entity()
 

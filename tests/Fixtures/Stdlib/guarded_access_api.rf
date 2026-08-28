@@ -1,0 +1,27 @@
+module Tests/Stdlib/GuardedAccessApi
+import IO/Console
+import BuilderQuery
+
+entity Counter
+  value: S64
+
+routine Counter.bump(inc: S64)
+  me.value = me.value + inc
+  return
+
+routine start()
+  var s = Guarded[Counter, MultiRead](from: Counter(value: 10))
+
+  # shared (multi-reader) access
+  using s.consult() as v
+    show(f"consult value: {v.value}")
+
+  # exclusive (read/write) access
+  using s.amend() as c
+    c.bump(inc: 5)
+
+  using s.consult() as v2
+    show(f"after bump: {v2.value}")
+
+  show("DONE")
+  return

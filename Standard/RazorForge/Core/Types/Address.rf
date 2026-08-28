@@ -6,12 +6,12 @@ module Core
 ### :see: {ByteSize}, {Hijacked[T]}, {Memory-Types}
 @llvm("i64")
 record Address
-obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable
+obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable, Assignable, Copyable
   pass
 
 # ============================================================================
 # No create routines — Address has no implicit or explicit conversions.
-# Use Hijacked[T] for converting between Address and other types.
+# Use Hijacked[T] for converting between Address and you types.
 # ============================================================================
 
 ### Returns `from` unchanged.
@@ -33,14 +33,14 @@ routine Address(from: Address) -> Address
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.add_wrap(you: Address) -> Address
-  return add[Address](me, you)
+  return LLVM::add(me, you)
 
 ### Returns the wrapping difference between two raw addresses.
 ### :param you: The address value to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.sub_wrap(you: Address) -> Address
-  return sub[Address](me, you)
+  return LLVM::sub(me, you)
 
 # Note: Address × Address and Address // Address have no meaningful semantics
 # (addresses are points in a memory space, not scalars). Use pointer arithmetic
@@ -56,16 +56,16 @@ routine Address.sub_wrap(you: Address) -> Address
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Address.eq(you: Address) -> Bool
-  return int_eq[Address](me, you)
+  return LLVM::int_eq(me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Address.cmp(you: Address) -> ComparisonSign
-  if unsigned_lt[Address](me, you)
+  if LLVM::unsigned_lt(me, you)
     return ME_SMALL
-  if unsigned_gt[Address](me, you)
+  if LLVM::unsigned_gt(me, you)
     return ME_LARGE
   return SAME
 
@@ -107,21 +107,21 @@ routine Address.is_power_of_two() -> Bool
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.add(offset: ByteSize) -> Address
-  return add[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+  return LLVM::add(me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
 
 ### Returns the byte distance from this address to another address.
-### :param other: The address to subtract.
+### :param you: The address to subtract.
 ### :returns: The resulting `ByteSize` value.
 @readonly
-routine Address.sub(other: Address) -> ByteSize
-  return ByteSize(U64(sub[Address](me, other)))
+routine Address.sub(you: Address) -> ByteSize
+  return ByteSize(U64(LLVM::sub(me, you)))
 
 ### Returns the result of stepping this address back by a byte size.
 ### :param offset: The byte count to subtract.
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.sub(offset: ByteSize) -> Address
-  return sub[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+  return LLVM::sub(me, LLVM::reinterpret_bits[ByteSize, Address](value: offset))
 
 # ============================================================================
 # Text Representation and Parsing

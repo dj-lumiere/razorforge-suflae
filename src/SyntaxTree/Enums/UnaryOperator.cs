@@ -37,8 +37,8 @@ public enum UnaryOperator
     ///
     /// Non-stealable types (caught by semantic analyzer):
     /// <list type="bullet">
-    /// <item>Scope-bound tokens (Viewing, Modifying, Inspecting, Claiming)</item>
-    /// <item>Handles and links (Retained, Tracked, Shared, Watched)</item>
+    /// <item>Scope-bound tokens (Viewing, Modifying, Consulting, Amending)</item>
+    /// <item>Handles and links (Retained, Tracked, Guarded, Witnessed)</item>
     /// <item>Hijacked[T] - internal ownership type</item>
     /// </list>
     /// </remarks>
@@ -60,8 +60,8 @@ public enum UnaryOperator
 }
 
 /// <summary>
-/// Extension methods for the <see cref="UnaryOperator"/> enum, providing string representations
-/// and operator overloading support via wired method names.
+/// Extension memberRoutines for the <see cref="UnaryOperator"/> enum, providing string representations
+/// and operator overloading support via wired memberRoutine names.
 /// </summary>
 internal static class UnaryOperatorExtensions
 {
@@ -84,10 +84,10 @@ internal static class UnaryOperatorExtensions
             };
         }
         /// <summary>
-        /// Gets the wired method name for operator overloading.
+        /// Gets the wired memberRoutine name for operator overloading.
         /// Returns null if the operator is not overloadable.
         /// </summary>
-        public string? GetMethodName()
+        public string? GetMemberRoutineName()
         {
             return op switch
             {

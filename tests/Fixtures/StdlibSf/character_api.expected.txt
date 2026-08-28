@@ -1,0 +1,18 @@
+c: A
+codepoint: 65
+to_lowercase: a
+to_uppercase 'a': A
+'A' is_alphabetic: true
+'1' is_numeric: true
+'1' is_digit: true
+'a' is_lowercase: true
+'A' is_uppercase: true
+' ' is_whitespace: true
+'a' is_ascii: true
+'한' is_ascii: false
+'한' codepoint: 54620
+'한' is_cjk: false
+'7' digit_value: 7
+'a' < 'b': true
+'a' == 'a': true
+DONE

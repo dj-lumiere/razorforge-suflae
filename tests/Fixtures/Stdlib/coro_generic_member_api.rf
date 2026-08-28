@@ -20,7 +20,7 @@ entity Holder[T]
 
 routine Holder[T].process()
   var b = Box(value: 5)
-  rf_coro_yield()
+  C::rf_coro_yield()
   return
 
 routine coro_body(ud: CPtr)
@@ -30,8 +30,8 @@ routine coro_body(ud: CPtr)
 
 routine start()
   danger
-    var co = rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
-    discard rf_coro_resume(coro: co)
-    rf_coro_abandon(coro: co)
+    var co = C::rf_coro_create(entry: coro_body, userdata: cptr_none(), stack_size: 0)
+    discard C::rf_coro_resume(coro: co)
+    C::rf_coro_abandon(coro: co)
   show(value: "done")
   return

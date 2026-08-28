@@ -8,7 +8,7 @@ import IO/Console
 # the cell, so the total is deterministic and the cell outlives every worker.
 
 threaded routine add_n(cell: Atomic[S64], times: S64, amount: S64) -> S64
-  for i in 0 til times
+  each i in 0 til times
     discard cell.fetch_add(delta: amount)
   return times
 

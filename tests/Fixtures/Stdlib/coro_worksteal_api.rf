@@ -14,9 +14,9 @@ import IO/Console
 
 # Records which worker ran it, parks so any worker can pick it up, then records again; 1 if it moved.
 suspended routine tag() -> S64
-  var w0 = rf_current_thread_id()
+  var w0 = C::rf_current_thread_id()
   waitfor(3ms)
-  var w1 = rf_current_thread_id()
+  var w1 = C::rf_current_thread_id()
   return if w0 == w1 then 0_s64 else 1_s64
 
 # Runs on a worker; its 48 children pile onto THIS worker's local deque. Returns how many migrated.
@@ -35,7 +35,7 @@ suspended routine burst() -> S64
   return migrated
 
 routine start()
-  var workers = rf_sched_worker_count()
+  var workers = C::rf_sched_worker_count()
   var b = burst()
   var migrated = b.retrieve()
   var ok = workers <= 1_u64 or migrated > 0_s64

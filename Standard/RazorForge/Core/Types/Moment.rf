@@ -29,10 +29,10 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
   var ns = nanoseconds
 
   if ns >= NS_PER_SECOND
-    s = s +% signed_div[S64](ns, NS_PER_SECOND)
-    ns = signed_rem[S64](ns, NS_PER_SECOND)
+    s = s +% LLVM::signed_div(ns, NS_PER_SECOND)
+    ns = LLVM::signed_rem(ns, NS_PER_SECOND)
   elseif ns < 0_s64
-    var borrow = signed_div[S64](0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
+    var borrow = LLVM::signed_div(0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
     s = s -% borrow
     ns = ns + borrow *% NS_PER_SECOND
 
@@ -55,18 +55,18 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
     y = y -% 1_s64
 
   # Era-based calculation for proleptic Gregorian
-  var era_year = y -% signed_div[S64](y, 400_s64) *% 400_s64
-  var era = signed_div[S64](y, 400_s64)
+  var era_year = y -% LLVM::signed_div(y, 400_s64) *% 400_s64
+  var era = LLVM::signed_div(y, 400_s64)
 
   # Day of year within March-based year
   if m > 2_s64
     m = m -% 3_s64
   else
     m = m +% 9_s64
-  var doy = signed_div[S64](153_s64 *% m +% 2_s64, 5_s64) +% day -% 1_s64
+  var doy = LLVM::signed_div(153_s64 *% m +% 2_s64, 5_s64) +% day -% 1_s64
 
   # Day of era
-  var doe = era_year *% 365_s64 +% signed_div[S64](era_year, 4_s64) -% signed_div[S64](era_year, 100_s64) +% doy
+  var doe = era_year *% 365_s64 +% LLVM::signed_div(era_year, 4_s64) -% LLVM::signed_div(era_year, 100_s64) +% doy
 
   # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
   return era *% 146097_s64 +% doe -% 719468_s64
@@ -76,12 +76,12 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
 ### :returns: The resulting `S64` value.
 routine days_to_year(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
-  var era = signed_div[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
   var doe = z -% era *% 146097_s64
-  var yoe = signed_div[S64](doe -% signed_div[S64](doe, 1460_s64) +% signed_div[S64](doe, 36524_s64) -% signed_div[S64](doe, 146096_s64), 365_s64)
+  var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
   var y = yoe +% era *% 400_s64
-  var doy = doe -% (365_s64 *% yoe +% signed_div[S64](yoe, 4_s64) -% signed_div[S64](yoe, 100_s64))
-  var mp = signed_div[S64](5_s64 *% doy +% 2_s64, 153_s64)
+  var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+  var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
   var m = mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
   if m <= 2_s64
     return y +% 1_s64
@@ -92,11 +92,11 @@ routine days_to_year(days_since_epoch: S64) -> S64
 ### :returns: The resulting `S64` value.
 routine days_to_month(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
-  var era = signed_div[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
   var doe = z -% era *% 146097_s64
-  var yoe = signed_div[S64](doe -% signed_div[S64](doe, 1460_s64) +% signed_div[S64](doe, 36524_s64) -% signed_div[S64](doe, 146096_s64), 365_s64)
-  var doy = doe -% (365_s64 *% yoe +% signed_div[S64](yoe, 4_s64) -% signed_div[S64](yoe, 100_s64))
-  var mp = signed_div[S64](5_s64 *% doy +% 2_s64, 153_s64)
+  var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
+  var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+  var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
   return mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
 
 ### Converts an epoch-day count to its day-of-month component.
@@ -104,12 +104,12 @@ routine days_to_month(days_since_epoch: S64) -> S64
 ### :returns: The resulting `S64` value.
 routine days_to_day(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
-  var era = signed_div[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var era = LLVM::signed_div(if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
   var doe = z -% era *% 146097_s64
-  var yoe = signed_div[S64](doe -% signed_div[S64](doe, 1460_s64) +% signed_div[S64](doe, 36524_s64) -% signed_div[S64](doe, 146096_s64), 365_s64)
-  var doy = doe -% (365_s64 *% yoe +% signed_div[S64](yoe, 4_s64) -% signed_div[S64](yoe, 100_s64))
-  var mp = signed_div[S64](5_s64 *% doy +% 2_s64, 153_s64)
-  return doy -% signed_div[S64](153_s64 *% mp +% 2_s64, 5_s64) +% 1_s64
+  var yoe = LLVM::signed_div(doe -% LLVM::signed_div(doe, 1460_s64) +% LLVM::signed_div(doe, 36524_s64) -% LLVM::signed_div(doe, 146096_s64), 365_s64)
+  var doy = doe -% (365_s64 *% yoe +% LLVM::signed_div(yoe, 4_s64) -% LLVM::signed_div(yoe, 100_s64))
+  var mp = LLVM::signed_div(5_s64 *% doy +% 2_s64, 153_s64)
+  return doy -% LLVM::signed_div(153_s64 *% mp +% 2_s64, 5_s64) +% 1_s64
 
 # ============================================================================
 # Creators
@@ -145,7 +145,7 @@ common routine Moment.from_timestamp(seconds: S64) -> Moment
 ### :returns: The resulting `Moment` value.
 common routine Moment.now() -> Moment
   # Implemented by compiler intrinsic / native runtime
-  return rf_moment_now()
+  return C::rf_moment_now()
 
 # ============================================================================
 # Date accessors (derived from seconds member variable)
@@ -155,19 +155,19 @@ common routine Moment.now() -> Moment
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.year() -> S64
-  return days_to_year(signed_div[S64](me.seconds, SECONDS_PER_DAY))
+  return days_to_year(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
 
 ### Returns the UTC calendar month of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.month() -> S64
-  return days_to_month(signed_div[S64](me.seconds, SECONDS_PER_DAY))
+  return days_to_month(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
 
 ### Returns the UTC day of month of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day() -> S64
-  return days_to_day(signed_div[S64](me.seconds, SECONDS_PER_DAY))
+  return days_to_day(LLVM::signed_div(me.seconds, SECONDS_PER_DAY))
 
 ### Returns the UTC day of week for this moment.
 ### The result uses `0 = Monday` through `6 = Sunday`.
@@ -175,8 +175,8 @@ routine Moment.day() -> S64
 @readonly
 routine Moment.day_of_week() -> S64
   # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
-  var days = signed_div[S64](me.seconds, SECONDS_PER_DAY)
-  var dow = signed_rem[S64](days +% 3_s64, 7_s64)
+  var days = LLVM::signed_div(me.seconds, SECONDS_PER_DAY)
+  var dow = LLVM::signed_rem(days +% 3_s64, 7_s64)
   if dow < 0_s64
     return dow +% 7_s64
   return dow
@@ -189,37 +189,37 @@ routine Moment.day_of_week() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.hour() -> S64
-  return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
+  return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
 
 ### Returns the UTC minute component of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.minute() -> S64
-  return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
+  return LLVM::signed_div(LLVM::signed_rem(me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
 
 ### Returns the UTC second component of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.second() -> S64
-  return signed_rem[S64](me.seconds, SECONDS_PER_MINUTE)
+  return LLVM::signed_rem(me.seconds, SECONDS_PER_MINUTE)
 
 ### Returns the millisecond component within the current second.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.millisecond() -> S64
-  return signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the microsecond component within the current millisecond.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
-  return signed_div[S64](signed_rem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
+  return LLVM::signed_div(LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
 
 ### Returns the nanosecond component within the current microsecond.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.nanosecond() -> S64
-  return signed_rem[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
+  return LLVM::signed_rem(S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 # ============================================================================
 # Conversion
@@ -235,7 +235,7 @@ routine Moment.timestamp() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
-  return me.seconds *% 1_000_s64 +% signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return me.seconds *% 1_000_s64 +% LLVM::signed_div(S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 # ============================================================================
 # Arithmetic with Duration
@@ -334,13 +334,6 @@ routine Moment.diagnose() -> Text
 # ============================================================================
 # Hashing
 # ============================================================================
-
-### Returns an xxHash64-based hash of this moment.
-### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Moment.fast_hash() -> U64
-  var acc = __hash_round(acc: 0u64, h: me.seconds.fast_hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.fast_hash())
-  return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this moment.
 ### :param k0: The first 64-bit key word.

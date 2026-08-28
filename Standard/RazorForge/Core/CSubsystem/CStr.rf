@@ -32,21 +32,21 @@ preset CSTR_NULL: CStr = reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[By
 ### :returns: The underlying `Hijacked[Byte]` pointer.
 @readonly
 routine CStr.ptr() -> Hijacked[Byte]
-  return reinterpret_bits[CStr, Hijacked[Byte]](me)
+  return LLVM::reinterpret_bits[CStr, Hijacked[Byte]](me)
 
 ### Wraps an existing null-terminated byte pointer as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr(from_ptr: Hijacked[Byte]) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
+  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
 ### Wraps an existing raw address as `CStr`.
 ### No copy is performed and ownership is not changed.
 ### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr(from_ptr: Address) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
+  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
 ### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
 ### :param from: The byte sequence to copy.
@@ -54,7 +54,7 @@ routine CStr(from_ptr: Address) -> CStr
 routine CStr(from: Bytes) -> CStr
   var len = from.count()
   danger
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
 
     var i: U64 = 0u64
     loop
@@ -64,7 +64,7 @@ routine CStr(from: Bytes) -> CStr
       i = i + 1u64
     buffer.offset(ByteSize(bytes: len)).poke(BYTE_NULL)
 
-    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Creates a UTF-8 encoded null-terminated C string from `Text`.
 ### :param from: The text value to encode and copy.
@@ -73,12 +73,12 @@ routine CStr(from: Text) -> CStr
   var len = from.count()
   danger
     if len == 0u64
-      var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
+      var empty_buffer = Hijacked[Byte](C::rf_allocate_dynamic(1u64))
       empty_buffer.poke(BYTE_NULL)
-      return reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
+      return LLVM::reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
     var max_bytes = len * 4u64 + 1u64
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(max_bytes))
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(max_bytes))
     var write_pos: U64 = 0u64
     var i: U64 = 0u64
 
@@ -107,12 +107,12 @@ routine CStr(from: Text) -> CStr
       i = i + 1u64
 
     buffer.offset(ByteSize(bytes: write_pos)).poke(BYTE_NULL)
-    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns the length of this C string in bytes, excluding the trailing null.
 ### :returns: The byte count, not including the null terminator.
 routine CStr.count() -> U64
-  return rf_cstr_count(me)
+  return C::rf_cstr_count(me)
 
 ### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
@@ -136,13 +136,13 @@ dangerous routine CStr.getitem(index: U64) -> Byte
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine CStr.eq(you: CStr) -> Bool
-  return rf_cstr_compare(a: me, b: you) == 0s32
+  return C::rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine CStr.cmp(you: CStr) -> ComparisonSign
-  var cmp = rf_cstr_compare(a: me, b: you)
+  var cmp = C::rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
@@ -155,19 +155,19 @@ routine CStr.cmp(you: CStr) -> ComparisonSign
 routine CStr.copy() -> CStr
   var len = me.count()
   danger
-    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
-    rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
-    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
+    var buffer = Hijacked[Byte](C::rf_allocate_dynamic(len + 1u64))
+    C::rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
+    return LLVM::reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Returns a new `CStr` view offset by `n` bytes into the same underlying
 ### buffer.
 ### :param n: The number of bytes to skip.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.offset(n: U64) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: n)))
+  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: n)))
 
 ### Returns a `CStr` view starting at `start` bytes from the current pointer.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CStr` value.
 dangerous routine CStr.from_index(start: U64) -> CStr
-  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: start)))
+  return LLVM::reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(ByteSize(bytes: start)))

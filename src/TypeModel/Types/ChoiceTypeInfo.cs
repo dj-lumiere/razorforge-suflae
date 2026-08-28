@@ -8,7 +8,7 @@ namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for choices (simple enumerations with optional integer values).
-/// Backed by <c>i32</c> at the LLVM level. Choices CAN have methods, unlike variants.
+/// Backed by <c>i32</c> at the LLVM level. Choices CAN have memberRoutines, unlike variants.
 /// Cases use SCREAMING_SNAKE_CASE.
 /// </summary>
 public sealed class ChoiceTypeInfo : RecordTypeInfo

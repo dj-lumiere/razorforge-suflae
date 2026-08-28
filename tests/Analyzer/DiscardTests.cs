@@ -9,8 +9,8 @@ using static TestHelpers;
 /// <summary>
 /// Tests for the discard keyword behavior:
 /// - discard routine_call() - no warning
-/// - routine_call() with non-Blank return - warning
-/// - routine_call() with Blank return - no warning
+/// - routine_call() with non-None return - warning
+/// - routine_call() with None return - no warning
 /// - discard x or discard 42 - parser error (must be call)
 /// </summary>
 public class DiscardTests
@@ -41,10 +41,10 @@ public class DiscardTests
     /// </summary>
 
     [Fact]
-    public void Analyze_CallWithoutDiscard_NonBlankReturn_WarningCurrentlySuppressed()
+    public void Analyze_CallWithoutDiscard_NonNoneReturn_WarningCurrentlySuppressed()
     {
         // The UnusedRoutineReturnValue (SW007) warning is currently in SemanticVerifier's
-        // SuppressedWarnings set (alongside UnhandledCrashableCall), so an unused non-Blank return
+        // SuppressedWarnings set (alongside UnhandledCrashableCall), so an unused non-None return
         // is NOT flagged today. CLAUDE.md still recommends `discard`; if enforcement is wanted,
         // remove SW007 from SuppressedWarnings (and expect fixtures/stdlib to need `discard`).
         string source = """
@@ -66,7 +66,7 @@ public class DiscardTests
     /// </summary>
 
     [Fact]
-    public void Analyze_CallWithoutDiscard_BlankReturn_NoWarning()
+    public void Analyze_CallWithoutDiscard_NoneReturn_NoWarning()
     {
         string source = """
                         routine do_something()
@@ -251,7 +251,7 @@ public class DiscardTests
     #region RazorForge - Discard Chained And Constructed Calls
 
     /// <summary>
-    /// Verifies that the parser accepts discard on a chained method call.
+    /// Verifies that the parser accepts discard on a chained memberRoutine call.
     /// </summary>
     [Fact]
     public void Parse_DiscardChainedCall_Succeeds()

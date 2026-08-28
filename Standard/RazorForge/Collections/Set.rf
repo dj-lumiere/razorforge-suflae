@@ -1,6 +1,6 @@
 module Core
 
-import BuilderService
+import BuilderQuery
 import Core.SecureHashKey
 
 secret preset SET_INITIAL_CAPACITY: U64 = 16u64
@@ -21,7 +21,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### **When to use**
 ### - You are storing data derived from untrusted input (e.g. tokens, user-supplied strings, request IDs).
 ### - You need membership testing with a security guarantee against hash-flooding.
-### - Use {FastSet[T]} instead when the element space is fully trusted and throughput matters more.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -32,7 +31,6 @@ secret preset ENTRY_LIVE: U8 = 1_u8
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
-### :see: {FastSet[T]} for an unkeyed faster variant when keys are fully trusted.
 ### :see: {Dict[K, V]} for the dictionary counterpart.
 entity Set[T] obeys Iterable[T], Container
 needs T obeys Hashable, Equatable
@@ -73,11 +71,11 @@ routine Set[T](key: SecureHashKey) -> Set[T]
     k1: key.k1
   )
   danger
-    set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+    set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
-    set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
+    set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
   return steal set
 
 routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
@@ -101,11 +99,11 @@ routine Set[T](key: SecureHashKey, capacity: U64) -> Set[T]
     k1: key.k1
   )
   danger
-    set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
+    set.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
-    set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
+    set.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(ecap))
   return steal set
 
 # ============================================================================
@@ -170,7 +168,7 @@ routine Set[T].should_rehash() -> Bool
     return true
   return false
 
-@migratable
+@reshaping
 routine Set[T].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap
@@ -190,11 +188,11 @@ routine Set[T].rehash()
     new_ecap = old_ecap *% 2u64
 
   danger
-    me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
+    me.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_cap))
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
     me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_ecap))
-    me.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(new_ecap))
+    me.entry_live = Hijacked[U8](C::rf_allocate_dynamic_uninit(new_ecap))
   me.capacity = new_cap
   me.entries_cap = new_ecap
   me.count = 0u64
@@ -217,13 +215,13 @@ routine Set[T].rehash()
 
   danger
     if not old_ctrl.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
-      rf_invalidate(pointer_to_int[U64, Address](old_indices))
+      C::rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
     if not old_slots.is_none()
-      rf_invalidate(pointer_to_int[T, Address](old_slots))
+      C::rf_invalidate(LLVM::pointer_to_int[T, Address](old_slots))
     if not old_entry_live.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](old_entry_live))
+      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================
@@ -240,7 +238,7 @@ routine Set[T].is_empty() -> Bool
 
 routine Set[T].clear()
   danger
-    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
+    C::rf_set_bytes_at(dest: LLVM::pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
   me.entries_used = 0u64
@@ -311,57 +309,57 @@ routine SetEmittable[T].emit!() -> T
 # ============================================================================
 
 @readonly
-routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].union(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
-  for val in me
+  each val in me
     discard result.add(val)
-  for val in other
+  each val in other
     discard result.add(val)
   return steal result
 
 @readonly
-routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].intersection(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val in other
       discard result.add(val)
   return steal result
 
 @readonly
-routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
   return steal result
 
 @readonly
-routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
+routine Set[T].symmetric_difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
-  for val in me
+  each val in me
     if val notin other
       discard result.add(val)
-  for val in other
+  each val in other
     if val notin me
       discard result.add(val)
   return steal result
 
 @readonly
-routine Set[T].is_subset(other: Referring[Set[T]]) -> Bool
+routine Set[T].is_subset(other: Accessing[Set[T]]) -> Bool
   if me.count > other.count
     return false
-  for val in me
+  each val in me
     if val notin other
       return false
   return true
 
 @readonly
-routine Set[T].is_superset(other: Referring[Set[T]]) -> Bool
+routine Set[T].is_superset(other: Accessing[Set[T]]) -> Bool
   return other.is_subset(me)
 
 @readonly
-routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
-  for val in me
+routine Set[T].is_disjoint(other: Accessing[Set[T]]) -> Bool
+  each val in me
     if val in other
       return false
   return true
@@ -375,7 +373,7 @@ routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
 ### :returns: A new {List[T]} containing all elements of `from`.
 routine List[T](from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
-  for val in from
+  each val in from
     result.add_last(val)
   return steal result
 
@@ -383,28 +381,28 @@ routine List[T](from: Set[T]) -> List[T]
 # Display
 # ============================================================================
 
-@readonly
+@[readonly, override]
 routine Set[T].represent() -> Text
   if me.is_empty()
     return "{}"
   var result = "{"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
-    result = result + val.represent()
+    result = result + nested_repr(val)
     first = false
   result = result + "}"
   return steal result
 
-@readonly
+@[readonly, override]
 routine Set[T].diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().represent() + ", {"
   var first = true
-  for val in me
+  each val in me
     if not first
       result = result + ", "
-    result = result + val.represent()
+    result = result + nested_repr(val)
     first = false
   result = result + "})"
   return steal result
@@ -414,10 +412,10 @@ routine Set[T].diagnose() -> Text
 # ============================================================================
 
 @readonly
-routine Set[T].eq(other: Referring[Set[T]]) -> Bool
+routine Set[T].eq(other: Accessing[Set[T]]) -> Bool
   if me.count != other.count
     return false
-  for val in me
+  each val in me
     if val notin other
       return false
   return true
@@ -440,10 +438,9 @@ dangerous routine Set[T].destroy()
 
 ### Serializes this collection to a `SerialValue.List`, serializing each element.
 ### :returns: The `SerialValue.List` of each element's serialized form.
-@[readonly, generated]
+@[readonly, override]
 routine Set[T].serialize() -> SerialValue
-needs T obeys Serializable
   var __sv = List[SerialValue]()
-  for __x in me
+  each __x in me
     __sv.add_last(value: __x.serialize())
   return SerialValue(steal __sv)

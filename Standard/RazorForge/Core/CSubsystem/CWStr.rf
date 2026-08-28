@@ -1,0 +1,105 @@
+module Core
+
+import BuilderQuery
+
+### Represents a null-terminated wide C string (`wchar_t*`) — the FFI wrapper for wide-character
+### C strings, the sibling of {CStr} for narrow `char*`. The wrapper is value-typed (a raw pointer);
+### its element width is platform-dependent because {CWChar} is (16-bit on Windows, 32-bit on Unix), but
+### the pointer representation itself is uniform. Ownership depends on how the pointer was obtained.
+### :see: {CStr}, {CWChar}
+@llvm("ptr")
+record CWStr
+  pass
+
+### Returns the raw null-terminated wide-character pointer backing this string.
+### :returns: The underlying `Hijacked[CWChar]` pointer.
+@readonly
+routine CWStr.ptr() -> Hijacked[CWChar]
+  return LLVM::reinterpret_bits[CWStr, Hijacked[CWChar]](me)
+
+### Wraps an existing null-terminated wide-character pointer as `CWStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The pointer to wrap.
+### :returns: The resulting `CWStr` value.
+@readonly
+routine CWStr(from_ptr: Hijacked[CWChar]) -> CWStr
+  return LLVM::reinterpret_bits[Hijacked[CWChar], CWStr](from_ptr)
+
+### A `CWStr` that does not reference any wide C string (a null pointer).
+preset CWSTR_NULL: CWStr = CWStr(from_ptr: hijacked_none[CWChar]())
+
+### Returns `true` when this wrapper does not reference any wide C string.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CWStr.is_null() -> Bool
+  return me.ptr().is_none()
+
+### Returns the number of wide characters in this string, excluding the trailing null.
+### Walks the buffer until the null terminator; assumes a well-formed null-terminated string.
+### :returns: The wide-character count, not including the null terminator.
+@readonly
+routine CWStr.count() -> U64
+  danger
+    var p = me.ptr()
+    var n: U64 = 0u64
+    loop
+      if U32(from: p.peek()) == 0u32
+        break
+      p = p.stride(1s64)
+      n = n + 1u64
+    return n
+
+### Returns `true` when this string is null or has zero length.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CWStr.is_empty() -> Bool
+  return me.is_null() or me.count() == 0u64
+
+### Returns the wide character at `index` in the referenced string.
+### This does not copy the string and assumes the caller stays within bounds.
+### :param index: The zero-based position to use.
+### :returns: The resulting `CWChar` value.
+dangerous routine CWStr.getitem(index: U64) -> CWChar
+  return me.ptr().offset(bytes: CWChar.data_size() * index).peek()
+
+### Returns whether both wide strings hold the same code units up to their null terminators.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CWStr.eq(you: CWStr) -> Bool
+  danger
+    var a = me.ptr()
+    var b = you.ptr()
+    loop
+      var ca = U32(from: a.peek())
+      var cb = U32(from: b.peek())
+      if ca != cb
+        return false
+      if ca == 0u32
+        return true
+      a = a.stride(1s64)
+      b = b.stride(1s64)
+
+### Compares this wide string with the other lexicographically by code unit.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine CWStr.cmp(you: CWStr) -> ComparisonSign
+  danger
+    var a = me.ptr()
+    var b = you.ptr()
+    loop
+      var ca = U32(from: a.peek())
+      var cb = U32(from: b.peek())
+      if ca != cb
+        return ca <=> cb
+      if ca == 0u32
+        return SAME
+      a = a.stride(1s64)
+      b = b.stride(1s64)
+
+### Returns a `CWStr` view offset by `n` wide characters into the same underlying buffer.
+### :param n: The number of wide characters to skip.
+### :returns: The resulting `CWStr` value.
+dangerous routine CWStr.offset(n: U64) -> CWStr
+  return CWStr(from_ptr: me.ptr().offset(bytes: CWChar.data_size() * n))

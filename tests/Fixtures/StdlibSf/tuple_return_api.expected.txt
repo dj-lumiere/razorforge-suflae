@@ -1,0 +1,3 @@
+divmod: 3 2
+flag: 42 true
+flag zero: 1 false

@@ -338,8 +338,8 @@ public class PatternMatchingTests
         string source = """
                         routine classify(n: S32?)
                           when n
-                            is S32 x if x > 0 => show("Positive")
-                            is S32 x if x < 0 => show("Negative")
+                            is S32 x and x > 0 => show("Positive")
+                            is S32 x and x < 0 => show("Negative")
                             is S32 x => show("Zero")
                             else => show("None")
                           return
@@ -357,7 +357,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(x: S32, y: S32)
                           when x
-                            == 0 if y > 0 => show("x=0, y positive")
+                            == 0 and y > 0 => show("x=0, y positive")
                             == 0 => show("x=0, y non-positive")
                             else => show("x not zero")
                           return
@@ -375,8 +375,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(error: Crashable)
                           when error
-                            is NetworkError e if e.code == 404 => show("Not found")
-                            is NetworkError e if e.code >= 500 => show("Server error")
+                            is NetworkError e and e.code == 404 => show("Not found")
+                            is NetworkError e and e.code >= 500 => show("Server error")
                             is Crashable e => show(f"Error: {e.message()}")
                           return
                         """;
@@ -689,11 +689,11 @@ public class PatternMatchingTests
                               return
                             else shape =>
                               when shape
-                                is CIRCLE (center, radius) if radius > 10 =>
+                                is CIRCLE (center, radius) and radius > 10 =>
                                   show("Large circle")
                                 is CIRCLE (center, radius) =>
                                   show("Small circle")
-                                is RECTANGLE ((x, y), (w, h)) if w == h =>
+                                is RECTANGLE ((x, y), (w, h)) and w == h =>
                                   show("Square")
                                 else => show("Other shape")
                           return
@@ -842,11 +842,11 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts when comparison with method call.
+    /// Verifies that the parser accepts when comparison with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_WhenComparisonWithMethodCall()
+    public void Parse_WhenComparisonWithMemberRoutineCall()
     {
         string source = """
                         routine test(value: S32)
@@ -987,9 +987,9 @@ public class PatternMatchingTests
         string source = """
                         routine test(x: S32, y: S32)
                           when x
-                            > 0 if y > 0 => show("both positive")
+                            > 0 and y > 0 => show("both positive")
                             > 0 => show("x positive, y not")
-                            < 0 if y < 0 => show("both negative")
+                            < 0 and y < 0 => show("both negative")
                             else => show("other")
                           return
                         """;
@@ -1006,9 +1006,9 @@ public class PatternMatchingTests
         string source = """
                         routine validate(score: S32, bonus: S32) -> Text
                           return when score
-                            >= 90 if bonus > 0 => "A+"
+                            >= 90 and bonus > 0 => "A+"
                             >= 90 => "A"
-                            >= 80 if bonus >= 5 => "B+"
+                            >= 80 and bonus >= 5 => "B+"
                             >= 80 => "B"
                             else => "C"
                           return
@@ -1030,7 +1030,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(n: S32, m: S32)
                           when n
-                            is S32 x if x > 0 and m > 0 => show("both positive")
+                            is S32 x and x > 0 and m > 0 => show("both positive")
                             else => show("not both positive")
                           return
                         """;
@@ -1047,7 +1047,7 @@ public class PatternMatchingTests
         string source = """
                         routine test(n: S32)
                           when n
-                            is S32 x if x < -100 or x > 100 => show("extreme")
+                            is S32 x and x < -100 or x > 100 => show("extreme")
                             else => show("moderate")
                           return
                         """;
@@ -1064,8 +1064,8 @@ public class PatternMatchingTests
         string source = """
                         routine classify(x: S32, y: S32, z: S32)
                           when x
-                            > 0 if y > 0 and z > 0 => show("all positive")
-                            > 0 if y > 0 or z > 0 => show("x and at least one other positive")
+                            > 0 and y > 0 and z > 0 => show("all positive")
+                            > 0 and y > 0 or z > 0 => show("x and at least one other positive")
                             > 0 => show("only x positive")
                             else => show("x not positive")
                           return
@@ -1083,8 +1083,8 @@ public class PatternMatchingTests
         string source = """
                         routine handle(user: User)
                           when user
-                            is User u if u.age >= 18 and u.verified => show("verified adult")
-                            is User u if u.age >= 18 => show("unverified adult")
+                            is User u and u.age >= 18 and u.verified => show("verified adult")
+                            is User u and u.age >= 18 => show("unverified adult")
                             else => show("minor")
                           return
                         """;
@@ -1092,17 +1092,17 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts when guard with method call.
+    /// Verifies that the parser accepts when guard with memberRoutine call.
     /// </summary>
 
     [Fact]
-    public void Parse_WhenGuardWithMethodCall()
+    public void Parse_WhenGuardWithMemberRoutineCall()
     {
         string source = """
                         routine process(item: Item)
                           when item
-                            is Item i if i.is_valid() and i.count() > 0 => process_valid(i)
-                            is Item i if i.is_valid() => handle_empty(i)
+                            is Item i and i.is_valid() and i.count() > 0 => process_valid(i)
+                            is Item i and i.is_valid() => handle_empty(i)
                             else => reject(item)
                           return
                         """;

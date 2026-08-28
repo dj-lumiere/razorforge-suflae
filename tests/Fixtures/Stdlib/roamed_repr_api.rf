@@ -1,0 +1,17 @@
+module Tests/Stdlib/RoamedReprApi
+import IO/Console
+
+# Pure-RazorForge check that a `Roamed[T]` handle renders its INNER value, never "Roamed[...]".
+# `Roamed[T]` declares no `represent`/`diagnose` of its own — codegen's RoamedTransparency projection
+# re-resolves the display call to the inner entity's, so `f"{p}"` and `p.diagnose()` show `Pt(...)`.
+entity Pt
+  x: S64
+  y: S64
+
+routine start()
+  danger
+    var p = Roamed(from: Pt(x: 3, y: 4))
+    show(f"p: {p}")
+    show(f"diag: {p.diagnose()}")
+  show("DONE")
+  return

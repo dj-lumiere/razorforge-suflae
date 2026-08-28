@@ -1,0 +1,21 @@
+module Tests/Stdlib/TupleReprApi
+import IO/Console
+
+# Tuple `represent()`/`diagnose()` — the SPECIAL tuple format via the `is TupleType` derive
+# templates: represent `(v0, v1)` (no type name / field names), diagnose `Module.Tuple[…](v0, v1)`
+# (qualified type name prefixed; elements still render via `represent`).
+
+routine start()
+  var pair = (1s32, 2s32)
+  show(pair.represent())
+  show(f"{pair.diagnose()}")
+
+  var mixed = (42s32, "hi", true)
+  show(mixed.represent())
+  show(f"{mixed.diagnose()}")
+
+  var nested = ((1s32, 2s32), 3s32)
+  show(nested.represent())
+
+  show("DONE")
+  return

@@ -1,0 +1,27 @@
+module Tests/Stdlib/TupleSerializeApi
+import IO/Console
+
+# Tuple `serialize()` — field-walk item0/item1/… into a `Dict[Text, SerialValue]`, via the same
+# universal derive template as records/entities. Registered (in GetOrCreateTupleType) only when every
+# element is serializable; a generic tuple (`Tuple[U64, T]`) is skipped and cloned per concrete
+# instantiation. Nested tuples and mixed element types are covered.
+
+record Point
+  x: S32
+  y: S32
+
+routine start()
+  var pair = (1s32, 2s32)
+  show(f"{pair.serialize()}")
+
+  var mixed = (42s32, "hi", true)
+  show(f"{mixed.serialize()}")
+
+  var nested = ((1s32, 2s32), 3s32)
+  show(f"{nested.serialize()}")
+
+  var with_record = (Point(x: 7s32, y: 8s32), 9s32)
+  show(f"{with_record.serialize()}")
+
+  show("DONE")
+  return

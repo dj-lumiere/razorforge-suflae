@@ -8,5 +8,5 @@ module Core
 ### them here promised conformance with no body behind it (a record that never declares `eq` would
 ### still "obey" Equatable), which let constrained generics like `List[T].eq` instantiate for a
 ### non-equatable element and emit a call to the abstract `Equatable.eq` → linker error.
-protocol RecordType obeys Diagnosable, Serializable
+protocol RecordType
   pass

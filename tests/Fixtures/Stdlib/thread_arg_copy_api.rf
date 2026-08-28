@@ -13,7 +13,7 @@ record Point
 
 # Atomic arg: shared by reference (the headline cross-thread sharing).
 threaded routine add_n(cell: Atomic[S64], times: S64) -> S64
-  for i in 0 til times
+  each i in 0 til times
     discard cell.fetch_add(delta: 1_s64)
   return times
 

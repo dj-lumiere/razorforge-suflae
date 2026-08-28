@@ -4,18 +4,18 @@ using static TestHelpers;
 
 /// <summary>
 /// Locks down the rule that `!` belongs inside a routine name, never after a
-/// call expression's closing paren. <c>method(args)!</c> is a parse error;
-/// failability is invoked via <c>method!(args)</c> and propagates through the
+/// call expression's closing paren. <c>memberRoutine(args)!</c> is a parse error;
+/// failability is invoked via <c>memberRoutine!(args)</c> and propagates through the
 /// enclosing `!`-marked routine.
 /// </summary>
 public class TrailingBangCallTests
 {
-    /// <summary>Verifies that trailing bang on a method call (method(args)!) produces a parse error.</summary>
+    /// <summary>Verifies that trailing bang on a memberRoutine call (memberRoutine(args)!) produces a parse error.</summary>
     [Fact]
-    public void Parse_TrailingBang_OnMethodCall_IsParseError()
+    public void Parse_TrailingBang_OnMemberRoutineCall_IsParseError()
     {
-        // `method(args)!` form — must fail to parse. The correct form is
-        // `method!(args)` with the bang INSIDE the routine name.
+        // `memberRoutine(args)!` form — must fail to parse. The correct form is
+        // `memberRoutine!(args)` with the bang INSIDE the routine name.
         string source = """
                         module L/Test
                         routine f!() -> S64
@@ -75,11 +75,11 @@ public class TrailingBangCallTests
         AssertParses(source: source);
     }
 
-    /// <summary>Verifies that the correct method!(args) form with bang in the name parses without error.</summary>
+    /// <summary>Verifies that the correct memberRoutine!(args) form with bang in the name parses without error.</summary>
     [Fact]
-    public void Parse_BangInMethodName_OK()
+    public void Parse_BangInMemberRoutineName_OK()
     {
-        // Positive control — the correct form `method!(args)` must parse cleanly.
+        // Positive control — the correct form `memberRoutine!(args)` must parse cleanly.
         // (Goes through `Parse`, not `AssertParseError`, so any throw fails the test.)
         string source = """
                         module L/Test

@@ -1,0 +1,36 @@
+<idea-plugin>
+    <id>com.razorforge.lsp</id>
+    <name>RazorForge / Suflae</name>
+    <vendor email="djminstar573@gmail.com">razorforge</vendor>
+
+    <description><![CDATA[
+        Language support for RazorForge (.rf) and Suflae (.sf) in Rider.
+        Registers the file types and drives the compiler's built-in language server
+        (<code>dotnet RazorForge.dll --lsp</code>) via the IntelliJ LSP client API for live
+        diagnostics, hover, go-to-definition, references and completion.
+    ]]></description>
+
+    <!-- Platform only. The LSP client API is a paid-IDE feature; Rider provides it. -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Recognize the extensions so files open in the editor and the LSP client can attach. -->
+        <fileType
+            name="RazorForge"
+            implementationClass="com.razorforge.lsp.RazorForgeFileType"
+            fieldName="INSTANCE"
+            language="RazorForge"
+            extensions="rf;razorforge"/>
+        <fileType
+            name="Suflae"
+            implementationClass="com.razorforge.lsp.SuflaeFileType"
+            fieldName="INSTANCE"
+            language="Suflae"
+            extensions="sf"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.intellij.platform.lsp">
+        <serverSupportProvider
+            implementation="com.razorforge.lsp.RazorForgeLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>

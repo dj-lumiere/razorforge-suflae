@@ -42,6 +42,13 @@ public enum SemanticWarningCode
     /// <summary>Routine call's return value is unused. Use 'discard' to explicitly ignore it.</summary>
     UnusedRoutineReturnValue = 7,
 
+    /// <summary>An <c>Agent[T]</c> (from a <c>suspended</c>/<c>threaded</c> call) is created but never
+    /// launched — no verb (<c>retrieve</c>/<c>execute</c>/<c>gather</c>/<c>race</c>) is ever called on
+    /// it, so the routine BODY never runs. Under the lazy model the call only builds a recipe; a verb
+    /// starts it. Call <c>.execute()</c> to run it in the background, or <c>.retrieve()</c> to run and
+    /// await the value.</summary>
+    AsyncAgentNeverLaunched = 8,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // UNREACHABLE CODE WARNINGS (RF-W050 - RF-W099)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -112,8 +119,8 @@ public enum SemanticWarningCode
     /// <summary>Variable marked modifiable but never modified.</summary>
     UnnecessaryModifiable = 200,
 
-    /// <summary>Method could be marked @readonly but is not.</summary>
-    MethodCouldBeReadonly = 201,
+    /// <summary>memberRoutine could be marked @readonly but is not.</summary>
+    MemberRoutineCouldBeReadonly = 201,
 
     /// <summary>Calling .modify() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,

@@ -8,12 +8,12 @@ import IO/Console
 # how F128.represent formats values.
 
 routine ck(got: F128, want: F128, label: Text)
-  show(label + ": " + f"{int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
+  show(label + ": " + f"{LLVM::int_eq[U128](a: got.to_bits(), b: want.to_bits())}")
   return
 
 routine start()
-  var p112 = F128(from: shift_left[U128](1_u128, 112_u128))   # 2^112 (even mantissa)
-  var p113 = F128(from: shift_left[U128](1_u128, 113_u128))   # 2^113 (even mantissa)
+  var p112 = F128(from: LLVM::shift_left[U128](1_u128, 112_u128))   # 2^112 (even mantissa)
+  var p113 = F128(from: LLVM::shift_left[U128](1_u128, 113_u128))   # 2^113 (even mantissa)
   var p112p2 = p112 + F128(from: 2_s64)
 
   # Exact ties must round half-to-even, both directions, both code paths.

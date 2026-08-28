@@ -43,7 +43,7 @@ public class RoutineValidationTests
                           x: S32
                           y: S32
                         @readonly
-                        @migratable
+                        @reshaping
                         routine Point.set_x(new_x: S32)
                           me.x = new_x
                           return
@@ -56,19 +56,19 @@ public class RoutineValidationTests
 
     #endregion
 
-    #region Migratable annotation
+    #region Reshaping annotation
 
     /// <summary>
-    /// Verifies that a single @migratable annotation on a method produces no conflict error.
+    /// Verifies that a single @reshaping annotation on a memberRoutine produces no conflict error.
     /// </summary>
     [Fact]
-    public void Analyze_MigratableAnnotationAlone_NoError()
+    public void Analyze_ReshapingAnnotationAlone_NoError()
     {
         string source = """
                         entity Counter
                           count: S32
 
-                        @migratable
+                        @reshaping
                         routine Counter.reset(value: S32)
                           me.count = value
                           return
@@ -80,16 +80,16 @@ public class RoutineValidationTests
     }
 
     /// <summary>
-    /// Verifies that @migratable combined with @readonly reports a mutation category conflict.
+    /// Verifies that @reshaping combined with @readonly reports a mutation category conflict.
     /// </summary>
     [Fact]
-    public void Analyze_MigratableAndReadonly_ReportsConflict()
+    public void Analyze_ReshapingAndReadonly_ReportsConflict()
     {
         string source = """
                         entity Counter
                           count: S32
 
-                        @migratable
+                        @reshaping
                         @readonly
                         routine Counter.peek() -> S32
                           return me.count

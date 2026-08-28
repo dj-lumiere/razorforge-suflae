@@ -1,0 +1,15 @@
+CLong repr=100 diag=CLong(100)
+CLong eq=true ne=false cmp_lt=ME_SMALL cmp_eq=SAME
+CLong hash_eq=true
+CULong repr=4000 diag=CULong(4000)
+CULong eq=true cmp_lt=ME_SMALL cmp_gt=ME_LARGE
+CULong hash_eq=true
+CWChar repr=65 cp=65 diag=CWChar(65)
+CWChar euro repr=8364 cp=8364
+CWChar eq=true cmp_lt=ME_SMALL
+CWStr count=3 is_null=false is_empty=false
+CWStr eq=true ne=false cmp_lt=ME_SMALL
+CWStr null is_null=true is_empty=true
+CWStr get0=72 get2=33
+CWStr offset1 count=2 get0=105
+DONE
