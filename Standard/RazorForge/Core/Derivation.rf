@@ -198,14 +198,29 @@ routine T.serialize() -> SerialValue
 needs RoutineType T
   return SerialValue(from: me.represent())
 
+### Default `crash_title()` for a crashable that declares none: the bare type name. Overridable — a
+### user `@override crash_title` wins. A `needs CrashableType T` derive (not a hand-written wired body)
+### so it re-homes the title default the deleted WiredRoutinePass used to synthesize, AND makes
+### `me.crash_title()` resolve inside the other CrashableType derives below.
+@overridable
+routine T.crash_title() -> Text
+needs CrashableType T
+  return me.type_name()
+
+### Default `crash_message()` for a crashable that declares none: falls back to the title (matching the
+### deleted WiredRoutinePass default). Overridable — a user `@override crash_message` wins.
+@overridable
+routine T.crash_message() -> Text
+needs CrashableType T
+  return me.crash_title()
+
 ### Crashable `represent()`: the human-readable message (`crash_message()`), NOT the record field walk — a
 ### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
 ### makes the derive selector pick this over the record `needs AnyType T` default (which would show the empty
-### `TypeName()` for a fieldless error). `needs T obeys Crashable` exposes `crash_message` on the bound `me`.
+### `TypeName()` for a fieldless error); `crash_message` resolves via the CrashableType derive above.
 @override
 routine T.represent() -> Text
 needs CrashableType T
-needs T obeys Crashable
   return me.crash_message()
 
 ### Crashable `diagnose()`: `Module.CrashableName(<crash_message>[, field: value, …])` — the qualified type
@@ -214,7 +229,6 @@ needs T obeys Crashable
 @override
 routine T.diagnose() -> Text
 needs CrashableType T
-needs T obeys Crashable
   var result = me.full_type_name() + "(" + me.crash_message()
   expand m in allmemvarof(T)
     result = result + ", " + nameof(m) + ": " + me.$nameof(m).represent()
