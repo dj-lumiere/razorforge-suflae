@@ -8,7 +8,7 @@ import IO/Console
 entity Resource obeys Enterable
   tag: S64
 
-routine Resource.create(tag: S32) -> Resource
+routine Resource(tag: S32) -> Resource
   show(f"  create({tag})")
   return Resource(tag: S64(tag))
 
@@ -31,14 +31,14 @@ routine Resource.touch()
 
 routine normal_exit()
   show(" normal: before using")
-  using Resource(tag: 1) as r
+  using Resource(tag: 1s32) as r
     r.touch()
   show(" normal: after using")
   return
 
 routine early_return(condition: Bool)
   show(f" early: before using (cond={condition})")
-  using Resource(tag: 2) as r
+  using Resource(tag: 2s32) as r
     r.touch()
     if condition
       show("  about to early-return")
