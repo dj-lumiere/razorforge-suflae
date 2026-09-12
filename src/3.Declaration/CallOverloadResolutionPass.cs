@@ -1,6 +1,7 @@
 using Builder.Desugaring.Passes;
 using Builder.Lowering;
 using Builder.Instantiation;
+using Builder.Tokenizer;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -748,6 +749,18 @@ internal sealed class CallOverloadResolutionPass
             return localT;
         }
 
+        // An explicitly-suffixed numeric literal (`0u64`, `1u64`, `3.0f32`) carries its type in its
+        // LiteralType token even when an un-SA'd body never stamped ResolvedType. Recover it so a local
+        // seeded from such a literal (`var n = 0u64`) gets a receiver type for a downstream `n.add(1u64)`
+        // — the cold-path monomorph of `Iterable[T].get_count`'s `n = n + 1u64`. Unsuffixed literals
+        // (UndecidedInteger/Decimal) are context-typed and deliberately NOT mapped here.
+        if (expr is LiteralExpression { } lit &&
+            MapSuffixedLiteralTypeName(literalType: lit.LiteralType) is { } litTypeName &&
+            _registry.LookupType(name: litTypeName) is { } litType)
+        {
+            return litType;
+        }
+
         if (expr is MemberExpression member)
         {
             TypeSymbol? ownerType = ComputeDeferredType(expr: member.Object);
@@ -815,6 +828,40 @@ internal sealed class CallOverloadResolutionPass
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Maps an EXPLICITLY-suffixed numeric literal token to its type name (<c>U64Literal</c> → <c>"U64"</c>).
+    /// Returns null for unsuffixed/context-typed literals (UndecidedInteger/Decimal) and non-numeric tokens —
+    /// those cannot be typed from the token alone. Mirrors the suffixed cases of the verifier's
+    /// <c>MapLiteralTypeName</c>, kept local to avoid a cross-namespace dependency on the verifier.
+    /// </summary>
+    private static string? MapSuffixedLiteralTypeName(TokenType literalType)
+    {
+        return literalType switch
+        {
+            TokenType.S8Literal => "S8",
+            TokenType.S16Literal => "S16",
+            TokenType.S32Literal => "S32",
+            TokenType.S64Literal => "S64",
+            TokenType.S128Literal => "S128",
+            TokenType.S256Literal => "S256",
+            TokenType.U8Literal => "U8",
+            TokenType.U16Literal => "U16",
+            TokenType.U32Literal => "U32",
+            TokenType.U64Literal => "U64",
+            TokenType.U128Literal => "U128",
+            TokenType.U256Literal => "U256",
+            TokenType.F16Literal => "F16",
+            TokenType.F32Literal => "F32",
+            TokenType.F64Literal => "F64",
+            TokenType.F128Literal => "F128",
+            TokenType.D32Literal => "D32",
+            TokenType.D64Literal => "D64",
+            TokenType.D128Literal => "D128",
+            TokenType.True or TokenType.False => "Bool",
+            _ => null
+        };
     }
 
     /// <summary>

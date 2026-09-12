@@ -1138,16 +1138,18 @@ internal static class GenericAstRewriter
         {
             TypeExpression te => RewriteType(type: te, ctx: ctx),
 
-            GenericMemberRoutineCallExpression gmc => gmc with
-            {
-                Object = RewriteExpression(expr: gmc.Object, ctx: ctx),
-                TypeArguments = gmc.TypeArguments
-                                   .Select(selector: a => RewriteType(type: a, ctx: ctx))
-                                   .ToList(),
-                Arguments = gmc.Arguments
-                               .Select(selector: a => RewriteExpression(expr: a, ctx: ctx))
-                               .ToList()
-            },
+            GenericMemberRoutineCallExpression gmc => CarryGmcMutableProps(
+                clone: gmc with
+                {
+                    Object = RewriteExpression(expr: gmc.Object, ctx: ctx),
+                    TypeArguments = gmc.TypeArguments
+                                       .Select(selector: a => RewriteType(type: a, ctx: ctx))
+                                       .ToList(),
+                    Arguments = gmc.Arguments
+                                   .Select(selector: a => RewriteExpression(expr: a, ctx: ctx))
+                                   .ToList()
+                },
+                original: gmc),
 
             CreatorExpression creator => creator with
             {
@@ -1216,6 +1218,26 @@ internal static class GenericAstRewriter
 
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Carries the mutable resolution props (<see cref="GenericMemberRoutineCallExpression.ConstructedType"/>,
+    /// <c>ResolvedRoutine</c>, <c>LoweringKind</c>, <c>IsCollectionLiteral</c>, <c>ResolvedType</c>) from
+    /// <paramref name="original"/> onto <paramref name="clone"/>. These are <c>{get;set;}</c> properties, so the
+    /// <c>with</c>-clone that rewrites Object/TypeArguments/Arguments DROPS them (resets to default). Without this
+    /// carry-over a cloned type-construction GMC (<c>WhereIterable[T, Me](...)</c>) loses its ConstructedType, and
+    /// the post-clone rebind (which only concretizes an already-present ConstructedType) leaves it null — so the
+    /// cold-materialized monomorphized body reaches codegen as an un-lowered GMCE. Returns <paramref name="clone"/>.
+    /// </summary>
+    private static GenericMemberRoutineCallExpression CarryGmcMutableProps(
+        GenericMemberRoutineCallExpression clone, GenericMemberRoutineCallExpression original)
+    {
+        clone.ResolvedRoutine = original.ResolvedRoutine;
+        clone.LoweringKind = original.LoweringKind;
+        clone.ConstructedType = original.ConstructedType;
+        clone.IsCollectionLiteral = original.IsCollectionLiteral;
+        clone.ResolvedType = original.ResolvedType;
+        return clone;
     }
 
     private static Expression? RewriteBuildtimeCallExpression(Expression expr, RewriteContext ctx)

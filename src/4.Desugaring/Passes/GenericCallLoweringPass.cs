@@ -279,6 +279,59 @@ internal sealed class GenericCallLoweringPass : AstRewriter
     }
 
     /// <summary>
+    /// Resolves the constructed type for a construction GMCE (<c>List[S64]()</c>): the SA-stamped
+    /// <see cref="GenericMemberRoutineCallExpression.ConstructedType"/> when present, else the type named by
+    /// <see cref="GenericMemberRoutineCallExpression.MemberRoutineName"/> specialized by its explicit type
+    /// args (a generic def + matching arg count → the concrete instance). Returns null when the name is not a
+    /// type or an arg doesn't resolve. Used to bind a no-arg creator for a cold-path monomorphized body.
+    /// </summary>
+    private TypeSymbol? ResolveConstructionTypeForGmc(GenericMemberRoutineCallExpression gmc)
+    {
+        if (gmc.ConstructedType is { } ct and not ErrorTypeSymbol)
+        {
+            return ct;
+        }
+
+        // Prefer the import-aware short-name lookup; on a cold-materialized stdlib body the constructing
+        // type (`WhereIterable`) lives in another module (IterTools) and is NOT in this pass's ambient
+        // import scope, so the short-name lookup honestly fails. Fall back to a scan for the matching
+        // generic DEFINITION by bare name — the type args below still fully pin the concrete instance.
+        TypeSymbol? baseType = _registry.LookupType(name: gmc.MemberRoutineName)
+                               ?? _registry.GetAllTypes().FirstOrDefault(predicate: t =>
+                                   t.IsGenericDefinition && t.BareName == gmc.MemberRoutineName);
+        if (baseType is null)
+        {
+            return null;
+        }
+
+        if (!baseType.IsGenericDefinition)
+        {
+            return baseType;
+        }
+
+        if (baseType.GenericParameters?.Count != gmc.TypeArguments.Count)
+        {
+            return null;
+        }
+
+        var args = new List<TypeSymbol>(capacity: gmc.TypeArguments.Count);
+        foreach (TypeExpression te in gmc.TypeArguments)
+        {
+            TypeSymbol? arg = te.ResolvedType is { } rt and not ErrorTypeSymbol
+                ? rt
+                : _registry.LookupType(name: te.Name);
+            if (arg is null or ErrorTypeSymbol || ContainsGenericParam(t: arg))
+            {
+                return null;
+            }
+
+            args.Add(item: arg);
+        }
+
+        return _registry.GetOrCreateResolution(genericDef: baseType, typeArguments: args);
+    }
+
+    /// <summary>
     /// Tries to lower a <see cref="GenericMemberRoutineCallExpression"/> to a plain
     /// <see cref="CallExpression"/>. Returns <c>null</c> if the node cannot be safely lowered.
     /// </summary>
@@ -288,6 +341,20 @@ internal sealed class GenericCallLoweringPass : AstRewriter
         if (gmc.IsCollectionLiteral)
         {
             return null;
+        }
+
+        // A construction GMC (`WhereIterable[T, Me](...)`) monomorphized on the COLD path carries concrete
+        // TypeArguments but a NULL ConstructedType: it's re-materialized from an un-SA'd stdlib template, and
+        // the `with`-clone in monomorphization drops the mutable ConstructedType stamp SA would have set. Recover
+        // it from MemberRoutineName + the concrete TypeArguments so the field-init guard below fires (it keys on
+        // ConstructedType). Without this the GMC survives to codegen and trips the residual-node check. On the
+        // warm path ConstructedType is already set, so this is a no-op.
+        if (gmc.ConstructedType is null && !gmc.IsMemoryOperation && gmc.ResolvedRoutine == null &&
+            gmc.Object is IdentifierExpression ctId && ctId.Name == gmc.MemberRoutineName &&
+            ResolveConstructionTypeForGmc(gmc: gmc) is { IsGenericDefinition: false } recovered)
+        {
+            // ConstructedType is a mutable {get;set;} prop — set it in place (a `with` clone would drop it).
+            gmc.ConstructedType = recovered;
         }
 
         // -----------------------------------------------------------------------------
@@ -320,6 +387,21 @@ internal sealed class GenericCallLoweringPass : AstRewriter
             (gmc.Arguments.Count > 0 || HasZeroMemberVariables(type: gmc.ConstructedType)))
         {
             return LowerFieldInitCreator(gmc: gmc);
+        }
+
+        // A zero-arg construction of a type WITH fields whose creator SA never bound — the cold-path
+        // monomorphized protocol-default case: `Iterable[T].List()`'s body `var result = List[T]()`,
+        // monomorphized to `List[S64]()`, reaches here (a fresh cold build re-materializes the body but
+        // never re-SA's it, so `List[S64]()`'s ResolvedRoutine is null). The field-init lowering above skips
+        // it (List has fields), and the null-return below would leave the GMCE for codegen to reject. `List`
+        // HAS a real no-arg creator (`routine List[T]()`), so resolve it by signature and fall through to the
+        // construction lowering — the same target SA would have bound on the warm/eager path.
+        if (gmc.Object is IdentifierExpression ctorId && ctorId.Name == gmc.MemberRoutineName &&
+            !gmc.IsMemoryOperation && gmc.ResolvedRoutine == null && gmc.Arguments.Count == 0 &&
+            ResolveConstructionTypeForGmc(gmc: gmc) is { IsGenericDefinition: false } ctorType &&
+            _registry.LookupCreatorOverload(type: ctorType, argTypes: []) is { } noArgCreator)
+        {
+            gmc = gmc with { ResolvedRoutine = noArgCreator, ConstructedType = ctorType };
         }
 
         // Only lower when SA has resolved the routine -> provides the concrete call target.
