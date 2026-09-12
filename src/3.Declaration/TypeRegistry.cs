@@ -484,10 +484,15 @@ public sealed partial class TypeRegistry
     public List<(Program Program, string FilePath, string Module)> StdlibPrograms =>
         _restoredStdlibPrograms == null
             ? _stdlibLoader?.AllLoadedPrograms ?? []
-            // Warm-restore: the restored set is the modules loaded at CAPTURE time; a warm compile may
-            // `import` further modules (e.g. IO/Console) that the fresh loader parses on-demand — those
-            // must join the stdlib program list or their routine bodies never reach codegen.
-            : [.. _restoredStdlibPrograms, .. _stdlibLoader?.AllLoadedPrograms ?? []];
+            // Warm-restore: the restored (cloned, per-build) set is the CANONICAL copy — on-demand analysis
+            // lowers a reached-but-unlowered restored program IN PLACE, and FindInStdlib/codegen read back the
+            // SAME object. A warm compile may `import` a module whose FILE the capture already primed into the
+            // restored set; the fresh loader still re-parses it into AllLoadedPrograms, producing a SECOND,
+            // stale (un-lowered) copy of the same file. Two copies split the readers: the demand map lowers one
+            // (last-write-wins) while FindInStdlib's template index picks the other, un-lowered — a monomorphized
+            // body then reaches codegen with a never-analyzed node (e.g. CircularList.grow's ternary). Drop any
+            // freshly-loaded program whose file the restored set already holds; keep only genuinely-new modules.
+            : [.. _restoredStdlibPrograms, .. FreshlyLoadedNotShadowedByRestored()];
 
     /// <summary>Lowered stdlib program ASTs restored from a warm-compile snapshot. When set, these
     /// (already fully desugared/lowered) programs are served as <see cref="StdlibPrograms"/> instead of
@@ -508,7 +513,28 @@ public sealed partial class TypeRegistry
     /// on-demand (e.g. IO/Console). The desugaring/monomorph/lowering passes iterate THIS, not the full
     /// <see cref="StdlibPrograms"/> — re-lowering the restored (already-lowered) programs would diverge.</summary>
     public List<(Program Program, string FilePath, string Module)> FreshlyLoadedStdlibPrograms =>
-        _stdlibLoader?.AllLoadedPrograms ?? [];
+        FreshlyLoadedNotShadowedByRestored();
+
+    /// <summary>The loader's freshly-parsed programs MINUS any whose file the restored snapshot already
+    /// holds. In a cold compile (<see cref="_restoredStdlibPrograms"/> == null) this is every loaded
+    /// program. In a warm compile the restored (canonical, per-build-cloned) copy supersedes a fresh
+    /// re-parse of the same file — a reached restored program is lowered in place, so the fresh duplicate
+    /// is stale and must not join the program list (else FindInStdlib/codegen may read the un-lowered
+    /// copy while the demand pipeline lowered the other — the warm-restore duplicate-program crash).</summary>
+    private List<(Program Program, string FilePath, string Module)> FreshlyLoadedNotShadowedByRestored()
+    {
+        List<(Program Program, string FilePath, string Module)> loaded =
+            _stdlibLoader?.AllLoadedPrograms ?? [];
+        if (_restoredStdlibPrograms == null)
+        {
+            return loaded;
+        }
+
+        var restoredPaths = new HashSet<string>(
+            collection: _restoredStdlibPrograms.Select(selector: p => p.FilePath),
+            comparer: StringComparer.OrdinalIgnoreCase);
+        return loaded.Where(predicate: p => !restoredPaths.Contains(item: p.FilePath)).ToList();
+    }
 
     private readonly List<(Program Program, string FilePath, string Module)> _userPrograms = [];
 
