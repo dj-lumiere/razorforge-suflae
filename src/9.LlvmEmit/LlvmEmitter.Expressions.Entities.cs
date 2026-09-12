@@ -184,6 +184,14 @@ public partial class LlvmEmitter
         string variantLlvm = GetLlvmType(type: variant);
         string slot = NextTemp();
         EmitLine(sb: sb, line: $"  {slot} = alloca {variantLlvm}");
+        // Zero the WHOLE variant before writing the tag + arm value. An arm whose payload is narrower than
+        // the union's `[N x i8]` (e.g. an `S32` arm in `{ i64, [24 x i8] }`) would otherwise leave the trailing
+        // payload bytes uninitialized. Those undef bytes become `poison` once the variant is loaded by value and
+        // copied (into a Dict slot, passed to `represent`), and the optimizer then treats every `tag == <const>`
+        // arm-dispatch comparison downstream as UB and folds the arm branches away — so `represent` silently
+        // drops the arm's value (a fieldless `SerialValue()` instead of `SerialValue(5)`). A defined zero payload
+        // keeps the value well-defined end-to-end.
+        EmitLine(sb: sb, line: $"  store {variantLlvm} zeroinitializer, ptr {slot}");
 
         // type_id = FNV-1a(member.Type.FullName); 0 for None/None.
         ulong typeId = member.IsNone

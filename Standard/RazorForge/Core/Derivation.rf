@@ -193,6 +193,11 @@ routine T.diagnose() -> Text
 needs RoutineType T
   return me.full_type_name()
 
+@override
+routine T.serialize() -> SerialValue
+needs RoutineType T
+  return SerialValue(from: me.represent())
+
 ### Crashable `represent()`: the human-readable message (`crash_message()`), NOT the record field walk — a
 ### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
 ### makes the derive selector pick this over the record `needs AnyType T` default (which would show the empty
