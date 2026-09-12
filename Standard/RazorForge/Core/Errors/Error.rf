@@ -11,5 +11,6 @@ crashable RuntimeError
 ### specific crashables whenever possible.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine RuntimeError.crash_message() -> Text
   return "A runtime error occurred."

@@ -8,6 +8,7 @@ crashable AbsentValueError
 ### Returns the default message for absent-value failures.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine AbsentValueError.crash_message() -> Text
   return "Attempted to access a value that is absent."
 
@@ -19,6 +20,7 @@ crashable UserTerminationError
 ### Returns the default message for user-requested termination.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine UserTerminationError.crash_message() -> Text
   return "Program was stopped by user."
 
@@ -31,6 +33,7 @@ crashable VerificationFailedError
 ### Returns the default message for verification failures.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine VerificationFailedError.crash_message() -> Text
   return "A verification check failed."
 
@@ -42,6 +45,7 @@ crashable LogicBreachedError
 ### Returns the default message for breached logic invariants.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
 
@@ -53,6 +57,7 @@ crashable KeyNotFoundError
 ### Returns the default message for failed keyed lookup.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine KeyNotFoundError.crash_message() -> Text
   return f"Key not found: {me.key}"
 
@@ -63,6 +68,7 @@ crashable TaskSpawnError
 ### Returns the default message for task-spawn failures.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine TaskSpawnError.crash_message() -> Text
   return "Failed to spawn a threaded task."
 
@@ -73,6 +79,7 @@ crashable TaskTimeoutError
 ### Returns the default message for task-timeout failures.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine TaskTimeoutError.crash_message() -> Text
   return "Threaded task did not finish before its deadline."
 
@@ -85,6 +92,7 @@ crashable ChannelClosedError
 ### Returns the default message for sending to a closed channel.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine ChannelClosedError.crash_message() -> Text
   return "Cannot send to a closed channel (no consumer can receive the item)."
 
@@ -97,5 +105,6 @@ crashable ReentrantLockError
 ### Returns the default message for re-entrant lock acquisition.
 ### :returns: The resulting `Text` value.
 @readonly
+@override
 routine ReentrantLockError.crash_message() -> Text
   return "Re-entrant exclusive lock acquisition — the calling thread already holds this lock (self-deadlock)."

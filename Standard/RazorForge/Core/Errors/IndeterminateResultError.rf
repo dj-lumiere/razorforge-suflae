@@ -7,5 +7,6 @@ crashable IndeterminateResultError
 
 ### Returns the default message for indeterminate arithmetic results.
 ### :returns: The resulting `Text` value.
+@override
 routine IndeterminateResultError.crash_message() -> Text
   return "Indeterminate form encountered: 0 ** 0 is undefined for integer arithmetic."

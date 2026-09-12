@@ -10,5 +10,6 @@ crashable InvalidValueError
 
 ### Returns the default message for invalid external input.
 ### :returns: The resulting `Text` value.
+@override
 routine InvalidValueError.crash_message() -> Text
   return f"Cannot parse \"{me.input}\" as {me.target}."

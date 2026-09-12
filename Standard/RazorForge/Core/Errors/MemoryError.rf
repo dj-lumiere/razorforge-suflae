@@ -8,6 +8,7 @@ crashable MemoryAllocationError
 
 ### Returns the default message for allocation failure.
 ### :returns: The resulting `Text` value.
+@override
 routine MemoryAllocationError.crash_message() -> Text
   return f"Failed to allocate {me.requested_bytes} bytes"
 
@@ -23,5 +24,6 @@ crashable MemoryBoundsError
 
 ### Returns the default message for out-of-bounds memory access.
 ### :returns: The resulting `Text` value.
+@override
 routine MemoryBoundsError.crash_message() -> Text
   return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"

@@ -9,5 +9,6 @@ crashable IOError
 
 ### Returns the message associated with this I/O failure.
 ### :returns: The resulting `Text` value.
+@override
 routine IOError.crash_message() -> Text
   return me.description
