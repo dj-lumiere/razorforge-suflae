@@ -1,9 +1,0 @@
-module Collections
-
-### Suflae SF-realm Collections split list — roam-boundary wrapper over RF::Collections.SplitList[T].
-### Entity + default constructor hand-written; every other method auto-forwarded (SuflaeForwarders).
-entity SplitList[T]
-  secret inner: RF::Collections.SplitList[T]
-
-routine SplitList[T]() -> SplitList[T]
-  return SplitList[T](inner: RF::Collections.SplitList[T]())
