@@ -533,6 +533,29 @@ public sealed partial class TypeRegistry
             return false;
         }
 
+        // A generic INSTANCE (e.g. `Dict[S64, S64]`) — or a REALM-BRIDGED copy of a type (the SF-realm `Core.Dict`
+        // an `.sf` file resolves to) — can carry an EMPTY own ImplementedProtocols: the declared conformances
+        // (`obeys Container, Iterable, …`) are populated by the eager Phase-3 conformance pass onto the AMBIENT
+        // (RF-realm) generic DEFINITION only. Without inheriting them, `x in dict` in an SF file false-fires
+        // RF-S065. Fold in the ambient definition's protocols (realm-blind lookup by bare name reaches the
+        // populated RF-realm def even under an SF ResolutionRealm); conditional (`onlyif`) conformances stay
+        // gated per-instance by ConditionalConformanceHolds below (checked against THIS instance's type args).
+        if (implemented.Count == 0 || type.IsGenericResolution)
+        {
+            List<TypeSymbol>? defImplemented = LookupTypeInAmbient(name: type.BareName) switch
+            {
+                ChoiceTypeSymbol c => c.ImplementedProtocols,
+                FlagsTypeSymbol f => f.ImplementedProtocols,
+                RecordTypeSymbol r => r.ImplementedProtocols,
+                EntityTypeSymbol e => e.ImplementedProtocols,
+                _ => null
+            };
+            if (defImplemented is { Count: > 0 })
+            {
+                implemented = implemented.Concat(second: defImplemented).ToList();
+            }
+        }
+
         // Reduce the target to the registry's ONE canonical protocol object, then match every implemented
         // protocol (+ its parent chain) by reference IDENTITY against it — no name-string equality anywhere.
         // Canonicalizing both sides through the registry (rather than trusting the object a type happened to
