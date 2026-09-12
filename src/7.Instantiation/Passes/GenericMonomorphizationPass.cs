@@ -1197,6 +1197,26 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             rewritten = _ctx.AnalyzeMaterializedDeriveBody?.Invoke(arg1: r, arg2: rewritten) ??
                         rewritten;
 
+            // v0.2.0 cycle-collector contract: an entity's DERIVED roam_free must ALSO run the side-effects of
+            // a USER-AUTHORED destroy (e.g. a logging / beacon `@override destroy`), so a value reaped by the
+            // cycle collector still observes its authored teardown. A user `@override` REPLACES the derived
+            // destroy entirely, and roam_free is a SEPARATE derived template (member roam_free walk + heap
+            // free), so without this the custom destroy is never reached during collection. Only a USER destroy
+            // is prepended — a DERIVED entity destroy walks Roamed members and would double-free, and this clone
+            // path only runs when roam_free itself is NOT hand-written (a container that hand-writes roam_free to
+            // manage a raw buffer never reaches here). "User-authored" = the destroy has a hand-written source
+            // body (present in programBodies); a template-derived destroy never does.
+            if (r.Name == "roam_free" && owner is EntityTypeSymbol &&
+                rewritten is BlockStatement roamFreeBlock &&
+                _ctx.Registry.LookupMemberRoutine(type: owner, memberRoutineName: "destroy") is
+                    { RegistryKey: { } destroyKey } &&
+                programBodies.ContainsKey(key: destroyKey))
+            {
+                rewritten = PrependReceiverCall(block: roamFreeBlock,
+                    memberRoutineName: "destroy",
+                    owner: owner);
+            }
+
             // IsSynthesized: FALSE deliberately — unlike a DerivedOperatorPass body (built pre-resolved +
             // pre-lowered), this clone is raw source that STILL needs the fresh-body lowering sweep
             // (BodyDispatch skips IsSynthesized entries). Marking it non-synthesized routes it through the
@@ -1209,6 +1229,31 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 VariantStatus: null,
                 VariantInnerType: null,
                 IsSynthesized: false);
+        }
+
+        /// <summary>
+        /// Prepends a zero-arg <c>me.&lt;memberRoutineName&gt;()</c> statement to <paramref name="block"/>,
+        /// with <c>me</c> typed as the concrete <paramref name="owner"/> so the later
+        /// <see cref="Declaration.CallOverloadResolutionPass"/> resolves the call. Used to graft a user-authored
+        /// <c>destroy</c>'s side-effects onto an entity's derived <c>roam_free</c>.
+        /// </summary>
+        private static BlockStatement PrependReceiverCall(BlockStatement block,
+            string memberRoutineName, TypeSymbol owner)
+        {
+            SourceLocation loc = block.Location;
+            var meRef = new IdentifierExpression(Name: "me", Location: loc) { ResolvedType = owner };
+            var call = new CallExpression(
+                Callee: new MemberExpression(Object: meRef,
+                    MemberName: memberRoutineName,
+                    Location: loc),
+                Arguments: [],
+                Location: loc);
+            var stmts = new List<Statement>(capacity: block.Statements.Count + 1)
+            {
+                new ExpressionStatement(Expression: call, Location: loc)
+            };
+            stmts.AddRange(collection: block.Statements);
+            return block with { Statements = stmts };
         }
 
         // Stage-2 (pull/(B)) demand resolution: ensure this reached routine's body is analyzed (calls/types
