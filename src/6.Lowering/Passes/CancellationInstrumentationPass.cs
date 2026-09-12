@@ -1,4 +1,5 @@
 using Builder.Declaration;
+using Builder.Verification;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -46,22 +47,37 @@ public sealed class CancellationInstrumentationPass
     /// <summary>
     /// Instruments every may-suspend routine in place: free routines and concrete member routines
     /// from <paramref name="programs"/>, plus monomorphized generic bodies in
-    /// <paramref name="instantiatedBodies"/> (e.g. <c>List[Box].pop</c>). No-op when
-    /// <paramref name="maySuspendKeys"/> is empty (i.e. no coroutine reaches a suspend point).
+    /// <paramref name="instantiatedBodies"/> (e.g. <c>List[Box].pop</c>).
+    ///
+    /// <para>The may-suspend set is computed HERE from the final resolved bodies, not read from
+    /// <paramref name="maySuspendKeys"/>. The upstream <c>ComputeMaySuspend</c> runs in Phase 7 over a
+    /// call graph that the retired <c>RoutineReachabilityPass</c> used to populate; with that pass gone the
+    /// graph is empty, so its verdict is always empty. This pass runs LAST — after the demand collector has
+    /// resolved every reached call — so it owns the authoritative bodies and rebuilds the graph itself
+    /// (edges + <see cref="CallGraphNode.DirectlySuspends"/>/<see cref="CallGraphNode.HasIndirectCall"/>
+    /// seeds) before running the <see cref="MaySuspendAnalysis"/> fixpoint. The passed-in keys are UNIONed
+    /// in so any value a future upstream producer supplies is still honored (over-approximation only adds
+    /// shadow-stack push/pops, never miscompiles teardown). No-op when nothing reaches a suspend primitive.</para>
     /// </summary>
     public static void Run(IEnumerable<(Program Program, string FilePath, string Module)> programs,
         IReadOnlyDictionary<string, Instantiation.MonomorphizedBody> instantiatedBodies,
         IReadOnlyCollection<string> maySuspendKeys, TypeRegistry registry)
     {
-        if (maySuspendKeys.Count == 0)
+        var programList = programs.ToList();
+        var maySuspend = new HashSet<string>(collection: maySuspendKeys,
+            comparer: StringComparer.Ordinal);
+        maySuspend.UnionWith(other: ComputeMaySuspendFromBodies(programs: programList,
+            instantiatedBodies: instantiatedBodies,
+            registry: registry));
+        if (maySuspend.Count == 0)
         {
             return;
         }
 
         var pass = new CancellationInstrumentationPass(
-            maySuspend: new HashSet<string>(collection: maySuspendKeys,
-                comparer: StringComparer.Ordinal),
+            maySuspend: maySuspend,
             registry: registry);
+        programs = programList;
 
         foreach ((Program program, _, _) in programs)
         {
@@ -117,6 +133,87 @@ public sealed class CancellationInstrumentationPass
         {
             InstrumentBody(body: decl.Body);
         }
+    }
+
+    /// <summary>
+    /// Rebuilds the may-suspend call graph from the FINAL resolved bodies and runs the
+    /// <see cref="MaySuspendAnalysis"/> fixpoint, returning the may-suspend routine keys. Re-homes the edge
+    /// recording the retired <c>RoutineReachabilityPass</c> used to do: walk every user-routine and
+    /// monomorphized body, add a caller→callee edge for each resolved call, seed
+    /// <see cref="CallGraphNode.DirectlySuspends"/> when a callee is a suspend primitive
+    /// (<see cref="SuspendPrimitives"/>) and <see cref="CallGraphNode.HasIndirectCall"/> for an unresolved
+    /// call through a routine value. A caller with no resolvable <see cref="RoutineInfo"/> is skipped
+    /// (it can't be keyed into the graph); its body still gets no instrumentation, which is sound.
+    /// </summary>
+    private static IReadOnlySet<string> ComputeMaySuspendFromBodies(
+        List<(Program Program, string FilePath, string Module)> programs,
+        IReadOnlyDictionary<string, Instantiation.MonomorphizedBody> instantiatedBodies,
+        TypeRegistry registry)
+    {
+        var graph = new CallGraph();
+        var resolver = new CancellationInstrumentationPass(
+            maySuspend: new HashSet<string>(comparer: StringComparer.Ordinal),
+            registry: registry);
+
+        foreach ((Program program, _, _) in programs)
+        {
+            foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
+            {
+                if (resolver.ResolveDecl(decl: decl) is { } caller)
+                {
+                    RecordBodyEdges(graph: graph, caller: caller, body: decl.Body);
+                }
+            }
+        }
+
+        foreach ((_, Instantiation.MonomorphizedBody mb) in instantiatedBodies)
+        {
+            RecordBodyEdges(graph: graph, caller: mb.Info, body: mb.Ast.Body);
+        }
+
+        return new MaySuspendAnalysis(callGraph: graph).Compute();
+    }
+
+    /// <summary>
+    /// Records the caller→callee edges (and suspend/indirect seeds) for one routine body into
+    /// <paramref name="graph"/>. Walks every expression; a resolved <see cref="CallExpression"/> /
+    /// <see cref="GenericMemberRoutineCallExpression"/> yields a real edge, an unresolved call through a
+    /// <see cref="RoutineTypeSymbol"/> callee marks the caller as having an indirect call.
+    /// </summary>
+    private static void RecordBodyEdges(CallGraph graph, RoutineInfo caller, Statement? body)
+    {
+        if (body == null)
+        {
+            return;
+        }
+
+        AstWalker.WalkExpressions(root: body, visit: expr =>
+        {
+            RoutineInfo? callee = expr switch
+            {
+                CallExpression { ResolvedRoutine: { } cr } => cr,
+                GenericMemberRoutineCallExpression { ResolvedRoutine: { } gr } => gr,
+                _ => null
+            };
+            if (callee != null)
+            {
+                graph.AddEdge(caller: caller, callee: callee, callsOnMe: false);
+                if (SuspendPrimitives.IsSuspendPrimitive(routine: callee))
+                {
+                    graph.GetOrCreateNode(routine: caller).DirectlySuspends = true;
+                }
+
+                return;
+            }
+
+            // Unresolved indirect call through a routine value — the static graph can't see the target,
+            // so treat the caller conservatively as may-suspend (over-approximation is teardown-safe).
+            if (expr is CallExpression { ResolvedRoutine: null } ce &&
+                ce.Callee.ResolvedType is RoutineTypeSymbol)
+            {
+                graph.GetOrCreateNode(routine: caller).HasIndirectCall = true;
+            }
+        });
     }
 
     /// <summary>
