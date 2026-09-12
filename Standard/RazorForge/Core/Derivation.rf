@@ -193,6 +193,28 @@ routine T.diagnose() -> Text
 needs RoutineType T
   return me.full_type_name()
 
+### Crashable `represent()`: the human-readable message (`crash_message()`), NOT the record field walk — a
+### crashable is surfaced to users, logs and `f"{err}"` by its message. The `needs CrashableType T` kind gate
+### makes the derive selector pick this over the record `needs AnyType T` default (which would show the empty
+### `TypeName()` for a fieldless error). `needs T obeys Crashable` exposes `crash_message` on the bound `me`.
+@override
+routine T.represent() -> Text
+needs CrashableType T
+needs T obeys Crashable
+  return me.crash_message()
+
+### Crashable `diagnose()`: `Module.CrashableName(<crash_message>[, field: value, …])` — the qualified type
+### name, the message as the first element, then each declared field via its own `represent` (matching the
+### former C# builder).
+@override
+routine T.diagnose() -> Text
+needs CrashableType T
+needs T obeys Crashable
+  var result = me.full_type_name() + "(" + me.crash_message()
+  expand m in allmemvarof(T)
+    result = result + ", " + nameof(m) + ": " + me.$nameof(m).represent()
+  return result + ")"
+
 ### A routine VALUE (`{ptr fn, ptr bound}`) owns no heap resource that a holding field is responsible for —
 ### a captureless function pointer, or a bound word managed elsewhere — so its teardown is a no-op. The
 ### record/entity/variant destroy templates are kind-gated and none match a RoutineType, so without this a
