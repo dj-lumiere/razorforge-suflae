@@ -2087,7 +2087,14 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                                                    .ToList(),
             expectedOwnerModule: resolvedRoutine.OwnerType?.FullName is { } ownerFn
                 ? TypeSymbol.StripTypeArgs(name: ownerFn)
-                : null);
+                : null,
+            // Realm-scoped: an SF overlay (`SF::Core.Dict[K,V]`) and the RF type it wraps
+            // (`Core.Dict[K,V]`) share the same bare AST name AND owner module (`Core.Dict`), so a
+            // module-only match binds the SF overlay's forwarder instance to the RF body — e.g. the SF
+            // `Dict.add` forwarder (`me.inner.add`) gets the RF `Dict.add` body (`me.keys`), which then
+            // reaches codegen calling `me.keys` on the fieldless overlay. Pass the owner realm so the SF
+            // instance resolves to the SF forwarder decl (mirrors the genDef-realm path above).
+            expectedOwnerRealm: resolvedRoutine.OwnerType?.Realm);
         if (astDecl == null)
         {
             EmitResolvedRoutineBodyFromVariantFallback(resolvedRoutine: resolvedRoutine,
