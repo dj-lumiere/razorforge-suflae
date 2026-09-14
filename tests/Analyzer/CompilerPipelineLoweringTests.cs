@@ -624,13 +624,16 @@ public class CompilerPipelineLoweringTests
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies
             });
 
+        // The allocator now returns a CPtr (`ptr`) so it matches its C `void*` signature under
+        // dev-loop LTO; the test's concern is unchanged — the ByteSize argument is passed as a
+        // scalar `i64`, never as a `{ i64 }` aggregate or a `%Record.Core.ByteSize` by-value struct.
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(i64 ",
+        Assert.Contains(expectedSubstring: "call ptr @rf_allocate_dynamic_uninit(i64 ",
             actualString: llvmIr);
-        Assert.DoesNotContain(expectedSubstring: "call i64 @rf_allocate_dynamic_uninit({ i64 }",
+        Assert.DoesNotContain(expectedSubstring: "call ptr @rf_allocate_dynamic_uninit({ i64 }",
             actualString: llvmIr);
         Assert.DoesNotContain(
-            expectedSubstring: "call i64 @rf_allocate_dynamic_uninit(%Record.Core.ByteSize",
+            expectedSubstring: "call ptr @rf_allocate_dynamic_uninit(%Record.Core.ByteSize",
             actualString: llvmIr);
     }
 

@@ -1472,15 +1472,26 @@ public sealed partial class SemanticVerifier
                                userMatches.Count == 1 &&
                                ReferenceEquals(objA: userMatches[index: 0], objB: currentCreate);
 
-        // Route through a unique user-defined `create` (so its body runs). Otherwise — no
-        // user match, ambiguous user overloads, or self-reference inside the creator — fall back
-        // to inline field-init / standard validation.
-        if (userMatches.Count != 1 || insideOwnCreate)
+        // Route through a user-defined `create` (so its body runs). A self-reference inside the
+        // creator, or no user match, falls back to inline field-init / standard validation. The
+        // name-set match above only BINDS the named args to a creator's parameters (and separates a
+        // create-call from field-init); when more than one overload binds (e.g. `Hijacked[T](from:
+        // Address)` vs `Hijacked[T](from: CPtr)`) the overload is chosen by ARGUMENT TYPE via the
+        // canonical signature-based resolver — never by name.
+        if (insideOwnCreate || userMatches.Count == 0)
         {
             return false;
         }
 
-        RoutineInfo match = userMatches[index: 0];
+        RoutineInfo? match = userMatches.Count == 1
+            ? userMatches[index: 0]
+            : SelectCreatorOverloadByArgType(type: type,
+                userMatches: userMatches,
+                creator: creator);
+        if (match == null)
+        {
+            return false;
+        }
 
         // Analyze each arg with the matching parameter's type as the expected type so integer
         // literals coerce correctly (e.g. `size: 10` → S8 if the param is S8, not default S32).
@@ -1505,6 +1516,41 @@ public sealed partial class SemanticVerifier
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Selects the `create` overload for a named-arg creator call by ARGUMENT TYPE, when more than
+    /// one overload binds the provided parameter names (e.g. `Hijacked[T](from: Address)` vs
+    /// `Hijacked[T](from: CPtr)`). Orders the named args into the shared parameter order — analyzing
+    /// each with its parameter type as the expected type so a literal coerces to the parameter's
+    /// width — then delegates to the canonical signature-based resolver
+    /// <c>LookupCreatorOverload</c>. Returns null (caller falls back to standard validation) when the
+    /// resolver finds no fit, or resolves to an overload outside the name-bound set. Never picks by
+    /// name.
+    /// </summary>
+    private RoutineInfo? SelectCreatorOverloadByArgType(TypeSymbol type,
+        List<RoutineInfo> userMatches, CreatorExpression creator)
+    {
+        Dictionary<string, Expression> argByName = creator.MemberVariables
+            .ToDictionary(keySelector: mv => mv.Name, elementSelector: mv => mv.Value);
+
+        var orderedArgTypes = new List<TypeSymbol>();
+        foreach (ParamInfo p in userMatches[index: 0].Parameters)
+        {
+            if (!argByName.TryGetValue(key: p.Name, value: out Expression? arg))
+            {
+                return null;
+            }
+
+            orderedArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: p.Type));
+        }
+
+        RoutineInfo? resolved =
+            _registry.LookupCreatorOverload(type: type, argTypes: orderedArgTypes);
+        return resolved != null &&
+               userMatches.Any(predicate: m => m.RegistryKey == resolved.RegistryKey)
+            ? resolved
+            : null;
     }
 
     /// <summary>
