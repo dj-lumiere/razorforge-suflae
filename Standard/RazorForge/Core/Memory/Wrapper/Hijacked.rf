@@ -53,6 +53,16 @@ routine T.get_address() -> Address
 routine Hijacked[T](from: Address) -> Hijacked[T]
   return LLVM::int_to_pointer[Address, T](from)
 
+### Reinterprets a raw C pointer as `Hijacked[T]`.
+### `CPtr` (the FFI/runtime opaque pointer) and `Hijacked[T]` are both `@llvm("ptr")`, so this is a
+### pure bit reinterpretation — no int round-trip. Used at the runtime-allocator boundary, where
+### `C::rf_allocate_dynamic*` return `CPtr` (see NativeDeclarations.rf): `Hijacked[U8](C::...)`
+### resolves here directly instead of forcing a `.get_address()` at every call site.
+### :param from: The C pointer to wrap.
+### :returns: A `Hijacked[T]` pointer over the same address.
+routine Hijacked[T](from: CPtr) -> Hijacked[T]
+  return LLVM::reinterpret_bits[CPtr, Hijacked[T]](from)
+
 ### Produces an unmanaged pointer alias of `me`.
 ### :returns: An unmanaged pointer alias of this value.
 ### :note: For entities and `@llvm("ptr")` records (`Retained[T]`, `Tracked[T]`, `CPtr`, etc.)
@@ -173,7 +183,7 @@ dangerous routine Hijacked[T].cyclic_trace_sparse_buffer(live: Hijacked[U8], use
 
 ### Deallocates the memory at this pointer's address.
 dangerous routine Hijacked[T].invalidate()
-  C::rf_invalidate(me.address())
+  rf_invalidate(me.address())
   return
 
 ### Cycle-collector TRACE hook for a raw pointer: a NO-OP. A `Hijacked` buffer cannot self-describe its

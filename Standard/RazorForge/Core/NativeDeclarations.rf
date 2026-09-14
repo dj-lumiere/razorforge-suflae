@@ -23,37 +23,48 @@ dangerous routine C::rf_reciprocal_word(d: U64) -> U64
 dangerous routine C::rf_udivrem_128_64_pre(hi: U64, lo: U64, d: U64, v: U64, rem: Hijacked[U64]) -> U64
 
 ### Allocates zero-initialized dynamic memory.
+### The C boundary returns `CPtr` (a real `void*`) rather than an `Address` (i64) so the pointer
+### keeps its `ptr` type across the RF↔runtime seam — that lets the dev-loop LTO step inline the
+### allocator and expose libc `calloc` to LLVM (see src/BuildSystem/NativeToolchain.cs).
 ### :param size: The number of bytes to allocate.
-### :returns: The resulting `Address` value.
-dangerous routine C::rf_allocate_dynamic(size: U64) -> Address
+### :returns: The resulting `CPtr` value.
+dangerous routine C::rf_allocate_dynamic(size: U64) -> CPtr
 ### Allocates zero-initialized dynamic memory.
 ### :param size: The number of bytes to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
-  return C::rf_allocate_dynamic(size: size.byte_size())
+  return C::rf_allocate_dynamic(size: size.byte_size()).get_address()
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
-### :returns: The resulting `Address` value.
-dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> Address
+### :returns: The resulting `CPtr` value.
+dangerous routine C::rf_allocate_dynamic_uninit(size: U64) -> CPtr
 ### Returns uninitialized dynamic memory — caller must write before reading.
 ### :param size: The byte count to allocate.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
-  return C::rf_allocate_dynamic_uninit(size: size.byte_size())
+  return C::rf_allocate_dynamic_uninit(size: size.byte_size()).get_address()
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size in bytes.
-### :returns: The resulting `Address` value.
-dangerous routine C::rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
+### :returns: The resulting `CPtr` value.
+dangerous routine C::rf_reallocate_dynamic(ptr: CPtr, size: U64) -> CPtr
 ### Reallocates a dynamic memory block to a new size.
 ### :param ptr: The existing allocation to resize.
 ### :param size: The new allocation size.
 ### :returns: The resulting `Address` value.
 dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
-  return C::rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
+  return C::rf_reallocate_dynamic(ptr: CPtr(from: ptr), size: size.byte_size()).get_address()
 ### Frees a dynamic memory block previously returned by the runtime allocator.
+### The C boundary takes `CPtr` (a real `void*`) so `free` matches its C signature under LTO.
 ### :param ptr: The allocation to release.
-dangerous routine C::rf_invalidate(ptr: Address)
+dangerous routine C::rf_invalidate(ptr: CPtr)
+### Frees a dynamic memory block, given its raw `Address`. Thin `Address`→`CPtr` adapter over
+### `C::rf_invalidate` so the many address-holding call sites (collection rehash, Agent payload
+### teardown, ...) need no per-site conversion.
+### :param ptr: The allocation to release.
+dangerous routine rf_invalidate(ptr: Address)
+  C::rf_invalidate(ptr: CPtr(from: ptr))
+  return
 
 # ============================================================================
 # Threaded tasks (v0.1 concurrency)

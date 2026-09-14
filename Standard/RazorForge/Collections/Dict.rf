@@ -298,15 +298,15 @@ routine Dict[K, V].rehash()
 
   danger
     if not old_ctrl.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
+      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
+      rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
     if not old_keys.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[K, Address](old_keys))
+      rf_invalidate(LLVM::pointer_to_int[K, Address](old_keys))
     if not old_vals.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[V, Address](old_vals))
+      rf_invalidate(LLVM::pointer_to_int[V, Address](old_vals))
     if not old_entry_live.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
+      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================

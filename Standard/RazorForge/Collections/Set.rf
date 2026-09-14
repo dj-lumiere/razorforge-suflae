@@ -229,13 +229,13 @@ routine Set[T].rehash()
 
   danger
     if not old_ctrl.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
+      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_ctrl))
     if not old_indices.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
+      rf_invalidate(LLVM::pointer_to_int[U64, Address](old_indices))
     if not old_slots.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[T, Address](old_slots))
+      rf_invalidate(LLVM::pointer_to_int[T, Address](old_slots))
     if not old_entry_live.is_none()
-      C::rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
+      rf_invalidate(LLVM::pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================

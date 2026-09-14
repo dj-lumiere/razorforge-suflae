@@ -145,7 +145,9 @@ public partial class LlvmEmitter
         // ABI the hand-emitted IR uses. The wait-side functions (rf_task_wait/wait_within/
         // result_payload/destroy) are called from the RF stdlib `Task.retrieve!`, so the normal
         // extern-declaration path emits them with the RF `Address`(=i64) ABI — declaring them here
-        // too would clash. rf_invalidate is shared, so it matches the existing i64 convention.
+        // too would clash. rf_allocate_dynamic and rf_invalidate now use the `ptr` (CPtr) ABI on
+        // both paths — the FFI declarations moved to CPtr so the allocators/free match their C
+        // signatures under dev-loop LTO — so these hand-emitted declarations agree with the FFI ones.
         _rfRoutineDeclarations[key: "rf_task_create"] = "declare ptr @rf_task_create(i32)";
         _rfRoutineDeclarations[key: "rf_task_spawn_threaded"] =
             "declare i32 @rf_task_spawn_threaded(ptr, ptr, ptr)";
@@ -153,7 +155,7 @@ public partial class LlvmEmitter
             "declare void @rf_task_complete_value(ptr, ptr)";
         _rfRoutineDeclarations[key: "rf_allocate_dynamic"] =
             "declare ptr @rf_allocate_dynamic(i64)";
-        _rfRoutineDeclarations[key: "rf_invalidate"] = "declare void @rf_invalidate(i64)";
+        _rfRoutineDeclarations[key: "rf_invalidate"] = "declare void @rf_invalidate(ptr)";
     }
 
     /// <summary>
@@ -241,9 +243,7 @@ public partial class LlvmEmitter
 
         if (routine.Parameters.Count > 0)
         {
-            // rf_invalidate takes Address (i64); ptrtoint the userdata pointer first.
-            b.Append(value: "  %udint = ptrtoint ptr %userdata to i64\n");
-            b.Append(value: "  call void @rf_invalidate(i64 %udint)\n");
+            b.Append(value: "  call void @rf_invalidate(ptr %userdata)\n");
         }
 
         b.Append(value: "  ret void\n}\n");
@@ -671,12 +671,10 @@ public partial class LlvmEmitter
 
         if (routine.Parameters.Count > 0)
         {
-            b.Append(value: "  %apint = ptrtoint ptr %argpack to i64\n");
-            b.Append(value: "  call void @rf_invalidate(i64 %apint)\n");
+            b.Append(value: "  call void @rf_invalidate(ptr %argpack)\n");
         }
 
-        b.Append(value: "  %udint = ptrtoint ptr %ud to i64\n");
-        b.Append(value: "  call void @rf_invalidate(i64 %udint)\n");
+        b.Append(value: "  call void @rf_invalidate(ptr %ud)\n");
         b.Append(value: "  ret void\n}\n");
         return thunkSym;
     }
