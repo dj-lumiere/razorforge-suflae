@@ -390,7 +390,8 @@ public sealed partial class SemanticVerifier
 
         RoutineInfo? routine = ResolveInitialFreeRoutine(call: call,
             callName: callName,
-            isFailableCall: isFailableCall);
+            isFailableCall: isFailableCall,
+            calleeRealm: id.Realm);
 
         RefineLocalFreeRoutine(call: call,
             callName: callName,
@@ -484,8 +485,23 @@ public sealed partial class SemanticVerifier
     /// implicit-failable retry, on-demand variant synthesis, and variadic arg packing.
     /// </summary>
     private RoutineInfo? ResolveInitialFreeRoutine(CallExpression call, string callName,
-        bool isFailableCall)
+        bool isFailableCall, string? calleeRealm = null)
     {
+        // A realm-qualified foreign call (`LLVM::atan2(...)` / `C::name(...)`) resolves to the foreign
+        // routine via its realm-qualified index, NOT the bare-name slot (which an ambient same-named
+        // free routine may now own — e.g. the free `atan2(y, x)` vs the `LLVM::atan2` intrinsic). Only
+        // the realm-qualified lookup reaches the intrinsic; without it the qualified call would bind the
+        // ambient routine and then trip the RF-S460 realm gate.
+        if (calleeRealm is "LLVM" or "C" && !callName.Contains(value: '.'))
+        {
+            RoutineInfo? foreignRoutine = _registry.LookupRoutine(
+                fullName: $"{calleeRealm}::{callName}", isFailable: isFailableCall);
+            if (foreignRoutine != null)
+            {
+                return foreignRoutine;
+            }
+        }
+
         // (A direct free call to a wired routine is unreachable now: `$` is a separate Dollar
         // token that the parser consumes structurally — a free-call `callName` is always bare and
         // free routines are never wired member routines. Wired-member misuse is caught on the

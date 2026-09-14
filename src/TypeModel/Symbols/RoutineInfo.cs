@@ -112,9 +112,21 @@ public sealed class RoutineInfo
                 : $"{baseName}#{string.Join(separator: ",", values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)))}";
 
             // Bridged-realm owner → realm-prefixed key (ambient realm "RF" stays bare = RF byte-identical).
-            return OwnerType is { Realm: not "RF" and { } r }
-                ? $"{r}::{key}"
-                : key;
+            if (OwnerType is { Realm: not "RF" and { } r })
+            {
+                return $"{r}::{key}";
+            }
+
+            // A free (owner-less) FOREIGN routine (C extern / LLVM intrinsic) gets a realm-prefixed key
+            // too, so it never collides with an ambient same-signature free routine: e.g. the
+            // `LLVM::atan2` intrinsic and the free `atan2(y, x)` both key distinctly and coexist, each
+            // resolved through its own realm (bare call → ambient, `LLVM::` call → the intrinsic).
+            if (OwnerType == null && Realm is RoutineRealm.C or RoutineRealm.LLVM)
+            {
+                return $"{(Realm == RoutineRealm.C ? "C" : "LLVM")}::{key}";
+            }
+
+            return key;
         }
     }
 

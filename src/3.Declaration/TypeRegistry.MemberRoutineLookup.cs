@@ -82,10 +82,32 @@ public sealed partial class TypeRegistry
             keyExisted: keyExisted,
             existingByKey: existingByKey);
 
-        // Also register under base name (first overload wins for unqualified lookup)
-        if (!_routines.ContainsKey(key: baseName))
+        // Also register under base name (first overload wins for unqualified lookup). A foreign
+        // (C/LLVM) routine is only legitimately reachable via its realm qualifier (`LLVM::name`) or an
+        // explicit import alias, so it must NEVER shadow an ambient same-named routine at an
+        // unqualified call site: e.g. the `LLVM::atan2` intrinsic must not hide the free `atan2(y, x)`.
+        // The first ambient overload therefore claims the bare slot AND displaces a foreign squatter
+        // that merely registered first. (A foreign routine still takes the slot when it is the only
+        // one, so a bare call to a foreign-only name still reports the RF-S460 "call it as LLVM::…".)
+        bool bareExists = _routines.TryGetValue(key: baseName, value: out RoutineInfo? existingBare);
+        if (!bareExists || (existingBare!.IsForeign && !routine.IsForeign))
         {
             _routines[key: baseName] = routine;
+        }
+
+        // A foreign routine is ALSO indexed under its realm-qualified base name (`LLVM::atan2`) so an
+        // explicit `LLVM::name(...)` / `C::name(...)` call resolves to it directly — independent of the
+        // bare-name slot above, which an ambient same-named routine now legitimately owns.
+        if (routine.OwnerType == null && routine.IsForeign)
+        {
+            string realmTag = routine.Realm == RoutineRealm.C
+                ? "C"
+                : "LLVM";
+            string qualifiedBase = $"{realmTag}::{baseName}";
+            if (!_routines.ContainsKey(key: qualifiedBase))
+            {
+                _routines[key: qualifiedBase] = routine;
+            }
         }
 
         // Index by module-qualified name for unambiguous lookup
@@ -274,6 +296,17 @@ public sealed partial class TypeRegistry
             {
                 return coreOverload;
             }
+        }
+
+        // Imported-module free overload: a free routine declared in a NON-Core module keys as
+        // `{Module}.name#…` (its BaseName carries the module), so neither the bare-key nor the
+        // Core-prefix lookup above finds it from an unqualified call. Scan the free-overload index by
+        // the routine's BARE name + exact argument-type identity — this reaches e.g. the module-Numerics
+        // free `atan2(Real, Real, S32)` that an unqualified `atan2(realY, realX, prec)` must bind (the
+        // D/F-type atan2 overloads live in module Core and resolve via the Core-prefix above).
+        if (MatchFreeOverloadByArgTypes(baseName: baseName, argTypes: argTypes) is { } freeOverload)
+        {
+            return freeOverload;
         }
 
         // Try matching generic overloads by reconstructing the generic parameter pattern.
@@ -503,9 +536,20 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="name">The routine name (without generic params).</param>
     /// <param name="preferredArity">Expected argument count; -1 means any arity is acceptable.</param>
-    public RoutineInfo? LookupGenericOverload(string name, int preferredArity = -1)
+    public RoutineInfo? LookupGenericOverload(string name, int preferredArity = -1,
+        bool includeForeign = false)
     {
         List<RoutineInfo> candidates = GenericFreeFunctions(name: name);
+        // A foreign (C/LLVM) generic routine is only reachable via its realm qualifier — an unqualified
+        // lookup must NOT bind it, or a bare call to a name shared with an intrinsic (the free
+        // `atan2(y, x)` vs the `LLVM::atan2[T]` intrinsic) would fall through to the intrinsic and emit
+        // an invalid `@llvm.atan2.<non-float>` (e.g. instantiated on the arbitrary-precision `Real`).
+        // Realm-qualified call sites opt in with includeForeign:true.
+        if (!includeForeign)
+        {
+            candidates = candidates.Where(predicate: c => !c.IsForeign).ToList();
+        }
+
         if (candidates.Count == 0)
         {
             return null;
@@ -858,6 +902,60 @@ public sealed partial class TypeRegistry
     /// <summary>Generic-definition free functions with the bare name <paramref name="name"/> — filtered off
     /// the FreeOwnerKey store (which is keyed by BaseName = Module.Name), replacing the old separate
     /// _genericFreeFunctions by-Name index. Matches the old semantics (all modules' same-named generics).</summary>
+    /// <summary>
+    /// Finds a CONCRETE free-routine overload by (bare name, exact argument-type identity) via the
+    /// free-overload index — which folds every owner-less routine regardless of its declaring module.
+    /// This reaches imported-module free routines (BaseName = <c>Module.name</c>) that the module-blind
+    /// <c>{name}#…</c> / <c>Core.{name}#…</c> keys in <see cref="LookupRoutineOverload"/> cannot. Matches
+    /// on full type identity (never assignability), so it only binds a genuinely exact overload.
+    /// </summary>
+    private RoutineInfo? MatchFreeOverloadByArgTypes(string baseName, List<TypeSymbol> argTypes)
+    {
+        string bareName = baseName;
+        if (baseName.Contains(value: '.'))
+        {
+            // An OWNER-qualified base name (`Agent[T].waitfor`, `Point.foo`) is a MEMBER-routine
+            // lookup — it must NOT fall to a same-named FREE routine (that mis-bound the member
+            // `Agent[T].waitfor` call to the free `waitfor(duration:)`). Only a MODULE-qualified name
+            // (`Numerics.atan2`) or a bare name denotes a free routine. Distinguish by the prefix: a
+            // generic owner carries `[`, and a non-generic owner resolves as a registered TYPE.
+            string prefix = baseName[..baseName.LastIndexOf(value: '.')];
+            if (prefix.Contains(value: '[') || LookupType(name: prefix) != null)
+            {
+                return null;
+            }
+
+            bareName = baseName[(baseName.LastIndexOf(value: '.') + 1)..];
+        }
+
+        if (!_routinesByOwner.TryGetValue(key: FreeOwnerKey,
+                value: out Dictionary<string, List<RoutineInfo>>? byName))
+        {
+            return null;
+        }
+
+        string wantKey = string.Join(separator: ",",
+            values: argTypes.Select(selector: RoutineInfo.GetTypeIdentity));
+        foreach (RoutineInfo routine in OwnerMemberRoutines(byName: byName))
+        {
+            if (routine.Name != bareName || routine.IsGenericDefinition ||
+                routine.Parameters.Count != argTypes.Count)
+            {
+                continue;
+            }
+
+            string haveKey = string.Join(separator: ",",
+                values: routine.Parameters.Select(selector: p =>
+                    RoutineInfo.GetTypeIdentity(type: p.Type)));
+            if (haveKey == wantKey)
+            {
+                return routine;
+            }
+        }
+
+        return null;
+    }
+
     private List<RoutineInfo> GenericFreeFunctions(string name)
     {
         return _routinesByOwner.TryGetValue(key: FreeOwnerKey,

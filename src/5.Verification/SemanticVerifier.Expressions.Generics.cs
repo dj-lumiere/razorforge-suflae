@@ -70,13 +70,22 @@ public sealed partial class SemanticVerifier
         // The object is an identifier that resolves to a routine, not a type or variable
         if (generic.Object is IdentifierExpression funcId)
         {
+            // A realm-qualified foreign generic call (`LLVM::atan2[F32](...)` / `C::name[...]`) must
+            // resolve to the FOREIGN routine, not the bare-name slot — which an ambient same-named free
+            // routine may now own (the free `atan2(y, x)` vs the `LLVM::atan2` intrinsic). The realm-
+            // qualified index and the generic-overload index both reach the intrinsic; the ambient
+            // `LookupRoutine(bareName)` would wrongly bind the ambient routine and then trip RF-S460.
             // LookupGenericOverload covers generic free routines, which register only in the
             // generic-overload index — without it an explicit `gen_id[T](...)` call to a generic
             // routine in another module fails to resolve (concrete free routines resolve fine).
-            RoutineInfo? routine = _registry.LookupRoutine(fullName: funcId.Name) ??
-                                   _registry.LookupRoutineByName(name: funcId.Name) ??
-                                   _registry.LookupGenericOverload(name: funcId.Name,
-                                       preferredArity: generic.Arguments.Count);
+            RoutineInfo? routine = funcId.Realm is "LLVM" or "C"
+                ? _registry.LookupRoutine(fullName: $"{funcId.Realm}::{funcId.Name}") ??
+                  _registry.LookupGenericOverload(name: funcId.Name,
+                      preferredArity: generic.Arguments.Count, includeForeign: true)
+                : _registry.LookupRoutine(fullName: funcId.Name) ??
+                  _registry.LookupRoutineByName(name: funcId.Name) ??
+                  _registry.LookupGenericOverload(name: funcId.Name,
+                      preferredArity: generic.Arguments.Count);
             if (routine != null)
             {
                 return AnalyzeStandaloneGenericRoutineCall(generic: generic,
