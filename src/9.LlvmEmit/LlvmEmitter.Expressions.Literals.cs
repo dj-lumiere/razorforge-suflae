@@ -716,10 +716,10 @@ public partial class LlvmEmitter
             }
             case TokenType.DecimalLiteral:
             {
-                // Decimal is @llvm("i256") BID; emit a single i256 constant (4 words, big-endian).
-                NumericLiteralParser.Decimal256 d =
-                    NumericLiteralParser.EncodeDecimal(str: numericValue);
-                return $"u0x{d.W3:X16}{d.W2:X16}{d.W1:X16}{d.W0:X16}";
+                // Decimal is @llvm("i128") BID (finite-only, canonical); emit a single i128 constant.
+                NumericLiteralParser.D128 d =
+                    NumericLiteralParser.EncodeDecimalCanonical(str: numericValue);
+                return $"u0x{d.Hi:X16}{d.Lo:X16}";
             }
             default:
                 return numericValue;
@@ -752,14 +752,8 @@ public partial class LlvmEmitter
                     : 0x7800000000000000UL;
                 return $"u0x{hi:X16}0000000000000000";
             }
-            case TokenType.DecimalLiteral:
-            {
-                // Decimal is @llvm("i256") BID; combination prefix in the top byte, rest zero.
-                ulong top = isNan
-                    ? 0x7C00000000000000UL
-                    : 0x7800000000000000UL;
-                return $"u0x{top:X16}000000000000000000000000000000000000000000000000";
-            }
+            // Decimal is finite-only: inf/nan Decimal literals are rejected by the analyzer, so
+            // there is no DecimalLiteral special case here (fall through to null).
             default:
                 return null;
         }

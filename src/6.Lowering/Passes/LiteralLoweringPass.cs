@@ -262,8 +262,8 @@ internal sealed class LiteralLoweringPass : AstRewriter
                 type: _integerType,
                 fromLiteral: _integerFromLiteral,
                 loc: loc),
-            // Decimal is now @llvm("i256") BID — its literals bake to a compile-time i256 constant
-            // (NumericLiteralParser.EncodeDecimal) like D128, not a runtime from-string call.
+            // Decimal is now @llvm("i128") BID — its literals bake to a compile-time i128 constant
+            // (NumericLiteralParser.EncodeDecimalCanonical) like D128, not a runtime from-string call.
             _ => null
         };
     }

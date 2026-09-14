@@ -765,16 +765,28 @@ public sealed partial class SemanticVerifier
         string digits =
             CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "dn"));
 
-        // Validate against the i256 BID Decimal range the same way codegen will encode it:
-        // EncodeDecimal throws OverflowException when the value would round to ±infinity, and the
-        // ParseDeferredLiteral catch turns that into a clean NumericLiteralParseFailed diagnostic
-        // (overflow-to-infinity is a compile error, not a silently-saturated literal). This mirrors
-        // the D32/D64/D128 fixed-width paths and keeps the compile-time encode the single source of
-        // truth — codegen re-runs EncodeDecimal on the same text to emit the bits.
-        if (rawValue != "inf" && rawValue != "nan")
+        // Decimal is finite-only: inf/nan Decimal literals are rejected outright (no non-finite
+        // Decimal value can exist — arithmetic crashes and conversions crash on a non-finite source).
+        if (rawValue == "inf" || rawValue == "nan")
         {
-            NumericLiteralParser.EncodeDecimal(str: digits);
+            ReportError(code: SemanticDiagnosticCode.InvalidDecimalLiteral,
+                message: "Decimal is finite-only; 'inf' and 'nan' are not valid Decimal literals",
+                location: literal.Location);
+            return new ParsedDecimal(Location: literal.Location,
+                StringValue: rawValue,
+                Sign: 0,
+                Exponent: 0,
+                SignificantDigits: 0,
+                IsInteger: false);
         }
+
+        // Validate against the i128 BID Decimal range the same way codegen will encode it:
+        // EncodeDecimalCanonical throws OverflowException when the value would round to ±infinity,
+        // and the ParseDeferredLiteral catch turns that into a clean NumericLiteralParseFailed
+        // diagnostic (overflow-to-infinity is a compile error, not a silently-saturated literal).
+        // This mirrors the D32/D64/D128 fixed-width paths and keeps the compile-time encode the
+        // single source of truth — codegen re-runs EncodeDecimalCanonical on the same text.
+        NumericLiteralParser.EncodeDecimalCanonical(str: digits);
 
         (string value, int sign, int exponent, int significantDigits, bool isInteger) =
             NumericLiteralParser.ParseDecimalInfo(str: digits);

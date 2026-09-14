@@ -656,34 +656,17 @@ public static partial class NumericLiteralParser
         return new F128 { Lo = (ulong)(bits & ulong.MaxValue), Hi = (ulong)(bits >> 64) };
     }
 
-    /// <summary>A raw 256-bit value as four little-endian 64-bit words (W0 = bits 0..63).</summary>
-    [StructLayout(layoutKind: LayoutKind.Sequential)]
-    public struct Decimal256
-    {
-        /// <summary>Bits 0..63.</summary>
-        public ulong W0 { get; set; }
-
-        /// <summary>Bits 64..127.</summary>
-        public ulong W1 { get; set; }
-
-        /// <summary>Bits 128..191.</summary>
-        public ulong W2 { get; set; }
-
-        /// <summary>Bits 192..255.</summary>
-        public ulong W3 { get; set; }
-    }
-
     /// <summary>
-    /// Canonicalizes a <c>Core.Decimal</c> (decimal256) coefficient/exponent pair — stripping
-    /// fractional trailing zeros so equal values share bits (2.50 and 2.5 → 25*10^-1), while
-    /// leaving integers (exp &gt;= 0) as-is (100 stays 100*10^0). Mirrors the runtime
-    /// <c>decimal_normalize_parts</c> so a literal and the arithmetic result of the same value are
-    /// bit-identical. (Kept out of <c>RoundAndClamp</c>, which the IEEE encoders share and must NOT
-    /// normalize.)
+    /// Canonicalizes a finite <c>Core.Decimal</c> (decimal128) coefficient/exponent pair — stripping
+    /// FRACTIONAL trailing zeros so equal values share bits (2.50 and 2.5 → 25*10^-1), while leaving
+    /// integers (exp &gt;= 0) as-is (100 stays 100*10^0). Mirrors the runtime <c>decimal_canon</c> so
+    /// a literal and the arithmetic result of the same value are bit-identical. (Kept out of
+    /// <c>RoundAndClamp</c>, which the IEEE encoders share and must NOT normalize.)
     /// </summary>
-    private static (BigInteger Coeff, int Biased) CanonicalizeDecimal(BigInteger coeff, int biased)
+    private static (BigInteger Coeff, int Biased) CanonicalizeDecimalD128(BigInteger coeff,
+        int biased)
     {
-        const int decBias = 1572932;
+        const int decBias = 6176;
         if (coeff.IsZero)
         {
             return (coeff, decBias); // canonical zero: exponent 0
@@ -700,24 +683,26 @@ public static partial class NumericLiteralParser
     }
 
     /// <summary>
-    /// Encodes a decimal literal into the software 70-digit <c>Core.Decimal</c> (decimal256) BID bit
-    /// pattern, matching <c>SoftFloat/DecimalA.rf</c> <c>decode()</c>/<c>decimalfixed_of_parts</c>:
-    /// bit255 = sign, bits254..233 = biased exponent (22 bits, q + 1572932), bits232..0 = coefficient
-    /// as a plain binary integer (&lt; 10^70 &lt; 2^233). Single-form (no combination field for finite
-    /// values). Pmax 70, stored exponent q in [-1572932, 1572795]. Throws on overflow (compile-time
-    /// literal range error); explicit inf/nan are handled before this is reached.
+    /// Encodes a decimal literal into the finite-only software <c>Core.Decimal</c> (decimal128) BID
+    /// bit pattern. Decimal shares D128's i128 layout (bit127 = sign, bits126..113 = biased exponent
+    /// q + 6176, bits112..0 = coefficient as a plain binary integer &lt; 10^34 &lt; 2^113), but is
+    /// RazorForge's CANONICAL decimal: fractional trailing zeros are stripped so equal values share
+    /// bits, while integers (exp &gt;= 0) are left as-is. Pmax 34, stored exponent q in [-6176, 6111].
+    /// Throws on overflow — Decimal is finite-only, so a literal that would round to infinity is a
+    /// compile-time range error (the caller's catch turns it into a diagnostic); explicit inf/nan
+    /// literals are rejected by the analyzer before this is reached.
     /// </summary>
     /// <param name="str">The decimal literal string, with optional type suffix.</param>
-    /// <returns>The encoded 256-bit decimal value as four 64-bit words.</returns>
-    public static Decimal256 EncodeDecimal(string str)
+    /// <returns>The encoded 128-bit canonical decimal value (low/high 64-bit words).</returns>
+    public static D128 EncodeDecimalCanonical(string str)
     {
         DecimalLiteralParts p = ParseDecimalLiteral(str: str);
         (bool overflow, BigInteger coeff, int biased) = RoundAndClamp(coeff: p.Coeff,
             exp10: p.Exp10,
-            pmax: 70,
-            bias: 1572932,
-            qMin: -1572932,
-            qMax: 1572795);
+            pmax: 34,
+            bias: 6176,
+            qMin: -6176,
+            qMax: 6111);
 
         if (overflow)
         {
@@ -727,21 +712,15 @@ public static partial class NumericLiteralParser
         }
 
         // Canonicalize (strip fractional trailing zeros so equal values share bits).
-        (coeff, biased) = CanonicalizeDecimal(coeff: coeff, biased: biased);
+        (coeff, biased) = CanonicalizeDecimalD128(coeff: coeff, biased: biased);
 
-        BigInteger bits = (BigInteger)biased << 233 | coeff;
+        UInt128 bits = (UInt128)(uint)biased << 113 | (UInt128)coeff;
         if (p.Sign)
         {
-            bits |= BigInteger.One << 255;
+            bits |= (UInt128)1 << 127;
         }
 
-        return new Decimal256
-        {
-            W0 = (ulong)(bits & ulong.MaxValue),
-            W1 = (ulong)(bits >> 64 & ulong.MaxValue),
-            W2 = (ulong)(bits >> 128 & ulong.MaxValue),
-            W3 = (ulong)(bits >> 192 & ulong.MaxValue)
-        };
+        return new D128 { Lo = (ulong)(bits & ulong.MaxValue), Hi = (ulong)(bits >> 64) };
     }
 
     #endregion
@@ -812,7 +791,7 @@ public static partial class NumericLiteralParser
     /// <see cref="ParseDecimalLiteral"/> splitter (no native FFI — the old libbf/decNumber
     /// <c>rf_cs_decimal_from_string</c> backend has been retired). The returned tuple feeds the
     /// vestigial <c>ParsedDecimal</c> SA result; the compile-time bits come from
-    /// <see cref="EncodeDecimal"/>, which is the single source of truth.
+    /// <see cref="EncodeDecimalCanonical"/>, which is the single source of truth.
     /// </summary>
     /// <param name="str">The string representation (type suffix already optional).</param>
     /// <returns>Tuple of (stringValue, sign, exponent, significantDigits, isInteger).</returns>

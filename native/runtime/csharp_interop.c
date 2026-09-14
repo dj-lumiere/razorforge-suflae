@@ -55,6 +55,14 @@ f128_t rf_f128_from_string(const char* str)
     return result;
 }
 
+// Out-param ABI wrapper for RF's `C::rf_parse_F128(cstr, out: Hijacked[F128])`. RF passes a
+// pointer to storage instead of taking an f128_t by value, sidestepping the Windows x64
+// sret/xmm0 mismatch that corrupts a direct f128_t return across the RF<->C boundary.
+void rf_parse_F128(const char* str, f128_t* out)
+{
+    *out = rf_f128_from_string(str);
+}
+
 // ============================================================================
 // Arbitrary precision integer parsing (via LibBF) - C# Compiler Interop
 // These functions use rf_cs_ prefix to distinguish from runtime API
