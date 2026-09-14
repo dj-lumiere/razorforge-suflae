@@ -145,19 +145,17 @@ public class CompilerPipelineInputEdgeCaseTests
     /// surfaces algorithmic regressions in seconds instead of bleeding CI throughput.
     /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
     /// </remarks>
-    // Timeout is generous (not the ~6 s baseline) on purpose: the work is a full fresh stdlib
-    // semantic analysis, and the macOS/ARM64 CI runners are slow and contended enough to spike
-    // several-fold. A true algorithmic regression (exponential in nesting) would run for minutes or
-    // hang, so a 2-minute cap still surfaces it while tolerating runner variance.
-    [Fact(Timeout = 120_000)]
-    public async Task LlvmEmitter_DeeplyNestedSource_GeneratesRoutineDefinitionAsync()
+    // Runs SYNCHRONOUSLY with no per-test timeout: the actual work for depth 32 is sub-second
+    // (measured Analyze ≈ 0.9 s cold-JIT, codegen ≈ 35 ms; the compiler is O(depth) — even depth 100
+    // codegens in the same ~2.4 s a trivial file does). The former `Task.Run` + `[Fact(Timeout)]`
+    // guard flaked on contended CI: it wrapped <1 s of work in a thread-pool task whose scheduling
+    // could be starved past the cap by parallel tests, spuriously "timing out" the first heavy test
+    // to run in-process. A genuine exponential-in-nesting regression would still be caught by the
+    // job-level timeout (it would run for minutes), without the false positives.
+    [Fact]
+    public void LlvmEmitter_DeeplyNestedSource_GeneratesRoutineDefinition()
     {
-        // Task.Run (not a custom large-stack thread): depth 32 fits a default stack on every
-        // platform, and a 64 MB-stack thread is pathologically slow to set up on macOS (eager stack
-        // commit), which previously turned a passing 6 s test into a 30 s+ timeout. Task.Run also
-        // keeps xUnit's Timeout effective on the async body.
-        string llvmIr = await Task.Run(function: () =>
-            GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
+        string llvmIr = GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32));
 
         Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
     }
