@@ -34,9 +34,15 @@ record D64Parts
 routine d64parts_to_d128(p: D64Parts) -> D128Parts
   return D128Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: LLVM::zero_extend[U64, U128](p.coeff))
 
-### Narrow a D128Parts back (special-rule results are inf/NaN/zero, coeff 0 — lossless).
+### Narrows a D128Parts to decimal64. Specials (inf/NaN) pass through; a finite value goes through
+### `decfin64` so its (up to 34-digit) coefficient is rounded half-even to 16 digits AND its exponent
+### is finalized into decimal64's range (q>369 pads the coefficient, out-of-range saturates to inf).
+### A naive truncate-coeff / copy-exp dropped high digits and produced a garbage BID pattern when the
+### exponent exceeded qmax (e.g. `D64(from_text: "1e370")`).
 routine d128_to_d64parts(p: D128Parts) -> D64Parts
-  return D64Parts(sign: p.sign, special: p.special, exp: p.exp, coeff: LLVM::int_truncate[U128, U64](p.coeff))
+  if LLVM::int_ne(a: p.special, b: 0_u64)
+    return D64Parts(sign: p.sign, special: p.special, exp: 0_s64, coeff: 0_u64)
+  return decfin64(sign: p.sign, coeff: p.coeff, exp: p.exp, pref: p.exp)
 
 ### 10^k as a U128 (k <= 38), via the U256 pow10 table truncated.
 routine p10_u128(k: S64) -> U128
@@ -318,8 +324,13 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
   # Batched: count the trailing zeros (capped at pref-e) and divide them off in ONE
   # reciprocal-multiply instead of one U128 ÷10 per digit — a fully-scaled divide quotient
   # otherwise loops ~14× on a dependent i128 chain (the bulk of D64 truediv).
-  if LLVM::signed_lt[S64](a: e, b: pref)
-    var tz = trailing_zeros10_u128(c: c, cap0: LLVM::sub(a: pref, b: e))
+  # Strip toward pref to restore the preferred cohort — but NEVER past qmax (369): an
+  # overflow-padded value already sits at e=369 with a padded coefficient, and stripping it back
+  # toward an out-of-range pref (e.g. pref=370 for `1e370`) would re-raise e above qmax and encode
+  # a garbage BID pattern. Clamp the strip target to qmax.
+  var strip_to = if LLVM::signed_gt(a: pref, b: 369_s64) then 369_s64 else pref
+  if LLVM::signed_lt[S64](a: e, b: strip_to)
+    var tz = trailing_zeros10_u128(c: c, cap0: LLVM::sub(a: strip_to, b: e))
     c = div_pow10_u128(x: c, k: tz)
     e = LLVM::add(a: e, b: tz)
   while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: c, b: p10_u128(k: 15_s64)) and LLVM::signed_le(a: e, b: 369_s64)
