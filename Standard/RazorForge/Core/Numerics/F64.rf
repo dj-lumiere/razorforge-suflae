@@ -38,21 +38,18 @@ preset F64_LN_10: F64 = 2.302585092994046_f64
 ### Converts an `S8` to `F64`. The result is exact for all values.
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: S8) -> F64
   return LLVM::signed_to_float[S8, F64](from)
 
 ### Converts an `S16` to `F64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: S16) -> F64
   return LLVM::signed_to_float[S16, F64](from)
 
 ### Converts an `S32` to `F64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: S32) -> F64
   return LLVM::signed_to_float[S32, F64](from)
 
@@ -61,7 +58,6 @@ routine F64(from: S32) -> F64
 ### representable double.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: S64) -> F64
   return LLVM::signed_to_float[S64, F64](from)
 
@@ -69,28 +65,24 @@ routine F64(from: S64) -> F64
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: S128) -> F64
   return LLVM::signed_to_float[S128, F64](from)
 
 ### Converts a `U8` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: U8) -> F64
   return LLVM::unsigned_to_float[U8, F64](from)
 
 ### Converts a `U16` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: U16) -> F64
   return LLVM::unsigned_to_float[U16, F64](from)
 
 ### Converts a `U32` to `F64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F64` value.
-@inline
 routine F64(from: U32) -> F64
   return LLVM::unsigned_to_float[U32, F64](from)
 
@@ -98,7 +90,6 @@ routine F64(from: U32) -> F64
 ### Values larger than 2⁵³ may be rounded to the nearest representable double.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: U64) -> F64
   return LLVM::unsigned_to_float[U64, F64](from)
 
@@ -106,42 +97,36 @@ routine F64(from: U64) -> F64
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: U128) -> F64
   return LLVM::unsigned_to_float[U128, F64](from)
 
 ### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The signed 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: S256) -> F64
   return LLVM::signed_to_float[S256, F64](from)
 
 ### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
 ### :param from: The unsigned 256-bit integer to convert.
 ### :returns: The closest representable `F64` value.
-@inline
 routine F64(from: U256) -> F64
   return LLVM::unsigned_to_float[U256, F64](from)
 
 ### Widens a half-precision float to double precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
-@inline
 routine F64(from: F16) -> F64
   return LLVM::float_extend[F16, F64](from)
 
 ### Widens a single-precision float to double precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F64` carrying the same numeric value.
-@inline
 routine F64(from: F32) -> F64
   return LLVM::float_extend[F32, F64](from)
 
 ### Returns an existing `F64` unchanged.
 ### :param from: The double-precision value to forward.
 ### :returns: `from`.
-@inline
 routine F64(from: F64) -> F64
   return from
 
@@ -160,7 +145,7 @@ routine F64(from: D64) -> F64
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F64` value.
 routine F64(from: D128) -> F64
-  return d128_to_f256(x: from).to_f128().F64()
+  return d128_to_uf192(x: from).to_f128().F64()
 
 # ============================================================================
 # Arithmetic Operations
@@ -732,7 +717,7 @@ routine F64.exp2!() -> F64
 
 ### 2 raised to me with raw IEEE 754 propagation.
 routine F64.exp2_unchecked() -> F64
-  return C::rf_f64_exp2(value: me)
+  return LLVM::exp2[F64](value: me)
 
 ### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for
 ### raw IEEE.
@@ -759,12 +744,14 @@ routine F64.log2!() -> F64
 
 ### Base-2 logarithm with raw IEEE 754 propagation.
 routine F64.log2_unchecked() -> F64
-  return C::rf_f64_log2(value: me)
+  return LLVM::log2[F64](value: me)
 
-### Euclidean distance sqrt(me^2 + you^2). Checked: crashes on overflow. Use `hypot_unchecked` for
+### Euclidean distance sqrt(x^2 + y^2). Checked: crashes on overflow. Use `hypot_unchecked` for
 ### raw IEEE.
-routine F64.hypot!(you: F64) -> F64
-  var r = me.hypot_unchecked(you)
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot!(x: F64, y: F64) -> F64
+  var r = hypot_unchecked(x: x, y: y)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -772,8 +759,10 @@ routine F64.hypot!(you: F64) -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Euclidean distance with raw IEEE 754 propagation (overflow -> +infinity).
-routine F64.hypot_unchecked(you: F64) -> F64
-  return C::rf_f64_hypot(x: me, y: you)
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: F64, y: F64) -> F64
+  return C::rf_f64_hypot(x: x, y: y)
 
 ### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `fma_unchecked`
 ### for raw IEEE.
@@ -787,7 +776,7 @@ routine F64.fma!(b: F64, c: F64) -> F64
 
 ### Fused multiply-add with raw IEEE 754 propagation.
 routine F64.fma_unchecked(b: F64, c: F64) -> F64
-  return C::rf_f64_fma(x: me, y: b, z: c)
+  return LLVM::fma[F64](a: me, b: b, c: c)
 
 ### Cube root.
 routine F64.cbrt() -> F64
@@ -795,7 +784,7 @@ routine F64.cbrt() -> F64
 
 ### Tangent (radians).
 routine F64.tan() -> F64
-  return C::rf_f64_tan(value: me)
+  return LLVM::tan[F64](value: me)
 
 ### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
 ### IEEE.
@@ -809,7 +798,7 @@ routine F64.asin!() -> F64
 
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
 routine F64.asin_unchecked() -> F64
-  return C::rf_f64_asin(value: me)
+  return LLVM::asin[F64](value: me)
 
 ### Arc cosine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `acos_unchecked` for raw
 ### IEEE.
@@ -823,15 +812,17 @@ routine F64.acos!() -> F64
 
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
 routine F64.acos_unchecked() -> F64
-  return C::rf_f64_acos(value: me)
+  return LLVM::acos[F64](value: me)
 
 ### Arc tangent.
 routine F64.atan() -> F64
-  return C::rf_f64_atan(value: me)
+  return LLVM::atan[F64](value: me)
 
-### Two-argument arc tangent atan2(me, x).
-routine F64.atan2(x: F64) -> F64
-  return C::rf_f64_atan2(y: me, x: x)
+### Two-argument arc tangent atan2(y, x).
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: F64, x: F64) -> F64
+  return LLVM::atan2[F64](a: y, b: x)
 
 ### Hyperbolic sine. Checked: crashes on overflow. Use `sinh_unchecked` for raw IEEE.
 routine F64.sinh!() -> F64
@@ -844,7 +835,7 @@ routine F64.sinh!() -> F64
 
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity).
 routine F64.sinh_unchecked() -> F64
-  return C::rf_f64_sinh(value: me)
+  return LLVM::sinh[F64](value: me)
 
 ### Hyperbolic cosine. Checked: crashes on overflow. Use `cosh_unchecked` for raw IEEE.
 routine F64.cosh!() -> F64
@@ -857,11 +848,11 @@ routine F64.cosh!() -> F64
 
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity).
 routine F64.cosh_unchecked() -> F64
-  return C::rf_f64_cosh(value: me)
+  return LLVM::cosh[F64](value: me)
 
 ### Hyperbolic tangent.
 routine F64.tanh() -> F64
-  return C::rf_f64_tanh(value: me)
+  return LLVM::tanh[F64](value: me)
 
 ### Inverse hyperbolic sine.
 routine F64.asinh() -> F64
@@ -992,7 +983,7 @@ routine F64.ldexp(n: S64) -> F64
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F64.rint() -> F64
-  return C::rf_f64_rint(value: me)
+  return LLVM::rint[F64](value: me)
 
 ### Positive difference max(me - you, 0) (C fdim).
 routine F64.fdim(you: F64) -> F64
@@ -1000,7 +991,7 @@ routine F64.fdim(you: F64) -> F64
 
 ### Floating-point remainder of me/you (C fmod).
 routine F64.fmod(you: F64) -> F64
-  return C::rf_f64_fmod(x: me, y: you)
+  return LLVM::float_rem[F64](a: me, b: you)
 
 ### IEEE remainder of me/you, ties to even (C remainder).
 routine F64.remainder(you: F64) -> F64
@@ -1008,11 +999,11 @@ routine F64.remainder(you: F64) -> F64
 
 ### Larger of me and you (C fmax).
 routine F64.fmax(you: F64) -> F64
-  return C::rf_f64_fmax(x: me, y: you)
+  return LLVM::maxnum[F64](a: me, b: you)
 
 ### Smaller of me and you (C fmin).
 routine F64.fmin(you: F64) -> F64
-  return C::rf_f64_fmin(x: me, y: you)
+  return LLVM::minnum[F64](a: me, b: you)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine F64.trunc() -> F64
@@ -1137,13 +1128,13 @@ routine F64.scaleb_unchecked(n: S64) -> F64
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
 routine F64.min_num(you: F64) -> F64
-  return C::rf_f64_fmin(x: me, y: you)
+  return LLVM::minnum[F64](a: me, b: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
 routine F64.max_num(you: F64) -> F64
-  return C::rf_f64_fmax(x: me, y: you)
+  return LLVM::maxnum[F64](a: me, b: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, and ordering -0 below +0.
 ### :param you: The value to compare against.

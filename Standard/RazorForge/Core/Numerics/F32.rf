@@ -671,7 +671,7 @@ routine C::rf_f32_lgamma(value: F32) -> F32
 
 ### Tangent (radians).
 routine F32.tan() -> F32
-  return C::rf_f32_tan(value: me)
+  return LLVM::tan[F32](value: me)
 
 ### Arc sine.
 routine F32.asin!() -> F32
@@ -684,7 +684,7 @@ routine F32.asin!() -> F32
 
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_asin`.
 routine F32.asin_unchecked() -> F32
-  return C::rf_f32_asin(value: me)
+  return LLVM::asin[F32](value: me)
 
 ### Arc cosine.
 routine F32.acos!() -> F32
@@ -697,15 +697,17 @@ routine F32.acos!() -> F32
 
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_f32_acos`.
 routine F32.acos_unchecked() -> F32
-  return C::rf_f32_acos(value: me)
+  return LLVM::acos[F32](value: me)
 
 ### Arc tangent.
 routine F32.atan() -> F32
-  return C::rf_f32_atan(value: me)
+  return LLVM::atan[F32](value: me)
 
-### Two-argument arc tangent atan2(me, x).
-routine F32.atan2(x: F32) -> F32
-  return C::rf_f32_atan2(y: me, x: x)
+### Two-argument arc tangent atan2(y, x).
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: F32, x: F32) -> F32
+  return LLVM::atan2[F32](a: y, b: x)
 
 ### Hyperbolic sine.
 routine F32.sinh!() -> F32
@@ -718,7 +720,7 @@ routine F32.sinh!() -> F32
 
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_f32_sinh`.
 routine F32.sinh_unchecked() -> F32
-  return C::rf_f32_sinh(value: me)
+  return LLVM::sinh[F32](value: me)
 
 ### Hyperbolic cosine.
 routine F32.cosh!() -> F32
@@ -731,11 +733,11 @@ routine F32.cosh!() -> F32
 
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_cosh`.
 routine F32.cosh_unchecked() -> F32
-  return C::rf_f32_cosh(value: me)
+  return LLVM::cosh[F32](value: me)
 
 ### Hyperbolic tangent.
 routine F32.tanh() -> F32
-  return C::rf_f32_tanh(value: me)
+  return LLVM::tanh[F32](value: me)
 
 ### Inverse hyperbolic sine.
 routine F32.asinh() -> F32
@@ -782,7 +784,7 @@ routine F32.exp2!() -> F32
 
 ### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_f32_exp2`.
 routine F32.exp2_unchecked() -> F32
-  return C::rf_f32_exp2(value: me)
+  return LLVM::exp2[F32](value: me)
 
 ### exp(me) - 1, accurate near zero.
 routine F32.expm1!() -> F32
@@ -821,7 +823,7 @@ routine F32.log2!() -> F32
 
 ### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_f32_log2`.
 routine F32.log2_unchecked() -> F32
-  return C::rf_f32_log2(value: me)
+  return LLVM::log2[F32](value: me)
 
 ### Base-10 exponential 10**me.
 routine F32.exp10!() -> F32
@@ -836,9 +838,11 @@ routine F32.exp10!() -> F32
 routine F32.exp10_unchecked() -> F32
   return C::rf_f32_exp10(value: me)
 
-### Hypotenuse sqrt(me^2 + you^2) without overflow.
-routine F32.hypot!(you: F32) -> F32
-  var rr = me.hypot_unchecked(you: you)
+### Hypotenuse sqrt(x^2 + y^2) without overflow.
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot!(x: F32, y: F32) -> F32
+  var rr = hypot_unchecked(x: x, y: y)
   if rr.is_finite()
     return rr
   if rr.is_nan()
@@ -846,8 +850,10 @@ routine F32.hypot!(you: F32) -> F32
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_f32_hypot`.
-routine F32.hypot_unchecked(you: F32) -> F32
-  return C::rf_f32_hypot(x: me, y: you)
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: F32, y: F32) -> F32
+  return C::rf_f32_hypot(x: x, y: y)
 
 ### Fused multiply-add me*b + c with a single rounding.
 routine F32.fma!(b: F32, c: F32) -> F32
@@ -860,11 +866,11 @@ routine F32.fma!(b: F32, c: F32) -> F32
 
 ### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_f32_fma`.
 routine F32.fma_unchecked(b: F32, c: F32) -> F32
-  return C::rf_f32_fma(x: me, y: b, z: c)
+  return LLVM::fma[F32](a: me, b: b, c: c)
 
 ### Floating-point remainder of me/you (C fmod).
 routine F32.fmod(you: F32) -> F32
-  return C::rf_f32_fmod(x: me, y: you)
+  return LLVM::float_rem[F32](a: me, b: you)
 
 ### IEEE remainder of me/you (C remainder).
 routine F32.remainder(you: F32) -> F32
@@ -876,11 +882,11 @@ routine F32.fdim(you: F32) -> F32
 
 ### Larger of me and you (C fmax).
 routine F32.fmax(you: F32) -> F32
-  return C::rf_f32_fmax(x: me, y: you)
+  return LLVM::maxnum[F32](a: me, b: you)
 
 ### Smaller of me and you (C fmin).
 routine F32.fmin(you: F32) -> F32
-  return C::rf_f32_fmin(x: me, y: you)
+  return LLVM::minnum[F32](a: me, b: you)
 
 ### sin(pi*me).
 routine F32.sinpi() -> F32
@@ -908,7 +914,7 @@ routine F32.ldexp(n: S64) -> F32
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
 routine F32.rint() -> F32
-  return C::rf_f32_rint(value: me)
+  return LLVM::rint[F32](value: me)
 
 ### Error function.
 routine F32.erf() -> F32

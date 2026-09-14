@@ -186,7 +186,7 @@ routine Complex.conjugate() -> Complex
 ### :returns: The resulting `Real` value.
 @readonly
 routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Real
-  return me.imag.atan2(x: me.real, precision: precision)
+  return atan2(y: me.imag, x: me.real, precision: precision)
 
 ### Computes the principal complex square root.
 ### :param precision: The decimal precision to use.

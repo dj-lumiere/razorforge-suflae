@@ -208,7 +208,7 @@ routine C32.abs() -> F32
 ### :returns: `atan2(imag, real)`, in the range (−π, π].
 routine C32.arg() -> F32
   # arg(z) = atan2(im, re); two-arg atan2 picks the correct quadrant.
-  return me.imag.atan2(me.real)
+  return atan2(y: me.imag, x: me.real)
 
 ### Returns the complex conjugate (negates the imaginary part).
 ### :returns: `real - imag·i`.

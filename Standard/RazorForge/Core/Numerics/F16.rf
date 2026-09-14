@@ -643,9 +643,11 @@ routine F16.acos_unchecked() -> F16
 routine F16.atan() -> F16
   return F16.from_bits(bits: C::rf_f16_atan(bits: me.to_bits()))
 
-### Two-argument arc tangent atan2(me, x).
-routine F16.atan2(x: F16) -> F16
-  return F16.from_bits(bits: C::rf_f16_atan2(y: me.to_bits(), x: x.to_bits()))
+### Two-argument arc tangent atan2(y, x).
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: F16, x: F16) -> F16
+  return F16.from_bits(bits: C::rf_f16_atan2(y: y.to_bits(), x: x.to_bits()))
 
 ### Hyperbolic sine.
 routine F16.sinh!() -> F16
@@ -833,8 +835,10 @@ routine F16.cbrt() -> F16
   return F16.from_bits(bits: C::rf_f16_cbrt(bits: me.to_bits()))
 
 ### Hypotenuse without overflow.
-routine F16.hypot!(you: F16) -> F16
-  var rr = me.hypot_unchecked(you: you)
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot!(x: F16, y: F16) -> F16
+  var rr = hypot_unchecked(x: x, y: y)
   if rr.is_finite()
     return rr
   if rr.is_nan()
@@ -842,8 +846,10 @@ routine F16.hypot!(you: F16) -> F16
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_f16_hypot`.
-routine F16.hypot_unchecked(you: F16) -> F16
-  return F16.from_bits(bits: C::rf_f16_hypot(x: me.to_bits(), y: you.to_bits()))
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: F16, y: F16) -> F16
+  return F16.from_bits(bits: C::rf_f16_hypot(x: x.to_bits(), y: y.to_bits()))
 
 ### Fused multiply-add me*b + c with a single rounding.
 routine F16.fma!(b: F16, c: F16) -> F16

@@ -266,11 +266,12 @@ routine Real.atan() -> Real
   rf_real_atan(result: result.handle, a: me.handle)
   return result
 
-### Two-argument inverse tangent of `me / x` (radians), quadrant-aware.
-@readonly
-routine Real.atan2(x: Real) -> Real
+### Two-argument inverse tangent of `y / x` (radians), quadrant-aware.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: Real, x: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
-  rf_real_atan2(result: result.handle, y: me.handle, x: x.handle)
+  rf_real_atan2(result: result.handle, y: y.handle, x: x.handle)
   return result
 
 ### Hyperbolic sine.
@@ -329,11 +330,12 @@ routine Real.log10() -> Real
   rf_real_log10(result: result.handle, a: me.handle)
   return result
 
-### Euclidean distance `sqrt(me^2 + other^2)` without intermediate overflow.
-@readonly
-routine Real.hypot(you: Real) -> Real
+### Euclidean distance `sqrt(x^2 + y^2)` without intermediate overflow.
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot(x: Real, y: Real) -> Real
   var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
-  rf_real_hypot(result: result.handle, a: me.handle, b: you.handle)
+  rf_real_hypot(result: result.handle, a: x.handle, b: y.handle)
   return result
 
 ### Cube root.
@@ -423,10 +425,11 @@ routine Real.atan(precision: S32) -> Real
   return result
 
 ### Two-argument inverse tangent to `precision` decimal digits.
-@readonly
-routine Real.atan2(x: Real, precision: S32) -> Real
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+routine atan2(y: Real, x: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
-  rf_real_atan2_p(result: result.handle, y: me.handle, x: x.handle, prec: precision)
+  rf_real_atan2_p(result: result.handle, y: y.handle, x: x.handle, prec: precision)
   return result
 
 ### Hyperbolic sine to `precision` decimal digits.
@@ -486,10 +489,11 @@ routine Real.log10(precision: S32) -> Real
   return result
 
 ### Euclidean distance to `precision` decimal digits.
-@readonly
-routine Real.hypot(you: Real, precision: S32) -> Real
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot(x: Real, y: Real, precision: S32) -> Real
   var result = Real(handle: rf_real_new(), ctrl: FrozenController().hijack())
-  rf_real_hypot_p(result: result.handle, a: me.handle, b: you.handle, prec: precision)
+  rf_real_hypot_p(result: result.handle, a: x.handle, b: y.handle, prec: precision)
   return result
 
 ### Cube root to `precision` decimal digits.
