@@ -2,7 +2,7 @@ module Core
 
 # CREDITS: UnpackedFloat[M, L, W] is a port and extension of TLFloat's UnpackedFloat
 # (© Naoki Shibata and contributors, Boost Software License 1.0). This generic engine
-# backs F128 / F256 / F512 and the decimal transcendental bridges.
+# backs the W=128/192/320 engines (F128 + the D64/D128/Decimal transcendental bridges).
 # See THIRD-PARTY-NOTICES.md.
 
 # ============================================================================
@@ -19,7 +19,7 @@ module Core
 # ============================================================================
 
 ### The generic extended-precision unpacked float.
-secret record UnpackedFloat[AnyType M, AnyType L, U64 W] obeys Addable, Subtractable, Multiplicable, Divisible
+record UnpackedFloat[AnyType M, AnyType L, U64 W] obeys Addable, Subtractable, Multiplicable, Divisible
 needs L obeys FloorDivisible
   ### Normalized mantissa (leading bit at W-2 when finite-nonzero).
   mant: M
@@ -249,8 +249,8 @@ routine UnpackedFloat[M, L, W].cmp(you: UnpackedFloat[M, L, W]) -> S64
 ### Core add/subtract: returns `me ± you` (subtract when `negate`).
 routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool) -> UnpackedFloat[M, L, W]
   var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var carry = LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64)
   var wm1 = LLVM::sub(a: wb, b: 1_s64)
+  var wm2 = LLVM::sub(a: wb, b: 2_s64)
   var negwb = LLVM::sub(a: 0_s64, b: wb)
   var rsign = (you.sign()).xor(you: negate)
   var ed = LLVM::sub(a: me.exp, b: you.exp)
@@ -273,62 +273,102 @@ routine UnpackedFloat[M, L, W].faddsub(you: UnpackedFloat[M, L, W], negate: Bool
       return me
     if LLVM::signed_lt(a: ed, b: negwb)
       return UnpackedFloat[M, L, W].make(mant: you.mant, exp: you.exp, fpclass: SignedFpClass.from_flags(sign: rsign, iszero: you.iszero(), isinf: you.isinf(), isnan: you.isnan()))
-  # True subtraction iff the effective signs differ; align both mantissas into the
-  # wide L word so the larger keeps wb fraction bits and the smaller is shifted by ed.
+  # Effective subtraction iff the signs differ. Work at the mantissa width M (significand leading
+  # at bit W-2), tracking only a guard + sticky below it, instead of the 2W-wide alignment the
+  # reference uses. `hi` is the magnitude-larger operand (by exp, then mantissa); `d` the gap.
   var subtract = me.sign() != rsign
-  var lsh = if LLVM::signed_gt(a: ed, b: 0_s64) then wb else LLVM::add(a: wb, b: ed)
-  var rsh = if LLVM::signed_gt(a: ed, b: 0_s64) then LLVM::sub(a: wb, b: ed) else wb
-  var lm = (LLVM::zero_extend[M, L](me.mant)).shift(s: lsh)
-  var rm = (LLVM::zero_extend[M, L](you.mant)).shift(s: rsh)
-  var exp = if LLVM::signed_gt(a: ed, b: 0_s64) then me.exp else you.exp
-  var am = L.to_width(s: 0_s64)
-  var rsign2 = me.sign()
+  var abig = LLVM::signed_gt(a: me.exp, b: you.exp) or (LLVM::int_eq(a: me.exp, b: you.exp) and LLVM::unsigned_ge[M](a: me.mant, b: you.mant))
+  var himant = if abig then me.mant else you.mant
+  var lomant = if abig then you.mant else me.mant
+  var d = if abig then ed else LLVM::sub(a: 0_s64, b: ed)
+  var exp = if abig then me.exp else you.exp
+  var rsign2 = if abig then me.sign() else rsign
+  var am = himant
   if not subtract
-    am = LLVM::add(a: lm, b: rm)
-    # carry out of the top bit -> renormalize right by one, bump exponent.
-    if (am).bit(pos: carry)
+    # ---- addition of magnitudes: hi + (lo >> d), round-half-even on (guard, sticky) ----
+    var sm = lomant
+    var g = false
+    var s = false
+    if LLVM::signed_ge(a: d, b: wb)
+      sm = M.to_width(s: 0_s64)
+      s = LLVM::int_ne[M](a: lomant, b: 0)
+    elseif LLVM::signed_ge(a: d, b: 1_s64)
+      sm = (lomant).shift(s: LLVM::sub(a: 0_s64, b: d))
+      g = (lomant).bit(pos: LLVM::sub(a: d, b: 1_s64))
+      if LLVM::signed_ge(a: d, b: 2_s64)
+        s = LLVM::int_ne[M](a: LLVM::bit_and[M](a: lomant, b: M.low_mask(n: LLVM::sub(a: d, b: 1_s64))), b: 0)
+    am = LLVM::add(a: himant, b: sm)
+    if (am).bit(pos: wm1)
+      var ns = s or g
+      g = (am).bit(pos: 0_s64)
       am = (am).shift(s: -1_s64)
       exp = LLVM::add(a: exp, b: 1_s64)
-    # round-half-even: base addend is all the low guard bits; +1 when the round bit (wb) is set.
-    var addend = L.low_mask(n: wm1)
-    if (am).bit(pos: wb)
-      addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
-    am = LLVM::add(a: am, b: addend)
-    if (am).bit(pos: carry)
-      am = (am).shift(s: -1_s64)
-      exp = LLVM::add(a: exp, b: 1_s64)
-  else
-    # magnitude subtraction: result takes the sign of the larger operand.
-    if LLVM::unsigned_lt(a: lm, b: rm)
-      am = LLVM::sub(a: rm, b: lm)
-      rsign2 = rsign
-    else
-      am = LLVM::sub(a: lm, b: rm)
-      rsign2 = me.sign()
-    # exact cancellation yields +0.
-    if LLVM::int_eq[L](a: am, b: 0)
+      s = ns
+    if g and (s or (am).bit(pos: 0_s64))
+      am = LLVM::add(a: am, b: M.to_width(s: 1_s64))
+      if (am).bit(pos: wm1)
+        am = (am).shift(s: -1_s64)
+        exp = LLVM::add(a: exp, b: 1_s64)
+  elseif LLVM::signed_le(a: d, b: 1_s64)
+    # ---- subtraction, near path (d in {0,1}): exact with one extra low bit (scale both up by 1),
+    # so the possibly-large cancellation renormalizes without losing precision ----
+    var hh = (himant).shift(s: 1_s64)
+    var ll = (lomant).shift(s: LLVM::sub(a: 1_s64, b: d))
+    am = LLVM::sub(a: hh, b: ll)
+    if LLVM::int_eq[M](a: am, b: 0)
       rsign2 = false
-    # renormalize: shift the leading set bit back up to its canonical position, adjust exp.
-    var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 1_s64)
-    am = (am).shift(s: x)
-    exp = LLVM::sub(a: exp, b: x)
-    var addend = L.low_mask(n: wm1)
-    if (am).bit(pos: wb)
-      addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
-    am = LLVM::add(a: am, b: addend)
-    if (am).bit(pos: carry)
+      exp = 0_s64
+    else
+      var lz = LLVM::int_truncate[M, S64](LLVM::leading_zeros(am))
+      am = (am).shift(s: lz)
+      exp = LLVM::sub(a: exp, b: lz)
+      var gbit = (am).bit(pos: 0_s64)
       am = (am).shift(s: -1_s64)
-      exp = LLVM::add(a: exp, b: 1_s64)
-  am = (am).shift(s: negwb)
-  var am128 = LLVM::int_truncate[L, M](am)
-  var amzero = LLVM::int_eq[M](a: am128, b: 0)
+      if gbit and (am).bit(pos: 0_s64)
+        am = LLVM::add(a: am, b: M.to_width(s: 1_s64))
+        if (am).bit(pos: wm1)
+          am = (am).shift(s: -1_s64)
+          exp = LLVM::add(a: exp, b: 1_s64)
+  else
+    # ---- subtraction, far path (d >= 2): at most a 1-bit cancellation. Track two guard bits
+    # (g1 = lo bit d-1, g2 = lo bit d-2) + a sticky below, so the leading-drop case renormalizes
+    # (M0 = 2*am - g1) and rounds at the correct position with g2; a final power-of-2 check fixes
+    # a round-down that crosses a power of two. d >= W: lo is wholly below, frac < 1/2 -> hi. ----
+    if LLVM::signed_ge(a: d, b: wb)
+      am = himant
+    else
+      var sm = (lomant).shift(s: LLVM::sub(a: 0_s64, b: d))
+      var g1 = (lomant).bit(pos: LLVM::sub(a: d, b: 1_s64))
+      var g2 = (lomant).bit(pos: LLVM::sub(a: d, b: 2_s64))
+      var s = false
+      if LLVM::signed_ge(a: d, b: 3_s64)
+        s = LLVM::int_ne[M](a: LLVM::bit_and[M](a: lomant, b: M.low_mask(n: LLVM::sub(a: d, b: 2_s64))), b: 0)
+      am = LLVM::sub(a: himant, b: sm)
+      if (am).bit(pos: wm2)
+        if g1
+          if g2 or s
+            am = LLVM::sub(a: am, b: M.to_width(s: 1_s64))
+          else
+            am = LLVM::sub(a: am, b: LLVM::bit_and[M](a: am, b: M.to_width(s: 1_s64)))
+      else
+        am = LLVM::sub(a: (am).shift(s: 1_s64), b: M.from_bool(cond: g1))
+        exp = LLVM::sub(a: exp, b: 1_s64)
+        if g2
+          if s
+            am = LLVM::sub(a: am, b: M.to_width(s: 1_s64))
+          else
+            am = LLVM::sub(a: am, b: LLVM::bit_and[M](a: am, b: M.to_width(s: 1_s64)))
+      if not (am).bit(pos: wm2)
+        am = (am).shift(s: 1_s64)
+        exp = LLVM::sub(a: exp, b: 1_s64)
+  var amzero = LLVM::int_eq[M](a: am, b: 0)
   if amzero
     exp = 0_s64
   if LLVM::signed_lt(a: exp, b: -2147483648_s64)
     return UnpackedFloat[M, L, W].zero(sign: rsign2)
   if LLVM::signed_gt(a: exp, b: 2147483647_s64)
     return UnpackedFloat[M, L, W].inf(sign: rsign2)
-  return UnpackedFloat[M, L, W].make(mant: am128, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
+  return UnpackedFloat[M, L, W].make(mant: am, exp: exp, fpclass: SignedFpClass.from_flags(sign: rsign2, iszero: amzero, isinf: false, isnan: false))
 
 ### Returns `me - you`. Wired `-`; `.sub(you:)` callers resolve here by bare-name lookup.
 routine UnpackedFloat[M, L, W].sub(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
@@ -348,13 +388,27 @@ routine UnpackedFloat[M, L, W].mul(you: UnpackedFloat[M, L, W]) -> UnpackedFloat
     if (me.iszero() and you.isinf()) or (me.isinf() and you.iszero())
       return UnpackedFloat[M, L, W].nan()
     return UnpackedFloat[M, L, W].inf(sign: (me.sign()).xor(you: you.sign()))
+  return me.mul_finite(you: you)
+
+### Finite multiply: the normal-operand path of `mul` WITHOUT the six isnan/isinf guards. Newton/
+### Horner loops over known-finite values (sqrt/cbrt) call this to skip per-step classification.
+### me and you MUST both be finite normals/zeros -- a nan/inf operand yields garbage, not a nan.
+routine UnpackedFloat[M, L, W].mul_finite(you: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   var wb = LLVM::reinterpret_bits[U64, S64](W)
   var carry = LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64)
   var wm1 = LLVM::sub(a: wb, b: 1_s64)
   var am = LLVM::mul(a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](you.mant))
-  var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
-  am = (am).shift(s: LLVM::add(a: x, b: 3_s64))
-  var exp = LLVM::sub(a: LLVM::add(a: me.exp, b: you.exp), b: x)
+  # Both mantissas are normalized (leading bit at W-2), so the 2W-bit product lands in
+  # [2^(2W-4), 2^(2W-2)): its leading bit is at 2W-3 or 2W-4 — exactly two cases. A single bit test
+  # replaces `clz_wide` + a runtime-amount normalization shift (two ctlz.i128 and a funnel-shift
+  # chain on the critical path) with a fixed 1- or 2-bit shift that pins the leading bit at 2W-2.
+  var exp = LLVM::add(a: me.exp, b: you.exp)
+  if (am).bit(pos: LLVM::sub(a: carry, b: 2_s64))
+    am = (am).shift(s: 1_s64)
+    exp = LLVM::add(a: exp, b: 2_s64)
+  else
+    am = (am).shift(s: 2_s64)
+    exp = LLVM::add(a: exp, b: 1_s64)
   var addend = L.low_mask(n: wm1)
   if (am).bit(pos: wb)
     addend = LLVM::add(a: addend, b: L.to_width(s: 1_s64))
@@ -463,25 +517,46 @@ common routine T.from_bool(cond: Bool) -> T
 routine T.clear_low(n: S64) -> T
   return LLVM::bit_and[T](a: me, b: LLVM::bit_xor[T](a: T.low_mask(n: n), b: LLVM::sub[T](a: 0, b: 1)))
 
-### Integer square root of `v` over the wide type `L` (restoring bitwise method). A common
-### routine on the engine type (not a bare-`L` member) so the W-parametrized instantiation is
-### reachability-seeded like `clz_wide` — a bare `L.isqrt[W]()` member is pruned before codegen.
-common routine UnpackedFloat[M, L, W].isqrt_wide(v: L) -> L
-  var wb = LLVM::reinterpret_bits[U64, S64](W)
-  var rem = v
-  var res = L.to_width(s: 0_s64)
-  var bit = LLVM::shift_left[L](value: 1, bits: L.to_width(s: LLVM::sub[S64](a: LLVM::mul[S64](a: 2_s64, b: wb), b: 2_s64)))
-  while LLVM::unsigned_gt(a: bit, b: rem)
-    bit = LLVM::shift_right_unsigned(bit, L.to_width(s: 2_s64))
-  while LLVM::int_ne[L](a: bit, b: 0)
-    var rb = LLVM::add(a: res, b: bit)
-    if LLVM::unsigned_ge(a: rem, b: rb)
-      rem = LLVM::sub(a: rem, b: rb)
-      res = LLVM::add(a: LLVM::shift_right_unsigned(res, L.to_width(s: 1_s64)), b: bit)
-    else
-      res = LLVM::shift_right_unsigned(res, L.to_width(s: 1_s64))
-    bit = LLVM::shift_right_unsigned(bit, L.to_width(s: 2_s64))
-  return res
+### Integer floor square root of `v` over the wide type `L` — f64-seeded Newton using the
+### FloorDivisible `//` (Knuth divide), then an exact ±1 correction. The engine-generic form of
+### `f128_isqrt256`: it stays in raw wide integers (no per-step UnpackedFloat pack/classify), so a
+### handful of fast Knuth divides beat BOTH the O(W²) restoring-bitwise isqrt (~700ns at W=128) AND
+### the reciprocal float `sqrt_newton` (~330ns) at the F128 width. Common routine on the engine type
+### (like `clz_wide`) so the W-parametrized instance is reachability-seeded.
+common routine UnpackedFloat[M, L, W].isqrt_newton_wide(v: L) -> L
+  var zero = L.to_width(s: 0_s64)
+  if LLVM::int_eq[L](a: v, b: zero)
+    return zero
+  var one = L.to_width(s: 1_s64)
+  var twoW = LLVM::mul(a: 2_s64, b: LLVM::reinterpret_bits[U64, S64](W))
+  # Seed x ~= sqrt(v) from hardware f64: take the top <=52 bits of v (even shift, so the f64 sqrt
+  # scales back by an integer power of two), f64-sqrt, then shift the ~26-bit integer result up by sh/2.
+  var bl = LLVM::sub(a: twoW, b: UnpackedFloat[M, L, W].clz_wide(v: v))
+  var sh = 0_s64
+  if LLVM::signed_gt(a: bl, b: 52_s64)
+    sh = LLVM::sub(a: bl, b: 52_s64)
+    if LLVM::int_ne(a: LLVM::signed_rem(a: sh, b: 2_s64), b: 0_s64)
+      sh = LLVM::sub(a: sh, b: 1_s64)
+  var vtop = LLVM::int_truncate[L, U64](LLVM::shift_right_unsigned(v, L.to_width(s: sh)))
+  var seed = LLVM::float_to_unsigned[F64, U64](F64(from: vtop).sqrt_unchecked())
+  var x = LLVM::shift_left(value: LLVM::zero_extend[U64, L](seed), bits: L.to_width(s: LLVM::signed_div(a: sh, b: 2_s64)))
+  if LLVM::int_eq[L](a: x, b: zero)
+    x = one
+  # Newton x <- (x + v//x)/2. From a ~26-bit-accurate seed, 3 steps reach ~208 bits (>=W at every
+  # width this path serves, W<=128); the exact correction below pins floor(sqrt(v)) regardless.
+  var j = 0_s64
+  while LLVM::signed_lt(a: j, b: 3_s64)
+    var q = v // x
+    x = LLVM::shift_right_unsigned(LLVM::add(a: x, b: q), L.to_width(s: 1_s64))
+    j = LLVM::add(a: j, b: 1_s64)
+  # x < 2^W here, so x*x < 2^2W fits L; pin the exact floor with a ±1 sweep.
+  while LLVM::unsigned_gt(a: LLVM::mul(a: x, b: x), b: v)
+    x = LLVM::sub(a: x, b: one)
+  var x1 = LLVM::add(a: x, b: one)
+  while LLVM::unsigned_le(a: LLVM::mul(a: x1, b: x1), b: v)
+    x = x1
+    x1 = LLVM::add(a: x1, b: one)
+  return x
 
 # ============================================================================
 # Fused multiply-add (faithful port of TLFloat fma, nbexp=0, NGB=4) — me*b + c.
@@ -503,15 +578,27 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
     if not (me.isinf() or b.isinf()) or ((me.sign()).xor(you: b.sign()) == c.sign())
       return UnpackedFloat[M, L, W].inf(sign: c.sign())
     return UnpackedFloat[M, L, W].nan()
+  return me.fma_finite(b: b, c: c)
+
+### Finite fma: the normal-operand path of `fma` WITHOUT the six isnan/isinf guards. Polynomial
+### Horner loops over known-finite values call this to skip per-step classification. me, b and c
+### MUST all be finite normals/zeros -- a nan/inf operand yields garbage, not a propagated nan.
+routine UnpackedFloat[M, L, W].fma_finite(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M, L, W]) -> UnpackedFloat[M, L, W]
   var wb = LLVM::reinterpret_bits[U64, S64](W)
   var twoW = LLVM::mul(a: 2_s64, b: wb)
   var carry = LLVM::sub(a: twoW, b: 1_s64)
   var wm1 = LLVM::sub(a: wb, b: 1_s64)
   var pexp = LLVM::add(a: me.exp, b: b.exp)
   var am = LLVM::mul(a: LLVM::zero_extend[M, L](me.mant), b: LLVM::zero_extend[M, L](b.mant))
-  var x = LLVM::sub(a: UnpackedFloat[M, L, W].clz_wide(v: am), b: 4_s64)
-  am = (am).shift(s: LLVM::add(a: x, b: 3_s64))
-  pexp = LLVM::sub(a: pexp, b: x)
+  # Product of two normalized mantissas -> leading bit at 2W-3 or 2W-4; a bit test + fixed shift
+  # replaces clz_wide + a variable shift here (same trick as `mul_finite`), pinning the leading bit
+  # at 2W-2. The subtract-path clz below stays: cancellation there can drop the leading bit anywhere.
+  if (am).bit(pos: LLVM::sub(a: carry, b: 2_s64))
+    am = (am).shift(s: 1_s64)
+    pexp = LLVM::add(a: pexp, b: 2_s64)
+  else
+    am = (am).shift(s: 2_s64)
+    pexp = LLVM::add(a: pexp, b: 1_s64)
   var amzero = LLVM::int_eq[L](a: am, b: 0)
   if amzero
     pexp = 0_s64
@@ -583,28 +670,52 @@ routine UnpackedFloat[M, L, W].fma(b: UnpackedFloat[M, L, W], c: UnpackedFloat[M
 # Square root (faithful port of TLFloat sqrt_)
 # ============================================================================
 
+### Newton iteration count for `sqrt_newton`, hand-tuned per engine width. The f64 seed gives ~52
+### correct bits and each Newton step doubles them, so the `floor(log2 W)-4` fallback reaches the
+### ~2W-bit target; the explicit per-width entries let a tier be dialed in empirically (raise for
+### accuracy, lower for speed) without touching the formula. W is a buildtime constant, so this
+### whole ladder folds to a single value per engine instantiation.
+secret common routine UnpackedFloat[M, L, W].sqrt_newton_iters() -> S64
+  if LLVM::int_eq[U64](a: W, b: 256_u64)
+    return 4_s64
+  if LLVM::int_eq[U64](a: W, b: 512_u64)
+    return 5_s64
+  var f = LLVM::sub(a: LLVM::sub(a: 63_s64, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros[U64](W))), b: 4_s64)
+  if LLVM::signed_lt(a: f, b: 2_s64)
+    return 2_s64
+  return f
+
 ### Returns the correctly-rounded square root.
-### Faithful reciprocal-sqrt via Newton (multiply-only) for the binary512 scratch
-### tier. The exact bit-by-bit `L.isqrt` is O(W^2) (~512 digit-recurrence iters at
-### W=512); Newton converges quadratically (~10 wide multiplies). F512 is internal
-### faithful-rounded scratch, so ~1 ULP is within contract. me must be > 0, finite, normal.
-### Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) to ~2 bits; iterate
-### y <- y*(3 - v*y^2)/2; return (v*y) * 2^k.
+### Faithful reciprocal-sqrt via Newton (multiply-only) — the wide-engine path (W>=256; W=128 uses the
+### integer-domain `isqrt_newton_wide` in `sqrt()`, which is faster at that width). Multiply-only
+### Newton avoids the wide divide that gets costly as W grows; converges quadratically. me must be > 0,
+### finite, normal. Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) from a HARDWARE f64
+### rsqrt (~52 correct bits, not the old ~2-bit constant), iterate y <- y*(3 - v*y^2)/2; return
+### (v*y) * 2^k. The f64 seed roughly halves the iteration count vs the old 2-bit seed at every
+### Newton width — every sqrt caller (log/asin/acos/hypot/erf on the W=192/W=320 engines) inherits it.
+### Iteration count comes from `sqrt_newton_iters()` (per-width tunable).
 routine UnpackedFloat[M, L, W].sqrt_newton() -> UnpackedFloat[M, L, W]
+  var wb = LLVM::reinterpret_bits[U64, S64](W)
   var e1 = LLVM::add(a: me.exp, b: 1_s64)
   var twok = LLVM::bit_and(a: e1, b: -2_s64)
   var k = LLVM::signed_div(a: twok, b: 2_s64)
   var v = me.ldexp(e: LLVM::sub(a: 0_s64, b: twok))
-  var y = UnpackedFloat[M, L, W].from_s64(src: 13_s64).ldexp(e: -4_s64)
-  if LLVM::signed_ge(a: v.exp, b: 0_s64)
-    y = UnpackedFloat[M, L, W].from_s64(src: 37_s64).ldexp(e: -6_s64)
+  # Seed y ~= 1/sqrt(v) from hardware f64. v in [1,4): take its top 53 mantissa bits (leading at W-2,
+  # so shift down by W-54) as an exact-in-f64 integer scaled by 2^(v.exp-51), rsqrt in f64, then read
+  # the ~52-bit f64 result back as an unpacked value (y*2^53 is an integer < 2^54 -> from_u64, /2^53).
+  var topbits = LLVM::int_truncate[M, U64](LLVM::shift_right_unsigned(v.mant, M.to_width(s: LLVM::sub(a: wb, b: 54_s64))))
+  var vf = F64(from: topbits).scalbn(n: LLVM::sub(a: v.exp, b: 51_s64))
+  var yf = F64(from: 1_u64).truediv_unchecked(you: vf.sqrt_unchecked())
+  var yint = LLVM::float_to_unsigned[F64, U64](yf.scalbn(n: 53_s64))
+  var y = UnpackedFloat[M, L, W].from_u64(v: yint).ldexp(e: -53_s64)
   var three = UnpackedFloat[M, L, W].from_s64(src: 3_s64)
+  var iters = UnpackedFloat[M, L, W].sqrt_newton_iters()
   var j = 0_s64
-  while LLVM::signed_lt(a: j, b: 10_s64)
-    var t = v.mul(you: y).mul(you: y)
-    y = y.mul(you: three.sub(you: t)).ldexp(e: -1_s64)
+  while LLVM::signed_lt(a: j, b: iters)
+    var t = v.mul_finite(you: y).mul_finite(you: y)
+    y = y.mul_finite(you: three.sub(you: t)).ldexp(e: -1_s64)
     j = LLVM::add(a: j, b: 1_s64)
-  return v.mul(you: y).ldexp(e: k)
+  return v.mul_finite(you: y).ldexp(e: k)
 
 ### Returns the correctly-rounded square root (NaN-of-negative, ±0 and +inf pass through).
 ### W>=256 routes to the quadratic Newton path; narrower W uses the bitwise `L.isqrt`.
@@ -618,9 +729,13 @@ routine UnpackedFloat[M, L, W].sqrt() -> UnpackedFloat[M, L, W]
     return UnpackedFloat[M, L, W].nan()
   if me.isinf()
     return me
-  # Newton's reciprocal-sqrt (10 iters, quadratic) is width-generic and ~O(W); the bitwise
-  # `L.isqrt` fallback below is O(W²). Only F256/F512 reach this engine (F128 has its own sqrt),
-  # so route both to Newton — previously only W==512 did, leaving F256 stuck on the slow path.
+  # Crossover is between W=128 and W=256: at W=128 the INTEGER-domain isqrt (`isqrt_newton_wide`:
+  # f64-seeded, Knuth-`//` Newton, exact — the generic form of `f128_isqrt256`) beats the reciprocal
+  # float Newton (`sqrt_newton`: fixed f64-seed setup + wide muls, each packing/classifying an
+  # UnpackedFloat), because the integer path stays in raw wide ints with a few fast Knuth divides and
+  # no per-step float ceremony. W>=256 routes to `sqrt_newton`, where the divide cost grows and the
+  # multiply-only reciprocal path wins. (F128Math's asin/acos etc. run on the W=128 engine, so this
+  # keeps their sqrt on the fast exact integer path too.)
   if LLVM::unsigned_ge[U64](a: W, b: 256_u64)
     return me.sqrt_newton()
   var wb = LLVM::reinterpret_bits[U64, S64](W)
@@ -630,7 +745,7 @@ routine UnpackedFloat[M, L, W].sqrt() -> UnpackedFloat[M, L, W]
   var tpar = LLVM::signed_rem(a: LLVM::add(a: x, b: offset), b: 2_s64)
   var par = LLVM::sub(a: 1_s64, b: tpar)
   var s0 = LLVM::add(a: LLVM::add(a: wb, b: par), b: y)
-  var l = UnpackedFloat[M, L, W].isqrt_wide(v: (LLVM::zero_extend[M, L](me.mant)).shift(s: s0))
+  var l = UnpackedFloat[M, L, W].isqrt_newton_wide(v: (LLVM::zero_extend[M, L](me.mant)).shift(s: s0))
   var s1 = LLVM::sub(a: LLVM::add(a: wb, b: 1_s64), b: UnpackedFloat[M, L, W].clz_wide(v: l))
   var addl = L.low_mask(n: LLVM::sub(a: s1, b: 1_s64))
   if (l).bit(pos: s1)
@@ -838,9 +953,24 @@ routine UnpackedFloat[M, L, W].frexp() -> UFExp[M, L, W]
 common routine M.from_words2(h1: U64, h0: U64) -> M
   return LLVM::bit_or[M](a: LLVM::zero_extend[U64, M](h0), b: LLVM::shift_left[M](value: LLVM::zero_extend[U64, M](h1), bits: 64))
 
+### Builds an `M`-typed value from three U64 limbs (h2..h0) — the 192-bit (U192) mantissa of the
+### binary192 engine, which has no literal suffix (assembled from limbs like U512/U1024).
+common routine M.from_words3(h2: U64, h1: U64, h0: U64) -> M
+  return LLVM::bit_or[M](a: M.from_words2(h1: h1, h0: h0), b: LLVM::shift_left[M](value: LLVM::zero_extend[U64, M](h2), bits: 128))
+
 ### Builds an `M`-typed value from four U64 halves (h3..h0, most significant first).
 common routine M.from_words4(h3: U64, h2: U64, h1: U64, h0: U64) -> M
   return LLVM::bit_or[M](a: M.from_words2(h1: h1, h0: h0), b: LLVM::shift_left[M](value: M.from_words2(h1: h3, h0: h2), bits: 128))
+
+### Builds an `M`-typed value from five U64 limbs (h4..h0) — the 320-bit (U320) mantissa of the
+### binary320 engine (the D256 scratch). Low four limbs via `from_words4`, high limb shifted by 256.
+common routine M.from_words5(h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> M
+  return LLVM::bit_or[M](a: M.from_words4(h3: h3, h2: h2, h1: h1, h0: h0), b: LLVM::shift_left[M](value: LLVM::zero_extend[U64, M](h4), bits: 256))
+
+### Builds an `M`-typed value from six U64 limbs (h5..h0) — a 384-bit `M` value. Low four limbs
+### via `from_words4`, high two shifted by 256.
+common routine M.from_words6(h5: U64, h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> M
+  return LLVM::bit_or[M](a: M.from_words4(h3: h3, h2: h2, h1: h1, h0: h0), b: LLVM::shift_left[M](value: M.from_words2(h1: h5, h0: h4), bits: 256))
 
 ### Builds an `M`-typed value from eight U64 halves (h7..h0, most significant first).
 common routine M.from_words8(h7: U64, h6: U64, h5: U64, h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> M
@@ -852,12 +982,12 @@ common routine M.from_words8(h7: U64, h6: U64, h5: U64, h4: U64, h3: U64, h2: U6
 common routine M.from_u128(v: U128) -> M
   return M.from_words2(h1: LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(v, U128.to_width(s: 64_s64))), h0: LLVM::int_truncate[U128, U64](v))
 
-### Builds an `M`-typed mantissa from a single 256-bit literal — octuple-tier constants write one
-### `0x…_u256` instead of four U64 halves.
+### Builds an `M`-typed mantissa from a single 256-bit literal — wide-engine (W=320) constants write
+### one `0x…_u256` instead of four U64 halves.
 common routine M.from_u256(v: U256) -> M
   return M.from_words4(h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(v, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](v))
 
-### Builds an `M`-typed 512-bit mantissa from a high and low 256-bit half — dec-tier constants write
+### Builds an `M`-typed 512-bit mantissa from a high and low 256-bit half — constants write
 ### two `0x…_u256` literals instead of eight U64 halves.
 common routine M.from_u256x2(hi: U256, lo: U256) -> M
   return M.from_words8(h7: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 192_s64))), h6: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 128_s64))), h5: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(hi, U256.to_width(s: 64_s64))), h4: LLVM::int_truncate[U256, U64](hi), h3: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 192_s64))), h2: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 128_s64))), h1: LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(lo, U256.to_width(s: 64_s64))), h0: LLVM::int_truncate[U256, U64](lo))

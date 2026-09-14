@@ -276,11 +276,13 @@ routine F128.frac() -> F128
 
 ### Returns the arithmetic negation (sign bit flipped).
 ### :returns: The negated value.
+@inline
 routine F128.neg() -> F128
   return F128.from_bits(bits: LLVM::bit_xor(a: me.to_bits(), b: f128_sign_mask()))
 
 ### Returns the absolute value (sign bit cleared).
 ### :returns: The magnitude of this value.
+@inline
 routine F128.abs() -> F128
   return F128.from_bits(bits: LLVM::bit_and(a: me.to_bits(), b: f128_abs_mask()))
 
@@ -1323,7 +1325,7 @@ routine f128_strip(s: Text) -> Text
 ### `%g`-style decimal conversion at 34 significant digits (`FLT128_DIG`) — the digits
 ### F128 carries reliably. Extraction runs in F128 arithmetic, so it CANNOT exceed ~34
 ### digits (the residual drifts past [0,10) and emits garbage); a bit-exact 36-digit
-### round-trip would need F256-precision digit extraction here AND a 36-digit parser
+### round-trip would need wider-than-F128 (W=192+) digit extraction here AND a 36-digit parser
 ### (the current `create!` narrows through 34-digit D128). Trailing zeros are stripped.
 ### :param bits: The raw `F128` encoding.
 ### :returns: The decimal text.
@@ -1411,9 +1413,9 @@ routine F128.to_uf() -> UnpackedFloat[U128, U256, 128]
   var mant = LLVM::shift_left(value: sig, bits: 14_u128)
   return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
-### Rounds any unpacked engine value (quad or octuple) back to an `F128`
+### Rounds any unpacked engine value (any width) back to an `F128`
 ### (round-to-nearest-even). Width-generic: the mantissa shift is `W - 114`
-### (14 for the 128-bit quad engine, 142 for the 256-bit octuple engine).
+### (14 for the W=128 quad engine, 78 for the W=192 engine, 206 for the W=320 engine).
 routine UnpackedFloat[M, L, W].to_f128() -> F128
   var sign = 0_u64
   if me.sign()
@@ -1443,30 +1445,35 @@ routine UnpackedFloat[M, L, W].to_f128() -> F128
   return F128.from_bits(bits: f128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
 
 # ============================================================================
-# Packed F128 <-> octuple UnpackedFloat[U256, U512, 256] casts (for the
-# functions TLFloat computes in octuple precision: exp2/exp10/pow/asinh/acosh).
+# Packed F128 <-> W=192 UnpackedFloat[U192, U384, 192] casts. This is the
+# uniform engine for ALL F128 transcendentals: a 192-bit mantissa (leading bit
+# at 190) carries 79 guard bits over F128's 113-bit significand, so every
+# transcendental is faithfully ~1 ULP. Mirrors to_uf() exactly for
+# W=192 widths: the normal-path significand shift is 190-112 = 78, subnormal
+# uses shift = 190 - msbf. The exponent bias 16384 and the subnormal 16495
+# constant are about F128's own encoding (not W), so they carry over unchanged.
 # ============================================================================
 
-### Decodes this `F128` into the octuple unpacked engine value (exact).
-routine F128.to_oct() -> UnpackedFloat[U256, U512, 256]
+### Decodes this `F128` into the W=192 unpacked engine value (exact).
+routine F128.to_uf192() -> UnpackedFloat[U192, U384, 192]
   var bits = me.to_bits()
   var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: f128_sign_mask()), b: 0_u128)
   var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
   var f = LLVM::bit_and(a: bits, b: f128_mant_mask())
   if e == 0x7FFF_u64
     if LLVM::int_ne(a: f, b: 0_u128)
-      return UnpackedFloat[U256, U512, 256].nan()
-    return UnpackedFloat[U256, U512, 256].inf(sign: sign)
+      return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[U192, U384, 192].inf(sign: sign)
   if e == 0_u64 and LLVM::int_eq(a: f, b: 0_u128)
-    return UnpackedFloat[U256, U512, 256].zero(sign: sign)
+    return UnpackedFloat[U192, U384, 192].zero(sign: sign)
   if e == 0_u64
     var msbf = LLVM::int_truncate[U128, S64](LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(f)))
-    var shift = LLVM::sub(a: 254_s64, b: msbf)
-    var mant = LLVM::shift_left(value: LLVM::zero_extend[U128, U256](f), bits: U256.to_width(s: shift))
-    return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var shift = LLVM::sub(a: 190_s64, b: msbf)
+    var mant = LLVM::shift_left(value: LLVM::zero_extend[U128, U192](f), bits: U192.to_width(s: shift))
+    return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = LLVM::bit_or(a: f, b: f128_implicit())
-  var mant = LLVM::shift_left[U256](value: LLVM::zero_extend[U128, U256](sig), bits: 142)
-  return UnpackedFloat[U256, U512, 256].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  var mant = LLVM::shift_left[U192](value: LLVM::zero_extend[U128, U192](sig), bits: 78)
+  return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 # ============================================================================
 # More exact members: nextafter, modf, frexp
@@ -1695,7 +1702,7 @@ routine F128(from: D64) -> F128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128(from: D128) -> F128
-  return d128_to_f256(x: from).to_f128()
+  return d128_to_uf192(x: from).to_f128()
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
@@ -1977,22 +1984,23 @@ routine f128_pow5(k: S64) -> U256
 ### :returns: The correctly-rounded `F128` value.
 ### :throws: {InvalidValueError} on malformed input.
 routine F128!(from_text: Text) -> F128
-  # PROVABLY-CORRECT decimal->binary128. FAST PATH: `coeff x 10^exp` in F512 (489-bit
-  # significand) is correctly-rounded for EVERY non-tie input — its ~2^-475 error is far
-  # below the ~2^-239 worst-case decimal->F128 separation. EXACT TIES (the round-half-even
-  # cases a fast path can't see) provably need exp in [-56,55]; for exp>=0 the F512 product
-  # is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
-  # V = (coeff / 5^|exp|) x 2^exp is EXACT in F512 via ldexp and resolved with bounded U256.
-  # No bignum, no module-Numerics dependency, no table beyond the existing f512_pow10.
+  # PROVABLY-CORRECT decimal->binary128. FAST PATH: `coeff x 10^exp` in the W=320 engine
+  # (318-bit mantissa) is correctly-rounded for EVERY non-tie input — its ~2^-310 worst-case
+  # error is far below the ~2^-239 worst-case decimal->F128 separation. EXACT TIES (the
+  # round-half-even cases a fast path can't see) provably need exp in [-56,55]; for exp>=0
+  # the product is exact anyway, and for exp<0 a tie requires 5^|exp| | coeff, in which case
+  # V = (coeff / 5^|exp|) x 2^exp is EXACT in the engine via ldexp (the U256 quotient fits
+  # the 318-bit mantissa) and resolved with bounded U256. No bignum, no module-Numerics
+  # dependency, no big-int 10^k table (f320_pow10 is binary-exponentiation of 10.0).
   var p = scan_decimal_parts(from_text: from_text)
   if LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128) and LLVM::signed_lt(a: p.exp, b: 0_s64) and LLVM::signed_ge(a: p.exp, b: -56_s64)
     var p5 = f128_pow5(k: LLVM::sub(a: 0_s64, b: p.exp))
     var cw = LLVM::zero_extend[U128, U256](p.coeff)
     if LLVM::int_eq(a: LLVM::unsigned_rem(a: cw, b: p5), b: LLVM::zero_extend[U64, U256](0_u64))
       var m = LLVM::unsigned_div(a: cw, b: p5)
-      var r = uf512_from_u256(c: m).ldexp(e: p.exp).to_f128()
+      var r = uf320_from_u256(c: m).ldexp(e: p.exp).to_f128()
       return if p.sign then r.neg() else r
-  return d128parts_to_f512(p: p).to_uf().to_f128()
+  return d128parts_to_f320(p: p).to_f128()
 
 # ============================================================================
 # Hashing

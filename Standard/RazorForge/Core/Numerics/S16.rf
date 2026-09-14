@@ -656,14 +656,11 @@ routine S16.signum() -> S16
 ### :returns: The value rendered as `Text`.
 @override
 routine S16.represent() -> Text
-  if me == 0s16
-    return "0"
-  if me > 0s16
-    return U16(me).represent()
-  # Use reinterpret_bits (not U16(me)) — U16.create(S16) throws on negative inputs,
-  # and we need the raw bit pattern so the two's-complement negation `0u16 -% bits`
-  # yields |me| (works correctly even for S16.MIN, whose absolute value overflows S16).
-  return "-" + (0u16 -% LLVM::reinterpret_bits[S16, U16](me)).represent()
+  # reinterpret (not U16(me)) so the two's-complement magnitude `0 -% bits` is correct even for S16.MIN.
+  var raw = LLVM::reinterpret_bits[S16, U16](me)
+  if me < 0s16
+    return int_to_text(mag: LLVM::zero_extend[U16, U64](0u16 -% raw), negative: true)
+  return int_to_text(mag: LLVM::zero_extend[U16, U64](raw), negative: false)
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.

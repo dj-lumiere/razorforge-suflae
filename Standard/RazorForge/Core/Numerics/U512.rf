@@ -9,7 +9,7 @@ import Collections
 # ============================================================================
 
 @llvm("i512")
-secret record U512 obeys FloorDivisible, Assignable, Copyable
+record U512 obeys FloorDivisible, Assignable, Copyable
   pass
 
 ### Assemble 8 U64 limbs (little-endian) into a U512.
@@ -115,6 +115,25 @@ routine U512.mod(you: U512) -> U512
       b: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
       rem: rem.hijack())
     return LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
+
+### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
+### calling `//` and `%` separately (each runs its own `knuth_divide[8]`). Caller guarantees `you != 0`
+### (matches `floordiv`/`mod`, which the single-limb path traps on for a zero divisor).
+### :param you: The divisor.
+### :returns: The tuple `(me // you, me % you)`.
+@readonly
+routine U512.divmod(you: U512) -> (U512, U512)
+  var av = me
+  var bv = you
+  var rem = Array[U64, 8]()
+  danger
+    var q = knuth_divide[8](
+      a: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U512], Hijacked[Array[U64, 8]]](bv.hijack()),
+      rem: rem.hijack())
+    var qv = LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](q.hijack()).peek()
+    var rv = LLVM::reinterpret_bits[Hijacked[Array[U64, 8]], Hijacked[U512]](rem.hijack()).peek()
+    return (qv, rv)
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 @override

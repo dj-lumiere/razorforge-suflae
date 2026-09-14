@@ -280,6 +280,33 @@ routine S128.mod!(you: S128) -> S128
     ur = LLVM::sub(a: bmag, b: ur)
   return LLVM::reinterpret_bits[U128, S128](ur)
 
+### (quotient, remainder) of euclidean `me // you` and `me % you` from ONE Knuth-D pass. `floordiv!`
+### and `mod!` each run their own `u128_floordiv`/`u128_mod`, so computing both costs TWO divisions;
+### this shares one `u128_divmod`. Remainder is always in `[0, |you|)`.
+### :param you: The divisor.
+### :returns: The euclidean tuple `(me // you, me % you)`.
+### :throws: {DivisionByZeroError} if `you == 0`; {IntegerOverflowError} if `me == S128_MIN` and `you == -1`.
+@readonly
+routine S128.divmod!(you: S128) -> (S128, S128)
+  if you == 0
+    throw DivisionByZeroError()
+  if me == S128_MIN and you == -1_s128
+    throw IntegerOverflowError()
+  var bmag = s128_abs_u128(x: you)
+  var dr = u128_divmod(a: s128_abs_u128(x: me), b: bmag)
+  var uq = dr.item0
+  var ur = dr.item1
+  var aneg = LLVM::signed_lt(a: me, b: 0_s128)
+  var bneg = LLVM::signed_lt(a: you, b: 0_s128)
+  if aneg and LLVM::int_ne(a: ur, b: 0_u128)
+    uq = LLVM::add(a: uq, b: 1_u128)
+    ur = LLVM::sub(a: bmag, b: ur)
+  var q = LLVM::reinterpret_bits[U128, S128](uq)
+  var r = LLVM::reinterpret_bits[U128, S128](ur)
+  if aneg == bneg
+    return (q, r)
+  return (LLVM::sub(a: 0_s128, b: q), r)
+
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
 routine S128.neg!() -> S128

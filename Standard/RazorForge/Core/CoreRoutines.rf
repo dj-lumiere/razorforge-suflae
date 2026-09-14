@@ -2,11 +2,14 @@ module Core
 
 ### A zero-initialized value of type `T` — every field/element set to zero (a null pointer for raw
 ### pointer fields). The buildtime footprint primitive behind the SoA collections: `SplitList`/
-### `SplitArray` start from `blank[T]()` and fill their columns. Sound only when `T obeys Splittable`
-### (a trivially-destructible footprint), so a zeroed instance owns nothing that needs teardown.
+### `SplitArray` start from `blank[T]()` and fill their columns. Gated on `T obeys Splittable` — a
+### trivially-destructible, blittable footprint — so the zeroed instance is ALWAYS a valid `T` that owns
+### nothing needing teardown. This is why the gate is ENFORCED, not advisory: a non-Splittable `T` with a
+### managed field would get an uninitialized lifecycle field (dangling handle → UAF/double-free on read or
+### destroy), so `blank` must not exist for it. Splittable is exactly the set where zero-bits is sound.
 ### :returns: A `T` with every byte zero.
 common routine T.blank() -> T
-needs AnyType T
+needs T obeys Splittable
   return LLVM::zeroed[T]()
 
 ### A freshly heap-allocated `T` entity whose whole footprint is zeroed — the reference-type analog of
@@ -165,19 +168,27 @@ needs U64 N
       var un_jn = if LLVM::int_eq(a: LLVM::add(a: j, b: n), b: mlen) then un_hi else LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::add(a: j, b: n)))
       var un_jn1 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: LLVM::add(a: j, b: n), b: 1_s64)))
 
-      # D3: estimate qhat, rhat from the top two dividend limbs / top divisor limb
+      # D3: estimate qhat, rhat from the top two dividend limbs / top divisor limb.
+      # rhat can legitimately reach up to 2*(2^64-1) here, which does NOT fit in a U64.
+      # Knuth's correction test only applies "while rhat < 2^64"; once rhat overflows a
+      # word the estimate is already final. `rhat` is a U64 so its overflow bit is lost on
+      # the `un_jn1 + vn1` add — track it explicitly in `rhat_ok` (true iff rhat < 2^64),
+      # else the all-ones-qhat case (un_jn == vn1) silently drops the carry and over-corrects.
       var qhat = 0_u64
       var rhat = 0_u64
+      var rhat_ok = true
       if LLVM::int_eq(a: un_jn, b: vn1)
         qhat = U64_MAX
         rhat = LLVM::add(a: un_jn1, b: vn1)
+        # carry-out of the word add ⇒ rhat >= 2^64 ⇒ skip the correction test entirely.
+        rhat_ok = LLVM::unsigned_ge(a: rhat, b: un_jn1)
       else
         var dr = div2by1(u1: un_jn, u0: un_jn1, d: vn1, v: vrec)
         qhat = dr.q
         rhat = dr.r
       # correct qhat: while qhat*vn2 > (rhat:un[j+n-2]) and rhat fits 64 bits
       var un_jn2 = LLVM::load_element_ref[Array[U64, N], U64](unp, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: LLVM::add(a: j, b: n), b: 2_s64)))
-      var keep = true
+      var keep = rhat_ok
       while keep
         var lhs = LLVM::mul(a: LLVM::zero_extend[U64, U128](qhat), b: LLVM::zero_extend[U64, U128](vn2))
         var rhs = LLVM::bit_or(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](rhat), 64_u128), b: LLVM::zero_extend[U64, U128](un_jn2))

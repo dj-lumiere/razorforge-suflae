@@ -104,6 +104,17 @@ public sealed partial class SemanticVerifier
     /// all nodes -> errors are already discarded by AnalyzeCompilerGeneratedBody's error-count guard.</summary>
     internal bool _isInCompilerGeneratedBody;
 
+    /// <summary>
+    /// Concrete type-parameter bindings for the compiler-generated body currently being re-analyzed
+    /// (<see cref="AnalyzeCompilerGeneratedBody"/>). Maps a generic parameter NAME (<c>T</c>, <c>N</c>) to
+    /// the concrete argument of the routine's owner instance (<c>T</c>→<c>Particle</c>). Consulted by the
+    /// type resolver BEFORE the global type lookup so a bare parameter reference in a re-SA'd member body of a
+    /// concrete generic instance (e.g. <c>var result = T.blank()</c> in <c>SplitList[Particle].getitem</c>)
+    /// resolves to the concrete argument — NOT to a same-named global user type (a <c>record T</c>), which
+    /// otherwise hijacks it (the generic-param-name-collision class). Null outside a compiler-generated body.
+    /// </summary>
+    internal Dictionary<string, TypeSymbol>? _compilerGeneratedTypeParamBindings;
+
     /// <summary>True while analyzing a synthesized derived-operator body (DerivedOperatorPass output).
     /// Instructs AnalyzeExpression to skip re-analysis of nodes that already have ResolvedType set,
     /// preserving the pre-annotations applied by DerivedOperatorPass.</summary>
@@ -2077,6 +2088,36 @@ public sealed partial class SemanticVerifier
             _registry.DeclareVariable(name: param.Name, type: param.Type);
         }
 
+        // Bind the owner type's generic parameters for this re-analysis. When re-analyzing a member body of a
+        // concrete generic instance (e.g. `SplitList[Particle].getitem`, `SplitArray[Point, 4].count`), bare
+        // parameter references must resolve to the concrete arguments, not be re-resolved from scratch:
+        //  - a TYPE param in type/callee position (`var result = T.blank()`) would otherwise resolve to a
+        //    same-named global user type (`record T` → the generic-param-name-collision) → wrong `result` type;
+        //  - a CONST param in value position (`return N`) would otherwise be "Unknown identifier N".
+        // Zip the generic DEFINITION's parameter names against the concrete owner's type args: const args go in
+        // the value scope (`DeclareVariable`), and ALL params go in `_compilerGeneratedTypeParamBindings` so the
+        // type resolver maps a bare `T`/`N` to its concrete argument before any global lookup.
+        Dictionary<string, TypeSymbol>? prevTypeParamBindings = _compilerGeneratedTypeParamBindings;
+        _compilerGeneratedTypeParamBindings = null;
+        if (routineInfo.GenericDefinition?.OwnerType?.GenericParameters is { } defParams &&
+            routineInfo.OwnerType?.TypeArguments is { } ownerArgs)
+        {
+            var bindings = new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal);
+            for (int i = 0; i < defParams.Count && i < ownerArgs.Count; i++)
+            {
+                bindings[key: defParams[index: i]] = ownerArgs[index: i];
+                if (ownerArgs[index: i] is ConstGenericValueTypeSymbol)
+                {
+                    _registry.DeclareVariable(name: defParams[index: i], type: ownerArgs[index: i]);
+                }
+            }
+
+            if (bindings.Count > 0)
+            {
+                _compilerGeneratedTypeParamBindings = bindings;
+            }
+        }
+
         // Suppress errors for synthesized bodies -> they are compiler-generated and correct by construction.
         // Any error indicates a compiler bug, not user code error, so we don't surface them.
         // _isInCompilerGeneratedBody bypasses the wired-routine direct-call guard so SA can fully
@@ -2094,6 +2135,7 @@ public sealed partial class SemanticVerifier
 
         _isInCompilerGeneratedBody = prevIsInCompilerGeneratedBody;
         _preservePresetTypes = prevPreservePresetTypes;
+        _compilerGeneratedTypeParamBindings = prevTypeParamBindings;
 
         _registry.ExitScope();
         _currentRoutine = prevRoutine;

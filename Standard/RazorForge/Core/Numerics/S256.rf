@@ -270,6 +270,34 @@ routine S256.mod!(you: S256) -> S256
     ur = LLVM::sub(a: bmag, b: ur)
   return LLVM::reinterpret_bits[U256, S256](ur)
 
+### (quotient, remainder) of euclidean `me // you` and `me % you` from ONE Knuth-D pass — half the
+### work of calling `//` and `%` separately. Remainder is always in `[0, |you|)`.
+### :param you: The divisor.
+### :returns: The euclidean tuple `(me // you, me % you)`.
+### :throws: {DivisionByZeroError} if `you == 0`; {IntegerOverflowError} if `me == S256_MIN` and `you == -1`.
+@readonly
+routine S256.divmod!(you: S256) -> (S256, S256)
+  if you == 0
+    throw DivisionByZeroError()
+  if me == S256_MIN and you == -1_s256
+    throw IntegerOverflowError()
+  var bmag = s256_abs_u256(x: you)
+  var dr = udivrem256(num: s256_abs_u256(x: me), den: bmag)
+  var uq = dr.q
+  var ur = dr.r
+  var aneg = LLVM::signed_lt(a: me, b: 0_s256)
+  var bneg = LLVM::signed_lt(a: you, b: 0_s256)
+  # euclidean: a negative dividend with a nonzero remainder bumps the quotient magnitude and
+  # reflects the remainder into [0, |you|) — both under the same condition, from the one division.
+  if aneg and LLVM::int_ne(a: ur, b: 0_u256)
+    uq = LLVM::add(a: uq, b: 1_u256)
+    ur = LLVM::sub(a: bmag, b: ur)
+  var q = LLVM::reinterpret_bits[U256, S256](uq)
+  var r = LLVM::reinterpret_bits[U256, S256](ur)
+  if aneg == bneg
+    return (q, r)
+  return (LLVM::sub(a: 0_s256, b: q), r)
+
 ### Returns `-me` (arithmetic negation), throwing on `S256_MIN`.
 ### :returns: The negated value.
 ### :throws: {IntegerOverflowError} if `me == S256_MIN`.

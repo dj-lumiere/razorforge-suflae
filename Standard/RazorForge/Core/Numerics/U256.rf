@@ -172,6 +172,35 @@ routine udiv128_by_u64_sticky(num: U128, den: U64) -> U128
     q = LLVM::bit_or(a: q, b: 1_u128)
   return q
 
+### Quotient of `num // den` when the caller GUARANTEES `hi(num) < den` (so the quotient
+### fits U64) — the sticky is baked into bit 0. A single normalized 2-by-1 divide: ONE x86
+### `divq` (or one M-G `div2by1` on arm64/wasm), NOT the two-limb long division of
+### `udiv128_by_u64_sticky`. Because `hi(num) < den ≤ 2^(64-s)` (s = clz(den)), the shift
+### `num << s` never spills past 128 bits, and the general routine's high-limb step would
+### divide `0:na1` → quotient 0 anyway, so it is pure overhead here. PRECONDITION: `hi(num) <
+### den` (else the result is wrong). D64's divide satisfies it — its digit-scaling caps the
+### quotient at ~18-19 digits (< 2^64).
+@inline
+routine udiv128_hi_lt_den_sticky(num: U128, den: U64) -> U128
+  var a0 = LLVM::int_truncate[U128, U64](num)
+  var a1 = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(num, 64_u128))
+  var s = LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(den))
+  var su = LLVM::reinterpret_bits[S64, U64](s)
+  var si = LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 64_s64, b: s))
+  var p = LLVM::signed_gt(a: s, b: 0_s64)
+  var dn = LLVM::shift_left(value: den, bits: su)
+  var vr = reciprocal_word(dn)
+  # hi(num) < den ⟹ (num << s) fits U128; the normalized high word na1 < dn, so one div2by1
+  # yields the full quotient. dr.r is the normalized remainder (true remainder << s), nonzero
+  # iff the true remainder is → correct sticky without denormalizing.
+  var na1 = LLVM::bit_or(a: LLVM::shift_left(value: a1, bits: su), b: if p then LLVM::shift_right_unsigned(a0, si) else 0_u64)
+  var na0 = LLVM::shift_left(value: a0, bits: su)
+  var dr = div2by1(u1: na1, u0: na0, d: dn, v: vr)
+  var q = LLVM::zero_extend[U64, U128](dr.q)
+  if LLVM::int_ne(a: dr.r, b: 0_u64)
+    q = LLVM::bit_or(a: q, b: 1_u128)
+  return q
+
 ### A 256-bit unsigned integer in the range 0 to 2²⁵⁶−1.
 ###
 ### `U256` is used for cryptographic computations, very large counters, and as a
@@ -468,6 +497,18 @@ routine U256.mod!(you: U256) -> U256
   if you == 0_u256
     throw DivisionByZeroError()
   return udivrem256(num: me, den: you).r
+
+### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
+### calling `//` and `%` separately (each runs its own full `udivrem256`). Throws on a zero divisor.
+### :param you: The divisor.
+### :returns: The tuple `(me // you, me % you)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+@readonly
+routine U256.divmod!(you: U256) -> (U256, U256)
+  if you == 0_u256
+    throw DivisionByZeroError()
+  var dr = udivrem256(num: me, den: you)
+  return (dr.q, dr.r)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)

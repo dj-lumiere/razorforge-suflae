@@ -51,7 +51,9 @@ dangerous routine Text.destroy()
     return
   var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
-    me.data.invalidate()
+    # data lives INSIDE the controller's block (see `text_alloc` co-allocation), so the single
+    # `ctrl.invalidate()` frees both the refcount header and the Character buffer — do NOT free
+    # `data` separately (it points mid-block).
     me.ctrl.invalidate()
   return
 
@@ -67,6 +69,27 @@ routine Text() -> Text
     ctrl: hijacked_none[FrozenController]()
   )
 
+### Allocates ONE block — a `FrozenController` (strong count = 1) header immediately followed by `count`
+### Characters — and returns a `Text` owning it, with `data` pointing just past the header. This is the
+### SOLE Text-buffer allocator: co-locating the refcount cell with the payload means one
+### `rf_allocate_dynamic` (and one `invalidate` in `destroy`) instead of two separate allocations. The
+### `FrozenController` is a single `U64 strong_count` at offset 0, so the block head IS the refcount cell;
+### `hold`/`unhold` drive atomics on it exactly as for a standalone controller. Callers fill the returned
+### `result.data` buffer (refcount is 1 and not yet shared) and return it. `count` MUST be > 0 — callers
+### special-case empty to `Text()`.
+### :param count: The number of Characters the buffer holds.
+### :returns: A `Text` owning a fresh co-allocated buffer of `count` Characters.
+routine text_alloc(count: U64) -> Text
+  danger
+    var header = FrozenController.data_size()
+    var ctrl = Hijacked[FrozenController](rf_allocate_dynamic(size: header + Character.data_size() * count))
+    ctrl.recast_as[U64]().poke(value: 1_u64)
+    return Text(
+      data: ctrl.recast_as[Character]().offset(bytes: header),
+      count: count,
+      ctrl: ctrl
+    )
+
 ### Creates text from a list of characters.
 ### The input characters are copied into a newly allocated immutable buffer.
 ### :param from_list: The characters to copy into the new text value.
@@ -75,33 +98,72 @@ routine Text(from_list: List[Character]) -> Text
   var n = from_list.count()
   if n == 0u64
     return Text()
+  var result = text_alloc(count: n)
   danger
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     var i: U64 = 0u64
     loop
       if i >= n
         break
-      buf.stride(count: S64(i)).poke(value: from_list[i])
+      result.data.stride(count: S64(i)).poke(value: from_list[i])
       i += 1u64
-    return Text(
-      data: buf,
-      count: n,
-      ctrl: FrozenController().hijack()
-    )
+  return result
 
 ### Creates text containing a single character.
 ### This is the most direct way to build one-character text values.
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
 routine Text(from_character: Character) -> Text
+  var result = text_alloc(count: 1u64)
   danger
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
-    buf.poke(value: from_character)
-    return Text(
-      data: buf,
-      count: 1u64,
-      ctrl: FrozenController().hijack()
-    )
+    result.data.poke(value: from_character)
+  return result
+
+### Creates text by copying `count` Characters from a raw span (e.g. a stack buffer). Exactly ONE
+### buffer allocation (+ controller) — no intermediate `List`/`add_first`, unlike `Text(from_list:)`.
+### Caller guarantees `from_span` has at least `count` Characters. Backs the fixed-width integer
+### `represent`s via `int_to_text`.
+### :param from_span: Pointer to the first Character to copy.
+### :param count: Number of Characters to copy.
+### :returns: The resulting `Text` value.
+routine Text(from_span: Hijacked[Character], count: U64) -> Text
+  if count == 0u64
+    return Text()
+  var result = text_alloc(count: count)
+  danger
+    var i: U64 = 0u64
+    loop
+      if i >= count
+        break
+      result.data.stride(count: LLVM::reinterpret_bits[U64, S64](i)).poke(value: from_span.stride(count: LLVM::reinterpret_bits[U64, S64](i)).peek())
+      i += 1u64
+  return result
+
+### Renders an unsigned magnitude (with an optional leading `-`) as decimal `Text` through a STACK
+### buffer: digits are written back-to-front into a fixed `Array[Character, 21]` (max 20 digits + sign),
+### then copied out in ONE `Text` allocation. No `List`, no O(n) `add_first`, no `"-" +` concat — the
+### three heap allocations the old `List[Character]` + `Text(from_list:)` + sign-concat path did per call
+### collapse to the one Text buffer. `// 10` / `% 10` are scalar-by-constant (backend reciprocal multiply).
+### Every fixed-width integer `represent` funnels through here.
+### :param mag: The absolute value to render (0..2⁶⁴−1).
+### :param negative: Whether to prefix a `-`.
+### :returns: the decimal rendering.
+routine int_to_text(mag: U64, negative: Bool) -> Text
+  if LLVM::int_eq(a: mag, b: 0u64)
+    return "0"
+  danger
+    var buf = Array[Character, 21]()
+    var p = LLVM::reinterpret_bits[Hijacked[Array[Character, 21]], Hijacked[Character]](buf.hijack())
+    var idx = 21_s64
+    var m = mag
+    while LLVM::int_ne(a: m, b: 0u64)
+      idx = LLVM::sub(a: idx, b: 1_s64)
+      var d = LLVM::int_truncate[U64, U32](LLVM::unsigned_rem(a: m, b: 10u64))
+      p.stride(count: idx).poke(value: Character(LLVM::add(a: 0x0030u32, b: d)))
+      m = LLVM::unsigned_div(a: m, b: 10u64)
+    if negative
+      idx = LLVM::sub(a: idx, b: 1_s64)
+      p.stride(count: idx).poke(value: Character(0x002Du32))
+    return Text(from_span: p.stride(count: idx), count: LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: 21_s64, b: idx)))
 
 ### Decodes UTF-8 text from a null-terminated C string.
 ### Invalid byte sequences are replaced with the Unicode replacement character.
@@ -246,23 +308,19 @@ routine Text.concat(other: Text) -> Text
   var n = me.count + other.count()
   if n == 0u64
     return Text()
+  var result = text_alloc(count: n)
   danger
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     if me.count > 0u64
-      rf_copy_bytes_at(dest: buf.address(), src: me.data.address(), size: Character.data_size() * me.count)
+      rf_copy_bytes_at(dest: result.data.address(), src: me.data.address(), size: Character.data_size() * me.count)
     var other_count = other.count()
     if other_count > 0u64
       var i: U64 = 0u64
       loop
         if i >= other_count
           break
-        buf.stride(count: S64(me.count + i)).poke(value: other[i])
+        result.data.stride(count: S64(me.count + i)).poke(value: other[i])
         i += 1u64
-    return Text(
-      data: buf,
-      count: n,
-      ctrl: FrozenController().hijack()
-    )
+  return result
 
 ### Returns the sum of this value and the other value.
 ### This is the operator form of `concat`.
@@ -282,20 +340,16 @@ routine Text.mul[I obeys Integral](count: I) -> Text
   if times == 0u64 or me.count == 0u64
     return Text()
   var n = me.count * times
+  var result = text_alloc(count: n)
   danger
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     var t: U64 = 0u64
     loop
       if t >= times
         break
-      var dest = buf.stride(count: S64(t * me.count))
+      var dest = result.data.stride(count: S64(t * me.count))
       rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Character.data_size() * me.count)
       t += 1u64
-    return Text(
-      data: buf,
-      count: n,
-      ctrl: FrozenController().hijack()
-    )
+  return result
 
 ### Returns whether both values are equal.
 ### Equality requires the same length and the same character at each position.

@@ -340,6 +340,7 @@ public partial class LlvmEmitter
     /// <summary>
     /// Gets the type of a literal expression from its token type.
     /// </summary>
+    // TODO: Kill this method
     private TypeSymbol? GetLiteralType(LiteralExpression literal)
     {
         string? typeName = literal.LiteralType switch
@@ -441,6 +442,7 @@ public partial class LlvmEmitter
     /// <summary>
     /// Gets the type bit width needed by this compiler phase.
     /// </summary>
+    // TODO: Kill this method
     private int GetTypeBitWidth(string llvmType)
     {
         return llvmType switch

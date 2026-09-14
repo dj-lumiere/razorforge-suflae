@@ -656,14 +656,11 @@ routine S32.is_power_of_two() -> Bool
 ### :returns: The value rendered as `Text`.
 @override
 routine S32.represent() -> Text
-  if me == 0s32
-    return "0"
-  if me > 0s32
-    return U32(me).represent()
-  # Use reinterpret_bits (not U32(me)) — U32.create(S32) throws on negative inputs,
-  # and we need the raw bit pattern so the two's-complement negation `0u32 -% bits`
-  # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
-  return "-" + (0u32 -% LLVM::reinterpret_bits[S32, U32](me)).represent()
+  # reinterpret (not U32(me)) so the two's-complement magnitude `0 -% bits` is correct even for S32.MIN.
+  var raw = LLVM::reinterpret_bits[S32, U32](me)
+  if me < 0s32
+    return int_to_text(mag: LLVM::zero_extend[U32, U64](0u32 -% raw), negative: true)
+  return int_to_text(mag: LLVM::zero_extend[U32, U64](raw), negative: false)
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.

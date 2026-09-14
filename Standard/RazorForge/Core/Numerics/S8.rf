@@ -662,14 +662,11 @@ routine S8.signum() -> S8
 ### :returns: The value rendered as `Text`.
 @override
 routine S8.represent() -> Text
-  if me == 0s8
-    return "0"
-  if me > 0s8
-    return U8(me).represent()
-  # Use reinterpret_bits (not U8(me)) — U8.create(S8) throws on negative inputs,
-  # and we need the raw bit pattern so the two's-complement negation `0u8 -% bits`
-  # yields |me| (works correctly even for S8.MIN, whose absolute value overflows S8).
-  return "-" + (0u8 -% LLVM::reinterpret_bits[S8, U8](me)).represent()
+  # reinterpret (not U8(me)) so the two's-complement magnitude `0 -% bits` is correct even for S8.MIN.
+  var raw = LLVM::reinterpret_bits[S8, U8](me)
+  if me < 0s8
+    return int_to_text(mag: LLVM::zero_extend[U8, U64](0u8 -% raw), negative: true)
+  return int_to_text(mag: LLVM::zero_extend[U8, U64](raw), negative: false)
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.

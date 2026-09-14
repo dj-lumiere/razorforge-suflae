@@ -647,7 +647,7 @@ routine U8.is_odd() -> Bool
 ### :returns: The value rendered as `Text`.
 @override
 routine U8.represent() -> Text
-  return U32(me).represent()
+  return int_to_text(mag: LLVM::zero_extend[U8, U64](me), negative: false)
 
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.

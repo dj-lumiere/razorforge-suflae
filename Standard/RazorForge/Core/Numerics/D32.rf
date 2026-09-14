@@ -267,6 +267,30 @@ routine D32.is_zero() -> Bool
 # Finalize: round to Pmax=7, clamp exponent to [-101, 90] (overflow -> inf,
 # underflow -> round-off / zero), then strip/pad toward the preferred exponent.
 # ============================================================================
+### Largest `j` in `[0, cap]` such that `10^j` divides `c` (caller guarantees `c != 0`), the U64
+### twin of `trailing_zeros10_u128`: cap at the hardware `cttz` (decimal tz ≤ binary tz, so odd `c`
+### returns 0 with no wide work), exact-divide fast path, else 5-step binary descent. Lets decfin32
+### strip a scaled divide quotient's trailing zeros in one reciprocal-multiply, not per-digit ÷10.
+routine trailing_zeros10_u64(c: U64, cap0: S64) -> S64
+  var cap = if LLVM::signed_lt(a: cap0, b: 19_s64) then cap0 else 19_s64
+  var t2 = LLVM::reinterpret_bits[U64, S64](LLVM::trailing_zeros(c))
+  if LLVM::signed_lt(a: t2, b: cap)
+    cap = t2
+  if LLVM::signed_le(a: cap, b: 0_s64)
+    return 0_s64
+  if LLVM::int_eq(a: LLVM::mul(a: div_pow10_u64(x: c, k: cap), b: p10_u64(k: cap)), b: c)
+    return cap
+  var tz = 0_s64
+  var hi = LLVM::sub(a: cap, b: 1_s64)
+  var probe = 16_s64
+  while LLVM::signed_ge(a: probe, b: 1_s64)
+    var cand = LLVM::add(a: tz, b: probe)
+    if LLVM::signed_le(a: cand, b: hi)
+      if LLVM::int_eq(a: LLVM::mul(a: div_pow10_u64(x: c, k: cand), b: p10_u64(k: cand)), b: c)
+        tz = cand
+    probe = LLVM::signed_div(a: probe, b: 2_s64)
+  return tz
+
 ### Finalize a working (coeff, exp) into a valid decimal32 D32Parts: round to Pmax=7 digits,
 ### clamp exponent to [-101, 90], round-half-even, then strip/pad toward pref.
 ### :param sign: result sign.
@@ -320,10 +344,13 @@ routine decfin32(sign: Bool, coeff: U64, exp: S64, pref: S64) -> D32Parts
   if LLVM::int_eq(a: c, b: 0_u64)
     var ez2 = if LLVM::signed_lt(a: e, b: -101_s64) then -101_s64 else e
     return D32Parts(sign: sign, special: 0_u64, exp: ez2, coeff: 0_u64)
-  # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 7 digits
-  while LLVM::signed_lt(a: e, b: pref) and LLVM::int_eq(a: LLVM::unsigned_rem(a: c, b: 10_u64), b: 0_u64)
-    c = LLVM::unsigned_div(a: c, b: 10_u64)
-    e = LLVM::add(a: e, b: 1_s64)
+  # strip trailing zeros toward pref (raise e); pad toward pref (lower e) within 7 digits.
+  # Batched: count trailing zeros (capped at pref-e) and divide them off in one reciprocal-
+  # multiply instead of one U64 ÷10 per digit — matches decfin64/decfinB/decfinA.
+  if LLVM::signed_lt(a: e, b: pref)
+    var tz = trailing_zeros10_u64(c: c, cap0: LLVM::sub(a: pref, b: e))
+    c = div_pow10_u64(x: c, k: tz)
+    e = LLVM::add(a: e, b: tz)
   while LLVM::signed_gt(a: e, b: pref) and LLVM::unsigned_lt(a: c, b: p10_u64(k: 6_s64)) and LLVM::signed_le(a: e, b: 90_s64)
     c = LLVM::mul(a: c, b: 10_u64)
     e = LLVM::sub(a: e, b: 1_s64)

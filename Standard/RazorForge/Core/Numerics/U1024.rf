@@ -4,12 +4,13 @@ import Collections
 
 # ============================================================================
 # U1024 — raw 1024-bit unsigned integer, the widest software-kernel intermediate
-# (e.g. decimal512 / F512 division numerators). Pure integer; division uses the
-# base-2⁶⁴ Knuth-D kernel (`knuth_divide[16]`), not inline `udiv i1024`.
+# (e.g. the D256/Decimal U512 reciprocal-multiply widening, mulhi via U1024).
+# Pure integer; division uses the base-2⁶⁴ Knuth-D kernel (`knuth_divide[16]`),
+# not inline `udiv i1024`.
 # ============================================================================
 
 @llvm("i1024")
-secret record U1024 obeys FloorDivisible, Assignable, Copyable
+record U1024 obeys FloorDivisible, Assignable, Copyable
   pass
 
 ### Returns me // you via the generic base-2⁶⁴ Knuth-D kernel (`knuth_divide[16]`,
@@ -36,6 +37,24 @@ routine U1024.mod(you: U1024) -> U1024
       b: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
       rem: rem.hijack())
     return LLVM::reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).peek()
+
+### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
+### calling `//` and `%` separately (each runs its own `knuth_divide[16]`). Caller guarantees `you != 0`.
+### :param you: The divisor.
+### :returns: The tuple `(me // you, me % you)`.
+@readonly
+routine U1024.divmod(you: U1024) -> (U1024, U1024)
+  var av = me
+  var bv = you
+  var rem = Array[U64, 16]()
+  danger
+    var q = knuth_divide[16](
+      a: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U1024], Hijacked[Array[U64, 16]]](bv.hijack()),
+      rem: rem.hijack())
+    var qv = LLVM::reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](q.hijack()).peek()
+    var rv = LLVM::reinterpret_bits[Hijacked[Array[U64, 16]], Hijacked[U1024]](rem.hijack()).peek()
+    return (qv, rv)
 
 ### Diagnostic name (raw wide intermediate; not decimal-formatted).
 @override

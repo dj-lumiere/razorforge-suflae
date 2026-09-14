@@ -145,9 +145,25 @@ needs FlagsType T
     result.add_last(value: LLVM::reinterpret_bits[U64, Me]($valueof(c)))
   return result
 
-### Choice/Flags `count()` is NOT a template: it is emitted as a BUILDTIME CONSTANT (`return <N>_u64`)
-### by WiredRoutinePass.BuildCountBody — the declared case/member count is known at build time, so there
-### is no runtime `caseof` unroll + increment.
+### Choice/Flags `count()`: the number of declared cases/members. `caseof` unrolls at buildtime into one
+### `n +% 1` per declared case, so the sum constant-folds to the case count — no runtime iteration remains.
+### Written as a template (not a synthesized buildtime constant) so the demand collector materializes a real
+### body; `+%` wraps rather than checks, though a declared-case count never approaches U64 overflow.
+@overridable
+routine T.count() -> U64
+needs ChoiceType T
+  var n = 0u64
+  expand c in caseof(T)
+    n = n +% 1u64
+  return n
+
+@overridable
+routine T.count() -> U64
+needs FlagsType T
+  var n = 0u64
+  expand c in caseof(T)
+    n = n +% 1u64
+  return n
 
 ### Tuple `represent()`: the SPECIAL tuple format `(v0, v1, …)` — no type name, no field names, each
 ### element via its own `represent`. Distinct from the record `TypeName(field: value)` shape, hence the
@@ -314,6 +330,14 @@ needs ChoiceType T
 routine T.cmp(you: T) -> ComparisonSign
 needs ChoiceType T
   return S32(from: me).cmp(you: S32(from: you))
+
+### Choice `hash`: a choice IS its S32 discriminant, so hashing reinterprets to the integral identity
+### (`S64(from: me)`, the ChoiceType conversion) and defers to the hand-written `S64` keyed hash. Without
+### this override the call binds to the abstract `Hashable.hash` and the protocol type leaks to codegen.
+@override
+routine T.hash(k0: U64, k1: U64) -> U64
+needs ChoiceType T
+  return S64(from: me).hash(k0: k0, k1: k1)
 
 ### Flags `eq`: EXACT bitmask equality (`perms == READ` means "exactly READ, nothing else"). A flags value
 ### is a SET of bits, so membership/subset ("is READ on?") is the separate `in` operator, never `==`. Like

@@ -344,8 +344,8 @@ routine Decimal(from: U256) -> Decimal
 # Creators — binary floats. Routed through D128 (the matched float->decimal engine,
 # correctly rounded): F16/F32/F64 are captured well within D128's 34 digits
 # (round-trip-exact); F128 is correctly rounded to 34 digits. inf/NaN pass through
-# the D128 -> Decimal parts path. A full 70-digit binary->decimal would need an F512
-# widening primitive (`to_f512a` only accepts the native 512-engine uf) — future work.
+# the D128 -> Decimal parts path. A full 70-digit binary->decimal would need a widening
+# primitive into the W=320 engine (the widest surviving float engine) — future work.
 # ============================================================================
 
 ### Binary float -> Decimal (correctly rounded via D128).
@@ -368,7 +368,7 @@ routine Decimal(from: F128) -> Decimal
 # ============================================================================
 # Creators — IEEE decimals (D32/D64/D128). Exact: the source coefficient (<= 34
 # digits) and exponent transfer directly into the 70-digit cohort; inf/NaN pass
-# through. Routed via the decoded parts, NOT binary F512 (decimals aren't exact
+# through. Routed via the decoded parts, NOT a binary float (decimals aren't exact
 # in binary).
 # ============================================================================
 

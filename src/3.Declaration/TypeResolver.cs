@@ -445,6 +445,17 @@ internal sealed class TypeResolver
             return ResolveGenericType(typeExpr: typeExpr);
         }
 
+        // Compiler-generated re-analysis (AnalyzeCompilerGeneratedBody) of a CONCRETE generic instance's
+        // member body binds each parameter name to its concrete argument. Resolve a bare parameter reference
+        // to that concrete argument BEFORE any global lookup — the concrete owner is not a generic-definition
+        // scope, so the definition-param shadow below does NOT fire, and a same-named global user type
+        // (`record T`) would otherwise hijack `T` in `var result = T.blank()` (generic-param-name-collision).
+        if (_sa._compilerGeneratedTypeParamBindings is { } cgBindings &&
+            cgBindings.TryGetValue(key: typeExpr.Name, value: out TypeSymbol? boundArg))
+        {
+            return boundArg;
+        }
+
         // Generic parameters SHADOW same-named global types. A parameter's NAME is only a source
         // label; its identity is its positional SLOT in the enclosing scope. So resolve an in-scope
         // parameter BEFORE any global lookup — otherwise a user type whose name matches a stdlib

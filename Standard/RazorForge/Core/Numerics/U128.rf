@@ -287,6 +287,39 @@ routine U128.mod!(you: U128) -> U128
     throw DivisionByZeroError()
   return u128_mod(a: me, b: you)
 
+### (quotient, remainder) of `a // b` and `a % b` from ONE `knuth_divide[2]` pass. PRECONDITION: `b != 0`.
+routine u128_divmod(a: U128, b: U128) -> (U128, U128)
+  var av = a
+  var bv = b
+  var rem = Array[U64, 2]()
+  var qlo = 0_u64
+  var qhi = 0_u64
+  var rlo = 0_u64
+  var rhi = 0_u64
+  danger
+    var q = knuth_divide[2](
+      a: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U128], Hijacked[Array[U64, 2]]](bv.hijack()),
+      rem: rem.hijack())
+    qlo = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 0_u64)
+    qhi = LLVM::load_element_ref[Array[U64, 2], U64](q.hijack(), 1_u64)
+    rlo = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 0_u64)
+    rhi = LLVM::load_element_ref[Array[U64, 2], U64](rem.hijack(), 1_u64)
+  var qv = LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](qhi), 64_u128), LLVM::zero_extend[U64, U128](qlo))
+  var rv = LLVM::bit_or(LLVM::shift_left(LLVM::zero_extend[U64, U128](rhi), 64_u128), LLVM::zero_extend[U64, U128](rlo))
+  return (qv, rv)
+
+### (quotient, remainder) of `me // you` and `me % you` from ONE Knuth-D pass — half the work of
+### calling `//` and `%` separately. Throws on a zero divisor.
+### :param you: The divisor.
+### :returns: The tuple `(me // you, me % you)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+@readonly
+routine U128.divmod!(you: U128) -> (U128, U128)
+  if you == 0_u128
+    throw DivisionByZeroError()
+  return u128_divmod(a: me, b: you)
+
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================

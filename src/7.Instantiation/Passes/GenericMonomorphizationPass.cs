@@ -2111,6 +2111,30 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             registry: ctx.Registry,
             enclosingRoutine: resolvedRoutine);
 
+        // Member routine of an EXPAND-STORAGE (SoA) type — SplitArray[T, N] / SplitList[T], whose columns are
+        // decl-position `expand m in allmemvarof(T)`. Its body CANNOT be SA'd as a generic-def template (`me[i]`
+        // / `me.$nameof(m)` need the per-instance columns, materialized only once T is concrete via
+        // ExpandSoAColumns), so the source AST above is RAW — substitution alone leaves operands untyped
+        // (`var result = "..."` has no type → the `.iter()`/`.add` chain reaches codegen unresolved). The
+        // concrete owner ALREADY carries its columns at this point (ExpandSoAColumns ran at type resolution), so
+        // re-analyze the substituted body in the concrete owner's context — the same treatment a materialized
+        // derive template gets. A normal generic (List[T]) is SA'd as a template → already typed → this gate
+        // (ExpandTemplates non-empty) skips it.
+        TypeSymbol? defOwner = resolvedRoutine.GenericDefinition?.OwnerType;
+        bool ownerHasExpandStorage = defOwner switch
+        {
+            RecordTypeSymbol r => r.ExpandTemplates.Count > 0,
+            EntityTypeSymbol e => e.ExpandTemplates.Count > 0,
+            _ => false
+        };
+        if (ownerHasExpandStorage && ctx.AnalyzeMaterializedDeriveBody is { } analyze)
+        {
+            rewrittenDecl = rewrittenDecl with
+            {
+                Body = analyze(arg1: resolvedRoutine, arg2: rewrittenDecl.Body)
+            };
+        }
+
         ctx.InstantiatedGenericBodies[key: resolvedRoutine.RegistryKey] = new MonomorphizedBody(
             Ast: rewrittenDecl,
             Info: resolvedRoutine,

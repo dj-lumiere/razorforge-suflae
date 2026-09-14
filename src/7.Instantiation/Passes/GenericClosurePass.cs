@@ -3,6 +3,7 @@ using Builder.Desugaring;
 using Builder.Desugaring.Passes;
 using Builder.Lowering;
 using Builder.Lowering.Passes;
+using SyntaxTree;
 
 namespace Builder.Instantiation.Passes;
 
@@ -185,6 +186,19 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
     internal static void LowerFreshBodies(InstantiationContext ctx, DesugaringContext adapter,
         Dictionary<string, MonomorphizedBody> freshBodies)
     {
+        foreach (var kv in freshBodies)
+        {
+            if (kv.Key.Contains("SplitArray") && kv.Key.Contains("represent"))
+            {
+                bool hasRange = false, rangeTyped = true;
+                if (kv.Value.Ast?.Body != null)
+                    AstWalker.WalkExpressions(root: kv.Value.Ast.Body, visit: e =>
+                    {
+                        if (e is CreatorExpression ce && (ce.ConstructedType?.Name?.Contains("Range") ?? false)) hasRange = true;
+                    });
+                File.AppendAllText(@"L:\tmp_soa.txt", $"[LFB-SPLIT] {kv.Key} inFresh=yes\n");
+            }
+        }
         // Preset inlining for instantiated bodies (pull/(B) demand path): GMP clones from a template that,
         // under the demand flip, may not have been preset-inlined before monomorphization, so a preset
         // (e.g. ENTRY_LIVE in a Dict/Set body) survives into the instance and reaches codegen. Inline first —

@@ -115,24 +115,29 @@ routine LLVM::float_narrow[From, To](value: From) -> To
 ###
 ### ONLY valid for types that fit a general-register class (≤ 128 bits, plus float/double). The
 ### `=r` constraint has no register class for wider integers, so on x86 i256 CRASHES instruction
-### selection — use `do_not_optimize_wide` for `S256`/`U256`/`F256`.
+### selection — use `do_not_optimize_wide(addr: x.hijack())` for `S256`/`U256`/`F256` and wider.
 ### :param value: The value to keep live and opaque.
 ### :returns: `value`, bit-for-bit unchanged.
 @llvm_ir("{result} = call {T} asm sideeffect \"\", \"=r,0\"({T} {value})")
 routine LLVM::do_not_optimize[T](value: T) -> T
 
-### Optimizer barrier for i256-carrier types (`S256`/`U256`/`F256`) — `do_not_optimize`'s `=r`
-### constraint has no register class for i256 and CRASHES instruction selection. This makes only the
-### low 64 bits opaque (an `=r,0` register barrier on the truncated limb) and ORs them back with the
-### untouched high 192 bits: the whole i256 becomes opaque to the optimizer (it can't prove the low
-### limb, so `a OP a` can't be folded or hoisted) with NO memory traffic — no `alloca` (the earlier
-### volatile/alloca version allocated per loop iteration and overflowed the stack). The `sideeffect`
-### asm can't be hoisted out of a loop, so the value is recomputed each iteration. A few i256
-### bit-ops of overhead (and/trunc/zext/or) — calibrate it out with a `*_null` baseline if needed.
-### i256-WIDTH ONLY (the i256/i64 widths are hardcoded). :param value: kept live and opaque.
-### :returns: `value`, bit-for-bit unchanged.
-@llvm_ir("{result} = and i256 {value}, -18446744073709551616\n  {result} = trunc i256 {value} to i64\n  {result} = call i64 asm sideeffect \"\", \"=r,0\"(i64 {prev})\n  {result} = zext i64 {prev} to i256\n  {result} = or i256 {prev}, {first}")
-routine LLVM::do_not_optimize_wide[T](value: T) -> T
+### Optimizer barrier for wide integer-carrier types (`S256`/`U256`/`F256` and every wider carrier —
+### i384/i512/i768/i1024), passed BY POINTER. `do_not_optimize`'s `=r` register barrier has no register
+### class for integers wider than 64 bits (instruction-selection CRASH), and a low-limb `and/trunc/zext/
+### or` workaround costs several WIDE bit-ops per call — which dominates the measurement once the carrier
+### is this big. This instead passes a POINTER to the value through an empty `sideeffect` asm with a
+### `~{memory}` clobber: the optimizer must assume the asm reads and writes `*addr`, so no computation
+### feeding the value can be folded, hoisted, strength-reduced, or dead-code-eliminated, and the value
+### can't be cached across the call. Only a `ptr` crosses the asm boundary (no register-class
+### constraint), so this ONE intrinsic is width-GENERIC — every carrier width, ZERO wide-integer
+### overhead. Google Benchmark's `DoNotOptimize` in-memory path / `ClobberMemory` in one shot.
+###
+### No `alloca` in the template — the backing slot is the caller's own `var` (one entry-block alloca,
+### NOT per-iteration), so the earlier stack-overflow footgun can't recur. Pass `sink.hijack()` with the
+### sink hoisted out of the bench loop; the `sideeffect` asm can't be hoisted, so the op is re-measured
+### each iteration. :param addr: a pointer to the value to keep live and opaque (typically `x.hijack()`).
+@llvm_ir("call void asm sideeffect \"\", \"r,~{memory}\"(ptr {addr})")
+dangerous routine LLVM::do_not_optimize_wide[T](addr: Hijacked[T])
 
 # ============================================================================
 # Integer Arithmetic Instructions
@@ -597,6 +602,49 @@ routine LLVM::pow[T](base: T, exp: T) -> T
 ### :returns: A value combining the magnitude of `value` and the sign of `sign`.
 @llvm_ir("{result} = call {T} @llvm.copysign.{T}({T} {value}, {T} {sign})")
 routine LLVM::copysign[T](value: T, sign: T) -> T
+### Fused multiply-add `a*b + c` with a single rounding (hardware FMA).
+### :returns: `a*b + c` rounded once.
+@llvm_ir("{result} = call {T} @llvm.fma.{T}({T} {a}, {T} {b}, {T} {c})")
+routine LLVM::fma[T](a: T, b: T, c: T) -> T
+### Returns `2` raised to `value`.
+@llvm_ir("{result} = call {T} @llvm.exp2.{T}({T} {value})")
+routine LLVM::exp2[T](value: T) -> T
+### Returns the base-2 logarithm of `value`.
+@llvm_ir("{result} = call {T} @llvm.log2.{T}({T} {value})")
+routine LLVM::log2[T](value: T) -> T
+### Rounds `value` to the nearest integral value, ties to even (current rounding mode).
+@llvm_ir("{result} = call {T} @llvm.rint.{T}({T} {value})")
+routine LLVM::rint[T](value: T) -> T
+### Returns the tangent of `value` (radians).
+@llvm_ir("{result} = call {T} @llvm.tan.{T}({T} {value})")
+routine LLVM::tan[T](value: T) -> T
+### Returns the arcsine of `value`.
+@llvm_ir("{result} = call {T} @llvm.asin.{T}({T} {value})")
+routine LLVM::asin[T](value: T) -> T
+### Returns the arccosine of `value`.
+@llvm_ir("{result} = call {T} @llvm.acos.{T}({T} {value})")
+routine LLVM::acos[T](value: T) -> T
+### Returns the arctangent of `value`.
+@llvm_ir("{result} = call {T} @llvm.atan.{T}({T} {value})")
+routine LLVM::atan[T](value: T) -> T
+### Returns the two-argument arctangent of `a/b` (a=y, b=x), quadrant-aware.
+@llvm_ir("{result} = call {T} @llvm.atan2.{T}({T} {a}, {T} {b})")
+routine LLVM::atan2[T](a: T, b: T) -> T
+### Returns the hyperbolic sine of `value`.
+@llvm_ir("{result} = call {T} @llvm.sinh.{T}({T} {value})")
+routine LLVM::sinh[T](value: T) -> T
+### Returns the hyperbolic cosine of `value`.
+@llvm_ir("{result} = call {T} @llvm.cosh.{T}({T} {value})")
+routine LLVM::cosh[T](value: T) -> T
+### Returns the hyperbolic tangent of `value`.
+@llvm_ir("{result} = call {T} @llvm.tanh.{T}({T} {value})")
+routine LLVM::tanh[T](value: T) -> T
+### Returns the IEEE-754 minNum of `a` and `b` (NaN-ignoring).
+@llvm_ir("{result} = call {T} @llvm.minnum.{T}({T} {a}, {T} {b})")
+routine LLVM::minnum[T](a: T, b: T) -> T
+### Returns the IEEE-754 maxNum of `a` and `b` (NaN-ignoring).
+@llvm_ir("{result} = call {T} @llvm.maxnum.{T}({T} {a}, {T} {b})")
+routine LLVM::maxnum[T](a: T, b: T) -> T
 
 # ============================================================================
 # Atomic Operations

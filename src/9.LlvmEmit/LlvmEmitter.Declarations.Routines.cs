@@ -627,7 +627,20 @@ public partial class LlvmEmitter
             { IsGenericDefinition: false, TypeArguments.Count: > 0 };
         bool isCompilerGenerated = routine.IsSynthesized || routine.IsWiredMemberRoutine ||
                                    ownerIsMonomorphizedInstance;
-        string linkagePrefix = isCompilerGenerated && !_baseMode
+        // Whole-program (non-base) OPTIMIZING builds: give EVERY routine internal linkage, not just
+        // compiler-generated ones. With external linkage LLVM keeps hand-written stdlib helpers
+        // (to_bits/from_bits/decode/f64_signbit/decfin32/...) as standalone interposable symbols and is
+        // far more conservative about inlining/DCE-ing them; internal linkage lets the O2/O3 cost-inliner
+        // flatten the small ones and GlobalDCE strip the dead originals (measured ~20-35% on the heavier
+        // decimal<->float conversions, whose helper chains are deepest). The sole real entry is @main
+        // (emitted separately, external); it calls start() WITHIN the module, and GC hooks are reached by
+        // function-pointer (already internal when compiler-generated), so nothing needs external linkage in
+        // a whole-program executable. Debug keeps the prior linkage (compiler-generated internal only) for
+        // stable breakpoints; base mode keeps external for the resident base/delta split.
+        bool optimizing = _buildMode is RfBuildMode.Release or RfBuildMode.ReleaseTime
+            or RfBuildMode.ReleaseSpace;
+        bool internalize = !_baseMode && (isCompilerGenerated || optimizing);
+        string linkagePrefix = internalize
             ? "internal "
             : "";
         return (isCompilerGenerated, linkagePrefix);
