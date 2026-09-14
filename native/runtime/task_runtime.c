@@ -4,6 +4,11 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h> /* shared completion-order counter for race! winner selection */
+
+/* Monotonic completion-order counter DEFINED in coro_runtime.c, shared so a thread task's and a
+ * coroutine's completion stamps are directly comparable in a mixed race! (see rf_race_wait). */
+extern _Atomic uint64_t g_rf_completion_seq;
 
 #ifdef _WIN32
 #include <process.h>
@@ -67,6 +72,8 @@ struct rf_task
 {
     rf_task_kind kind;
     rf_task_status status;
+    uint64_t completion_seq;   /* global completion-order stamp; UINT64_MAX until completed. race!
+                                * picks the smallest seq among completed competitors (first-to-finish). */
     rf_task_completion completion;
 
     rf_Bool cancel_requested;
@@ -170,6 +177,13 @@ static rf_Bool rf_task_is_completed(rf_task* task)
 static void rf_task_signal_completion(rf_task* task)
 {
     if (task == NULL) return;
+
+    /* Stamp the global completion order before waking any awaiter/race, so race! can rank this task
+     * against its competitors by finish time. All completion sites (value/error/cancel/timeout) set
+     * status=COMPLETED then call this exactly once, so stamp idempotently (guard on the sentinel). */
+    if (task->completion_seq == (uint64_t)-1) {
+        task->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
+    }
 
     /* Wake a coroutine awaiting this task (if one parked via rf_task_await_coro). Done under
      * coro_lock and BEFORE the thread-backend signal: register-vs-complete is race-free because
@@ -488,6 +502,7 @@ rf_task* rf_task_create(rf_task_kind kind)
 
     task->kind = kind;
     task->status = RF_TASK_NEW;
+    task->completion_seq = (uint64_t)-1; /* not completed yet (never the min in race!'s winner scan) */
     task->completion.kind = RF_TASK_COMPLETION_PENDING;
     task->task_id = rf_next_task_id++;
     rf_mutex_init(&task->coro_lock);
@@ -586,6 +601,12 @@ rf_task_status rf_task_status_get(rf_task* task)
 {
     if (task == NULL) return RF_TASK_COMPLETED;
     return task->status;
+}
+
+uint64_t rf_task_completion_seq(rf_task* task)
+{
+    if (task == NULL) return (uint64_t)-1;
+    return task->completion_seq;
 }
 
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task)

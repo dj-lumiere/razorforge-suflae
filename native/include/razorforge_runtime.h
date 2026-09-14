@@ -178,6 +178,9 @@ void rf_cyclic_unlock_shared(void);
 
 rf_task_kind rf_task_kind_get(rf_task* task);
 rf_task_status rf_task_status_get(rf_task* task);
+/* Global completion-order stamp (shared with coroutines); UINT64_MAX until the task completes. Used by
+ * race! (rf_race_wait) to pick the first-to-finish competitor rather than the lowest-indexed one. */
+uint64_t rf_task_completion_seq(rf_task* task);
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task);
 void* rf_task_result_payload(rf_task* task);
 void* rf_task_error_payload(rf_task* task);

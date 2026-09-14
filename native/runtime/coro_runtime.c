@@ -145,6 +145,12 @@ struct rf_coro {
                                     * across a competitor set, tolerating spurious wakes).          */
     void* shadow_stack;            /* this coroutine's RF-level call-chain shadow stack (migrates
                                     * with it across workers); NULL when tracing is off         */
+    uint64_t completion_seq;       /* global completion order stamp (g_rf_completion_seq) written
+                                    * JUST BEFORE status=COMPLETED, so any observer of COMPLETED
+                                    * also sees the seq. UINT64_MAX until completed. race! picks the
+                                    * SMALLEST seq among completed competitors (first-to-finish) so
+                                    * the winner is order-correct even when a delayed scan sees
+                                    * several already completed (the macOS coros-race bug).        */
 #if defined(_WIN32)
     void* fiber;                   /* Windows fiber backing this coroutine (CreateFiberEx)        */
     void* resumer_fiber;           /* fiber to switch back to on yield/finish                     */
@@ -155,6 +161,10 @@ struct rf_coro {
     size_t stack_region_size;      /* byte length of stack_region; 0 if libco malloc'd it itself */
 #endif
 };
+
+/* Monotonic completion-order counter (defined below, near rf_race_wait). Forward-declared here
+ * because the coroutine completion paths above stamp completion_seq before its definition. */
+extern _Atomic uint64_t g_rf_completion_seq;
 
 /* The coroutine currently executing on THIS OS thread. NULL when running ordinary (non-coroutine)
  * code. Set by resume immediately before switching in so the trampoline, yield, cf_push/pop,
@@ -193,6 +203,7 @@ static void __stdcall rf_coro_fiber_proc(void* param)
 {
     rf_coro* self = (rf_coro*)param;
     self->entry(self->userdata);
+    self->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
     self->status = RF_CORO_COMPLETED;
     SwitchToFiber(self->resumer_fiber);
 }
@@ -213,6 +224,7 @@ static void rf_coro_trampoline(void)
 {
     rf_coro* self = g_current_coro;
     self->entry(self->userdata);
+    self->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
     self->status = RF_CORO_COMPLETED;
     co_switch(self->resumer);
 }
@@ -278,6 +290,7 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
     coro->timer_idx = -1; /* not on any timer heap yet (calloc's 0 would alias heap slot 0) */
+    coro->completion_seq = (uint64_t)-1; /* not completed yet (never the min in race!'s winner scan) */
     coro->shadow_stack = __rf_stack_coro_create(); /* NULL when tracing is off */
 
 #if defined(_WIN32)
@@ -360,6 +373,7 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
      * still make progress (yield becomes a no-op). */
     coro->status = RF_CORO_RUNNING;
     coro->entry(coro->userdata);
+    coro->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
     coro->status = RF_CORO_COMPLETED;
     return RF_CORO_COMPLETED;
 #endif
@@ -1833,6 +1847,11 @@ void rf_race_add_task(rf_race* r, rf_task* t) { rf_race_push(r, (void*)t, 1); }
 //     are harmless — we re-poll the whole set under the lock.
 // Either way a cross-waker is armed per thread competitor so the worker's deadlock detector stays quiet
 // while those run on their own OS threads.
+/* Monotonic completion-order counter shared by coroutines AND tasks (task_runtime.c externs it), so a
+ * coroutine's and a thread's completion stamps are directly comparable in a mixed race. Starts at 1 so
+ * 0 is never a valid stamp and an uninitialized field (UINT64_MAX) is always "not yet completed". */
+_Atomic uint64_t g_rf_completion_seq = 1;
+
 intptr_t rf_race_wait(rf_race* r)
 {
     if (r == NULL || r->count == 0) {
@@ -1863,18 +1882,33 @@ intptr_t rf_race_wait(rf_race* r)
     }
 
     for (;;) {
+        // Winner = the competitor that finished FIRST, i.e. the SMALLEST completion_seq among all
+        // completed competitors — NOT the lowest index. A plain index scan (break on first completed)
+        // is order-correct only if this scan runs between two completions; when a delayed wakeup lets
+        // several competitors complete before the scan (observed on macOS for an all-coroutine race),
+        // it wrongly returns the first-inserted instead of the first-finished. completion_seq is
+        // stamped just before status=COMPLETED, so any competitor we observe COMPLETED here has a
+        // valid stamp; a not-yet-completed one keeps UINT64_MAX and is never the min.
+        uint64_t best_seq = (uint64_t)-1;
+        winner = -1;
         for (intptr_t i = 0; i < r->count; i++) {
+            int done = 0;
+            uint64_t seq = (uint64_t)-1;
             if (r->kinds[i] == 0) {
                 rf_coro* c = (rf_coro*)r->handles[i];
                 if (c != NULL && (c->status == RF_CORO_COMPLETED || c->status == RF_CORO_CANCELLED)) {
-                    winner = i;
-                    break;
+                    done = 1;
+                    seq = c->completion_seq;
                 }
             } else {
                 if (rf_task_status_get((rf_task*)r->handles[i]) == RF_TASK_COMPLETED) {
-                    winner = i;
-                    break;
+                    done = 1;
+                    seq = rf_task_completion_seq((rf_task*)r->handles[i]);
                 }
+            }
+            if (done && (winner < 0 || seq < best_seq)) {
+                winner = i;
+                best_seq = seq;
             }
         }
         if (winner >= 0) {
