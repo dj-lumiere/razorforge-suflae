@@ -247,7 +247,10 @@ routine D64.exp!() -> D64
 ### e^me, raw IEEE: may return ±inf (overflow) or NaN. Never crashes.
 ### :returns: The exponential of `me`, possibly non-finite.
 routine D64.exp_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked())
+  # D64 (16 digits ~54 bits) needs far fewer exp-series terms than F128's 113-bit target: n=13 is
+  # bit-exact to F128's n=20 across the D64 finite domain (n>=11 safe; +2-term margin). Uses F128's
+  # `exp_unchecked_n` so inf/NaN specials stay correct (a raw engine call drops them).
+  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked_n(n: 13_s64))
 
 ### e^me - 1 (accurate near 0) via DD. Crashes on a non-finite result.
 ### :returns: `exp(me) - 1`.
@@ -263,7 +266,7 @@ routine D64.expm1!() -> D64
 ### `exp(me) - 1`, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: `exp(me) - 1`, possibly non-finite.
 routine D64.expm1_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked_n(n: 15_s64))
 
 ### 2^me via DD. Crashes on a non-finite result.
 ### :returns: Two raised to the power `me`.
@@ -311,7 +314,7 @@ routine D64.log!() -> D64
 ### ln(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The natural logarithm of `me`, possibly non-finite.
 routine D64.log_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked_n(n: 16_s64))
 
 ### ln(1+me) (accurate near 0) via DD. Crashes on a non-finite result (me<=-1).
 ### :returns: `ln(1 + me)`.
@@ -327,7 +330,7 @@ routine D64.log1p!() -> D64
 ### `ln(1 + me)`, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
 ### :returns: `ln(1 + me)`, possibly non-finite.
 routine D64.log1p_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked_n(n: 15_s64))
 
 ### Base-2 log log2(me) via DD. Crashes on a non-finite result (me<=0).
 ### :returns: The base-2 logarithm of `me`.
@@ -343,7 +346,7 @@ routine D64.log2!() -> D64
 ### log2(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-2 logarithm of `me`, possibly non-finite.
 routine D64.log2_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked_n(n: 16_s64))
 
 ### Base-10 log log10(me) via DD. Crashes on a non-finite result (me<=0).
 ### :returns: The base-10 logarithm of `me`.
@@ -359,7 +362,7 @@ routine D64.log10!() -> D64
 ### log10(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-10 logarithm of `me`, possibly non-finite.
 routine D64.log10_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked_n(n: 16_s64))
 
 ### Square root sqrt(me) via DD. Crashes on a non-finite result (me<0).
 ### :returns: The square root of `me`.
@@ -375,8 +378,9 @@ routine D64.sqrt!() -> D64
 ### sqrt(me), raw IEEE: NaN for me<0. Never crashes.
 ### :returns: The square root of `me`, possibly NaN.
 routine D64.sqrt_unchecked() -> D64
-  # DD.sqrt clamps every non-positive input to 0; preserve IEEE by mapping a strictly
-  # negative operand to NaN (me<0) while a signed zero still yields +0 through DD.sqrt.
+  # sqrt(neg) = NaN (IEEE), sqrt(+/-0) = +0: guard the strictly-negative case explicitly, then
+  # delegate the magnitude sqrt to the F128 (W=192) engine — which carries D64's full exponent
+  # range, unlike a DoubleDouble path (F64 exponent) that would overflow large D64 operands.
   if me.is_negative() and not me.is_zero()
     return D64.quiet_nan()
   return f128_to_d64(x: d64_to_f128(x: me).sqrt_unchecked())
@@ -448,17 +452,17 @@ routine D64.fma_unchecked(b: D64, c: D64) -> D64
 ### Sine sin(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The sine of `me`.
 routine D64.sin() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sin())
+  return f128_to_d64(x: d64_to_f128(x: me).sin_n(n: 10_s64))
 
 ### Cosine cos(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The cosine of `me`.
 routine D64.cos() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cos())
+  return f128_to_d64(x: d64_to_f128(x: me).cos_n(n: 10_s64))
 
 ### Tangent tan(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The tangent of `me`.
 routine D64.tan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tan())
+  return f128_to_d64(x: d64_to_f128(x: me).tan_n(n: 11_s64))
 
 ### Arcsine asin(me) via DD. Crashes if non-finite (|me|>1).
 ### :returns: The arcsine of `me` in radians.
@@ -525,7 +529,7 @@ routine D64.sinh!() -> D64
 ### sinh(me), raw IEEE: ±inf on overflow. Never crashes.
 ### :returns: The hyperbolic sine of `me`, possibly ±inf.
 routine D64.sinh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked_n(n: 13_s64))
 
 ### Hyperbolic cosine cosh(me) via DD. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic cosine of `me`.
@@ -541,12 +545,12 @@ routine D64.cosh!() -> D64
 ### cosh(me), raw IEEE: +inf on overflow. Never crashes.
 ### :returns: The hyperbolic cosine of `me`, possibly +inf.
 routine D64.cosh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked_n(n: 13_s64))
 
 ### Hyperbolic tangent tanh(me) via DD (defined for all reals). Never crashes.
 ### :returns: The hyperbolic tangent of `me`.
 routine D64.tanh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tanh())
+  return f128_to_d64(x: d64_to_f128(x: me).tanh_n(n: 13_s64))
 
 ### Inverse hyperbolic sine asinh(me) via DD (defined for all reals). Never crashes.
 ### :returns: The inverse hyperbolic sine of `me`.
@@ -587,17 +591,17 @@ routine D64.atanh!() -> D64
 ### atanh(me), raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
 ### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
 routine D64.atanh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked())
+  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked_n(n: 14_s64))
 
 ### Error function erf(me) via DD. Never crashes (saturates to ±1).
 ### :returns: The error function of `me`.
 routine D64.erf() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erf())
+  return f128_to_d64(x: d64_to_f128(x: me).erf_fast(levels_mid: 44_s64, levels_tail: 76_s64))
 
 ### Complementary error function erfc(me) = 1 - erf(me) via DD. Never crashes.
 ### :returns: The complementary error function of `me`.
 routine D64.erfc() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erfc())
+  return f128_to_d64(x: d64_to_f128(x: me).erfc_fast(levels_mid: 48_s64, levels_tail: 90_s64))
 
 ### Gamma function tgamma(me) via DD. Crashes if non-finite (poles at 0 and neg ints).
 ### :returns: The gamma function of `me`.
