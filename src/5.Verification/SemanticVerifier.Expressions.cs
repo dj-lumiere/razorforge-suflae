@@ -143,6 +143,18 @@ public sealed partial class SemanticVerifier
             return choiceCase.Value.ChoiceType;
         }
 
+        // Compiler-generated re-analysis of a concrete generic instance's member body binds each parameter
+        // name to its concrete argument (T -> Particle). Resolve a bare parameter reference here — the
+        // identifier-as-type-receiver path (`var result = T.blank()`) — to that concrete argument BEFORE the
+        // global type lookup below. The concrete owner is not a generic-definition scope, so the slot-shadow
+        // block that follows does NOT fire, and a same-named global user type (`record T`) would otherwise
+        // hijack `T` (the generic-param-name-collision). Mirrors the guard in TypeResolver.ResolveTypeCore.
+        if (_compilerGeneratedTypeParamBindings is { } cgBind &&
+            cgBind.TryGetValue(key: id.Name, value: out TypeSymbol? boundParam))
+        {
+            return boundParam;
+        }
+
         // An in-scope generic PARAMETER shadows a same-named global type, BEFORE the global lookup.
         // A parameter's NAME is only a label; its identity is its positional slot. Inside a
         // `common routine T.to_width()` body the receiver `T` is UNAMBIGUOUSLY that parameter — there
@@ -157,6 +169,23 @@ public sealed partial class SemanticVerifier
         {
             return new GenericParameterTypeSymbol(name: id.Name,
                 slot: GenericParameterSlot(name: id.Name));
+        }
+
+        // A monomorphization-substituted type-param receiver — `T.blank()` where GenericAstRewriter
+        // rewrote the receiver `T` to the concrete element type and stamped the module-qualified type
+        // on the node — reaches re-analysis as a bare type NAME (e.g. "Point"). Trust that already-
+        // resolved concrete type instead of the module-ambiguous bare-name lookup below: when several
+        // modules declare a same-named record (two fixtures' `record Point`), the name lookup binds the
+        // first-registered one, silently clobbering the substituted type to the wrong module (the SoA
+        // getitem building a `BuilderQueryApi.Point` for a `SoaSplitArrayApi.Point` column — a
+        // link-time struct-type mismatch). A variable/param of this name already won above; this fires
+        // only in genuine type-name position, so honoring the stamped concrete type is safe.
+        if (id.ResolvedType is { IsGenericDefinition: false } stamped &&
+            stamped is not GenericParameterTypeSymbol and not ErrorTypeSymbol &&
+            stamped.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
+                or TypeCategory.Flags or TypeCategory.Crashable)
+        {
+            return stamped;
         }
 
         // Types take precedence over routines when both share a bare name — bare type references for

@@ -1024,6 +1024,25 @@ internal static class GenericAstRewriter
 
     private static TypeExpression RewriteType(TypeExpression type, RewriteContext ctx)
     {
+        // The decl-position expand-column placeholder ("0col") in a TYPE-ARGUMENT position — e.g.
+        // `hijacked_from[$typeof(m)]` inside `expand m in allmemvarof(T)` — folds to the current
+        // member's concrete type. ResolveGenericParameter already folds its ResolvedType, but the
+        // placeholder NAME would otherwise survive into the monomorphized call's type argument, and a
+        // name-based downstream resolution then references an undefined `hijacked_from(0col)`. Rewrite
+        // the name too (to the real column type) so the free routine monomorphizes on the concrete type.
+        if (ctx.ActiveMemberType != null &&
+            (type.Name == MemberExpandTemplateInfo.ColumnPlaceholderName ||
+             type.ResolvedType is GenericParameterTypeSymbol
+             {
+                 Name: MemberExpandTemplateInfo.ColumnPlaceholderName
+             }))
+        {
+            return TypeInfoToTypeExpr(type: ctx.ActiveMemberType, location: type.Location) with
+            {
+                ResolvedType = ctx.ActiveMemberType
+            };
+        }
+
         // Associated-type projection `Base/Slot` (e.g. `S/Iter`): resolve the base through the
         // monomorphization type-subs, walk its associated-type binding(s), and emit the concrete
         // bound type. Without this the raw `S/Iter` name survives into codegen (TypeParameter).

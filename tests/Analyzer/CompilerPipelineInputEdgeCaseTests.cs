@@ -164,9 +164,14 @@ public class CompilerPipelineInputEdgeCaseTests
 
     private static string GenerateIr(string source)
     {
+        // Debug (-O0), matching the `codegen` CLI verb: an optimized build's demand pipeline
+        // legitimately DCEs `test()` because these edge-case sources reference it from no entry
+        // point, which would defeat the test's purpose (does the edge-case source survive to a
+        // routine DEFINITION?). Debug keeps the lone routine so the pipeline coverage is what's
+        // asserted, not dead-routine elimination.
         Program program = Parse(source: source);
         var analyzer = new SemanticVerifier(language: Language.RazorForge,
-            buildMode: RfBuildMode.ReleaseSpace);
+            buildMode: RfBuildMode.Debug);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -175,9 +180,11 @@ public class CompilerPipelineInputEdgeCaseTests
             options: new LlvmEmitterOptions
             {
                 StdlibPrograms = result.Registry.StdlibPrograms,
-                BuildMode = RfBuildMode.ReleaseSpace,
+                BuildMode = RfBuildMode.Debug,
                 SynthesizedBodies = result.SynthesizedBodies,
-                InstantiatedGenericBodies = result.InstantiatedGenericBodies
+                InstantiatedGenericBodies = result.InstantiatedGenericBodies,
+                LiveRoutineKeys = result.LiveRoutineKeys,
+                MaySuspendRoutineKeys = result.MaySuspendRoutineKeys
             });
 
         return generator.Generate();
