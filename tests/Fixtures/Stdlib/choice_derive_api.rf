@@ -1,0 +1,38 @@
+module Tests/Stdlib/ChoiceDeriveApi
+import IO/Console
+
+# Coverage for the choice derive sub-cases that no other fixture exercises:
+#   - count()            (buildtime-constant case count)
+#   - all_cases()        (every declared case, in order)
+#   - hash()             (from Hashable)
+#   - Me(from: S32)      (reverse discriminant -> case constructor)
+choice Suit
+  SPADE
+  HEART
+  DIAMOND
+  CLUB
+
+routine start()
+  # count() — number of declared cases, emitted as a buildtime constant.
+  show(f"count: {Suit.count()}")
+
+  # all_cases() — every declared case, in declaration order.
+  var cases = Suit.all_cases()
+  show(f"all_cases size: {cases.count()}")
+  each s in cases
+    show(f"  case: {s}")
+
+  # hash(k0, k1) — from Hashable: equal cases hash equal, distinct cases differ.
+  var a = Suit.HEART
+  var b = Suit.HEART
+  var d = Suit.CLUB
+  show(f"hash HEART==HEART: {a.hash(k0: 0u64, k1: 0u64) == b.hash(k0: 0u64, k1: 0u64)}")
+  show(f"hash HEART==CLUB: {a.hash(k0: 0u64, k1: 0u64) == d.hash(k0: 0u64, k1: 0u64)}")
+
+  # Me(from: S32) — reverse constructor: discriminant back to the case.
+  var rebuilt = Suit(from: 2)
+  show(f"from 2: {rebuilt}")
+  show(f"from 2 is DIAMOND: {rebuilt is Suit.DIAMOND}")
+
+  show("DONE")
+  return

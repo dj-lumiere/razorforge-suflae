@@ -1,0 +1,11 @@
+count: 4
+all_cases size: 4
+  case: SPADE
+  case: HEART
+  case: DIAMOND
+  case: CLUB
+hash HEART==HEART: true
+hash HEART==CLUB: false
+from 2: DIAMOND
+from 2 is DIAMOND: true
+DONE

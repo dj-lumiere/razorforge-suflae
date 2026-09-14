@@ -2507,9 +2507,26 @@ internal partial class Program
             return 1;
         }
 
-        // Optimize the emitted IR, then link it into a native executable.
-        int optResult =
-            NativeToolchain.OptimizeIr(llFile: llFile, optFile: optFile, buildMode: buildMode);
+        // Optimize the emitted IR, then link it into a native executable. For optimized builds
+        // (anything but -O0 debug), first llvm-link the hot native-runtime bitcode into the module
+        // and internalize during opt, so the allocators/divide shims inline across the RF↔runtime
+        // seam. LTO is skipped transparently (plain opt on the un-linked module) if the toolchain or
+        // sources are unavailable — it must never break a build that would otherwise succeed.
+        string moduleToOptimize = llFile;
+        bool internalizeForLto = false;
+        if (buildMode != RfBuildMode.Debug &&
+            NativeToolchain.TryLinkHotRuntimeBitcode(exeDir: exeDir,
+                llFile: llFile,
+                linkedFile: out string linkedFile))
+        {
+            moduleToOptimize = linkedFile;
+            internalizeForLto = true;
+        }
+
+        int optResult = NativeToolchain.OptimizeIr(llFile: moduleToOptimize,
+            optFile: optFile,
+            buildMode: buildMode,
+            internalizeForLto: internalizeForLto);
         if (optResult != 0)
         {
             return optResult;

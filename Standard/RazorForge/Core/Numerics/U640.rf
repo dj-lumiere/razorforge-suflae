@@ -1,0 +1,86 @@
+module Core
+
+import Collections
+
+# ============================================================================
+# U640 — raw 640-bit unsigned integer. Engine-only intermediate: the wide product /
+# division numerator (L) of the binary320 float engine (UnpackedFloat[U320, U640, 320],
+# a 2x-scratch float engine). 10 base-2⁶⁴ limbs. Not user-facing; minimal surface
+# (FloorDivisible via Knuth-D + value semantics). Constants assembled from U64 limbs
+# via `asm640` (no literal suffix, as with U512/U1024).
+# ============================================================================
+
+@llvm("i640")
+record U640 obeys FloorDivisible, Assignable, Copyable
+  pass
+
+### Assemble 10 U64 limbs (little-endian) into a U640.
+@inline
+routine asm640(q0: U64, q1: U64, q2: U64, q3: U64, q4: U64, q5: U64, q6: U64, q7: U64, q8: U64, q9: U64) -> U640
+  var r = LLVM::zero_extend[U64, U640](q0)
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q1), bits: U640.to_width(s: 64_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q2), bits: U640.to_width(s: 128_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q3), bits: U640.to_width(s: 192_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q4), bits: U640.to_width(s: 256_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q5), bits: U640.to_width(s: 320_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q6), bits: U640.to_width(s: 384_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q7), bits: U640.to_width(s: 448_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q8), bits: U640.to_width(s: 512_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U640](q9), bits: U640.to_width(s: 576_s64)))
+  return r
+
+### nth U64 limb of a U640.
+@inline
+routine limb640(x: U640, i: S64) -> U64
+  return LLVM::int_truncate[U640, U64](LLVM::shift_right_unsigned(x, U640.to_width(s: LLVM::mul(a: i, b: 64_s64))))
+
+### Returns me // you via the base-2⁶⁴ Knuth-D kernel (`knuth_divide[10]`).
+routine U640.floordiv(you: U640) -> U640
+  var av = me
+  var bv = you
+  var rem = Array[U64, 10]()
+  danger
+    var q = knuth_divide[10](
+      a: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](bv.hijack()),
+      rem: rem.hijack())
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 10]], Hijacked[U640]](q.hijack()).peek()
+
+### Returns me % you (remainder from the same Knuth-D kernel).
+routine U640.mod(you: U640) -> U640
+  var av = me
+  var bv = you
+  var rem = Array[U64, 10]()
+  danger
+    var q = knuth_divide[10](
+      a: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](bv.hijack()),
+      rem: rem.hijack())
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 10]], Hijacked[U640]](rem.hijack()).peek()
+
+### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the division
+### left a nonzero remainder). One Knuth-D call — no separate %/mul-back.
+routine udiv640_sticky(num: U640, den: U640) -> U640
+  var av = num
+  var bv = den
+  var rem = Array[U64, 10]()
+  danger
+    var qa = knuth_divide[10](
+      a: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U640], Hijacked[Array[U64, 10]]](bv.hijack()),
+      rem: rem.hijack())
+    var q = LLVM::reinterpret_bits[Hijacked[Array[U64, 10]], Hijacked[U640]](qa.hijack()).peek()
+    var r = LLVM::reinterpret_bits[Hijacked[Array[U64, 10]], Hijacked[U640]](rem.hijack()).peek()
+    if LLVM::int_ne[U640](a: r, b: 0)
+      return LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U640](1_u64))
+    return q
+
+### Diagnostic name (raw wide intermediate; not decimal-formatted).
+@override
+routine U640.represent() -> Text
+  return wide_dec[U640](me)
+
+### Diagnostic representation tagged with the type name.
+@override
+routine U640.diagnose() -> Text
+  return "U640"

@@ -1,0 +1,82 @@
+module Core
+
+import Collections
+
+# ============================================================================
+# U320 — raw 320-bit unsigned integer. Engine-only intermediate: the mantissa (M)
+# of the binary320 float engine (UnpackedFloat[U320, U640, 320] scratch). Mirrors
+# U192/U384 at 5 limbs. Not user-facing, so it carries only the minimal surface the
+# engine needs: FloorDivisible (knuth-D, the `//` the divide core calls) + value
+# semantics. No literal suffix (like U512/U1024, constants are assembled from U64
+# limbs via `asm320`).
+# ============================================================================
+
+@llvm("i320")
+record U320 obeys FloorDivisible, Assignable, Copyable
+  pass
+
+### Assemble 5 U64 limbs (little-endian) into a U320.
+@inline
+routine asm320(q0: U64, q1: U64, q2: U64, q3: U64, q4: U64) -> U320
+  var r = LLVM::zero_extend[U64, U320](q0)
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U320](q1), bits: U320.to_width(s: 64_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U320](q2), bits: U320.to_width(s: 128_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U320](q3), bits: U320.to_width(s: 192_s64)))
+  r = LLVM::bit_or(a: r, b: LLVM::shift_left(value: LLVM::zero_extend[U64, U320](q4), bits: U320.to_width(s: 256_s64)))
+  return r
+
+### nth U64 limb of a U320.
+@inline
+routine limb320(x: U320, i: S64) -> U64
+  return LLVM::int_truncate[U320, U64](LLVM::shift_right_unsigned(x, U320.to_width(s: LLVM::mul(a: i, b: 64_s64))))
+
+### Returns me // you via the base-2⁶⁴ Knuth-D kernel (`knuth_divide[5]`).
+routine U320.floordiv(you: U320) -> U320
+  var av = me
+  var bv = you
+  var rem = Array[U64, 5]()
+  danger
+    var q = knuth_divide[5](
+      a: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](bv.hijack()),
+      rem: rem.hijack())
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 5]], Hijacked[U320]](q.hijack()).peek()
+
+### Returns me % you (remainder from the same Knuth-D kernel).
+routine U320.mod(you: U320) -> U320
+  var av = me
+  var bv = you
+  var rem = Array[U64, 5]()
+  danger
+    var q = knuth_divide[5](
+      a: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](bv.hijack()),
+      rem: rem.hijack())
+    return LLVM::reinterpret_bits[Hijacked[Array[U64, 5]], Hijacked[U320]](rem.hijack()).peek()
+
+### Quotient of `num // den` with the round-sticky baked into bit 0 (set iff the division
+### left a nonzero remainder). One Knuth-D call — no separate %/mul-back.
+routine udiv320_sticky(num: U320, den: U320) -> U320
+  var av = num
+  var bv = den
+  var rem = Array[U64, 5]()
+  danger
+    var qa = knuth_divide[5](
+      a: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](av.hijack()),
+      b: LLVM::reinterpret_bits[Hijacked[U320], Hijacked[Array[U64, 5]]](bv.hijack()),
+      rem: rem.hijack())
+    var q = LLVM::reinterpret_bits[Hijacked[Array[U64, 5]], Hijacked[U320]](qa.hijack()).peek()
+    var r = LLVM::reinterpret_bits[Hijacked[Array[U64, 5]], Hijacked[U320]](rem.hijack()).peek()
+    if LLVM::int_ne[U320](a: r, b: 0)
+      return LLVM::bit_or(a: q, b: LLVM::zero_extend[U64, U320](1_u64))
+    return q
+
+### Diagnostic name (raw wide intermediate; not decimal-formatted).
+@override
+routine U320.represent() -> Text
+  return wide_dec[U320](me)
+
+### Diagnostic representation tagged with the type name.
+@override
+routine U320.diagnose() -> Text
+  return "U320"

@@ -124,6 +124,7 @@ add_library(razorforge_runtime SHARED
     runtime/moment.c
     runtime/math_functions.c
     runtime/bignum_functions.c
+    runtime/rf_divide.c
     runtime/real_functions.c
     runtime/f16_functions.c
     runtime/f128_functions.c
@@ -257,6 +258,7 @@ set_target_properties(razorforge_runtime PROPERTIES
 add_library(razorforge_math STATIC
     runtime/math_functions.c
     runtime/bignum_functions.c
+    runtime/rf_divide.c
     runtime/real_functions.c
     runtime/f16_functions.c
     runtime/f128_functions.c
