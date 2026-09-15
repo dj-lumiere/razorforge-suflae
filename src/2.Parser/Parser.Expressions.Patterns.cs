@@ -466,6 +466,37 @@ public partial class Parser
     }
 
     /// <summary>
+    /// Rewrites a <c>try</c>/<c>grab</c>/<c>lookup</c>-wrapped call into a call to the matching generated
+    /// recovery variant by prepending <paramref name="variantPrefix"/> to the callee name (free or member).
+    /// The wrapped node must be a call; anything else is a grammar error. The recovery variant is total
+    /// (returns a carrier), so the failable <c>!</c> marker is cleared.
+    /// </summary>
+    private Expression RewriteRecoveryOperand(Expression operand, string variantPrefix, Token keyword)
+    {
+        switch (operand)
+        {
+            case CallExpression { Callee: IdentifierExpression id } freeCall:
+                return freeCall with
+                {
+                    Callee = id with { Name = variantPrefix + id.Name },
+                    IsFailable = false
+                };
+            case CallExpression { Callee: MemberExpression member } memberCall:
+                return memberCall with
+                {
+                    Callee = member with { MemberName = variantPrefix + member.MemberName },
+                    IsFailable = false
+                };
+            default:
+                throw ThrowParseError(
+                    message:
+                    $"'{keyword.Text}' must wrap a call to a failable routine " +
+                    $"(e.g. `{keyword.Text} foo(...)` or `{keyword.Text} x.foo(...)`).",
+                    token: keyword);
+        }
+    }
+
+    /// <summary>
     /// Parses unary prefix expressions.
     /// Syntax: <c>-x</c> (negation), <c>not x</c> (logical not), <c>~x</c> (bitwise not), <c>^n</c> (backindex).
     /// Special handling for unary minus on numeric literals to support min values.
@@ -473,6 +504,28 @@ public partial class Parser
     /// <returns>The parsed expression.</returns>
     private Expression ParseUnary()
     {
+        // Recovery prefix keywords (try/grab/lookup): wrap a failable CALL into a carrier. MILESTONE
+        // lowering — rewrite the wrapped call's name to the existing generated recovery variant:
+        //   try foo(a)      -> try_foo(a)          (Maybe[T])
+        //   grab x.foo()    -> x.check_foo()       (Check[T])
+        //   lookup foo()    -> lookup_foo()        (Lookup[T])
+        // Bare-word keywords only (`try_foo` etc. tokenize as single identifiers). Whole-expression
+        // monadic composition + a dedicated RecoveryExpression node replace this rewrite later.
+        if (CheckAndAdvance(TokenType.Try, TokenType.Grab, TokenType.Lookup))
+        {
+            Token recoveryKw = PeekToken(offset: -1);
+            string variantPrefix = recoveryKw.Type switch
+            {
+                TokenType.Grab => "check_",
+                TokenType.Lookup => "lookup_",
+                _ => "try_"
+            };
+            Expression recoveryOperand = ParseUnary(); // right-associative; wraps the postfix call chain
+            return RewriteRecoveryOperand(operand: recoveryOperand,
+                variantPrefix: variantPrefix,
+                keyword: recoveryKw);
+        }
+
         // Handle steal expression (steal expr = ownership transfer, RazorForge only)
         if (CheckAndAdvance(type: TokenType.Steal))
         {

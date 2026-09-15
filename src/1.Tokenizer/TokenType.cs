@@ -441,6 +441,15 @@ public enum TokenType
     /// <summary>Absent statement keyword - indicates value not found (triggers Lookup generation)</summary>
     Absent,
 
+    /// <summary>`try` prefix keyword — recover a failable call into Maybe[T] (present|absent, no crash info).</summary>
+    Try,
+
+    /// <summary>`grab` prefix keyword — recover a failable call into Check[T] (carries the Crashable error).</summary>
+    Grab,
+
+    /// <summary>`lookup` prefix keyword — recover a failable call into Lookup[T] (value | absent | Crashable).</summary>
+    Lookup,
+
     /// <summary>Becomes statement keyword (block result value)</summary>
     Becomes,
 

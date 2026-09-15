@@ -182,6 +182,11 @@ public partial class Tokenizer
             [key: "throw"] = TokenType.Throw,
             [key: "pierce"] = TokenType.Pierce,
             [key: "absent"] = TokenType.Absent,
+            // Recovery prefix keywords: wrap a failable call into a carrier (Maybe/Check/Lookup).
+            // Bare words only — `try_foo`/`check_foo`/`lookup_foo` tokenize as single identifiers, untouched.
+            [key: "try"] = TokenType.Try,
+            [key: "grab"] = TokenType.Grab,
+            [key: "lookup"] = TokenType.Lookup,
             [key: "becomes"] = TokenType.Becomes,
 
             // Module system
