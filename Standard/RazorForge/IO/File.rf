@@ -44,7 +44,7 @@ entity FileHandle obeys Enterable
 ### :throws: May throw {IOError}.
 routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
-  var mode_val = S32(from: mode)
+  var mode_val = mode.S32()
   var fd = rf_file_open(cstr, cstr.count().S32!(), mode_val)
   if fd == -1
     throw IOError(description: f"Cannot open file: {path}")

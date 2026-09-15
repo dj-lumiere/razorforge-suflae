@@ -2163,6 +2163,37 @@ public sealed partial class SemanticVerifier
         RoutineInfo? creator = _registry.LookupMemberRoutineOverload(type: targetType,
             memberRoutineName: creatorName,
             argTypes: [objectType]);
+
+        // A method-form conversion `x.Type()` MUST resolve identically to the free creator call `Type(x)`.
+        // When the member resolver above can't place it, route it through the SAME free-construction analysis
+        // as `Type(x)` (positional single arg binds the sole creator param by TYPE, name-agnostic) — this
+        // reaches the generic/reinterpret readers the member-scoped resolver misses, e.g. the choice
+        // discriminant reader `S32(from: T) needs ChoiceType T` (a no-op reinterpret registered as a FREE
+        // routine, not an `S32.create` member). Adopt free-form's resolution verbatim: ResolvedRoutine may be
+        // null for a bare reinterpret, which codegen inlines (EmitMemberRoutineCall's TypeConstructor path).
+        // Crash `create` form only — a `try_`/`check_`/`lookup_` variant has no free-routine spelling.
+        if (creator == null && creatorName == RoutineInfo.CreatorName && call.Arguments.Count == 0 &&
+            call.Callee is MemberExpression convMember)
+        {
+            var freeCtor = new CallExpression(
+                Callee: new IdentifierExpression(Name: potentialTypeName, Location: call.Location),
+                Arguments: [convMember.Object],
+                Location: call.Location);
+            TypeSymbol ctorType = AnalyzeExpression(expression: freeCtor);
+            if (ctorType is not ErrorTypeSymbol)
+            {
+                call.ConstructedType = freeCtor.ConstructedType ?? targetType;
+                call.LoweringKind = CallLoweringKind.TypeConstructor;
+                call.ResolvedRoutine = freeCtor.ResolvedRoutine;
+                if (freeCtor.ResolvedRoutine is { } freeCreator)
+                {
+                    TrackFailableMemberRoutineCall(memberRoutine: freeCreator, location: call.Location);
+                }
+
+                return ctorType;
+            }
+        }
+
         // Fall back to default overload if no match by arg type
         string creatorFullName = $"{targetType.FullName}.{creatorName}";
         creator ??= _registry.LookupRoutine(fullName: creatorFullName);

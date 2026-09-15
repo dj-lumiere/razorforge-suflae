@@ -539,6 +539,18 @@ public partial class LlvmEmitter
             loweringKind = CallLoweringKind.DirectMemberRoutine;
         }
 
+        // Method-form conversion `x.Type()` whose reader is a bare reinterpret with no callable creator
+        // (SA left ResolvedRoutine null — e.g. a choice receiver's `S32(from: T) needs ChoiceType T`, a
+        // no-op reinterpret). Emit it EXACTLY as free-form `Type(x)` does — the backend-record construction
+        // that inlines the reinterpret — with the receiver as the sole arg. Done before the receiver is
+        // emitted below so it is evaluated once. Numeric/text conversions keep a resolved creator and skip this.
+        if (loweringKind == CallLoweringKind.TypeConstructor && resolvedRoutine == null &&
+            _registry.LookupType(name: member.MemberName) is RecordTypeSymbol { BackendType: not null }
+                convTarget)
+        {
+            return EmitRecordConstruction(sb: sb, record: convTarget, arguments: [member.Object]);
+        }
+
         // Dynamic call through a callable FIELD on the receiver (e.g. `me.predicate(item)` in
         // a stdlib iterator emitter, where `predicate` is a `secret predicate: Routine[(T,), Bool]`
         // field). SA classifies these as DynamicCall. There is no memberRoutine named `predicate`. load
