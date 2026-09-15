@@ -2171,9 +2171,24 @@ public sealed partial class SemanticVerifier
         // discriminant reader `S32(from: T) needs ChoiceType T` (a no-op reinterpret registered as a FREE
         // routine, not an `S32.create` member). Adopt free-form's resolution verbatim: ResolvedRoutine may be
         // null for a bare reinterpret, which codegen inlines (EmitMemberRoutineCall's TypeConstructor path).
-        // Crash `create` form only — a `try_`/`check_`/`lookup_` variant has no free-routine spelling.
-        if (creator == null && creatorName == RoutineInfo.CreatorName && call.Arguments.Count == 0 &&
-            call.Callee is MemberExpression convMember)
+        //
+        // This also handles the RECOVERY-variant conversion `try x.S8()` (rewritten to `x.try_S8()`, whose
+        // stripped creatorName is `try_create`): numeric/reinterpret conversions are FREE readers
+        // (`routine S8!(from: S64)`), NOT `S8.create` members, so there is no `S8.try_create` member to
+        // resolve — but the free reader HAS an on-demand recovery variant. Resolve the free base reader the
+        // crash way (exact overload by arg type), then bind its `try_`/`check_`/`lookup_` variant by RESOLVED
+        // reference via SynthesizeVariantForBase (no `try_S8` name-strip). The carrier (Maybe/Check/Lookup[T])
+        // is the variant's return type.
+        string? recoveryPrefix = creatorName switch
+        {
+            "try_create" => "try",
+            "check_create" => "check",
+            "lookup_create" => "lookup",
+            _ => null
+        };
+        if (creator == null && call.Arguments.Count == 0 &&
+            call.Callee is MemberExpression convMember &&
+            (creatorName == RoutineInfo.CreatorName || recoveryPrefix != null))
         {
             var freeCtor = new CallExpression(
                 Callee: new IdentifierExpression(Name: potentialTypeName, Location: call.Location),
@@ -2182,15 +2197,35 @@ public sealed partial class SemanticVerifier
             TypeSymbol ctorType = AnalyzeExpression(expression: freeCtor);
             if (ctorType is not ErrorTypeSymbol)
             {
-                call.ConstructedType = freeCtor.ConstructedType ?? targetType;
-                call.LoweringKind = CallLoweringKind.TypeConstructor;
-                call.ResolvedRoutine = freeCtor.ResolvedRoutine;
-                if (freeCtor.ResolvedRoutine is { } freeCreator)
+                // Recovery variant: the base free reader must be failable and have a synthesized variant.
+                if (recoveryPrefix != null)
                 {
-                    TrackFailableMemberRoutineCall(memberRoutine: freeCreator, location: call.Location);
-                }
+                    if (freeCtor.ResolvedRoutine is { IsFailable: true } baseReader &&
+                        SynthesizeVariantForBase(baseOverload: baseReader, prefix: recoveryPrefix) is
+                            { } variant)
+                    {
+                        call.ConstructedType = targetType;
+                        call.LoweringKind = CallLoweringKind.TypeConstructor;
+                        call.ResolvedRoutine = variant;
+                        return variant.ReturnType ?? targetType;
+                    }
 
-                return ctorType;
+                    // Base reader is non-failable (a pure reinterpret cannot fail) or has no variant —
+                    // fall through so the caller reports the missing recovery conversion.
+                }
+                else
+                {
+                    call.ConstructedType = freeCtor.ConstructedType ?? targetType;
+                    call.LoweringKind = CallLoweringKind.TypeConstructor;
+                    call.ResolvedRoutine = freeCtor.ResolvedRoutine;
+                    if (freeCtor.ResolvedRoutine is { } freeCreator)
+                    {
+                        TrackFailableMemberRoutineCall(memberRoutine: freeCreator,
+                            location: call.Location);
+                    }
+
+                    return ctorType;
+                }
             }
         }
 
