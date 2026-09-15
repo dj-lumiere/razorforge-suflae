@@ -1385,6 +1385,23 @@ public partial class LlvmEmitter
             _ => defaultExpr
         };
 
+        // A choice/flags case-member default (e.g. `mode: FileMode = FileMode.READ`) is raw
+        // declaration-site AST: its `FileMode` target identifier has no ResolvedType, and a bare-name
+        // LookupType fails for a module-qualified stdlib choice referenced from another module (the
+        // cross-module short-name scan was removed), so EmitMemberVariableAccess's constant-fold can't
+        // find the type and falls through to emit `FileMode` as an unknown identifier. The parameter's
+        // DECLARED type IS the choice/flags type, so stamp it onto the access target here — the fold
+        // then resolves the case via ResolvedType without any name lookup.
+        if (defaultExpr is MemberExpression memberDefault
+            && memberDefault.Object is IdentifierExpression { ResolvedType: null } targetId
+            && param.Type is ChoiceTypeSymbol or FlagsTypeSymbol)
+        {
+            defaultExpr = memberDefault with
+            {
+                Object = targetId with { ResolvedType = param.Type }
+            };
+        }
+
         return EmitExpression(sb: sb, expr: defaultExpr);
     }
 
