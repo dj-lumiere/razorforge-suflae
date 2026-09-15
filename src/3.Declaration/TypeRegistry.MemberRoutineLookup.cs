@@ -1117,17 +1117,6 @@ public sealed partial class TypeRegistry
             return ownMatch;
         }
 
-        // On-demand failable-variant synthesis: placed RIGHT AFTER the own-routine miss and BEFORE the
-        // protocol / generic-resolution / wrapper fallbacks below — several of those `return` a (possibly
-        // null) result and would short-circuit past a miss handler at the tail.
-        RoutineInfo? synthesizedVariant = TryOnDemandVariantSynthesis(type: type,
-            memberRoutineName: memberRoutineName,
-            isFailable: isFailable);
-        if (synthesizedVariant != null)
-        {
-            return synthesizedVariant;
-        }
-
         // For protocol types, check the protocol's memberRoutine signatures
         if (type is ProtocolTypeSymbol proto)
         {
@@ -1237,39 +1226,6 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Attempts on-demand failable-variant synthesis (try_/check_/lookup_) when the name has the
-    /// right prefix and the synthesizer hook is installed. The re-entry guard prevents the
-    /// synthesizer's own lookups from recursing into this hook.
-    /// </summary>
-    private RoutineInfo? TryOnDemandVariantSynthesis(TypeSymbol type, string memberRoutineName,
-        bool? isFailable)
-    {
-        if (OnDemandVariantSynthesizer == null || _inVariantSynthesis ||
-            !HasFailableVariantPrefix(name: memberRoutineName))
-        {
-            return null;
-        }
-
-        _inVariantSynthesis = true;
-        try
-        {
-            RoutineInfo? synthesized =
-                OnDemandVariantSynthesizer(arg1: type, arg2: memberRoutineName);
-            if (synthesized != null &&
-                (isFailable == null || synthesized.IsFailable == isFailable))
-            {
-                return synthesized;
-            }
-
-            return null;
-        }
-        finally
-        {
-            _inVariantSynthesis = false;
-        }
-    }
-
-    /// <summary>
     /// Checks a protocol type's own declared member routine signatures and synthesizes a
     /// <see cref="RoutineInfo"/> for the first name/failability match.
     /// </summary>
@@ -1338,32 +1294,13 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Verifier-installed hook that synthesizes a failable variant (<c>try_</c>/<c>check_</c>/
-    /// <c>lookup_</c>) from its base failable routine the first time it is looked up — the on-demand
-    /// replacement for eager pre-registration of every failable routine's variants. Signature is
-    /// <c>(receiverType, variantName) → variant RoutineInfo?</c>.
-    /// </summary>
-    public Func<TypeSymbol, string, RoutineInfo?>? OnDemandVariantSynthesizer { get; set; }
-
-    /// <summary>
     /// Verifier-installed hook that synthesizes the variant of a SPECIFIC base overload (a
-    /// <see cref="RoutineInfo"/>, not a name) — used by the variant-body rewriter, which holds the exact
-    /// failable routine being rewritten and must get THAT overload's variant (a name-only lookup can't
-    /// disambiguate <c>S64.create(from_text:)</c> from <c>S64.create(from_int:)</c>). Signature is
-    /// <c>(baseOverload, "try"|"check"|"lookup") → variant RoutineInfo?</c>.
+    /// <see cref="RoutineInfo"/>, not a name) — used by the <c>try</c>/<c>grab</c>/<c>lookup</c> keyword and
+    /// the variant-body rewriter, which hold the exact failable routine being recovered and must get THAT
+    /// overload's variant (a name-only lookup can't disambiguate <c>S64.create(from_text:)</c> from
+    /// <c>S64.create(from_int:)</c>). Signature is <c>(baseOverload, "try"|"check"|"lookup") → variant RoutineInfo?</c>.
     /// </summary>
     public Func<RoutineInfo, string, RoutineInfo?>? OnDemandVariantForBase { get; set; }
-
-    /// <summary>Re-entry guard: true while <see cref="OnDemandVariantSynthesizer"/> is running, so its
-    /// own lookups (the base routine, then the freshly-registered variant) don't re-trigger the hook.</summary>
-    private bool _inVariantSynthesis;
-
-    private static bool HasFailableVariantPrefix(string name)
-    {
-        return name.StartsWith(value: "try_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "check_", comparisonType: StringComparison.Ordinal) ||
-               name.StartsWith(value: "lookup_", comparisonType: StringComparison.Ordinal);
-    }
 
     /// <summary>
     /// Resolves a memberRoutine through <paramref name="type"/>'s implemented protocols' default

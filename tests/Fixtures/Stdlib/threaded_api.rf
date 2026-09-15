@@ -36,14 +36,14 @@ routine start()
   var p = make_point(a: 3, b: 4).retrieve()
   show(f"point => x={p.x} y={p.y}")
 
-  # 4. bounded join via the graceful variant — `retrieve!` throws on timeout, whereas
-  #    `try_retrieve` yields Maybe[T] (None on timeout). Generous window -> the value.
-  var r3 = compute(x: 3, y: 4).waitfor(5s).try_retrieve()
+  # 4. bounded join via the graceful form — `retrieve!` throws on timeout, whereas
+  #    `try …retrieve()` yields Maybe[T] (None on timeout). Generous window -> the value.
+  var r3 = try compute(x: 3, y: 4).waitfor(5s).retrieve()
   when r3
     is None => show("within => none")
     is S64 v => show(f"within => {v}")
 
-  var r4 = excessive_compute(a: 1).waitfor(500ms).try_retrieve()
+  var r4 = try excessive_compute(a: 1).waitfor(500ms).retrieve()
   when r4
     is None => show("within => none")
     is S64 v => show(f"within => {v}")

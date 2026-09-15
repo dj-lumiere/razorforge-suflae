@@ -14,8 +14,8 @@ routine make_point!(use_zero: Bool) -> Point
   return Point(x: 3, y: 4)
 
 routine start()
-  var m_some = try_make_point(use_zero: false)
-  var m_none = try_make_point(use_zero: true)
+  var m_some = try make_point(use_zero: false)
+  var m_none = try make_point(use_zero: true)
 
   show(f"some type: {m_some.type_name()}")
   show(f"some present: {m_some}")

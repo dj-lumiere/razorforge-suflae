@@ -968,7 +968,7 @@ routine SortedList[T].eq(you: Accessing[SortedList[T]]) -> Bool
     return false
   var i = 0u64
   while i < me.count
-    if me.try_get_by_rank(rank: i)!! != you.try_get_by_rank(rank: i)!!
+    if (try me.get_by_rank(rank: i))!! != (try you.get_by_rank(rank: i))!!
       return false
     i = i +% 1u64
   return true

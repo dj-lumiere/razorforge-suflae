@@ -8,23 +8,6 @@ namespace Builder.Verification;
 
 public sealed partial class SemanticVerifier
 {
-    /// <summary>
-    /// Prefix → creator-variant name for CONVERSION-variant member-routine chains: <c>.try_S64()</c> etc.
-    /// map to <c>S64.try_create</c>/<c>check_create</c>/<c>lookup_create</c> (the recoverable forms of the
-    /// <c>.S64!()</c> → <c>S64.create!(from:)</c> conversion). See the conversion-variant resolution in
-    /// <c>AnalyzeCallExpression</c>.
-    /// </summary>
-    // A conversion call `.try_TYPE()` resolves to TYPE's failable-creator recovery variant, named with the
-    // reserved "create" token (see ErrorHandlingGenerator.GenerateVariantName): `.try_S32()` → `S32`'s
-    // `try_create`. (The `try_K` surface heuristic — strip prefix, test remainder as a type — is a pending
-    // design decision vs an explicit `K.try_create`; this table is the current spelling.)
-    private static readonly (string prefix, string cname)[] ConversionVariantCreators =
-    [
-        ("try_", "try_create"),
-        ("check_", "check_create"),
-        ("lookup_", "lookup_create")
-    ];
-
     private const string StartRoutineName = "start";
 
     private const string UseWhenHint =
@@ -538,14 +521,6 @@ public sealed partial class SemanticVerifier
             callName: callName,
             routine: ref routine);
 
-        // On-demand failable-variant synthesis: a free `try_`/`check_`/`lookup_` call whose
-        // variant isn't registered yet is synthesized from its base failable routine (the
-        // on-demand replacement for eager pre-registration of every failable's variants).
-        if (routine == null)
-        {
-            routine = TrySynthesizeFreeVariantOnDemand(callName: callName);
-        }
-
         // Variadic call: pack the K trailing args into an Array[T, K] literal so the arg count
         // matches the desugared single Array parameter and const-generic inference binds the
         // arity (must run before the generic branches below).
@@ -944,11 +919,12 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Handles the member-chain constructor path: `"42".S32!()` → `S32.create!(from: "42")`.
-    /// Strips conversion-variant prefixes (`try_`/`check_`/`lookup_`), infers generic type args
-    /// from the variant arm when the target is a generic definition, then delegates to
-    /// <see cref="AnalyzeMemberConversion"/>.
-    /// Returns a resolved type on success, null when the member name is not a type.
+    /// Handles the member-chain constructor path: `"42".S32!()` → `S32.create!(from: "42")`. Infers generic
+    /// type args from the variant arm when the target is a generic definition, then delegates to
+    /// <see cref="AnalyzeMemberConversion"/>. Returns a resolved type on success, null when the member name
+    /// is not a type. Recovery of a failable conversion (`try x.S8()`) is NOT a name here — the `try`/`grab`/
+    /// `lookup` keyword resolves the bare conversion, then binds the reader's variant by RESOLVED reference
+    /// in <see cref="BindResolvedVariantCall"/> (no `try_S8` string ever exists).
     /// </summary>
     private TypeSymbol? AnalyzeMemberChainConversion(CallExpression call, MemberExpression member,
         TypeSymbol objectType)
@@ -957,26 +933,7 @@ public sealed partial class SemanticVerifier
         // MemberName is bare; failability is carried structurally in member.IsFailable.
         bool isFailable = member.IsFailable;
         string potentialTypeName = member.MemberName;
-
-        // Conversion-VARIANT chain: `.try_S64()`/`.check_S64()`/`.lookup_S64()` on a value resolve to
-        // the target type's `try_create`/`check_create`/`lookup_create` (the recoverable forms of the
-        // `.S64!()` -> `S64.create!(from:)` conversion). This is what a `try_`/`check_`/`lookup_`
-        // variant body's re-analysis of a converted `!` conversion call must resolve to — else the
-        // bare "try_create" member name re-resolves against the RECEIVER type (e.g. F64.try_create)
-        // instead of the conversion TARGET (S64.try_create). Strip the prefix ONLY when the remainder
-        // is an actual type name, so a real `try_foo` member routine is untouched.
         string creatorName = RoutineInfo.CreatorName;
-        foreach ((string prefix, string cname) in ConversionVariantCreators)
-        {
-            if (potentialTypeName.StartsWith(value: prefix,
-                    comparisonType: StringComparison.Ordinal) &&
-                LookupTypeWithImports(name: potentialTypeName[prefix.Length..]) is not null)
-            {
-                potentialTypeName = potentialTypeName[prefix.Length..];
-                creatorName = cname;
-                break;
-            }
-        }
 
         TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
 
@@ -2172,23 +2129,12 @@ public sealed partial class SemanticVerifier
         // routine, not an `S32.create` member). Adopt free-form's resolution verbatim: ResolvedRoutine may be
         // null for a bare reinterpret, which codegen inlines (EmitMemberRoutineCall's TypeConstructor path).
         //
-        // This also handles the RECOVERY-variant conversion `try x.S8()` (rewritten to `x.try_S8()`, whose
-        // stripped creatorName is `try_create`): numeric/reinterpret conversions are FREE readers
-        // (`routine S8!(from: S64)`), NOT `S8.create` members, so there is no `S8.try_create` member to
-        // resolve — but the free reader HAS an on-demand recovery variant. Resolve the free base reader the
-        // crash way (exact overload by arg type), then bind its `try_`/`check_`/`lookup_` variant by RESOLVED
-        // reference via SynthesizeVariantForBase (no `try_S8` name-strip). The carrier (Maybe/Check/Lookup[T])
-        // is the variant's return type.
-        string? recoveryPrefix = creatorName switch
-        {
-            "try_create" => "try",
-            "check_create" => "check",
-            "lookup_create" => "lookup",
-            _ => null
-        };
+        // A failable conversion `x.S8()` resolves to the failable free reader `S8!(from: S64)` here (bare,
+        // crash-on-failure). Its RECOVERY (`try x.S8()`) is handled by the `try`/`grab`/`lookup` keyword,
+        // which analyzes this bare conversion and then binds the reader's variant by RESOLVED reference in
+        // BindResolvedVariantCall — no `try_S8` string is ever formed.
         if (creator == null && call.Arguments.Count == 0 &&
-            call.Callee is MemberExpression convMember &&
-            (creatorName == RoutineInfo.CreatorName || recoveryPrefix != null))
+            call.Callee is MemberExpression convMember)
         {
             var freeCtor = new CallExpression(
                 Callee: new IdentifierExpression(Name: potentialTypeName, Location: call.Location),
@@ -2197,35 +2143,16 @@ public sealed partial class SemanticVerifier
             TypeSymbol ctorType = AnalyzeExpression(expression: freeCtor);
             if (ctorType is not ErrorTypeSymbol)
             {
-                // Recovery variant: the base free reader must be failable and have a synthesized variant.
-                if (recoveryPrefix != null)
+                call.ConstructedType = freeCtor.ConstructedType ?? targetType;
+                call.LoweringKind = CallLoweringKind.TypeConstructor;
+                call.ResolvedRoutine = freeCtor.ResolvedRoutine;
+                if (freeCtor.ResolvedRoutine is { } freeCreator)
                 {
-                    if (freeCtor.ResolvedRoutine is { IsFailable: true } baseReader &&
-                        SynthesizeVariantForBase(baseOverload: baseReader, prefix: recoveryPrefix) is
-                            { } variant)
-                    {
-                        call.ConstructedType = targetType;
-                        call.LoweringKind = CallLoweringKind.TypeConstructor;
-                        call.ResolvedRoutine = variant;
-                        return variant.ReturnType ?? targetType;
-                    }
-
-                    // Base reader is non-failable (a pure reinterpret cannot fail) or has no variant —
-                    // fall through so the caller reports the missing recovery conversion.
+                    TrackFailableMemberRoutineCall(memberRoutine: freeCreator,
+                        location: call.Location);
                 }
-                else
-                {
-                    call.ConstructedType = freeCtor.ConstructedType ?? targetType;
-                    call.LoweringKind = CallLoweringKind.TypeConstructor;
-                    call.ResolvedRoutine = freeCtor.ResolvedRoutine;
-                    if (freeCtor.ResolvedRoutine is { } freeCreator)
-                    {
-                        TrackFailableMemberRoutineCall(memberRoutine: freeCreator,
-                            location: call.Location);
-                    }
 
-                    return ctorType;
-                }
+                return ctorType;
             }
         }
 
@@ -2256,13 +2183,9 @@ public sealed partial class SemanticVerifier
 
         TrackFailableMemberRoutineCall(memberRoutine: creator, location: call.Location);
 
-        // A conversion-variant chain (`.try_S64()` -> `S64.try_create`) returns the carrier
-        // (Maybe/Result/Lookup[targetType]), not the bare target type. `create` returns the
-        // target type as before. `call.ConstructedType` stays the target so codegen's
-        // TypeConstructor path passes the receiver as the `from:` arg either way.
-        return creatorName == RoutineInfo.CreatorName
-            ? targetType
-            : creator.ReturnType ?? targetType;
+        // `create` returns the target type. `call.ConstructedType` stays the target so codegen's
+        // TypeConstructor path passes the receiver as the `from:` arg.
+        return targetType;
     }
 
     /// <summary>

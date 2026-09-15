@@ -487,7 +487,7 @@ public class CompilerPipelineLoweringTests
     {
         string source = """
                         routine start()
-                          var value = 7_s32.try_floordiv(2_s32)
+                          var value = try 7_s32.floordiv(2_s32)
                           return
                         """;
 
@@ -718,7 +718,7 @@ public class CompilerPipelineLoweringTests
     public void LlvmEmitter_BitListToU8_UsesConcreteHijackedU64Extract()
     {
         // Variants are synthesized + emitted ON DEMAND — a bare propagating `to_u8!()` never
-        // materializes `try_to_u8`. The `trigger` routine RECOVERS via the `try_` variant so the
+        // materializes `try_to_u8`. The `trigger` routine RECOVERS via `try …to_u8()` so the
         // body this test inspects is actually generated (mirrors ErrorVariantGenerationTests).
         string source = """
                         import Collections.BitList
@@ -727,7 +727,7 @@ public class CompilerPipelineLoweringTests
                           return bits.to_u8!()
 
                         routine trigger(bits: BitList) -> U8
-                          discard bits.try_to_u8()
+                          discard try bits.to_u8()
                           return 0u8
 
                         routine start()

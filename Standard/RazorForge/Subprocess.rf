@@ -25,7 +25,7 @@ routine ProcessResult.succeeded() -> Bool
   return (not me.signal.is_present()) and me.exit_code == 0
 
 ### Maps the runtime's term-signal convention (0 = not signalled) to a `Maybe`: absent when 0,
-### otherwise the signal number. The `try_` variant yields the `S32?` that ProcessResult carries.
+### otherwise the signal number. `try`-recovering it yields the `S32?` that ProcessResult carries.
 routine term_signal_value!(raw: S32) -> S32
   if raw == 0
     absent
@@ -38,7 +38,7 @@ routine term_signal_value!(raw: S32) -> S32
 routine proc_result_of(code: S64) -> ProcessResult
   var output = Bytes(ptr: rf_proc_output(), count: rf_proc_output_len()).decode_as_utf8_lossy()
   var errors = Bytes(ptr: rf_proc_errors(), count: rf_proc_errors_len()).decode_as_utf8_lossy()
-  var signal = try_term_signal_value(raw: rf_proc_term_signal())
+  var signal = try term_signal_value(raw: rf_proc_term_signal())
   return ProcessResult(exit_code: code, signal: signal, output: output, errors: errors)
 
 ### Runs `command` through the platform shell (`/bin/sh -c` on POSIX, `cmd /c` on Windows), capturing

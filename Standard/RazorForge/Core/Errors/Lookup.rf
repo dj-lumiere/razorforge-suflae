@@ -2,7 +2,7 @@ module Core
 
 import BuilderQuery
 
-### Represents the success-or-crash-or-absent carrier used by `lookup_` routines.
+### Represents the success-or-crash-or-absent carrier produced by the `lookup` recovery keyword.
 ### `Lookup[T]` extends the `Check[T]` carrier shape with an explicit absent
 ### state for APIs where "not found" is not itself an error. The full layout
 ### is codegen-controlled:

@@ -29,7 +29,7 @@ public class PortedFixtureTests
                           var a = Node(value: 1)
                           var ra = Retained(from: steal a)
                           var rt = ra.observe()
-                          when rt.try_hold()
+                          when try rt.hold()
                             is None => return
                             else rc => return
                         """;
@@ -41,7 +41,7 @@ public class PortedFixtureTests
     // ── playground/maybe_entity_test.rf ──────────────────────────────────────
     // Source memory: maybe_entity_auto_own.md + failable_entity_return_sa_check_2026_05_14.md.
     // After the bound-T-is-pointer redesign, Maybe[entity] is the natural carrier
-    // for a failable returning an entity. `try_*` form + `is None` must resolve.
+    // for a failable returning an entity. `try` recovery + `is None` must resolve.
 
     [Fact]
     public void Analyze_FailableReturningEntity_TryForm_WhenIsNone_Resolves()
@@ -54,7 +54,7 @@ public class PortedFixtureTests
                             else => return "world"
 
                         routine start()
-                          var m1 = try_get_text(n: 1)
+                          var m1 = try get_text(n: 1)
                           when m1
                             is None => return
                             else v => return

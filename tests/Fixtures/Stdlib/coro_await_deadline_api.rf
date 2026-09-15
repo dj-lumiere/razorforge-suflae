@@ -4,7 +4,7 @@ module Tests/Stdlib/CoroAwaitDeadlineApi
 # races the worker thread against the deadline WITHOUT blocking: the coroutine parks on a deadline
 # timer that is also wakeable by the worker's completion, and resumes on whichever wins. If the task
 # finishes first the value comes back; if the deadline wins it throws TaskTimeoutError (here caught
-# via the graceful `try_retrieve` -> None). Same call blocks with a deadline on a plain thread.
+# via the graceful `try …retrieve()` -> None). Same call blocks with a deadline on a plain thread.
 
 import IO/Console
 
@@ -20,8 +20,8 @@ suspended routine in_time() -> S64
   return quick(x: 41).waitfor(5s).retrieve()
 
 suspended routine times_out() -> S64
-  # Worker takes 150ms but the deadline is 20ms -> the timer wins; try_retrieve yields None.
-  var r = slow(x: 41).waitfor(20ms).try_retrieve()
+  # Worker takes 150ms but the deadline is 20ms -> the timer wins; `try …retrieve()` yields None.
+  var r = try slow(x: 41).waitfor(20ms).retrieve()
   when r
     is None => return 99       # timed out, as expected
     is S64 v => return v        # would be 42 if it had not timed out

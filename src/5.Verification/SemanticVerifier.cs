@@ -411,10 +411,9 @@ public sealed partial class SemanticVerifier
         //   [demand collect+monomorphize] · 9 Post-desugar checks.
         // Stub synthesis (3) + syntax prepass (4) run BEFORE semantic analysis (5) so their stubs are in
         // scope. Under the demand flip, stdlib SA+desugaring is driven per-file by the collector, not eagerly.
-        // Install the on-demand failable-variant synthesizer: any LookupMemberRoutine miss on a
-        // try_/check_/lookup_ name now synthesizes that variant from the deferred base index (populated
-        // by pre-registration) rather than relying on eager registration of every failable's variants.
-        _registry.OnDemandVariantSynthesizer = TrySynthesizeVariantOnDemand;
+        // Install the on-demand failable-variant synthesizer hook (by RESOLVED base reference): the `try`/
+        // `grab`/`lookup` keyword and the variant-body rewriter mint a base's recovery variant on demand
+        // from the deferred base index, rather than eagerly registering every failable's variants.
         _registry.OnDemandVariantForBase = SynthesizeVariantForBase;
         RunPhase1Declarations(program: program);
         Mark(label: "Phase 1 Declarations");
@@ -1207,10 +1206,10 @@ public sealed partial class SemanticVerifier
         AnalyzeSynthesizedBodies();
 
         // Index failable stdlib routines for on-demand variant synthesis (no eager GenerateVariants),
-        // then install the synthesizer hook so stdlib bodies that call try_X (e.g. try_get_by_rank)
-        // resolve during body analysis. Uses AST-level detection — no full body analysis required.
+        // then install the by-RESOLVED-base synthesizer hook so a stdlib body's `try`/`grab`/`lookup` (or
+        // the variant-body rewriter) mints a base's variant during analysis. AST-level detection — no full
+        // body analysis required.
         PreRegisterStdlibVariants();
-        _registry.OnDemandVariantSynthesizer = TrySynthesizeVariantOnDemand;
         _registry.OnDemandVariantForBase = SynthesizeVariantForBase;
 
         AnalyzeStdlibBodies();
@@ -1587,9 +1586,8 @@ public sealed partial class SemanticVerifier
     /// <returns>Analysis result containing errors, warnings, and the populated type registry.</returns>
     public AnalysisResult AnalyzeMultiple(List<(Program Program, string FilePath)> files)
     {
-        // On-demand failable-variant synthesis (see Analyze): install the hook here too — the
-        // multi-file / stdlib build path does not go through Analyze.
-        _registry.OnDemandVariantSynthesizer = TrySynthesizeVariantOnDemand;
+        // On-demand failable-variant synthesis (see Analyze): install the by-RESOLVED-base hook here too —
+        // the multi-file / stdlib build path does not go through Analyze.
         _registry.OnDemandVariantForBase = SynthesizeVariantForBase;
         _importSnapshots.Clear();
         _symbolNameSnapshots.Clear();

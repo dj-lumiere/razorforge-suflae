@@ -2,7 +2,7 @@ module Core
 
 import BuilderQuery
 
-### Represents the success-or-crash carrier used by `check_` routines.
+### Represents the success-or-crash carrier produced by the `grab` recovery keyword.
 ### A `Check[T]` stores either a successful `T` payload or a crashable error
 ### payload inline. The full layout is codegen-controlled:
 ###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }

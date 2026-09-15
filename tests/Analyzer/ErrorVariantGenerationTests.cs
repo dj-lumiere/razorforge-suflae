@@ -37,12 +37,12 @@ public class ErrorVariantGenerationTests
                           return User(name: "test")
 
                         routine trigger_variants(id: U64) -> User?
-                          return try_get(id: id)
+                          return try get(id: id)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the trigger call above generates try_get.
+        // Variants are synthesized ON DEMAND — the `try` keyword above generates try_get.
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
         Assert.NotNull(@object: tryVariant);
         // Return type should be Maybe[User] / User?
@@ -79,13 +79,13 @@ public class ErrorVariantGenerationTests
                           return value
 
                         routine trigger_variants(value: S32) -> S32?
-                          check_validate(value: value)
-                          return try_validate(value: value)
+                          discard grab validate(value: value)
+                          return try validate(value: value)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the trigger calls above generate check_/try_validate.
+        // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_validate.
         RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_validate");
         Assert.NotNull(@object: checkVariant);
 
@@ -136,13 +136,13 @@ public class ErrorVariantGenerationTests
                           return User(name: "test")
 
                         routine trigger_variants(id: U64) -> User?
-                          lookup_get_user(id: id)
-                          return try_get_user(id: id)
+                          lookup get_user(id: id)
+                          return try get_user(id: id)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the trigger calls above generate lookup_/try_get_user.
+        // Variants are synthesized ON DEMAND — the `lookup`/`try` keywords above generate lookup_/try_get_user.
         RoutineInfo? lookupVariant = result.Registry.GetRoutine(name: "lookup_get_user");
         Assert.NotNull(@object: lookupVariant);
 
@@ -171,12 +171,12 @@ public class ErrorVariantGenerationTests
                           return me.data.get(key)
 
                         routine Cache.trigger(key: Text) -> S32?
-                          return me.try_get(key: key)
+                          return try me.get(key: key)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the trigger call above generates Cache.try_get.
+        // Variants are synthesized ON DEMAND — the `try` keyword above generates Cache.try_get.
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "Cache.try_get");
         Assert.NotNull(@object: tryVariant);
     }
@@ -320,13 +320,13 @@ public class ErrorVariantGenerationTests
                           throw SomeError(msg: "parse failed")
 
                         routine trigger_variants(text: Text) -> S32?
-                          check_parse_number(text: text)
-                          return try_parse_number(text: text)
+                          discard grab parse_number(text: text)
+                          return try parse_number(text: text)
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Variants are synthesized ON DEMAND — the trigger calls above generate check_/try_parse_number.
+        // Variants are synthesized ON DEMAND — the `grab`/`try` keywords above generate check_/try_parse_number.
         RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_parse_number");
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_parse_number");
 

@@ -219,7 +219,7 @@ public class DiscardTests
     }
 
     /// <summary>
-    /// Verifies that discard on the non-failable try_ variant in a non-failable context produces no error.
+    /// Verifies that discard on a `try`-recovered call in a non-failable context produces no error.
     /// </summary>
     [Fact]
     public void Analyze_DiscardTryVariantInNonFailableContext_NoError()
@@ -231,7 +231,7 @@ public class DiscardTests
                           return 42
 
                         routine test()
-                          discard try_get(flag: true)
+                          discard try get(flag: true)
                           return
                         """;
 

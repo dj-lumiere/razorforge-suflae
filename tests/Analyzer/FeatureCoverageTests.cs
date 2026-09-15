@@ -310,8 +310,8 @@ public class FeatureCoverageTests
                                 return a // b
 
                               routine start()
-                                var ok = check_guard_div(a: 10, b: 2)
-                                var err = check_guard_div(a: 10, b: 0)
+                                var ok = grab guard_div(a: 10, b: 2)
+                                var err = grab guard_div(a: 10, b: 0)
                                 when ok
                                   is DivisionByZeroError => show("caught")
                                   else v                 => show(f"ok:{v}")
@@ -336,7 +336,7 @@ public class FeatureCoverageTests
                                 return n
 
                               routine start()
-                                var m = try_parse_pos(n: 5)
+                                var m = try parse_pos(n: 5)
                                 when m
                                   is None => show("none")
                                   else v  => show(f"{v}")

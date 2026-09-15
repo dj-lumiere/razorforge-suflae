@@ -173,12 +173,12 @@ public class ErrorHandlingValidationTests
                           throw MyError(message: "error")
 
                         routine trigger_variants() -> S32?
-                          return try_normal_routine()
+                          return try normal_routine()
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        // Without @crash_only, variants are synthesized ON DEMAND — the trigger call above generates it.
+        // Without @crash_only, variants are synthesized ON DEMAND — the `try` keyword above generates it.
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_normal_routine");
         Assert.NotNull(@object: tryVariant);
     }
@@ -251,7 +251,7 @@ public class ErrorHandlingValidationTests
                           return 42
 
                         routine test()
-                          var pending = lookup_get_value(id: 1)
+                          var pending = lookup get_value(id: 1)
                           return
                         """;
 
@@ -280,7 +280,7 @@ public class ErrorHandlingValidationTests
                           return value
 
                         routine test()
-                          var first = check_validate(value: 1)
+                          var first = grab validate(value: 1)
                           var second = first
                           return
                         """;

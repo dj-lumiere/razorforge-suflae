@@ -837,7 +837,10 @@ public sealed partial class SemanticVerifier
     {
         // discard must target a routine call, not an arbitrary expression like a literal or variable.
         // Explicit-generic calls (`f[T](...)`) parse to GenericMemberRoutineCallExpression — also a call.
-        if (discard.Expression is not (CallExpression or GenericMemberRoutineCallExpression))
+        // A `try`/`grab`/`lookup` recovery (`discard grab feeder.send(...)`) is likewise a call under the
+        // hood — it lowers to the failable call's recovery variant — so discarding its carrier is valid.
+        if (discard.Expression is not (CallExpression or GenericMemberRoutineCallExpression
+            or RecoveryExpression))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidDiscardTarget,
                 message: "'discard' can only be used with routine calls. " +

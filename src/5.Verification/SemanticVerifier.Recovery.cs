@@ -59,14 +59,15 @@ public sealed partial class SemanticVerifier
             _ => "try"
         };
 
-        // SINGLE failable call (the overwhelmingly common case): rewrite it to its recovery-variant call
-        // (`l.remove_last()` → `l.try_remove_last()`, `foo(a)` → `try_foo(a)`, conversion `x.S8()` →
-        // `x.try_S8()`) and RE-ANALYZE — normal resolution monomorphizes the variant on the concrete
-        // receiver (→ concrete carrier `Maybe[S64]`, not the generic-def `Maybe[T]`) AND keeps the receiver
-        // in place so an entity is BORROWED as the base call borrowed it (no synth-routine by-value capture
-        // → no spurious RF-S413). Routine synthesis (below) is needed ONLY to thread a MULTI-call
-        // short-circuit, or when the exact variant is not directly synthesizable (grab's check_ over an
-        // absent-only base — the routine path shapes that), which this gate defers via SynthesizeVariantForBase.
+        // SINGLE failable call (the overwhelmingly common case): bind its recovery-variant DIRECTLY by
+        // RESOLVED reference — no `try_`/`check_`/`lookup_` NAME is ever formed (names are STRUCTURED, never
+        // string-parsed). The base call already resolved concretely (a concrete receiver → the concrete
+        // member routine, or the failable free reader for a conversion), so we synthesize the base's variant
+        // and substitute it for that same concrete owner: concrete carrier `Maybe[S64]` (not the generic-def
+        // `Maybe[T]`), receiver stays in place so an entity is BORROWED as the base call borrowed it (no
+        // synth-routine by-value capture → no spurious RF-S413). Routine synthesis (below) is the fallback
+        // ONLY for a MULTI-call short-circuit, or a shape SynthesizeVariantForBase cannot mint here (grab's
+        // check_ over an absent-only base — the routine path shapes that), which this gate defers on null.
         if (hoister.Hoisted is
                 [
                     DeclarationStatement
@@ -75,31 +76,13 @@ public sealed partial class SemanticVerifier
                     }
                 ] &&
             residual is IdentifierExpression &&
-            recovery.Inner is CallExpression { ResolvedRoutine: { } singleBase } &&
-            SynthesizeVariantForBase(baseOverload: singleBase, prefix: recoveryPrefix) != null)
+            recovery.Inner is CallExpression { ResolvedRoutine: { } singleBase } singleCall &&
+            SynthesizeVariantForBase(baseOverload: singleBase, prefix: recoveryPrefix) is { } singleVariant &&
+            BindResolvedVariantCall(call: singleCall, baseRoutine: singleBase,
+                genericVariant: singleVariant) is { } boundCall)
         {
-            string namePrefix = recoveryPrefix + "_";
-            Expression variantCall = recovery.Inner switch
-            {
-                CallExpression { Callee: IdentifierExpression id } c => c with
-                {
-                    Callee = id with { Name = namePrefix + id.Name }, IsFailable = false
-                },
-                CallExpression { Callee: MemberExpression m } c => c with
-                {
-                    Callee = m with { MemberName = namePrefix + m.MemberName, IsFailable = false },
-                    IsFailable = false
-                },
-                _ => recovery.Inner
-            };
-            TypeSymbol carrier = AnalyzeExpression(expression: variantCall);
-            if (carrier is not ErrorTypeSymbol)
-            {
-                recovery.LoweredCall = variantCall;
-                return carrier;
-            }
-
-            // Fall through to routine synthesis when the rewritten variant call does not resolve.
+            recovery.LoweredCall = boundCall;
+            return boundCall.ResolvedType!;
         }
 
         // Free variables = referenced identifiers that resolve to an outer local/param (not a hoisted temp,
@@ -191,6 +174,74 @@ public sealed partial class SemanticVerifier
         TypeSymbol carrierType = AnalyzeExpression(expression: loweredCall);
         recovery.LoweredCall = loweredCall;
         return carrierType;
+    }
+
+    /// <summary>
+    /// Binds a single failable <paramref name="call"/> to its recovery-variant by RESOLVED reference — no
+    /// <c>try_</c>/<c>check_</c>/<c>lookup_</c> name is ever formed. <paramref name="genericVariant"/> is the
+    /// variant minted for the base (generic-def for a generic owner). Produces a retargeted
+    /// <see cref="CallExpression"/> whose ResolvedRoutine/LoweringKind/ResolvedType are stamped as the normal
+    /// resolution would; returns null when the call shape is not a directly-bindable single call (the caller
+    /// then defers to routine-synthesis composition).
+    /// </summary>
+    private CallExpression? BindResolvedVariantCall(CallExpression call, RoutineInfo baseRoutine,
+        RoutineInfo genericVariant)
+    {
+        // CONVERSION recovery (`try x.S8()`): the base is a failable free reader `S8!(from:)` bound as a
+        // TypeConstructor; its variant is the reader's recovery variant. Keep the member-call shape — codegen's
+        // TypeConstructor path passes the receiver as the `from:` argument and dispatches on ResolvedRoutine —
+        // and stamp the resolved variant + carrier return (the variant's ReturnType is Maybe/Check/Lookup[T]).
+        if (call.LoweringKind == CallLoweringKind.TypeConstructor)
+        {
+            var conv = call with { IsFailable = false };
+            conv.ResolvedRoutine = genericVariant;
+            conv.LoweringKind = CallLoweringKind.TypeConstructor;
+            conv.ConstructedType = call.ConstructedType;
+            conv.ResolvedType = genericVariant.ReturnType;
+            return conv;
+        }
+
+        switch (call.Callee)
+        {
+            // MEMBER call (`l.remove_last()`): the base call already resolved to the concrete-for-owner member
+            // routine, so substitute the (generic-def) variant for the BASE's owner — that owner is already
+            // unwrapped through any access wrapper (`you: Accessing[SortedList[T]]` → owner `SortedList[T]`),
+            // whereas the receiver EXPRESSION's type is still the wrapper. Yields the concrete carrier and keeps
+            // the receiver in place (borrowed, not consumed).
+            case MemberExpression m when (baseRoutine.OwnerType ?? m.Object.ResolvedType) is { } ownerType:
+            {
+                RoutineInfo concrete =
+                    _registry.SubstituteMemberRoutineForOwner(memberRoutine: genericVariant,
+                        resolvedOwner: ownerType) ?? genericVariant;
+                var member = call with
+                {
+                    Callee = m with { MemberName = concrete.Name, IsFailable = false },
+                    IsFailable = false
+                };
+                member.ResolvedRoutine = concrete;
+                member.LoweringKind = ClassifyMemberRoutineCall(memberRoutine: concrete);
+                member.ResolvedType = concrete.ReturnType;
+                return member;
+            }
+
+            // FREE call (`make_point(...)`): no generic free recovery exists (measured across the suite), so
+            // the variant is already concrete — bind it verbatim.
+            case IdentifierExpression id:
+            {
+                var free = call with
+                {
+                    Callee = id with { Name = genericVariant.Name },
+                    IsFailable = false
+                };
+                free.ResolvedRoutine = genericVariant;
+                free.LoweringKind = ClassifyStandaloneRoutineCall(routine: genericVariant);
+                free.ResolvedType = genericVariant.ReturnType;
+                return free;
+            }
+
+            default:
+                return null;
+        }
     }
 
     /// <summary>The surface keyword for a <see cref="RecoveryKind"/>, for diagnostics.</summary>
