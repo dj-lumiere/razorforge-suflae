@@ -855,11 +855,6 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         }
 
         RoutineInfo failRoutine = failCall.ResolvedRoutine;
-        if (failRoutine.OwnerType is not { } owner)
-        {
-            return false;
-        }
-
         string baseName = failRoutine.OriginalName ?? failRoutine.Name;
 
         // In the monomorphized (path-2) caller — which runs AFTER reachability — restrict propagation
@@ -873,10 +868,19 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             return false;
         }
 
-        RoutineInfo? variant = LookupVariantForOverload(registry: registry,
-            owner: owner,
-            prefix: PrefixTry,
-            original: failRoutine);
+        // Resolve the try_ variant of THIS overload. The per-overload synth hook handles BOTH free and
+        // member bases (a whole-expression `try` composition body — SemanticVerifier.Recovery — hoists FREE
+        // failable calls, which have no OwnerType); fall back to the member-scoped lookup when the hook is
+        // absent (and only then require an owner).
+        RoutineInfo? variant =
+            registry.OnDemandVariantForBase?.Invoke(arg1: failRoutine, arg2: PrefixTry);
+        if (variant == null && failRoutine.OwnerType is { } owner)
+        {
+            variant = LookupVariantForOverload(registry: registry,
+                owner: owner,
+                prefix: PrefixTry,
+                original: failRoutine);
+        }
 
         // Need a Maybe carrier (flat {present,value}) to unwrap with field access. The TryBool
         // variant returns Bool (no type args) and is rejected here.
