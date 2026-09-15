@@ -81,6 +81,25 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx) : Ast
             Location: loc);
     }
 
+    /// <summary>Like <see cref="MakeCarrierReturn"/> but tags the carrier with a RUNTIME <c>type_id</c>
+    /// expression (the caught carrier's own <c>type_id</c>) rather than a compile-time constant — used when
+    /// re-throwing an already-erased <c>Crashable</c> whose concrete type is unknown until run time.</summary>
+    private static ReturnStatement MakeCarrierReturnDynamic(RecordTypeSymbol carrier,
+        Expression typeIdExpr, Expression? payload, SourceLocation loc)
+    {
+        var members = new List<(string Name, Expression Value)> { ("type_id", typeIdExpr) };
+        if (payload != null)
+        {
+            members.Add(item: ("payload", payload));
+        }
+
+        return new ReturnStatement(Value: new CreatorExpression(TypeName: carrier.Name,
+                TypeArguments: null,
+                MemberVariables: members,
+                Location: loc) { ResolvedType = carrier },
+            Location: loc);
+    }
+
     /// <summary>Lowers routine bodies in a single program (user file or stdlib file).</summary>
     public void Run(Program program)
     {
@@ -200,6 +219,18 @@ internal sealed class VariantReturnLoweringPass(PostprocessingContext ctx) : Ast
             return MakeCarrierReturn(carrier: carrier,
                 typeId: 0,
                 payload: null,
+                loc: vr.Location);
+        }
+
+        // Re-throwing an already-erased Crashable (a composition propagating an inner carrier's failure):
+        // the concrete crashable type — hence its type_id — is unknown at compile time, so tag the re-wrapped
+        // carrier with the RUNTIME type_id read off the source carrier (CrashableTypeIdSource) instead of a
+        // constant computed from the erased Crashable static type (which would mis-tag the payload).
+        if (vr.CrashableTypeIdSource is { } runtimeTypeId && vr.Value != null)
+        {
+            return MakeCarrierReturnDynamic(carrier: carrier,
+                typeIdExpr: runtimeTypeId,
+                payload: vr.Value,
                 loc: vr.Location);
         }
 

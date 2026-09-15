@@ -80,6 +80,14 @@ public sealed partial class SemanticVerifier
 
         // Synthesize the failable base routine __recover_N! and register it. It is a TEMPLATE — never called
         // directly (only its recovery variant is), so it is never collected/emitted on its own.
+        // The carrier the KEYWORD selects drives which variant the base must expose:
+        //  - try    → try_    (Maybe): pessimistic (throw+absent) generates try_.
+        //  - lookup → lookup_ (Lookup): pessimistic (throw+absent) generates lookup_.
+        //  - grab   → check_  (Check): grab collapses the WHOLE crashable set (and, per the design, promotes
+        //    a sub-call's absent to AbsentValueError) into Check's single Crashable arm. The variant rules
+        //    only mint check_ for a THROW-ONLY shape, so mark grab's base throw-only (HasThrow, no HasAbsent,
+        //    non-pessimistic) — otherwise the both-shape yields lookup_ and no check_ exists.
+        bool grab = recovery.Kind == RecoveryKind.Grab;
         string baseName = $"__recover_{_recoveryCompositionSeq++}";
         var baseRoutine = new RoutineInfo(name: baseName)
         {
@@ -88,6 +96,7 @@ public sealed partial class SemanticVerifier
             ReturnType = innerType,
             IsFailable = true,
             IsSynthesized = true,
+            HasThrow = grab,
             // Open: this is compiler-internal, and its variant inherits this visibility. Secret would trip
             // the cross-module access check (RF-S403) at the call site.
             Visibility = VisibilityModifier.Open,
@@ -97,9 +106,9 @@ public sealed partial class SemanticVerifier
         };
         _registry.RegisterRoutine(routine: baseRoutine);
 
-        // Index the base for on-demand variant synthesis (pessimistic: the failability is entirely
-        // propagated through the hoisted calls — no direct throw/absent in this synthesized body).
-        _registry.DeferredVariantBases[key: baseRoutine.RegistryKey] = (baseRoutine, baseBody, true);
+        // Index the base for on-demand variant synthesis. try/lookup use the pessimistic (throw+absent)
+        // shape; grab uses the throw-only shape stamped above (so check_ is generated).
+        _registry.DeferredVariantBases[key: baseRoutine.RegistryKey] = (baseRoutine, baseBody, !grab);
 
         string prefix = recovery.Kind switch
         {

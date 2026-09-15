@@ -472,9 +472,17 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         VariantCallRewriter? rewriter = null, TypeRegistry? registry = null,
         bool nextOnlyPropagation = false)
     {
-        TypeRegistry? propRegistry = registry != null && kind == ErrorHandlingVariantKind.Try
-            ? registry
-            : null;
+        // Pass the registry through for every carrier kind that has non-tail propagation: Try (the flat
+        // Maybe {present,value} unwrap) AND Check/Lookup (the tag-based `when` over the inner's same-kind
+        // variant — TryBuildCarrierSafeCall/BuildCarrierPropagationWhen). Previously gated to Try only,
+        // which left the Check/Lookup propagation branch unreachable (its `registry != null` guard never
+        // held), so a `grab`/`lookup` composition body left inner failable calls raw and crashed. TryBool
+        // has no carrier to thread through.
+        TypeRegistry? propRegistry =
+            kind is ErrorHandlingVariantKind.Try or ErrorHandlingVariantKind.Check
+                or ErrorHandlingVariantKind.Lookup
+                ? registry
+                : null;
         return TransformBodyCore(body: body,
             kind: kind,
             rewriter: rewriter,
@@ -800,6 +808,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                     innerCanNone: innerCanNone,
                     innerCanError: innerCanError,
                     remainder: remainder,
+                    registry: registry!,
                     loc: s.Location));
                 return result; // remainder consumed into the when's success arm
             }
@@ -992,12 +1001,11 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         }
 
         RoutineInfo failRoutine = failCall.ResolvedRoutine;
-        if (failRoutine.OwnerType is not { } owner)
-        {
-            return false;
-        }
 
-        // Prefer the outer kind's variant, then fall back to the most-informative available.
+        // Prefer the outer kind's variant, then fall back to the most-informative available. The
+        // per-overload synth hook resolves BOTH free and member bases (a whole-expression `grab`/`lookup`
+        // composition body — SemanticVerifier.Recovery — hoists FREE failable calls, which have no
+        // OwnerType); fall back to the member-scoped lookup when the hook is absent and the base has an owner.
         string[] order = kind == ErrorHandlingVariantKind.Check
             ? [PrefixCheck, PrefixLookup, PrefixTry]
             : [PrefixLookup, PrefixCheck, PrefixTry];
@@ -1005,10 +1013,15 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         string chosen = "";
         foreach (string p in order)
         {
-            RoutineInfo? v = LookupVariantForOverload(registry: registry,
-                owner: owner,
-                prefix: p,
-                original: failRoutine);
+            RoutineInfo? v = registry.OnDemandVariantForBase?.Invoke(arg1: failRoutine, arg2: p);
+            if (v == null && failRoutine.OwnerType is { } owner)
+            {
+                v = LookupVariantForOverload(registry: registry,
+                    owner: owner,
+                    prefix: p,
+                    original: failRoutine);
+            }
+
             if (v?.ReturnType is { TypeArguments.Count: > 0 })
             {
                 variant = v;
@@ -1025,11 +1038,12 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         innerCanNone = chosen is PrefixTry or PrefixLookup;
         innerCanError = chosen is PrefixCheck or PrefixLookup;
 
-        // The outer carrier represents None only for Lookup (Try uses the flat-field path), and an
-        // error for both Check and Lookup. If neither failure the inner can produce maps onto the
-        // outer, propagation is meaningless — leave the call raw.
-        bool outerCanNone = kind == ErrorHandlingVariantKind.Lookup;
-        if (!(innerCanNone && outerCanNone || innerCanError))
+        // A Lookup outer represents None natively; a Check outer has no None state but ABSORBS a caught
+        // absent by promoting it to AbsentValueError (a Crashable) — grab collapses "not found" into the
+        // single Crashable arm. Both outers represent an error. If neither failure the inner can produce
+        // maps onto the outer, propagation is meaningless — leave the call raw.
+        bool outerAbsorbsNone = kind is ErrorHandlingVariantKind.Lookup or ErrorHandlingVariantKind.Check;
+        if (!(innerCanNone && outerAbsorbsNone || innerCanError))
         {
             return false;
         }
@@ -1070,14 +1084,30 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// Arms are emitted only for failures the chosen inner carrier can produce AND the outer can
     /// represent. Lowered by CrashableExpansionPass + PatternLoweringPass on path-1 variant bodies.
     /// </summary>
-    private static WhenStatement BuildCarrierPropagationWhen(Expression subject, string? bindName,
+    private static Statement BuildCarrierPropagationWhen(Expression subject, string? bindName,
         ErrorHandlingVariantKind kind, bool innerCanNone, bool innerCanError,
-        List<Statement> remainder, SourceLocation loc)
+        List<Statement> remainder, TypeRegistry registry, SourceLocation loc)
     {
+        // Bind the subject carrier to a temp so the Crashable arm can read its RUNTIME type_id — the outer
+        // carrier must re-wrap the failure preserving the concrete crashable identity, which the caught,
+        // erased `Crashable` value alone does not carry (only the source carrier's type_id field does).
+        string subjName = $"__rc_carrier_{Interlocked.Increment(location: ref _propTemp)}";
+        TypeSymbol? subjType = subject.ResolvedType;
+        var subjDecl = new DeclarationStatement(
+            Declaration: new VariableDeclaration(Name: subjName,
+                Type: null,
+                Initializer: subject,
+                Visibility: VisibilityModifier.Secret,
+                Location: loc),
+            Location: loc);
+        IdentifierExpression SubjRef() =>
+            new(Name: subjName, Location: loc) { ResolvedType = subjType };
+
         var clauses = new List<WhenClause>();
 
         if (innerCanNone && kind == ErrorHandlingVariantKind.Lookup)
         {
+            // Lookup natively carries an absent state.
             clauses.Add(item: new WhenClause(Pattern: new NonePattern(Location: loc),
                 Body: new VariantReturnStatement(VariantKind: kind,
                     SiteKind: VariantSiteKind.FromAbsent,
@@ -1085,10 +1115,28 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                     Location: loc),
                 Location: loc));
         }
+        else if (innerCanNone && kind == ErrorHandlingVariantKind.Check)
+        {
+            // Check has no absent state — grab promotes a caught absent to AbsentValueError (a concrete
+            // Crashable, so its type_id is baked correctly by the normal FromThrow lowering).
+            var absentError = new CreatorExpression(TypeName: "AbsentValueError",
+                TypeArguments: null,
+                MemberVariables: [],
+                Location: loc) { ResolvedType = registry.LookupType(name: "AbsentValueError") };
+            clauses.Add(item: new WhenClause(Pattern: new NonePattern(Location: loc),
+                Body: new VariantReturnStatement(VariantKind: kind,
+                    SiteKind: VariantSiteKind.FromThrow,
+                    Value: absentError,
+                    Location: loc),
+                Location: loc));
+        }
 
         if (innerCanError)
         {
             const string errName = "__rf_prop_err";
+            var typeIdSource = new MemberExpression(Object: SubjRef(),
+                MemberName: "type_id",
+                Location: loc) { ResolvedType = registry.LookupType(name: "U64") };
             clauses.Add(item: new WhenClause(
                 Pattern: new CrashablePattern(ErrorType: null,
                     VariableName: errName,
@@ -1096,7 +1144,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Body: new VariantReturnStatement(VariantKind: kind,
                     SiteKind: VariantSiteKind.FromThrow,
                     Value: new IdentifierExpression(Name: errName, Location: loc),
-                    Location: loc),
+                    Location: loc) { CrashableTypeIdSource = typeIdSource },
                 Location: loc));
         }
 
@@ -1105,7 +1153,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             Body: new BlockStatement(Statements: remainder, Location: loc),
             Location: loc));
 
-        return new WhenStatement(Expression: subject, Clauses: clauses, Location: loc);
+        var when = new WhenStatement(Expression: SubjRef(), Clauses: clauses, Location: loc);
+        return new BlockStatement(Statements: [subjDecl, when], Location: loc);
     }
 
     /// <summary>

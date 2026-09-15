@@ -1043,6 +1043,17 @@ public record VariantReturnStatement(
     Expression? Value,
     SourceLocation Location) : Statement(Location: Location)
 {
+    /// <summary>
+    /// For a <see cref="VariantSiteKind.FromThrow"/> that RE-THROWS an already-erased <c>Crashable</c>
+    /// (a composition propagating an inner carrier's failure — see
+    /// <c>ErrorHandlingVariantPass.BuildCarrierPropagationWhen</c>), the expression that yields the caught
+    /// error's RUNTIME <c>type_id</c> (the source carrier's <c>type_id</c> member). When set, carrier
+    /// lowering tags the re-wrapped carrier with THIS value instead of a compile-time constant computed
+    /// from the erased <c>Crashable</c> static type (which would mis-tag the payload). Null for a normal
+    /// throw of a concretely-typed error, where the static type gives the correct <c>type_id</c>.
+    /// </summary>
+    public Expression? CrashableTypeIdSource { get; init; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
