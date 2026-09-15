@@ -9,8 +9,8 @@ routine divide!(a: S64, b: S64) -> S64
   return a // b
 
 routine start()
-  var r_ok = check_divide(a: 10, b: 2)
-  var r_err = check_divide(a: 10, b: 0)
+  var r_ok = grab divide(a: 10, b: 2)
+  var r_err = grab divide(a: 10, b: 0)
 
   show(f"ok type: {r_ok.type_name()}")
   show(f"ok present: {r_ok}")

@@ -23,12 +23,12 @@ routine validate!(n: S64) -> S64
 
 routine start()
   # Happy path: check_ variant returns Check[T] (T is S64 record-typed)
-  var ok = check_validate(n: 5)
+  var ok = grab validate(n: 5)
   show(f"ok type: {ok.type_name()}")
   show(f"ok: {ok}")
 
   # Failure path
-  var err = check_validate(n: -1)
+  var err = grab validate(n: -1)
   show(f"err: {err}")
   show(f"err diagnose: {err:?}")
 

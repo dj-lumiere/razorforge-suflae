@@ -33,8 +33,8 @@ routine start()
   show(f"LogicBreachedError title: {lb.crash_title()}")
 
   # DivisionByZeroError caught via check_ variant
-  var r_ok = check_guard_div(a: 10, b: 2)
-  var r_err = check_guard_div(a: 10, b: 0)
+  var r_ok = grab guard_div(a: 10, b: 2)
+  var r_err = grab guard_div(a: 10, b: 0)
 
   when r_ok
     is DivisionByZeroError => show("  unreachable")
@@ -44,7 +44,7 @@ routine start()
     else v                    => show(f"  div ok: {v}")
 
   # VerificationFailedError caught
-  var r_neg = check_guard_input(n: -5)
+  var r_neg = grab guard_input(n: -5)
   when r_neg
     is VerificationFailedError e => show(f"  caught: {e.crash_title()}")
     else v                        => show(f"  unreachable: {v}")
