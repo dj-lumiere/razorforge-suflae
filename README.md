@@ -10,9 +10,10 @@ RazorForge is a natively compiled, statically typed programming language built a
 1. **Single-ownership memory management without a borrow checker** — containment is ownership,
    transfers are explicit (`steal`), borrows are scoped — so you get deterministic cleanup and
    use-after-move rejection without lifetime annotations or a garbage collector.
-2. **Compiler-generated error handling** — write one failable routine (`routine parse!(...)`),
-   and the compiler derives `try_parse` (returns `Maybe[T]`), `check_parse` (returns `Result[T]`),
-   and `lookup_parse` variants for every calling style. No exceptions, no boilerplate.
+2. **Keyword-driven error handling** — write one failable routine (`routine parse!(...)`); a bare
+   call crashes loudly on failure, or recover by prefixing the call with a keyword: `try parse(...)`
+   → `Maybe[T]`, `grab parse(...)` → `Check[T]` (keeps the error), `lookup parse(...)` → `Lookup[T]`.
+   No exceptions, no boilerplate.
 
 It compiles to native code through LLVM and runs on Windows x86-64 and Linux x86-64 today.
 It is aimed at **performance-minded application work** — CLIs, services, games, data tools —
@@ -43,7 +44,7 @@ routine get_text!(n: S64) -> Text
     else => return "world"
 
 routine start()
-  var m = try_get_text(n: 0)   # generated variant -> Maybe[Text]
+  var m = try get_text(n: 0)   # try keyword -> Maybe[Text]
   when m
     is None => show("absent")
     else v  => show(f"present: {v}")
@@ -169,8 +170,8 @@ With no entry file given, the CLI searches the current and parent directories fo
 - **Memory model**: single-ownership entities with deterministic `$destroy`, explicit `steal`
   transfer, scoped borrows, `Retained`/`Tracked` reference counting, `danger` blocks for
   opt-in unsafe operations.
-- **Error handling**: failable routines (`!`), `throw`/`absent`, generated `try_`/`check_`/`lookup_`
-  variants, `Maybe[T]`/`Result[T]`/`Lookup[T]` carriers, `when` pattern matching.
+- **Error handling**: failable routines (`!`), `throw`/`absent`, `try`/`grab`/`lookup` recovery
+  keywords, `Maybe[T]`/`Check[T]`/`Lookup[T]` carriers, `when` pattern matching.
 - **Numerics**: `S8`–`S128`, `U8`–`U128`, `F16`–`F128`, decimal `D32`/`D64`/`D128`, arbitrary
   precision `Integer`/`Decimal`, complex numbers — with checked, wrapping, clamping, and
   overflow-reporting arithmetic variants.

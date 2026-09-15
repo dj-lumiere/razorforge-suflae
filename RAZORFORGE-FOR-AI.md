@@ -32,12 +32,17 @@ When unsure, consult ground truth in the repo/package:
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
-7. **Failable routines carry a `!` suffix and failure handling is enforced.**
-   You either call from another failable routine, match with `when`, or call a
-   compiler-generated variant. `try_foo` is always generated (→ Maybe);
-   `check_foo` is generated for routines that can throw (→ Result);
-   `lookup_foo` is generated when a routine can both throw and be absent
-   (→ Lookup). There are no exceptions in the Java/C# sense.
+7. **Failable routines carry a `!` suffix; the `!` is OPTIONAL** (failability is
+   inferred from the body — `foo` and `foo!` are the SAME routine). A BARE call
+   crashes LOUDLY on failure. To RECOVER, prefix the whole expression with a
+   keyword and match the carrier with `when`:
+   `try EXPR` → `Maybe[T]` (present | absent, no error kept);
+   `grab EXPR` → `Check[T]` (T | the caught `Crashable`);
+   `lookup EXPR` → `Lookup[T]` (T | absent | `Crashable`).
+   The keyword composes EVERY failable call inside the expression, short-circuiting
+   to the carrier on the first failure. There is no `try_foo` name form — recovery
+   is a keyword at the call site, not a mangled variant name. There are no
+   exceptions in the Java/C# sense.
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
    `U64` variable with an `S64` variable needs explicit conversion.
@@ -123,9 +128,9 @@ binding RazorForge has.
 - Collections: `List[T]`, `Dict[K,V]`, `Set[T]`, `CircularList[T]`, `BitList`, `PriorityQueue[TPriority, TElement]`,
   `SortedDict[K, V]`, `SortedList[T]`, `SortedSet[T]`, fixed-size `Array[T, N]`, `BitArray[N]`
 - Tuples: `(T, U)` / `Tuple[T, U]`, with fields `item0`, `item1`, ...
-- Carriers: `Maybe[T]`, `Result[T]`, `Lookup[T]` (compiler-synthesized only —
-  user routines cannot declare them as return types; you get them from the
-  generated `try_`/`check_`/`lookup_` variants).
+- Carriers: `Maybe[T]`, `Check[T]`, `Lookup[T]` (compiler-synthesized only —
+  user routines cannot declare them as return types; you obtain one by wrapping a
+  failable call with the `try`/`grab`/`lookup` keyword).
 - Typed literal suffixes exist: `7s32`, `0_s64`, `1.5f32` (underscore optional)
 
 **Optionals and `none`:**
@@ -134,11 +139,11 @@ binding RazorForge has.
 - **`None` (capital)** is the type / pattern marker (`when x is None`, type
   position). **`none` (lowercase)** is the value literal (like `true`/`false`).
 - `none` is legal ONLY where the target type is a carrier with an absent arm
-  (`Maybe[T]`, `Lookup[T]`, `Result[Blank]`) or a variant with a `None` member.
+  (`Maybe[T]`, `Lookup[T]`) or a variant with a `None` member.
   `var x = none`, `var x: S64 = none`, `foo(none)` into a non-carrier slot are all
   errors — `none` has no free-standing type.
 - Absent is matched by `is None` on `Maybe[T]` / `Lookup[T]` / a variant's zero
-  tag. `Result[T]` has no absent state (only `Crashable | T`).
+  tag. `Check[T]` has no absent state (only `Crashable | T`).
 
 ## 4. Variables and operators
 
@@ -159,7 +164,7 @@ binding is immediately valid and borrowable; assign before reading.)
   (bare literal amounts fine)
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
-  idiom is `x.try_abs()!!`
+  idiom is `(try x.abs())!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
   compares whether two references are the SAME object (entities / access-token /
   RC-wrapper operands only — RF-S440 on value types). See §7.
@@ -222,10 +227,10 @@ dangerous routine raw_poke(p: Address)  # callable only inside danger blocks
   return
 ```
 
-- Call with named args: `add(a: 1, b: 2)`. The compiler generates
-  `try_get_text(n: 0)` → `Maybe[Text]`/`Text?` automatically. If the routine
-  can throw, it also generates `check_...`; if it can both throw and be absent,
-  it generates `lookup_...`.
+- Call with named args: `add(a: 1, b: 2)`. Recover a failable call with a keyword:
+  `try get_text(n: 0)` → `Maybe[Text]`/`Text?`; `grab get_text(n: 0)` → `Check[Text]`
+  (keeps the `Crashable`); `lookup get_text(n: 0)` → `Lookup[Text]` (T | absent |
+  `Crashable`). A bare `get_text(n: 0)` crashes loudly on failure.
 - **Wired routines** are compiler-synthesized lifecycle/operator hooks (NO sigil):
   `create`, `destroy`, `copy`, `eq`, `cmp`, `represent` (to-text), `diagnose`
   (debug text), `getitem!`/`setitem` (indexing), `iter`/`next` (iteration), `add`
@@ -269,7 +274,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
     entity. Produced by `a.view()` / `a.modify()`.
   - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
     a `Guarded[T,P]`, lock-guarded by the policy `P`. Produced by `s.consult()` /
-    `s.amend()`, always via a `using` block; `s.try_amend()` is the failable form.
+    `s.amend()`, always via a `using` block; `s.try_amend()` is the NON-BLOCKING
+    acquire (a hand-written method returning the token, used with `using … fallback`
+    — NOT a recovery variant, so no `try` keyword).
 - **RC wrappers** (opt-in shared ownership, reference-counted):
   - **`Retained[T]`** — single-thread strong handle (copy verb `.retain()`);
     forwards direct access to the retained entity.
@@ -363,11 +370,11 @@ Verify exact signatures in `Standard/RazorForge/Collections/` — highlights
 that differ from other languages:
 
 - `list.add_last(value: v)`, `list.remove_first!()`, `list.remove_at!(0)` —
-  removal is failable (empty/out-of-range throws); `try_remove_first()` returns
-  Maybe.
+  removal is failable (empty/out-of-range throws); `try list.remove_first()`
+  returns `Maybe`.
 - `set.add(value: v)` returns Bool — `discard` it if unused.
 - `dict.add(key: k, value: v)` returns Bool; indexing is failable under the
-  hood, so use `dict.try_getitem(key: k)` when you want `Maybe[V]`.
+  hood, so use `try dict.getitem(key: k)` (or `try dict[k]`) when you want `Maybe[V]`.
 - Indexing `coll[i]` is failable under the hood (`getitem!`); back-indexing
   is `coll[^1]` (last element).
 - **Range slicing returns an owned COPY**: `xs[a til b]` (or `xs[a to b]`) on a
@@ -470,7 +477,7 @@ warning. Frequent ones when porting habits from other languages:
 |--------------|---------------------------------------|----------------------------------------------------|
 | RF-S510/S512 | positional args in a multi-param call | name every argument                                |
 | RF-S413      | entity assigned without transfer      | add `steal`                                        |
-| RF-S753      | failable call left unhandled          | use `try_`/`check_`/`lookup_` variant or `when`    |
+| RF-S753      | failable call left unhandled          | recover with `try`/`grab`/`lookup` + `when`        |
 | RF-S010      | literal out of range for target type  | use the right constant (`U8_MAX`)                  |
 | RF-W007      | ignored Bool return                   | `discard expr`                                     |
 | RF-G055/G112 | brace-style or inline-`if` habits     | 2-space indent blocks; conditionals top-level only |
@@ -496,7 +503,7 @@ routine start()
   items.add_last(value: Item(name: "bolt", qty: 40))
   items.add_last(value: Item(name: "nut", qty: 0))
 
-  var q = try_find_qty(items: items.view(), name: "bolt")
+  var q = try find_qty(items: items.view(), name: "bolt")
   when q
     is None => show("not found")
     else n  => show(f"bolt qty: {n}")
@@ -537,7 +544,7 @@ Surface (methods are on `Agent[T]`; `waitfor` is a free routine):
 - `waitfor(d)` — wait `d` (parks in a coroutine, sleeps on a thread). Durations: `50ms`, `5s`, or
   `Duration.from_milliseconds(ms: n)`.
 - `agent.waitfor(d).retrieve!()` — retrieve with a deadline; throws `TaskTimeoutError` past `d`.
-  `agent.waitfor(d).try_retrieve()` returns `None` on timeout instead of throwing.
+  `try agent.waitfor(d).retrieve()` returns `None` on timeout instead of throwing.
 - `race![T](of: List[Agent[T]]) -> T` — drive all, return the FIRST finisher; losers abandoned.
 - `gather![T](of: List[Agent[T]]) -> List[T]` — drive all, wait for ALL; results in input order.
 - `race!`/`gather!` **consume** the list — pass it with `steal`: `gather!(of: steal agents)`.

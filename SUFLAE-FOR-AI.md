@@ -231,11 +231,13 @@ routine) is designed to become a runtime `ActiveLoopReshaping` crash (a runtime
 ## 6. Failure taxonomy (recoverable vs fatal walls)
 
 Suflae has **no try-catch-finally.** Recovery is only for *failable* routines
-(`throw`/`absent`) via the generated `try_`/`check_`/`lookup_` variants + `when`,
-exactly as in RF. The dividing line:
+(`throw`/`absent`): prefix the call with the `try`/`grab`/`lookup` keyword to get a
+`Maybe[T]`/`Check[T]`/`Lookup[T]` carrier, then match with `when` — exactly as in RF.
+(There is no `try_foo` name form; recovery is a keyword at the call site.) The
+dividing line:
 
 - **Data condition** (file missing, key absent, parse failure) → the program can
-  reasonably respond → **recoverable** (failable `!` + `try_`/`check_`/`lookup_`
+  reasonably respond → **recoverable** (failable `!` + `try`/`grab`/`lookup`
   + `when`).
 - **Physical/logic limit** (out of memory, runaway recursion) → responding is
   meaningless → **fatal wall**: fails LOUD, in human words, and is NOT catchable.
