@@ -1224,4 +1224,34 @@ public record StealExpression(Expression Operand, SourceLocation Location)
     }
 }
 
+/// <summary>The recovery mode a <c>try</c>/<c>grab</c>/<c>lookup</c> prefix selects for its carrier.</summary>
+public enum RecoveryKind
+{
+    /// <summary><c>try</c> → <c>Maybe[T]</c> (present|absent, discards crash info).</summary>
+    Try,
+
+    /// <summary><c>grab</c> → <c>Check[T]</c> (T | the Crashable error).</summary>
+    Grab,
+
+    /// <summary><c>lookup</c> → <c>Lookup[T]</c> (T | absent | Crashable).</summary>
+    Lookup
+}
+
+/// <summary>
+/// A <c>try</c>/<c>grab</c>/<c>lookup</c> recovery prefix wrapping a failable-call expression. Lowered to
+/// the matching generated recovery variant(s): a single failable call becomes a call to its
+/// <c>try_</c>/<c>check_</c>/<c>lookup_</c> variant; a composition of failable calls short-circuits to the
+/// carrier on the first failure. The carrier is <c>Maybe[T]</c>/<c>Check[T]</c>/<c>Lookup[T]</c> where
+/// <c>T</c> is <see cref="Inner"/>'s type (with the None-collapse: <c>Maybe[None]≡Bool</c>).
+/// </summary>
+public record RecoveryExpression(RecoveryKind Kind, Expression Inner, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitRecoveryExpression(node: this);
+    }
+}
+
 #endregion

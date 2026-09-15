@@ -1157,6 +1157,16 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     {
         return $"steal {node.Operand.Accept(visitor: this)}";
     }
+    public string VisitRecoveryExpression(RecoveryExpression node)
+    {
+        string keyword = node.Kind switch
+        {
+            RecoveryKind.Grab => "grab",
+            RecoveryKind.Lookup => "lookup",
+            _ => "try"
+        };
+        return $"{keyword} {node.Inner.Accept(visitor: this)}";
+    }
 
 
     /// <inheritdoc/>

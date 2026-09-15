@@ -329,6 +329,11 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
         Visit(e: node.Operand);
         return false;
     }
+    public bool VisitRecoveryExpression(RecoveryExpression node)
+    {
+        Visit(e: node.Inner);
+        return false;
+    }
     public bool VisitWaitforExpression(WaitforExpression node)
     {
         Visit(e: node.Operand);

@@ -354,6 +354,7 @@ public abstract class AstRewriter
             CreatorExpression e => VisitCreator(e: e),
             TypeConversionExpression e => VisitTypeConversion(e: e),
             StealExpression e => VisitSteal(e: e),
+            RecoveryExpression e => VisitRecovery(e: e),
             BackIndexExpression e => VisitBackIndex(e: e),
             RangeExpression e => VisitRange(e: e),
             ChainedComparisonExpression e => VisitChainedComparison(e: e),
@@ -579,6 +580,20 @@ public abstract class AstRewriter
         return ReferenceEquals(objA: o, objB: e.Operand)
             ? e
             : e with { Operand = o };
+    }
+
+    /// <summary>
+    /// Rewrites a <see cref="RecoveryExpression"/> by visiting its inner (wrapped) expression.
+    /// Returns the original node when the inner is unchanged.
+    /// </summary>
+    /// <param name="e">The recovery expression to rewrite.</param>
+    /// <returns>The rewritten recovery expression, or the original reference if nothing changed.</returns>
+    protected virtual Expression VisitRecovery(RecoveryExpression e)
+    {
+        Expression inner = VisitExpression(expr: e.Inner);
+        return ReferenceEquals(objA: inner, objB: e.Inner)
+            ? e
+            : e with { Inner = inner };
     }
 
     /// <summary>

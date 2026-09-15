@@ -294,6 +294,11 @@ public interface ISyntaxTreeVisitor<out T>
     /// <remarks>RazorForge only - transfers ownership and invalidates the source</remarks>
     T VisitStealExpression(StealExpression node);
 
+    /// <summary>Visits a try/grab/lookup recovery expression node (wraps a failable call into a carrier).</summary>
+    /// <param name="node">The recovery expression to visit</param>
+    /// <returns>Result of visiting the recovery expression</returns>
+    T VisitRecoveryExpression(RecoveryExpression node);
+
     /// <summary>Visits a waitfor expression node (await async computation)</summary>
     /// <param name="node">The waitfor expression to visit</param>
     /// <returns>Result of visiting the waitfor expression</returns>

@@ -196,6 +196,10 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     {
         return node.Operand.Accept(visitor: this);
     }
+    public bool VisitRecoveryExpression(RecoveryExpression node)
+    {
+        return node.Inner.Accept(visitor: this);
+    }
     public bool VisitWaitforExpression(WaitforExpression node)
     {
         return node.Operand.Accept(visitor: this) ||

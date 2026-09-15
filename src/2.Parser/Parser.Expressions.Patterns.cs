@@ -466,37 +466,6 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Rewrites a <c>try</c>/<c>grab</c>/<c>lookup</c>-wrapped call into a call to the matching generated
-    /// recovery variant by prepending <paramref name="variantPrefix"/> to the callee name (free or member).
-    /// The wrapped node must be a call; anything else is a grammar error. The recovery variant is total
-    /// (returns a carrier), so the failable <c>!</c> marker is cleared.
-    /// </summary>
-    private Expression RewriteRecoveryOperand(Expression operand, string variantPrefix, Token keyword)
-    {
-        switch (operand)
-        {
-            case CallExpression { Callee: IdentifierExpression id } freeCall:
-                return freeCall with
-                {
-                    Callee = id with { Name = variantPrefix + id.Name },
-                    IsFailable = false
-                };
-            case CallExpression { Callee: MemberExpression member } memberCall:
-                return memberCall with
-                {
-                    Callee = member with { MemberName = variantPrefix + member.MemberName },
-                    IsFailable = false
-                };
-            default:
-                throw ThrowParseError(
-                    message:
-                    $"'{keyword.Text}' must wrap a call to a failable routine " +
-                    $"(e.g. `{keyword.Text} foo(...)` or `{keyword.Text} x.foo(...)`).",
-                    token: keyword);
-        }
-    }
-
-    /// <summary>
     /// Parses unary prefix expressions.
     /// Syntax: <c>-x</c> (negation), <c>not x</c> (logical not), <c>~x</c> (bitwise not), <c>^n</c> (backindex).
     /// Special handling for unary minus on numeric literals to support min values.
@@ -514,16 +483,25 @@ public partial class Parser
         if (CheckAndAdvance(TokenType.Try, TokenType.Grab, TokenType.Lookup))
         {
             Token recoveryKw = PeekToken(offset: -1);
-            string variantPrefix = recoveryKw.Type switch
+            RecoveryKind recoveryKind = recoveryKw.Type switch
             {
-                TokenType.Grab => "check_",
-                TokenType.Lookup => "lookup_",
-                _ => "try_"
+                TokenType.Grab => RecoveryKind.Grab,
+                TokenType.Lookup => RecoveryKind.Lookup,
+                _ => RecoveryKind.Try
             };
-            Expression recoveryOperand = ParseUnary(); // right-associative; wraps the postfix call chain
-            return RewriteRecoveryOperand(operand: recoveryOperand,
-                variantPrefix: variantPrefix,
-                keyword: recoveryKw);
+            Expression recoveryInner = ParseUnary(); // right-associative; wraps the postfix call chain
+            if (recoveryInner is not CallExpression)
+            {
+                throw ThrowParseError(
+                    message:
+                    $"'{recoveryKw.Text}' must wrap a call to a failable routine " +
+                    $"(e.g. `{recoveryKw.Text} foo(...)` or `{recoveryKw.Text} x.foo(...)`).",
+                    token: recoveryKw);
+            }
+
+            return new RecoveryExpression(Kind: recoveryKind,
+                Inner: recoveryInner,
+                Location: GetLocation(token: recoveryKw));
         }
 
         // Handle steal expression (steal expr = ownership transfer, RazorForge only)

@@ -25,6 +25,9 @@ public sealed class DesugaringPipeline(DesugaringContext ctx)
         new PresetInliningPass(ctx: ctx).Run(program: program);
         new ControlFlowLoweringPass(ctx: ctx).Run(program: program);
         new GenericCallLoweringPass(ctx: ctx).Run(program: program);
+        // Lower try/grab/lookup recovery to the generated try_/check_/lookup_ variant calls (pre-SA so the
+        // variant name resolves; ErrorHandlingVariantPass generates the variants in RunGlobal below).
+        new RecoveryLoweringPass().Run(program: program);
     }
 
     /// <summary>
