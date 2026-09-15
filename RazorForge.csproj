@@ -59,14 +59,6 @@
     <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\bin')"/>
     <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\lib')"/>
     <Content Include="Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
-    <Content Include="RazorForge-Wiki\.gitea\workflows\deploy.yaml"/>
-    <Content Include="Suflae-Wiki\.gitea\workflows\deploy.yaml"/>
-    <Content Update="Standard\RazorForge\Core\Types\SipHash.rf">
-      <LinkBase>Standard\</LinkBase>
-    </Content>
-    <Content Update="Standard\RazorForge\Core\Types\HashHelper.rf">
-      <LinkBase>Standard\</LinkBase>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <AssemblyMetadata Include="RazorForgeVersion" Value="$(RazorForgeVersion)"/>
@@ -74,6 +66,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="native\**\*.cs"/>
+    <!-- Vendored native third-party sources (pcre2, libbf, ...) are fetched into native/ at build
+         time and compiled by native/build.sh (CMake), not by MSBuild. Drop them from the SDK's
+         default None glob so SonarScanner doesn't list them under sonar.sources — the vendored tree
+         (e.g. native/pcre2/src/.clang-format) otherwise fails Sonar's source-path validation. The
+         explicit native\build\bin|lib Content includes above are unaffected. -->
+    <None Remove="native\**\*"/>
   </ItemGroup>
 
   <ItemGroup>
