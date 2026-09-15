@@ -26,7 +26,7 @@ routine start()
 
   # catch path via the compiler-generated check_ variant
   var bad = Person(name: "bob", age: -1_s64)
-  var r = check_checked_age(p: bad)
+  var r = grab checked_age(p: bad)
   when r
     is VerificationFailedError e => show(f"caught: {e.crash_title()}")
     else v                        => show(f"ok: {v}")

@@ -11,22 +11,22 @@ routine start()
   var empty: List[S64] = []
 
   # --- List: remove_last on empty ---
-  show(f"l remove_last (has data): {l.try_remove_last()}")
-  show(f"empty remove_last: {empty.try_remove_last()}")
+  show(f"l remove_last (has data): {try l.remove_last()}")
+  show(f"empty remove_last: {try empty.remove_last()}")
 
   # --- List: remove_first on empty ---
-  show(f"l remove_first: {l.try_remove_first()}")
-  show(f"empty remove_first: {empty.try_remove_first()}")
+  show(f"l remove_first: {try l.remove_first()}")
+  show(f"empty remove_first: {try empty.remove_first()}")
 
   # --- List: remove_at out-of-bounds ---
   var l2: List[S64] = [1, 2, 3, 4]
-  show(f"l2 remove_at(1): {l2.try_remove_at(index: 1_u64)}")
-  show(f"l2 remove_at(99): {l2.try_remove_at(index: 99_u64)}")
+  show(f"l2 remove_at(1): {try l2.remove_at(index: 1_u64)}")
+  show(f"l2 remove_at(99): {try l2.remove_at(index: 99_u64)}")
 
   # --- List: first / last on empty via Iterable terminal ---
-  show(f"l first: {l.try_first()}")
-  show(f"empty first: {empty.try_first()}")
-  show(f"empty last: {empty.try_last()}")
+  show(f"l first: {try l.first()}")
+  show(f"empty first: {try empty.first()}")
+  show(f"empty last: {try empty.last()}")
 
   # --- Set: remove returns Bool already (not failable), invariants ---
   var s: Set[S64] = {1, 2, 3}

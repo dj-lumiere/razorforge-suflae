@@ -22,8 +22,8 @@ routine start()
   show(f"S64->U64 of 42: {U64(from: 42_s64)}")
 
   # Parse text -> integer (failable)
-  var t_ok = try_S64_from_text(text: "42")
-  var t_bad = try_S64_from_text(text: "not a number")
+  var t_ok = try S64_from_text(text: "42")
+  var t_bad = try S64_from_text(text: "not a number")
   show(f"parse '42': {t_ok}")
   show(f"parse 'not a number': {t_bad}")
 

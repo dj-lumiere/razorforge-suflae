@@ -52,6 +52,56 @@ public sealed partial class SemanticVerifier
         var hoister = new RecoveryFailableHoister(seed: 0);
         Expression residual = hoister.VisitExpression(expr: recovery.Inner);
 
+        string recoveryPrefix = recovery.Kind switch
+        {
+            RecoveryKind.Grab => "check",
+            RecoveryKind.Lookup => "lookup",
+            _ => "try"
+        };
+
+        // SINGLE failable call (the overwhelmingly common case): rewrite it to its recovery-variant call
+        // (`l.remove_last()` → `l.try_remove_last()`, `foo(a)` → `try_foo(a)`, conversion `x.S8()` →
+        // `x.try_S8()`) and RE-ANALYZE — normal resolution monomorphizes the variant on the concrete
+        // receiver (→ concrete carrier `Maybe[S64]`, not the generic-def `Maybe[T]`) AND keeps the receiver
+        // in place so an entity is BORROWED as the base call borrowed it (no synth-routine by-value capture
+        // → no spurious RF-S413). Routine synthesis (below) is needed ONLY to thread a MULTI-call
+        // short-circuit, or when the exact variant is not directly synthesizable (grab's check_ over an
+        // absent-only base — the routine path shapes that), which this gate defers via SynthesizeVariantForBase.
+        if (hoister.Hoisted is
+                [
+                    DeclarationStatement
+                    {
+                        Declaration: VariableDeclaration { Initializer: CallExpression }
+                    }
+                ] &&
+            residual is IdentifierExpression &&
+            recovery.Inner is CallExpression { ResolvedRoutine: { } singleBase } &&
+            SynthesizeVariantForBase(baseOverload: singleBase, prefix: recoveryPrefix) != null)
+        {
+            string namePrefix = recoveryPrefix + "_";
+            Expression variantCall = recovery.Inner switch
+            {
+                CallExpression { Callee: IdentifierExpression id } c => c with
+                {
+                    Callee = id with { Name = namePrefix + id.Name }, IsFailable = false
+                },
+                CallExpression { Callee: MemberExpression m } c => c with
+                {
+                    Callee = m with { MemberName = namePrefix + m.MemberName, IsFailable = false },
+                    IsFailable = false
+                },
+                _ => recovery.Inner
+            };
+            TypeSymbol carrier = AnalyzeExpression(expression: variantCall);
+            if (carrier is not ErrorTypeSymbol)
+            {
+                recovery.LoweredCall = variantCall;
+                return carrier;
+            }
+
+            // Fall through to routine synthesis when the rewritten variant call does not resolve.
+        }
+
         // Free variables = referenced identifiers that resolve to an outer local/param (not a hoisted temp,
         // not a type/routine/global). These become the base routine's parameters.
         var freeParams = new List<ParamInfo>();
@@ -110,14 +160,8 @@ public sealed partial class SemanticVerifier
         // shape; grab uses the throw-only shape stamped above (so check_ is generated).
         _registry.DeferredVariantBases[key: baseRoutine.RegistryKey] = (baseRoutine, baseBody, !grab);
 
-        string prefix = recovery.Kind switch
-        {
-            RecoveryKind.Grab => "check",
-            RecoveryKind.Lookup => "lookup",
-            _ => "try"
-        };
-
-        RoutineInfo? variant = SynthesizeVariantForBase(baseOverload: baseRoutine, prefix: prefix);
+        RoutineInfo? variant =
+            SynthesizeVariantForBase(baseOverload: baseRoutine, prefix: recoveryPrefix);
         if (variant == null)
         {
             // The requested carrier variant is not (yet) synthesizable for this base shape (e.g. `grab`'s

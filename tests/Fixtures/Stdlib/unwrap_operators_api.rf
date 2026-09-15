@@ -9,8 +9,8 @@ routine maybe_value!(n: S64) -> S64
   return n * 10
 
 routine start()
-  var m_some = try_maybe_value(n: 3)
-  var m_none = try_maybe_value(n: 0)
+  var m_some = try maybe_value(n: 3)
+  var m_none = try maybe_value(n: 0)
 
   # ?? fallback
   show(f"m_some ?? -1: {m_some ?? -1_s64}")

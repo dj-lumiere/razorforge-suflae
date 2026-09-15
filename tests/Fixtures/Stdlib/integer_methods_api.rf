@@ -24,9 +24,9 @@ routine start()
   show(f"trailing_zeros(8): {(8_s64).trailing_zeros()}")
 
   # Parse from text
-  var ok = try_S64_from_text(text: "12345")
-  var neg = try_S64_from_text(text: "-42")
-  var bad = try_S64_from_text(text: "abc")
+  var ok = try S64_from_text(text: "12345")
+  var neg = try S64_from_text(text: "-42")
+  var bad = try S64_from_text(text: "abc")
   show(f"parse '12345': {ok}")
   show(f"parse '-42': {neg}")
   show(f"parse 'abc': {bad}")

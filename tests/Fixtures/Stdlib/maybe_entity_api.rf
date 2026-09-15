@@ -10,9 +10,9 @@ routine get_text!(n: S64) -> Text
     else => return "world"
 
 routine start()
-  var m0 = try_get_text(n: 0)
-  var m1 = try_get_text(n: 1)
-  var m2 = try_get_text(n: 2)
+  var m0 = try get_text(n: 0)
+  var m1 = try get_text(n: 1)
+  var m2 = try get_text(n: 2)
 
   show(f"m0 type: {m0.type_name()}")
   show(f"m0: {m0}")

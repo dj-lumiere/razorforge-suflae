@@ -78,7 +78,7 @@ routine start()
   show(f"chained_cmp(5): {chained_cmp(x: 5)}")
   show(f"chained_cmp(11): {chained_cmp(x: 11)}")
   show(f"back_to_front: {back_to_front()}")
-  var z = try_zombie_negation(x: 5_s8)
+  var z = try zombie_negation(x: 5_s8)
   when z
     is None => show("zombie: absent")
     else v => show(f"zombie: {v}")
