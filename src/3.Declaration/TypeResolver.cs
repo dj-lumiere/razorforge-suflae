@@ -736,9 +736,29 @@ internal sealed class TypeResolver
             return ErrorTypeSymbol.Instance;
         }
 
-        // Reject None as a type argument except Result<None>.
+        // Reject None as a type argument except Check<None>.
         // Lookup<None> is ambiguous in the type_id carrier model because None is also the absent sentinel.
         string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
+
+        // Carrier None-collapse (design invariant): a recovery carrier over the unit type None degenerates —
+        //   Maybe[None]  ≡ Bool          (present|absent with no payload = a 2-state = Bool)
+        //   Lookup[None] ≡ Check[None]   (Lookup's extra absent state is meaningless with no success payload)
+        // Check[None] is the canonical no-payload carrier and stays. These arise from `try`/`lookup` over a
+        // unit-returning call; enforce the identity in resolution so the carrier type is uniform.
+        if (typeArgs.Count == 1 && typeArgs[index: 0] is { Name: "None" })
+        {
+            if (genericDefCarrierName == MaybeTypeName)
+            {
+                return LookupTypeWithImports(name: "Bool") ?? ErrorTypeSymbol.Instance;
+            }
+
+            if (genericDefCarrierName is "Lookup" &&
+                LookupTypeWithImports(name: "Check") is { IsGenericDefinition: true } checkDef)
+            {
+                return _sa._registry.GetOrCreateResolution(genericDef: checkDef, typeArguments: typeArgs);
+            }
+        }
+
         foreach (TypeSymbol arg in typeArgs)
         {
             if (arg is not { Name: "None" } || genericDefCarrierName is "Check")

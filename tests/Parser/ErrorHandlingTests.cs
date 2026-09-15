@@ -365,7 +365,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: whenStmt);
     }
 
-    // Result[T] and Lookup[T] parameter tests moved til Analyzer/ErrorVariantGenerationTests.cs
+    // Check[T] and Lookup[T] parameter tests moved til Analyzer/ErrorVariantGenerationTests.cs
     // They parse correctly but should be rejected by semantic analysis
 
     #endregion

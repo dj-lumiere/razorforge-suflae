@@ -59,7 +59,7 @@ public class ErrorVariantGenerationTests
     public void Analyze_FailableWithThrowOnly_GeneratesCheckAndTryVariants()
     {
         // Routine with 'throw' only generates:
-        // - check_validate() -> Result[T]
+        // - check_validate() -> Check[T]
         // - try_validate() -> T?
         string source = """
                         crashable ValidationError
@@ -344,13 +344,13 @@ public class ErrorVariantGenerationTests
     [Fact]
     public void Analyze_ResultAsParameter_ReportsError()
     {
-        // Result[T] should not be passable as a function argument
+        // Check[T] should not be passable as a function argument
         // It is an internal type for error handling flow, not a first-class type
         string source = """
                         entity User
                           name: Text
 
-                        routine handle_result(result: Result[User])
+                        routine handle_result(result: Check[User])
                           pass
                           return
                         """;

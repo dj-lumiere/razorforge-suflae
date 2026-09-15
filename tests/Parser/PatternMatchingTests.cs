@@ -396,7 +396,7 @@ public class PatternMatchingTests
     public void Parse_WhenResult()
     {
         string source = """
-                        routine handle(result: Result[User])
+                        routine handle(result: Check[User])
                           when result
                             is Crashable err => show(f"Error: {err.message()}")
                             else user => show(f"Found: {user.name}")
@@ -412,7 +412,7 @@ public class PatternMatchingTests
     public void Parse_WhenResultSpecificError()
     {
         string source = """
-                        routine handle(result: Result[File])
+                        routine handle(result: Check[File])
                           when result
                             is FileNotFoundError e => show(f"Not found: {e.path}")
                             is PermissionError e => show(f"Access denied: {e.path}")
@@ -528,7 +528,7 @@ public class PatternMatchingTests
     public void Parse_WhenWildcard()
     {
         string source = """
-                        routine handle(result: Result[S32])
+                        routine handle(result: Check[S32])
                           when result
                             is Crashable => absent
                             else value => value

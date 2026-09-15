@@ -13,12 +13,12 @@ public class TypeProhibitionTests
     #region None as Type Argument (rejected)
 
     /// <summary>
-    /// Verifies semantic analysis behavior for blank nullable and reports the expected error.
+    /// `None?` desugars to Maybe[None], which COLLAPSES to Bool (present|absent, no payload) — no error.
     /// </summary>
     [Fact]
-    public void Analyze_NoneNullable_ReportsError()
+    public void Analyze_NoneNullable_CollapsesToBool()
     {
-        // None? desugars to Maybe<None>, which is prohibited
+        // None? desugars to Maybe[None] ≡ Bool (carrier None-collapse)
         string source = """
                         routine foo(x: None?)
                           pass
@@ -26,14 +26,14 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for explicit maybe blank and reports the expected error.
+    /// `Maybe[None]` COLLAPSES to Bool (present|absent with no payload = a 2-state) — no error.
     /// </summary>
     [Fact]
-    public void Analyze_ExplicitMaybeNone_ReportsError()
+    public void Analyze_ExplicitMaybeNone_CollapsesToBool()
     {
         string source = """
                         routine bar() -> Maybe[None]
@@ -42,7 +42,7 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
 
@@ -91,7 +91,7 @@ public class TypeProhibitionTests
     {
         // Result<None> is allowed for failable void routines
         string source = """
-                        routine foo(x: Result[None])
+                        routine foo(x: Check[None])
                           pass
                           return
                         """;
@@ -101,12 +101,13 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for lookup blank and reports the expected error.
+    /// `Lookup[None]` COLLAPSES to Check[None] (Lookup's extra absent state is meaningless with no
+    /// success payload) — no error.
     /// </summary>
     [Fact]
-    public void Analyze_LookupNone_ReportsError()
+    public void Analyze_LookupNone_CollapsesToCheck()
     {
-        // Lookup<None> is ambiguous: None is also the absent sentinel in the type_id carrier.
+        // Lookup[None] ≡ Check[None] (carrier None-collapse)
         string source = """
                         routine foo(x: Lookup[None])
                           pass
@@ -114,7 +115,7 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NoneAsTypeArgument);
     }
 
