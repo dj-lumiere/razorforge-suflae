@@ -72,8 +72,10 @@ struct rf_task
 {
     rf_task_kind kind;
     rf_task_status status;
-    uint64_t completion_seq;   /* global completion-order stamp; UINT64_MAX until completed. race!
-                                * picks the smallest seq among completed competitors (first-to-finish). */
+    _Atomic uint64_t completion_seq; /* global completion-order stamp; UINT64_MAX until completed. race!
+                                * picks the smallest seq among completed competitors (first-to-finish).
+                                * Atomic + stamped BEFORE the status=COMPLETED store (release-fenced) so a
+                                * racer observing COMPLETED is guaranteed to read a valid seq (arm64-safe). */
     rf_task_completion completion;
 
     rf_Bool cancel_requested;
@@ -174,16 +176,24 @@ static rf_Bool rf_task_is_completed(rf_task* task)
            task->completion.kind != RF_TASK_COMPLETION_PENDING;
 }
 
+/* Stamp the global completion-order counter into this task, idempotently (guard on the sentinel).
+ * MUST be called BEFORE the status=COMPLETED store, with a release fence between the two, so a racer
+ * that reads status==COMPLETED (then acquire-fences, see rf_race_wait) is guaranteed to observe a
+ * valid seq. Fences alone can't fix a status-then-seq write order — a later store can't be made
+ * visible ahead of an earlier one — so the stamp is pulled ahead of every completion site's status
+ * store. Ranks this task against its competitors by finish time for race!. */
+static void rf_task_stamp_completion(rf_task* task)
+{
+    if (atomic_load_explicit(&task->completion_seq, memory_order_relaxed) == (uint64_t)-1) {
+        atomic_store_explicit(&task->completion_seq,
+                              atomic_fetch_add(&g_rf_completion_seq, 1),
+                              memory_order_relaxed);
+    }
+}
+
 static void rf_task_signal_completion(rf_task* task)
 {
     if (task == NULL) return;
-
-    /* Stamp the global completion order before waking any awaiter/race, so race! can rank this task
-     * against its competitors by finish time. All completion sites (value/error/cancel/timeout) set
-     * status=COMPLETED then call this exactly once, so stamp idempotently (guard on the sentinel). */
-    if (task->completion_seq == (uint64_t)-1) {
-        task->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
-    }
 
     /* Wake a coroutine awaiting this task (if one parked via rf_task_await_coro). Done under
      * coro_lock and BEFORE the thread-backend signal: register-vs-complete is race-free because
@@ -502,7 +512,7 @@ rf_task* rf_task_create(rf_task_kind kind)
 
     task->kind = kind;
     task->status = RF_TASK_NEW;
-    task->completion_seq = (uint64_t)-1; /* not completed yet (never the min in race!'s winner scan) */
+    atomic_init(&task->completion_seq, (uint64_t)-1); /* not completed yet (never the min in race!'s scan) */
     task->completion.kind = RF_TASK_COMPLETION_PENDING;
     task->task_id = rf_next_task_id++;
     rf_mutex_init(&task->coro_lock);
@@ -606,7 +616,7 @@ rf_task_status rf_task_status_get(rf_task* task)
 uint64_t rf_task_completion_seq(rf_task* task)
 {
     if (task == NULL) return (uint64_t)-1;
-    return task->completion_seq;
+    return atomic_load_explicit(&task->completion_seq, memory_order_relaxed);
 }
 
 rf_task_completion_kind rf_task_completion_kind_get(rf_task* task)
@@ -795,6 +805,8 @@ void rf_task_complete_value(rf_task* task, void* result_payload)
         return;
     }
 
+    rf_task_stamp_completion(task);
+    atomic_thread_fence(memory_order_release);
     task->status = RF_TASK_COMPLETED;
     task->completion.kind = RF_TASK_COMPLETION_VALUE;
     task->completion.value_payload = result_payload;
@@ -835,6 +847,8 @@ void rf_task_complete_error(rf_task* task, void* error_payload)
 {
     if (task == NULL) return;
 
+    rf_task_stamp_completion(task);
+    atomic_thread_fence(memory_order_release);
     task->status = RF_TASK_COMPLETED;
     task->completion.kind = RF_TASK_COMPLETION_ERROR;
     task->completion.value_payload = NULL;
@@ -846,6 +860,8 @@ void rf_task_complete_cancelled(rf_task* task)
 {
     if (task == NULL) return;
 
+    rf_task_stamp_completion(task);
+    atomic_thread_fence(memory_order_release);
     task->status = RF_TASK_COMPLETED;
     task->completion.kind = RF_TASK_COMPLETION_CANCELLED;
     task->completion.value_payload = NULL;
@@ -857,6 +873,8 @@ void rf_task_complete_timeout(rf_task* task)
 {
     if (task == NULL) return;
 
+    rf_task_stamp_completion(task);
+    atomic_thread_fence(memory_order_release);
     task->status = RF_TASK_COMPLETED;
     task->completion.kind = RF_TASK_COMPLETION_TIMEOUT;
     task->completion.value_payload = NULL;
@@ -960,6 +978,8 @@ rf_Bool rf_task_prerequisite_complete(rf_task* task, rf_Bool success)
 
     if (!success)
     {
+        rf_task_stamp_completion(task);
+        atomic_thread_fence(memory_order_release);
         task->status = RF_TASK_COMPLETED;
         task->completion.kind = RF_TASK_COMPLETION_CANCELLED;
         rf_task_signal_completion(task);

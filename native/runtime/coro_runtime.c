@@ -145,11 +145,12 @@ struct rf_coro {
                                     * across a competitor set, tolerating spurious wakes).          */
     void* shadow_stack;            /* this coroutine's RF-level call-chain shadow stack (migrates
                                     * with it across workers); NULL when tracing is off         */
-    uint64_t completion_seq;       /* global completion order stamp (g_rf_completion_seq) written
-                                    * JUST BEFORE status=COMPLETED, so any observer of COMPLETED
-                                    * also sees the seq. UINT64_MAX until completed. race! picks the
-                                    * SMALLEST seq among completed competitors (first-to-finish) so
-                                    * the winner is order-correct even when a delayed scan sees
+    _Atomic uint64_t completion_seq; /* global completion order stamp (g_rf_completion_seq) written
+                                    * JUST BEFORE status=COMPLETED with a release fence between them,
+                                    * so any observer of COMPLETED (acquire-fenced, see rf_race_wait)
+                                    * also sees the seq — arm64-safe. UINT64_MAX until completed. race!
+                                    * picks the SMALLEST seq among completed competitors (first-to-finish)
+                                    * so the winner is order-correct even when a delayed scan sees
                                     * several already completed (the macOS coros-race bug).        */
 #if defined(_WIN32)
     void* fiber;                   /* Windows fiber backing this coroutine (CreateFiberEx)        */
@@ -203,7 +204,9 @@ static void __stdcall rf_coro_fiber_proc(void* param)
 {
     rf_coro* self = (rf_coro*)param;
     self->entry(self->userdata);
-    self->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
+    atomic_store_explicit(&self->completion_seq, atomic_fetch_add(&g_rf_completion_seq, 1),
+                          memory_order_relaxed);
+    atomic_thread_fence(memory_order_release); /* seq visible before the COMPLETED store (arm64) */
     self->status = RF_CORO_COMPLETED;
     SwitchToFiber(self->resumer_fiber);
 }
@@ -224,7 +227,9 @@ static void rf_coro_trampoline(void)
 {
     rf_coro* self = g_current_coro;
     self->entry(self->userdata);
-    self->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
+    atomic_store_explicit(&self->completion_seq, atomic_fetch_add(&g_rf_completion_seq, 1),
+                          memory_order_relaxed);
+    atomic_thread_fence(memory_order_release); /* seq visible before the COMPLETED store (arm64) */
     self->status = RF_CORO_COMPLETED;
     co_switch(self->resumer);
 }
@@ -290,7 +295,7 @@ rf_coro* rf_coro_create(rf_context_entry_fn entry, void* userdata, size_t stack_
     coro->userdata = userdata;
     coro->status = RF_CORO_NEW;
     coro->timer_idx = -1; /* not on any timer heap yet (calloc's 0 would alias heap slot 0) */
-    coro->completion_seq = (uint64_t)-1; /* not completed yet (never the min in race!'s winner scan) */
+    atomic_init(&coro->completion_seq, (uint64_t)-1); /* not completed yet (never the min in race!'s scan) */
     coro->shadow_stack = __rf_stack_coro_create(); /* NULL when tracing is off */
 
 #if defined(_WIN32)
@@ -373,7 +378,9 @@ rf_coro_status rf_coro_resume(rf_coro* coro)
      * still make progress (yield becomes a no-op). */
     coro->status = RF_CORO_RUNNING;
     coro->entry(coro->userdata);
-    coro->completion_seq = atomic_fetch_add(&g_rf_completion_seq, 1);
+    atomic_store_explicit(&coro->completion_seq, atomic_fetch_add(&g_rf_completion_seq, 1),
+                          memory_order_relaxed);
+    atomic_thread_fence(memory_order_release); /* seq visible before the COMPLETED store (arm64) */
     coro->status = RF_CORO_COMPLETED;
     return RF_CORO_COMPLETED;
 #endif
@@ -811,6 +818,15 @@ void rf_coro_abandon(rf_coro* coro)
      * destroy run — the double-free invariant (design §7.6). Top-to-bottom = reverse
      * construction order = correct teardown order. */
     if (coro->status != RF_CORO_COMPLETED) {
+        /* Stamp completion order before the CANCELLED store (release-fenced), same as the COMPLETED
+         * paths, so a cancelled coro that finished first can still win a race! — tasks stamp on
+         * cancel too (rf_task_complete_cancelled), so coro/task race! semantics stay symmetric.
+         * Idempotent (guard on the sentinel) in case abandon is reachable twice. */
+        if (atomic_load_explicit(&coro->completion_seq, memory_order_relaxed) == (uint64_t)-1) {
+            atomic_store_explicit(&coro->completion_seq, atomic_fetch_add(&g_rf_completion_seq, 1),
+                                  memory_order_relaxed);
+        }
+        atomic_thread_fence(memory_order_release); /* seq visible before the CANCELLED store (arm64) */
         coro->status = RF_CORO_CANCELLED;
         rf_cancel_frame* frame = coro->cf_top;
         while (frame != NULL) {
@@ -1897,11 +1913,15 @@ intptr_t rf_race_wait(rf_race* r)
             if (r->kinds[i] == 0) {
                 rf_coro* c = (rf_coro*)r->handles[i];
                 if (c != NULL && (c->status == RF_CORO_COMPLETED || c->status == RF_CORO_CANCELLED)) {
+                    // Acquire-fence pairs with the release fence at the completion site so the seq
+                    // stamped just before the COMPLETED store is guaranteed visible here (arm64).
+                    atomic_thread_fence(memory_order_acquire);
                     done = 1;
-                    seq = c->completion_seq;
+                    seq = atomic_load_explicit(&c->completion_seq, memory_order_relaxed);
                 }
             } else {
                 if (rf_task_status_get((rf_task*)r->handles[i]) == RF_TASK_COMPLETED) {
+                    atomic_thread_fence(memory_order_acquire);
                     done = 1;
                     seq = rf_task_completion_seq((rf_task*)r->handles[i]);
                 }
