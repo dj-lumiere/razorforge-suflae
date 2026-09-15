@@ -72,7 +72,7 @@ routine run_demo!() -> S64
   return total
 
 routine start()
-  when try_run_demo()
+  when try run_demo()
     is None => show("demo produced no value")
     else result => show(f"demo checksum: {result}")
   return

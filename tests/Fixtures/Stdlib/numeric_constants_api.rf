@@ -16,9 +16,9 @@ routine start()
   show(f"F64_MAX: {F64_MAX}")
 
   # abs / min / max instance methods
-  show(f"abs(-5): {(-5_s64).try_abs()!!}")
-  show(f"abs(5): {(5_s64).try_abs()!!}")
-  show(f"abs(0): {(0_s64).try_abs()!!}")
+  show(f"abs(-5): {(try (-5_s64).abs())!!}")
+  show(f"abs(5): {(try (5_s64).abs())!!}")
+  show(f"abs(0): {(try (0_s64).abs())!!}")
 
   show(f"min(3, 7): {(3_s64).min(you: 7_s64)}")
   show(f"max(3, 7): {(3_s64).max(you: 7_s64)}")
