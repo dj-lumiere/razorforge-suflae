@@ -467,6 +467,42 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Analyzes a <c>try</c>/<c>grab</c>/<c>lookup</c> <see cref="RecoveryExpression"/>. Builds the equivalent
+    /// recovery-variant call (<c>try_foo(args)</c> / <c>x.check_foo()</c> / <c>lookup_foo()</c>) and analyzes
+    /// THAT — reusing the full variant resolution + carrier typing (Maybe/Check/Lookup[T], None-collapsed) —
+    /// then stashes it on <see cref="RecoveryExpression.LoweredCall"/> for Phase-6 to splice in. Single wrapped
+    /// call (the parser guarantees the inner is a call); whole-expression composition is a later stage.
+    /// </summary>
+    private TypeSymbol AnalyzeRecoveryExpression(RecoveryExpression recovery)
+    {
+        string variantPrefix = recovery.Kind switch
+        {
+            RecoveryKind.Grab => "check_",
+            RecoveryKind.Lookup => "lookup_",
+            _ => "try_"
+        };
+
+        Expression variantCall = recovery.Inner switch
+        {
+            CallExpression { Callee: IdentifierExpression id } freeCall => freeCall with
+            {
+                Callee = id with { Name = variantPrefix + id.Name },
+                IsFailable = false
+            },
+            CallExpression { Callee: MemberExpression member } memberCall => memberCall with
+            {
+                Callee = member with { MemberName = variantPrefix + member.MemberName },
+                IsFailable = false
+            },
+            _ => recovery.Inner // parser guarantees a CallExpression; defensive fallthrough
+        };
+
+        TypeSymbol carrierType = AnalyzeExpression(expression: variantCall);
+        recovery.LoweredCall = variantCall;
+        return carrierType;
+    }
+
+    /// <summary>
     /// Resolves the index parameter type of a `getitem` routine for a given lookup type, with
     /// owner generic parameters substituted. Returns null when the routine or parameter is missing.
     /// `me` is implicit and not in <see cref="RoutineInfo.Parameters"/>; the index is at index 0.

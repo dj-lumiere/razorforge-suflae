@@ -411,6 +411,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // stdlib bodies (which bypass ExpressionLoweringPass) are also covered.
             // -- Step 1d: optional member access (?.) -----------------------------
             OptionalMemberExpression optMember => LowerOptionalMember(optMember: optMember),
+            // try/grab/lookup recovery: splice in the recovery-variant call SA analyzed and lower that.
+            RecoveryExpression recovery => LowerExpr(expr: recovery.LoweredCall ?? recovery.Inner),
             // -- Step 1f: carrier absence checks (is None / is None) -------------
             IsPatternExpression ipe => LowerIsPatternExpression(ipe: ipe),
             // -- Step 1i: logical not -> ConditionalExpression ----------------------

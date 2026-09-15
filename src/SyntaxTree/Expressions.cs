@@ -1252,6 +1252,13 @@ public record RecoveryExpression(RecoveryKind Kind, Expression Inner, SourceLoca
     {
         return visitor.VisitRecoveryExpression(node: this);
     }
+
+    /// <summary>
+    /// The analyzed lowering SA computed for this recovery (single-call: a call to the resolved
+    /// <c>try_</c>/<c>check_</c>/<c>lookup_</c> variant carrying the same arguments). Phase-6 replaces the
+    /// node with this. Null until analyzed.
+    /// </summary>
+    public Expression? LoweredCall { get; set; }
 }
 
 #endregion

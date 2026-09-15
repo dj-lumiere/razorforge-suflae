@@ -590,6 +590,14 @@ public abstract class AstRewriter
     /// <returns>The rewritten recovery expression, or the original reference if nothing changed.</returns>
     protected virtual Expression VisitRecovery(RecoveryExpression e)
     {
+        // After SA the node carries its analyzed lowering (the recovery-variant call) — splice it in so no
+        // downstream pass or codegen ever sees a RecoveryExpression. Pre-SA (LoweredCall null) it stays,
+        // recursing into the inner so nested rewrites still apply.
+        if (e.LoweredCall is { } lowered)
+        {
+            return VisitExpression(expr: lowered);
+        }
+
         Expression inner = VisitExpression(expr: e.Inner);
         return ReferenceEquals(objA: inner, objB: e.Inner)
             ? e
