@@ -949,10 +949,22 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 MemberName: RuntimeContract.Carrier.ValueField,
                 Location: loc) { ResolvedType = valueType };
 
+            // The extracted payload ALIASES the carrier's heap buffer (a plain field read, not a move), so
+            // binding `var x = carrier.value` and later destroying BOTH x AND the carrier double-frees a
+            // managed payload (Bytes/List/…). DEEP-COPY the payload out (`.assign()`) so the bind owns an
+            // independent buffer. For a scalar payload assign is a cheap identity copy; the copy only matters
+            // for a managed payload. (The carrier temp is torn down normally, freeing its own buffer once.)
+            Expression ownedValue = new CallExpression(
+                Callee: new MemberExpression(Object: valueAccess,
+                    MemberName: RuntimeContract.Duplication.Assign,
+                    Location: loc) { ResolvedType = valueType },
+                Arguments: [],
+                Location: loc) { ResolvedType = valueType };
+
             bindStmt = new DeclarationStatement(
                 Declaration: new VariableDeclaration(Name: bindName,
                     Type: null,
-                    Initializer: valueAccess,
+                    Initializer: ownedValue,
                     Visibility: VisibilityModifier.Secret,
                     Location: loc),
                 Location: loc);

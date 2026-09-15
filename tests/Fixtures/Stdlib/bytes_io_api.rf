@@ -9,32 +9,32 @@ import IO/BytesIO
 
 routine start()
   # --- S64 parse: happy paths ---
-  show(f"parse '42': {S64.try_from_digit_bytes(bytes: b"42")!!}")
-  show(f"parse '-42': {S64.try_from_digit_bytes(bytes: b"-42")!!}")
-  show(f"parse '+42': {S64.try_from_digit_bytes(bytes: b"+42")!!}")
-  show(f"parse '0': {S64.try_from_digit_bytes(bytes: b"0")!!}")
-  show(f"parse '1234567890': {S64.try_from_digit_bytes(bytes: b"1234567890")!!}")
+  show(f"parse '42': {(try S64.from_digit_bytes(bytes: b"42"))!!}")
+  show(f"parse '-42': {(try S64.from_digit_bytes(bytes: b"-42"))!!}")
+  show(f"parse '+42': {(try S64.from_digit_bytes(bytes: b"+42"))!!}")
+  show(f"parse '0': {(try S64.from_digit_bytes(bytes: b"0"))!!}")
+  show(f"parse '1234567890': {(try S64.from_digit_bytes(bytes: b"1234567890"))!!}")
 
   # Leading whitespace
-  show(f"parse '   42': {S64.try_from_digit_bytes(bytes: b"   42")!!}")
-  show(f"parse '\\t-7': {S64.try_from_digit_bytes(bytes: b"\t-7")!!}")
+  show(f"parse '   42': {(try S64.from_digit_bytes(bytes: b"   42"))!!}")
+  show(f"parse '\\t-7': {(try S64.from_digit_bytes(bytes: b"\t-7"))!!}")
 
   # Lenient: stops at first non-digit, doesn't fail
-  show(f"parse '42abc' (stops at 'a'): {S64.try_from_digit_bytes(bytes: b"42abc")!!}")
-  show(f"parse '42 99' (stops at ' '): {S64.try_from_digit_bytes(bytes: b"42 99")!!}")
+  show(f"parse '42abc' (stops at 'a'): {(try S64.from_digit_bytes(bytes: b"42abc"))!!}")
+  show(f"parse '42 99' (stops at ' '): {(try S64.from_digit_bytes(bytes: b"42 99"))!!}")
 
   # --- S64 parse failures ---
-  show(f"try empty: {S64.try_from_digit_bytes(bytes: b"")}")
-  show(f"try 'abc': {S64.try_from_digit_bytes(bytes: b"abc")}")
-  show(f"try '+': {S64.try_from_digit_bytes(bytes: b"+")}")
-  show(f"try '   ': {S64.try_from_digit_bytes(bytes: b"   ")}")
+  show(f"try empty: {try S64.from_digit_bytes(bytes: b"")}")
+  show(f"try 'abc': {try S64.from_digit_bytes(bytes: b"abc")}")
+  show(f"try '+': {try S64.from_digit_bytes(bytes: b"+")}")
+  show(f"try '   ': {try S64.from_digit_bytes(bytes: b"   ")}")
 
   # --- Streaming parse (from_digit_bytes_at) ---
   var stream = b"10 20 -30 40"
   var i: U64 = 0_u64
   var sum: S64 = 0_s64
   loop
-    var t = S64.try_from_digit_bytes_at(bytes: stream, start: i)
+    var t = try S64.from_digit_bytes_at(bytes: stream, start: i)
     when t
       is None => break
       else pair =>
@@ -43,28 +43,28 @@ routine start()
   show(f"streaming sum: {sum}")
 
   # --- to_digit_bytes (formatting) ---
-  show(f"format 0: {try_to_digit_bytes_s64(v: S64(0))!!}")
-  show(f"format 42: {try_to_digit_bytes_s64(v: S64(42))!!}")
-  show(f"format -42: {try_to_digit_bytes_s64(v: S64(-42))!!}")
-  show(f"format S64_MIN: {try_to_digit_bytes_s64(v: S64_MIN)!!}")
-  show(f"format S64_MAX: {try_to_digit_bytes_s64(v: S64_MAX)!!}")
+  show(f"format 0: {(try to_digit_bytes_s64(v: S64(0)))!!}")
+  show(f"format 42: {(try to_digit_bytes_s64(v: S64(42)))!!}")
+  show(f"format -42: {(try to_digit_bytes_s64(v: S64(-42)))!!}")
+  show(f"format S64_MIN: {(try to_digit_bytes_s64(v: S64_MIN))!!}")
+  show(f"format S64_MAX: {(try to_digit_bytes_s64(v: S64_MAX))!!}")
 
   # --- U64 ---
-  show(f"U64 parse '42': {U64.try_from_digit_bytes(bytes: b"42")!!}")
-  show(f"U64 parse '+42': {U64.try_from_digit_bytes(bytes: b"+42")!!}")
-  show(f"U64 try '-42' (must fail): {U64.try_from_digit_bytes(bytes: b"-42")}")
+  show(f"U64 parse '42': {(try U64.from_digit_bytes(bytes: b"42"))!!}")
+  show(f"U64 parse '+42': {(try U64.from_digit_bytes(bytes: b"+42"))!!}")
+  show(f"U64 try '-42' (must fail): {try U64.from_digit_bytes(bytes: b"-42")}")
 
-  show(f"U64 format 0: {try_to_digit_bytes_u64(v: U64(0))!!}")
-  show(f"U64 format U64_MAX: {try_to_digit_bytes_u64(v: U64_MAX)!!}")
+  show(f"U64 format 0: {(try to_digit_bytes_u64(v: U64(0)))!!}")
+  show(f"U64 format U64_MAX: {(try to_digit_bytes_u64(v: U64_MAX))!!}")
 
   # --- Round-trip property: parse(format(x)) == x for many values ---
   var ok = true
   each x in -100 to 100
-    var bytes_opt = try_to_digit_bytes_s64(v: S64(from: x))
+    var bytes_opt = try to_digit_bytes_s64(v: S64(from: x))
     when bytes_opt
       is None => ok = false
       else b =>
-        var parsed_opt = S64.try_from_digit_bytes(bytes: b)
+        var parsed_opt = try S64.from_digit_bytes(bytes: b)
         when parsed_opt
           is None => ok = false
           else parsed =>
