@@ -951,20 +951,27 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
             // The extracted payload ALIASES the carrier's heap buffer (a plain field read, not a move), so
             // binding `var x = carrier.value` and later destroying BOTH x AND the carrier double-frees a
-            // managed payload (Bytes/List/…). DEEP-COPY the payload out (`.assign()`) so the bind owns an
-            // independent buffer. For a scalar payload assign is a cheap identity copy; the copy only matters
-            // for a managed payload. (The carrier temp is torn down normally, freeing its own buffer once.)
-            Expression ownedValue = new CallExpression(
-                Callee: new MemberExpression(Object: valueAccess,
-                    MemberName: RuntimeContract.Duplication.Assign,
-                    Location: loc) { ResolvedType = valueType },
-                Arguments: [],
-                Location: loc) { ResolvedType = valueType };
+            // MANAGED/ASSIGNABLE payload (Bytes/Text/record — for these `.assign()` is a refcount++ share /
+            // structural co-own, NOT a buffer copy, which balances the two destroys). A MOVE-ONLY entity
+            // payload has no `assign` (it's single-owner); leave the extract as a plain passthrough and let
+            // the ownership checker treat it as the move it is (assigning it would reach codegen unresolved).
+            bool payloadAssignable = valueType != null && registry.LookupMemberRoutine(
+                type: valueType,
+                memberRoutineName: RuntimeContract.Duplication.Assign,
+                isFailable: false) != null;
+            Expression boundValue = payloadAssignable
+                ? new CallExpression(
+                    Callee: new MemberExpression(Object: valueAccess,
+                        MemberName: RuntimeContract.Duplication.Assign,
+                        Location: loc) { ResolvedType = valueType },
+                    Arguments: [],
+                    Location: loc) { ResolvedType = valueType }
+                : valueAccess;
 
             bindStmt = new DeclarationStatement(
                 Declaration: new VariableDeclaration(Name: bindName,
                     Type: null,
-                    Initializer: ownedValue,
+                    Initializer: boundValue,
                     Visibility: VisibilityModifier.Secret,
                     Location: loc),
                 Location: loc);
