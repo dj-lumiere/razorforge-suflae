@@ -2,7 +2,7 @@ module Tests/Stdlib/ResultApi
 import IO/Console
 import BuilderQuery
 
-# Failable routine using throw only -> exposes check_ variant returning Result[T]
+# Failable routine using throw only -> exposes check_ variant returning Check[T]
 routine divide!(a: S64, b: S64) -> S64
   if b == 0
     throw DivisionByZeroError()

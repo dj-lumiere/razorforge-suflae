@@ -3247,7 +3247,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             RecordTypeSymbol { GenericDefinition: not null } r => r.GenericDefinition.Name,
             _ => type.Name
         };
-        return baseName is "Result" or "Lookup";
+        return baseName is "Check" or "Lookup";
     }
 
     /// <summary>

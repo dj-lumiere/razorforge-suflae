@@ -39,7 +39,7 @@ public partial class LlvmEmitter
         // can `getelementptr` field 0 / field 1 against a real ptr.
         bool needsSpill = subjectType is VariantTypeSymbol ||
                           subjectType is RecordTypeSymbol carrierRec &&
-                          GetCarrierBaseName(type: carrierRec) is "Maybe" or "Result" or "Lookup";
+                          GetCarrierBaseName(type: carrierRec) is "Maybe" or "Check" or "Lookup";
         if (needsSpill)
         {
             string llvmType = GetLlvmType(type: subjectType!);
@@ -299,7 +299,7 @@ public partial class LlvmEmitter
         bool handledCrashable)
     {
         return GetCarrierBaseName(type: subjectType) == "Maybe" && handledAbsent ||
-               GetCarrierBaseName(type: subjectType) == "Result" && handledCrashable ||
+               GetCarrierBaseName(type: subjectType) == "Check" && handledCrashable ||
                GetCarrierBaseName(type: subjectType) == "Lookup" && handledAbsent &&
                handledCrashable;
     }
@@ -1044,7 +1044,7 @@ public partial class LlvmEmitter
         return GetCarrierBaseName(type: carrierType) switch
         {
             "Maybe" => pattern is NonePattern or TypePattern { Type.Name: "None" },
-            "Result" or "Lookup" => pattern is TypePattern { Type.Name: "None" },
+            "Check" or "Lookup" => pattern is TypePattern { Type.Name: "None" },
             _ => false
         };
     }

@@ -213,7 +213,7 @@ public sealed partial class SemanticVerifier
         bool carrierUsesNoneForAbsent = carrierBase is "Maybe" or "Lookup";
         bool eliminateNone = carrierUsesNoneForAbsent && IsNonePattern(pattern: isPat.Pattern);
         bool eliminateNoneValue =
-            carrierBase == "Result" && IsNoneTypePattern(pattern: isPat.Pattern);
+            carrierBase == "Check" && IsNoneTypePattern(pattern: isPat.Pattern);
         bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
 
         if (!eliminateNone && !eliminateNoneValue && !eliminateCrashable)
@@ -284,7 +284,7 @@ public sealed partial class SemanticVerifier
             "Maybe" when eliminateNone => valueType,
 
             // Result<T>: eliminate Crashable -> T
-            "Result" when eliminateCrashable => valueType,
+            "Check" when eliminateCrashable => valueType,
 
             // Lookup<T>: must eliminate both absent (None) and Crashable -> T
             "Lookup" when eliminateNone && eliminateCrashable => valueType,

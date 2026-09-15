@@ -1213,7 +1213,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
         }
 
         string baseName = GetCarrierBaseName(type: type);
-        return baseName is "Result" or "Lookup";
+        return baseName is "Check" or "Lookup";
     }
 
     /// <summary>
@@ -1226,7 +1226,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
             return false;
         }
 
-        return GetCarrierBaseName(type: type) == "Result";
+        return GetCarrierBaseName(type: type) == "Check";
     }
 
     /// <summary>

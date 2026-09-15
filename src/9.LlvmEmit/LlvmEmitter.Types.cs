@@ -380,7 +380,7 @@ public partial class LlvmEmitter
     /// </summary>
     private string GetResultCarrierLlvmType(TypeSymbol valueType)
     {
-        TypeSymbol? def = _registry.LookupType(name: "Result");
+        TypeSymbol? def = _registry.LookupType(name: "Check");
         if (def != null)
         {
             TypeSymbol? resolved =
@@ -392,7 +392,7 @@ public partial class LlvmEmitter
         }
 
         // Carriers live in `module Core`; match the module-qualified canonical name (GetRecordTypeName).
-        return $"%{Q(name: $"Record.Core.Result[{valueType.FullName}]")}";
+        return $"%{Q(name: $"Record.Core.Check[{valueType.FullName}]")}";
     }
 
     /// <summary>Returns true if <paramref name="type"/> is a Maybe[T], Result[T], or Lookup[T] carrier.</summary>

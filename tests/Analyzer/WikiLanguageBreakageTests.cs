@@ -258,7 +258,7 @@ public class WikiLanguageBreakageTests
     /// </summary>
     /// <param name="typeName">The error-handling type name.</param>
     [Theory]
-    [InlineData("Result[S32]")]
+    [InlineData("Check[S32]")]
     [InlineData("Lookup[S32]")]
     public void Analyze_ErrorHandlingTypeAsParameter_ReportsError(string typeName)
     {
@@ -278,7 +278,7 @@ public class WikiLanguageBreakageTests
     /// </summary>
     /// <param name="typeName">The error-handling type name.</param>
     [Theory]
-    [InlineData("Result[S32]")]
+    [InlineData("Check[S32]")]
     [InlineData("Lookup[S32]")]
     public void Analyze_ErrorHandlingTypeAsMemberVariable_ReportsError(string typeName)
     {

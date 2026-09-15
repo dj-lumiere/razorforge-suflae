@@ -741,7 +741,7 @@ internal sealed class TypeResolver
         string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
         foreach (TypeSymbol arg in typeArgs)
         {
-            if (arg is not { Name: "None" } || genericDefCarrierName is "Result")
+            if (arg is not { Name: "None" } || genericDefCarrierName is "Check")
             {
                 continue;
             }
@@ -1681,7 +1681,7 @@ internal sealed class TypeResolver
         }
 
         string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is MaybeTypeName or "Result" or "Lookup"
+        return baseName is MaybeTypeName or "Check" or "Lookup"
             ? baseName
             : null;
     }

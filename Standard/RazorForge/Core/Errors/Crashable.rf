@@ -1,7 +1,7 @@
 module Core
 
 ### Represents the aggregate protocol for `crashable`-kind error types — the value-category marker
-### `throw` produces and `Result[T]`/`Lookup[T]` transport. Like `RecordType`/`VariantType`, it bundles
+### `throw` produces and `Check[T]`/`Lookup[T]` transport. Like `RecordType`/`VariantType`, it bundles
 ### NO method requirements: `crash_message`/`crash_title` are buildtime-GUARANTEED on every crashable by
 ### the `needs CrashableType T` derives in `Derivation.rf` (a type may `@override` either), exactly as
 ### `represent`/`diagnose` are universal built-ins rather than opt-in protocol methods. Conformance is the

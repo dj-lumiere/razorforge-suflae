@@ -22,7 +22,7 @@ routine validate!(n: S64) -> S64
   return n * 2
 
 routine start()
-  # Happy path: check_ variant returns Result[T] (T is S64 record-typed)
+  # Happy path: check_ variant returns Check[T] (T is S64 record-typed)
   var ok = check_validate(n: 5)
   show(f"ok type: {ok.type_name()}")
   show(f"ok: {ok}")

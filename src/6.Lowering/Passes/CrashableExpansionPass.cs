@@ -490,7 +490,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
         }
 
         string baseName = GetCarrierBaseName(type: type);
-        return baseName is "Result" or "Lookup";
+        return baseName is "Check" or "Lookup";
     }
 
     private static string GetCarrierBaseName(TypeSymbol type)

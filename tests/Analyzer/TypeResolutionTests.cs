@@ -677,7 +677,7 @@ public class TypeResolutionTests
     public void Analyze_RoutineReturnsResult_ReportsError()
     {
         string source = """
-                        routine foo() -> Result[S32]
+                        routine foo() -> Check[S32]
                           return 42
                         """;
 

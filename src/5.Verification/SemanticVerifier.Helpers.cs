@@ -54,7 +54,7 @@ public sealed partial class SemanticVerifier
     #region Carrier Type Helpers
 
     /// <summary>
-    /// Returns the base name ("Maybe", "Result", or "Lookup") for a carrier type,
+    /// Returns the base name ("Maybe", "Check", or "Lookup") for a carrier type,
     /// or null if the type is not a carrier type.
     /// Works for both generic definitions (name == "Maybe") and resolved instances (GenericDefinition.Name == "Maybe").
     /// </summary>
@@ -66,7 +66,7 @@ public sealed partial class SemanticVerifier
         }
 
         string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is MaybeTypeName or "Result" or "Lookup"
+        return baseName is MaybeTypeName or "Check" or "Lookup"
             ? baseName
             : null;
     }

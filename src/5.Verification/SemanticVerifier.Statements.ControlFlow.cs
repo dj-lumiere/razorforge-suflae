@@ -531,7 +531,7 @@ public sealed partial class SemanticVerifier
         {
             handledNone = true;
         }
-        else if (carrierBase == "Result" && IsNoneTypePattern(pattern: clause.Pattern))
+        else if (carrierBase == "Check" && IsNoneTypePattern(pattern: clause.Pattern))
         {
             handledNoneValue = true;
         }

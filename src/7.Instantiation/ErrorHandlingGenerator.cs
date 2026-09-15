@@ -421,7 +421,7 @@ public sealed class ErrorHandlingGenerator
 
         TypeSymbol carrierInner = WrapBareEntityForCarrier(type: innerType);
 
-        TypeSymbol resultDef = _registry.LookupType(name: "Result") ??
+        TypeSymbol resultDef = _registry.LookupType(name: "Check") ??
                              throw new InvalidOperationException(
                                  message: "Result type not registered");
         TypeSymbol resultType = _registry.GetOrCreateResolution(
@@ -469,7 +469,7 @@ public sealed class ErrorHandlingGenerator
         // so the only distinction is throw vs no-throw — same as check_.
         if (returnType.Name == NoneTypeName)
         {
-            TypeSymbol resultDef = _registry.LookupType(name: "Result") ??
+            TypeSymbol resultDef = _registry.LookupType(name: "Check") ??
                                  throw new InvalidOperationException(
                                      message: "Result type not registered");
             TypeSymbol resultType = _registry.GetOrCreateResolution(

@@ -11,14 +11,14 @@ using static TestHelpers;
 public class ErrorHandlingPatternTests
 {
     /// <summary>
-    /// Verifies that Result[T] is rejected as a routine parameter type — carriers are internal
+    /// Verifies that Check[T] is rejected as a routine parameter type — carriers are internal
     /// error-propagation types and may not be passed as arguments.
     /// </summary>
     [Fact]
     public void Analyze_ResultAsParameter_ReportsError()
     {
         string source = """
-                        routine test(value: Result[S32])
+                        routine test(value: Check[S32])
                           return
                         """;
 
@@ -67,7 +67,7 @@ public class ErrorHandlingPatternTests
     public void Analyze_ResultIsNone_ReportsPatternMismatch()
     {
         string source = """
-                        routine test(value: Result[S32])
+                        routine test(value: Check[S32])
                           when value
                             is None => pass
                             else => pass
@@ -108,7 +108,7 @@ public class ErrorHandlingPatternTests
     public void Analyze_ResultNoneUsesNoneValueArm_NoPatternMismatch()
     {
         string source = """
-                        routine test(value: Result[None])
+                        routine test(value: Check[None])
                           when value
                             is Crashable err => pass
                             is None => pass

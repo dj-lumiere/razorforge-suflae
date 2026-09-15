@@ -2521,7 +2521,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 variantStatus = FailableVariant.Lookup;
                 variantInnerType = concreteInfo.ReturnType.TypeArguments[index: 0];
             }
-            else if (baseName == "Result")
+            else if (baseName == "Check")
             {
                 variantStatus = FailableVariant.Check;
                 variantInnerType = concreteInfo.ReturnType.TypeArguments[index: 0];

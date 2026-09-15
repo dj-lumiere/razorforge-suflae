@@ -3,12 +3,12 @@ module Core
 import BuilderQuery
 
 ### Represents the success-or-crash carrier used by `check_` routines.
-### A `Result[T]` stores either a successful `T` payload or a crashable error
+### A `Check[T]` stores either a successful `T` payload or a crashable error
 ### payload inline. The full layout is codegen-controlled:
 ###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }
 ### `type_id == 0` is the None state with don't-care payload bytes.
 ### :typeparam T: The successful return value type.
-record Result[AnyType T]
+record Check[AnyType T]
   ### Identifies the stored payload type.
   ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
@@ -20,10 +20,10 @@ record Result[AnyType T]
 
 ### Returns the display form of this result: the payload's own `represent` for both the success
 ### (`T`) and crashable arms. `is T` matches the success state (type-id of the concrete `T`); the
-### `else` is an unreachable fallback (a `Result` is always `Crashable` or `T`).
+### `else` is an unreachable fallback (a `Check` is always `Crashable` or `T`).
 ### :returns: The resulting `Text` value.
 @override
-routine Result[T].represent() -> Text
+routine Check[T].represent() -> Text
   when me
     is Crashable v =>
       return v.represent()
@@ -36,7 +36,7 @@ routine Result[T].represent() -> Text
 ### Format: `f"{full_type_name}(type_id: {type_id}, {payload.diagnose()})"` for both arms.
 ### :returns: The resulting `Text` value.
 @override
-routine Result[T].diagnose() -> Text
+routine Check[T].diagnose() -> Text
   when me
     is Crashable v =>
       return f"{me.full_type_name()}(type_id: {me.type_id}, {v.diagnose()})"
@@ -50,7 +50,7 @@ routine Result[T].diagnose() -> Text
 ### auto-derived) so the per-instantiation body is monomorphized and emitted like
 ### `represent`/`diagnose`, and so only the active arm's payload is touched.
 @override
-dangerous routine Result[T].destroy()
+dangerous routine Check[T].destroy()
   when me
     is T v =>
       v.destroy()

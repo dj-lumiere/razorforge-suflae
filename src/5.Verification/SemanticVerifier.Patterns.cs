@@ -190,7 +190,7 @@ public sealed partial class SemanticVerifier
                           // Only valid when the success type argument is itself None — `Result[S32]`'s
                           // success arm is S32, so `is None` there is still a mismatch.
                           || matchedType is CrashableTypeSymbol ||
-                          GetCarrierBaseName(type: matchedType) == "Result" &&
+                          GetCarrierBaseName(type: matchedType) == "Check" &&
                           matchedType is RecordTypeSymbol { TypeArguments: [{ Name: "None" }, ..] }
                           // Suflae: a nullable entity reference (`E?`) is a Roamed[E] handle that may be a
                           // null/none handle, so `is None` / `isnot None` is a legal none-check on it.
@@ -875,7 +875,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 break;
-            case "Result":
+            case "Check":
                 if (!hasCrashableCatchAll)
                 {
                     missing.Add(item: "Crashable");

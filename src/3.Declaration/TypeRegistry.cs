@@ -752,7 +752,7 @@ public sealed partial class TypeRegistry
         {
             GenericParameters = ["T"], Module = "Core", CarrierKind = CarrierKind.Maybe
         });
-        RegisterType(type: new RecordTypeSymbol(name: "Result")
+        RegisterType(type: new RecordTypeSymbol(name: "Check")
         {
             GenericParameters = ["T"], Module = "Core", CarrierKind = CarrierKind.Result
         });

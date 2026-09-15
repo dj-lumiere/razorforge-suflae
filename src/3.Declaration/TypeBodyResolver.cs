@@ -994,7 +994,7 @@ internal sealed class TypeBodyResolver
         }
 
         string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is "Maybe" or "Result" or "Lookup"
+        return baseName is "Maybe" or "Check" or "Lookup"
             ? baseName
             : null;
     }
