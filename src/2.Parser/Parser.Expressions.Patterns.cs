@@ -490,7 +490,25 @@ public partial class Parser
                 _ => RecoveryKind.Try
             };
             Expression recoveryInner = ParseUnary(); // right-associative; wraps the postfix call chain
-            if (recoveryInner is not CallExpression)
+
+            // A trailing force-unwrap binds LOOSER than the recovery keyword: `try route()!!` means
+            // `(try route())!!`, not `try (route()!!)`. The keyword PRODUCES a carrier and `!!` CONSUMES it,
+            // so `!!` applies to the recovery RESULT. ParseUnary already folded the `!!` onto the inner call
+            // (`ForceUnwrap(route())`); peel those force-unwraps off, recover the inner CALL, then re-apply
+            // them on top of the RecoveryExpression. (`??` needs no such handling — it is a binary operator
+            // parsed above ParseUnary, so it already applies to the recovery result.)
+            var forceUnwraps = new List<SourceLocation>();
+            Expression callSpine = recoveryInner;
+            while (callSpine is UnaryExpression
+                   {
+                       Operator: UnaryOperator.ForceUnwrap, Operand: { } unwrapped
+                   } fu)
+            {
+                forceUnwraps.Add(item: fu.Location);
+                callSpine = unwrapped;
+            }
+
+            if (callSpine is not CallExpression)
             {
                 throw ThrowParseError(
                     message:
@@ -499,9 +517,19 @@ public partial class Parser
                     token: recoveryKw);
             }
 
-            return new RecoveryExpression(Kind: recoveryKind,
-                Inner: recoveryInner,
+            Expression recovery = new RecoveryExpression(Kind: recoveryKind,
+                Inner: callSpine,
                 Location: GetLocation(token: recoveryKw));
+
+            // Re-apply the peeled `!!`s outermost-last so `try route()!!` → `(try route())!!`.
+            for (int i = forceUnwraps.Count - 1; i >= 0; i--)
+            {
+                recovery = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap,
+                    Operand: recovery,
+                    Location: forceUnwraps[index: i]);
+            }
+
+            return recovery;
         }
 
         // Handle steal expression (steal expr = ownership transfer, RazorForge only)
