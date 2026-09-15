@@ -409,8 +409,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // -- Step 1c: force-unwrap (!!) -- handled by OperatorLoweringPass --------
             // !! is desugared to operand.unwrap() in OperatorLoweringPass so that
             // stdlib bodies (which bypass ExpressionLoweringPass) are also covered.
-            // -- Step 1d: optional member access (?.) -----------------------------
-            OptionalMemberExpression optMember => LowerOptionalMember(optMember: optMember),
             // try/grab/lookup recovery: splice in the recovery-variant call SA analyzed and lower that.
             RecoveryExpression recovery => LowerExpr(expr: recovery.LoweredCall ?? recovery.Inner),
             // -- Step 1f: carrier absence checks (is None / is None) -------------
@@ -2996,91 +2994,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         hoisted.Add(item: whenStmt);
 
         return (hoisted, MakeRef(name: qqName, resolvedType: valueType, loc: loc));
-    }
-
-    /// <summary>
-    /// 1d. Lowers <c>a?.prop</c> to:
-    /// <code>
-    ///   var _car_N = a
-    ///   var _om_N: Maybe[PropType]
-    ///   when _car_N
-    ///     is None/None -> _om_N = None   (zeroinitializer via IdentifierExpression("None"))
-    ///     else v        -> _om_N = v.prop  (auto-wrapped if needed by codegen)
-    ///   // replacement: _om_N
-    /// </code>
-    /// </summary>
-    private (List<Statement> Hoisted, Expression Expr) LowerOptionalMember(
-        OptionalMemberExpression optMember)
-    {
-        SourceLocation loc = optMember.Location;
-        TypeSymbol? carrierType = optMember.Object.ResolvedType;
-        TypeSymbol? resultType = optMember.ResolvedType; // Maybe[PropType]
-
-        // Skip hoisting if types are unknown (e.g., unanalyzed stdlib bodies).
-        if (carrierType == null || resultType == null)
-        {
-            return ([], optMember);
-        }
-
-        string carName = NextTempName(prefix: "car");
-        string omName = NextTempName(prefix: "om");
-        string valName = NextTempName(prefix: "val");
-
-        var hoisted = new List<Statement>();
-
-        (List<Statement> objH, Expression loweredObj) = LowerExpr(expr: optMember.Object);
-        hoisted.AddRange(collection: objH);
-
-        AddTempVar(hoisted: hoisted,
-            name: carName,
-            typeHint: carrierType,
-            initializer: loweredObj,
-            loc: loc);
-        AddTempVarUninit(hoisted: hoisted,
-            name: omName,
-            typeHint: resultType,
-            loc: loc);
-
-        Expression carRef = MakeRef(name: carName, resolvedType: carrierType, loc: loc);
-        Expression omRef = MakeRef(name: omName, resolvedType: resultType, loc: loc);
-
-        // Inner type for member access
-        TypeSymbol? innerType = carrierType?.TypeArguments?[0];
-        Expression valRef = MakeRef(name: valName, resolvedType: innerType, loc: loc);
-
-        // val.prop
-        TypeSymbol? propType = resultType?.TypeArguments?[0];
-        var memberAccess =
-            new MemberExpression(Object: valRef, MemberName: optMember.MemberName, Location: loc)
-            {
-                ResolvedType = propType
-            };
-
-        // None literal (absent Maybe) -- codegen treats "None" identifier as zeroinitializer
-        var noneLiteral = new IdentifierExpression(Name: "None", Location: loc)
-        {
-            ResolvedType = resultType
-        };
-
-        ProducedWhenStatement = true;
-        var whenStmt = new WhenStatement(Expression: carRef,
-            Clauses:
-            [
-                new WhenClause(Pattern: MakeAbsencePattern(carrierType: carrierType, loc: loc),
-                    Body: new AssignmentStatement(Target: omRef,
-                        Value: noneLiteral,
-                        Location: loc),
-                    Location: loc),
-                new WhenClause(Pattern: new ElsePattern(VariableName: valName, Location: loc),
-                    Body: new AssignmentStatement(Target: omRef,
-                        Value: memberAccess,
-                        Location: loc),
-                    Location: loc)
-            ],
-            Location: loc);
-        hoisted.Add(item: whenStmt);
-
-        return (hoisted, MakeRef(name: omName, resolvedType: resultType, loc: loc));
     }
 
     // --- Helpers -----------------------------------------------------------------

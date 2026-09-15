@@ -123,10 +123,6 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     {
         return node.Object.Accept(visitor: this);
     }
-    public bool VisitOptionalMemberExpression(OptionalMemberExpression node)
-    {
-        return node.Object.Accept(visitor: this);
-    }
     public bool VisitIndexExpression(IndexExpression node)
     {
         return node.Object.Accept(visitor: this) || node.Index.Accept(visitor: this);

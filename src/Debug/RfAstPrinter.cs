@@ -779,13 +779,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitOptionalMemberExpression(OptionalMemberExpression node)
-    {
-        return $"{node.Object.Accept(visitor: this)}?.{node.MemberName}";
-    }
-
-
-    /// <inheritdoc/>
     public string VisitCreatorExpression(CreatorExpression node)
     {
         string typeArgs = node.TypeArguments is { Count: > 0 }

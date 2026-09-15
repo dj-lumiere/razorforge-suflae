@@ -451,21 +451,6 @@ public sealed partial class SemanticVerifier
         return null;
     }
 
-    private TypeSymbol AnalyzeOptionalMemberExpression(OptionalMemberExpression optMember)
-    {
-        // Analyze the object expression to get its type
-        AnalyzeExpression(expression: optMember.Object);
-
-        // Delegate to regular member analysis for the property lookup
-        // The result is wrapped in Maybe[T] since the access may produce none
-        var regularMember = new MemberExpression(Object: optMember.Object,
-            MemberName: optMember.MemberName,
-            Location: optMember.Location);
-        TypeSymbol memberType = AnalyzeMemberExpression(member: regularMember);
-
-        return memberType;
-    }
-
     /// <summary>
     /// Resolves the index parameter type of a `getitem` routine for a given lookup type, with
     /// owner generic parameters substituted. Returns null when the routine or parameter is missing.

@@ -230,11 +230,6 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
 
         return false;
     }
-    public bool VisitOptionalMemberExpression(OptionalMemberExpression node)
-    {
-        Visit(e: node.Object);
-        return false;
-    }
     public bool VisitIndexExpression(IndexExpression node)
     {
         Visit(e: node.Object);

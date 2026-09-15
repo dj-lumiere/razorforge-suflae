@@ -459,16 +459,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                         includeMe: includeMe)
                 },
                 original: member),
-            OptionalMemberExpression optionalMember => CopyResolvedType(
-                rewritten: optionalMember with
-                {
-                    Object = RewriteExpression(expression: optionalMember.Object,
-                        scope: scope,
-                        inheritedGenericParameters: inheritedGenericParameters,
-                        inheritedGenericConstraints: inheritedGenericConstraints,
-                        includeMe: includeMe)
-                },
-                original: optionalMember),
             IndexExpression index => CopyResolvedType(rewritten: index with
                 {
                     Object = RewriteExpression(expression: index.Object,
@@ -1177,9 +1167,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             case MemberExpression m:
                 yield return m.Object;
                 break;
-            case OptionalMemberExpression o:
-                yield return o.Object;
-                break;
             case IndexExpression i:
                 yield return i.Object;
                 yield return i.Index;
@@ -1532,13 +1519,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
 
             case MemberExpression member:
                 CollectLocalCapturesRecursive(expression: member.Object,
-                    outerScope: outerScope,
-                    parameterNames: parameterNames,
-                    captures: captures);
-                break;
-
-            case OptionalMemberExpression optionalMember:
-                CollectLocalCapturesRecursive(expression: optionalMember.Object,
                     outerScope: outerScope,
                     parameterNames: parameterNames,
                     captures: captures);

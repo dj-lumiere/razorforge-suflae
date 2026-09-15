@@ -164,7 +164,7 @@ binding is immediately valid and borrowable; assign before reading.)
   (bare literal amounts fine)
 - `//` floor division, `/` true division, `%` remainder
 - `abs()` on signed ints is failable (`abs!()` throws on MIN); the force-unwrap
-  idiom is `(try x.abs())!!`
+  idiom is `try x.abs()!!`
 - Equality `==`/`!=` compares VALUES (lowers to `.eq()`); identity `===`/`!==`
   compares whether two references are the SAME object (entities / access-token /
   RC-wrapper operands only — RF-S440 on value types). See §7.

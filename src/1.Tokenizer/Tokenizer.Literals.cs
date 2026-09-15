@@ -558,14 +558,10 @@ public partial class Tokenizer
         }
     }
 
-    /// <summary>Scans a '?' token inside an insertion expression: optional-dot, none-coalesce, or question.</summary>
+    /// <summary>Scans a '?' token inside an insertion expression: none-coalesce, or question.</summary>
     private void ScanInsertionQuestionToken()
     {
-        if (Match(expected: '.'))
-        {
-            AddToken(type: TokenType.QuestionDot);
-        }
-        else if (Match(expected: '?'))
+        if (Match(expected: '?'))
         {
             AddToken(type: Match(expected: '=')
                 ? TokenType.NoneCoalesceAssign

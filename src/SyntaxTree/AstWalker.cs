@@ -251,10 +251,6 @@ public static class AstWalker
             {
                 e.Object
             },
-            OptionalMemberExpression e => new object[]
-            {
-                e.Object
-            },
             IndexExpression e => new object[]
             {
                 e.Object,

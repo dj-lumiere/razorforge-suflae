@@ -776,9 +776,6 @@ internal sealed class IteratorInlineLoweringPass
             case MemberExpression m:
                 return m with { Object = CloneExpression(expr: m.Object, ctx: ctx) };
 
-            case OptionalMemberExpression om:
-                return om with { Object = CloneExpression(expr: om.Object, ctx: ctx) };
-
             case CallExpression call:
                 return call with
                 {
@@ -1021,7 +1018,6 @@ internal sealed class IteratorInlineLoweringPass
         switch (e)
         {
             case MemberExpression m: WalkExpr(e: m.Object, visit: visit); break;
-            case OptionalMemberExpression om: WalkExpr(e: om.Object, visit: visit); break;
             case CallExpression call: WalkCallExpr(call: call, visit: visit); break;
             case GenericMemberRoutineCallExpression gcall:
                 WalkGenericCallExpr(gcall: gcall, visit: visit); break;

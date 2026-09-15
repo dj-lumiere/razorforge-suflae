@@ -328,15 +328,11 @@ public partial class Tokenizer
     }
 
     /// <summary>
-    /// Scans a '?' token: '?.' optional access, '??'/'??=' none-coalescing, or a bare question mark.
+    /// Scans a '?' token: '??'/'??=' none-coalescing, or a bare question mark.
     /// </summary>
     private void ScanQuestionOperator()
     {
-        if (Match(expected: '.'))
-        {
-            AddToken(type: TokenType.QuestionDot);
-        }
-        else if (Match(expected: '?'))
+        if (Match(expected: '?'))
         {
 //?? or ??=
             AddToken(type: Match(expected: '=')

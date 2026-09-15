@@ -1646,7 +1646,6 @@ public class CompilerPipelineLoweringTests
             CallExpression call => ContainsLambda(expression: call.Callee) ||
                                    call.Arguments.Any(predicate: ContainsLambda),
             MemberExpression member => ContainsLambda(expression: member.Object),
-            OptionalMemberExpression member => ContainsLambda(expression: member.Object),
             IndexExpression index => ContainsLambda(expression: index.Object) ||
                                      ContainsLambda(expression: index.Index),
             ConditionalExpression conditional =>

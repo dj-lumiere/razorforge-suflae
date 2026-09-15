@@ -337,7 +337,6 @@ public partial class SemanticVerifier
             CallExpression call => FoldCallExpr(expr: expr, call: call),
             NamedArgumentExpression na => FoldNamedArgumentExpr(expr: expr, na: na),
             MemberExpression mem => FoldMemberExpr(expr: expr, mem: mem),
-            OptionalMemberExpression om => FoldOptionalMemberExpr(expr: expr, om: om),
             IndexExpression ix => FoldIndexExpr(expr: expr, ix: ix),
             TypeConversionExpression cv => FoldTypeConversionExpr(expr: expr, cv: cv),
             StealExpression st => FoldStealExpr(expr: expr, st: st),
@@ -414,14 +413,6 @@ public partial class SemanticVerifier
         return ReferenceEquals(objA: o, objB: mem.Object)
             ? expr
             : mem with { Object = o };
-    }
-
-    private Expression FoldOptionalMemberExpr(Expression expr, OptionalMemberExpression om)
-    {
-        Expression o = FoldReflectionExpr(expr: om.Object);
-        return ReferenceEquals(objA: o, objB: om.Object)
-            ? expr
-            : om with { Object = o };
     }
 
     private Expression FoldIndexExpr(Expression expr, IndexExpression ix)

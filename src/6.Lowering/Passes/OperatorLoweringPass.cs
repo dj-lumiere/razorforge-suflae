@@ -162,11 +162,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         return e;
     }
 
-    protected override Expression VisitOptionalMember(OptionalMemberExpression e)
-    {
-        return e;
-    }
-
     protected override Expression VisitTypeConversion(TypeConversionExpression e)
     {
         return e;

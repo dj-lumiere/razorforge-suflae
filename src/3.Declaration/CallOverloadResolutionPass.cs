@@ -332,10 +332,6 @@ internal sealed class CallOverloadResolutionPass
                 WalkExpression(expr: mem.Object);
                 break;
 
-            case OptionalMemberExpression omem:
-                WalkExpression(expr: omem.Object);
-                break;
-
             case NamedArgumentExpression named:
                 WalkExpression(expr: named.Value);
                 break;

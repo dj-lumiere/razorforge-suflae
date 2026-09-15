@@ -676,29 +676,6 @@ public record SpliceMemberExpression(
 }
 
 /// <summary>
-/// Expression that conditionally accesses a member of an object if the object is not none.
-/// Represents the ?. operator for safe navigation / optional chaining.
-/// </summary>
-/// <param name="Object">Expression that may evaluate to none</param>
-/// <param name="MemberName">Name of the property/member variable to access if object is not none</param>
-/// <param name="Location">Source location information</param>
-/// <remarks>
-/// Examples: obj?.memberVar, result?.value
-/// If the object is none, the entire expression evaluates to none.
-/// </remarks>
-public record OptionalMemberExpression(
-    Expression Object,
-    string MemberName,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
-    {
-        return visitor.VisitOptionalMemberExpression(node: this);
-    }
-}
-
-/// <summary>
 /// Expression that accesses an element of a collection using an index or key.
 /// Represents bracket notation for array indexing and dictionary access.
 /// </summary>

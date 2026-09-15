@@ -266,7 +266,6 @@ internal sealed class GlobalEntityRewritePass(PostprocessingContext ctx)
                              .ToList()
             },
             MemberExpression x => x with { Object = RW(e: x.Object) },
-            OptionalMemberExpression x => x with { Object = RW(e: x.Object) },
             NamedArgumentExpression x => x with { Value = RW(e: x.Value) },
             CreatorExpression x => x with
             {

@@ -1348,11 +1348,6 @@ internal static class GenericAstRewriter
     {
         return expr switch
         {
-            OptionalMemberExpression ome => ome with
-            {
-                Object = RewriteExpression(expr: ome.Object, ctx: ctx)
-            },
-
             GenericMemberExpression gme => gme with
             {
                 Object = RewriteExpression(expr: gme.Object, ctx: ctx),

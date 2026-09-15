@@ -36,8 +36,6 @@ public sealed partial class SemanticVerifier
             SpliceMemberExpression spliceMember => AnalyzeSpliceMemberExpression(
                 spliceMember: spliceMember),
             SpliceExpression splice => AnalyzeSpliceExpression(splice: splice),
-            OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(
-                optMember: optMember),
             RecoveryExpression recovery => AnalyzeRecoveryExpression(recovery: recovery),
             IndexExpression index => AnalyzeIndexExpression(index: index),
             ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),

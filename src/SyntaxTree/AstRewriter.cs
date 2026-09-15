@@ -347,7 +347,6 @@ public abstract class AstRewriter
             CallExpression e => VisitCall(e: e),
             NamedArgumentExpression e => VisitNamedArgument(e: e),
             MemberExpression e => VisitMember(e: e),
-            OptionalMemberExpression e => VisitOptionalMember(e: e),
             IndexExpression e => VisitIndex(e: e),
             ConditionalExpression e => VisitConditional(e: e),
             BlockExpression e => VisitBlockExpression(e: e),
@@ -452,20 +451,6 @@ public abstract class AstRewriter
     /// <param name="e">The member expression to rewrite.</param>
     /// <returns>The rewritten member expression, or the original reference if nothing changed.</returns>
     protected virtual Expression VisitMember(MemberExpression e)
-    {
-        Expression o = VisitExpression(expr: e.Object);
-        return ReferenceEquals(objA: o, objB: e.Object)
-            ? e
-            : e with { Object = o };
-    }
-
-    /// <summary>
-    /// Rewrites an <see cref="OptionalMemberExpression"/> (a null-safe <c>obj?.field</c> access) by
-    /// visiting the receiver object expression. Returns the original node when the object is unchanged.
-    /// </summary>
-    /// <param name="e">The optional member expression to rewrite.</param>
-    /// <returns>The rewritten optional member expression, or the original reference if nothing changed.</returns>
-    protected virtual Expression VisitOptionalMember(OptionalMemberExpression e)
     {
         Expression o = VisitExpression(expr: e.Object);
         return ReferenceEquals(objA: o, objB: e.Object)

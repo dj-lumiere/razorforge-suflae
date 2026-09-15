@@ -56,17 +56,6 @@ public partial class Parser
             return true;
         }
 
-        // Optional chaining: obj?.member
-        if (CheckAndAdvance(type: TokenType.QuestionDot))
-        {
-            string member =
-                ConsumeMemberRoutineName(errorMessage: "Expected member name after '?.'");
-            expr = new OptionalMemberExpression(Object: expr,
-                MemberName: member,
-                Location: expr.Location);
-            return true;
-        }
-
         // Buildtime splice selectors: obj.${expr} or obj.$primary
         if (TryParseSpliceMember(expr: expr, result: out Expression? spliceMember) &&
             spliceMember != null)

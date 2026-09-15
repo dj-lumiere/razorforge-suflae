@@ -193,11 +193,6 @@ public interface ISyntaxTreeVisitor<out T>
     /// <returns>Result of visiting the splice member expression</returns>
     T VisitSpliceMemberExpression(SpliceMemberExpression node);
 
-    /// <summary>Visits an optional member expression node (safe navigation like obj?.memberVar)</summary>
-    /// <param name="node">The optional member expression to visit</param>
-    /// <returns>Result of visiting the optional member expression</returns>
-    T VisitOptionalMemberExpression(OptionalMemberExpression node);
-
     /// <summary>Visits an index expression node (array/collection access like arr[0])</summary>
     /// <param name="node">The index expression to visit</param>
     /// <returns>Result of visiting the index expression</returns>

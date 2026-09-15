@@ -850,9 +850,6 @@ public enum TokenType
     /// <summary>Member access dot operator (.)</summary>
     Dot,
 
-    /// <summary>Optional chaining operator (?.)</summary>
-    QuestionDot,
-
     /// <summary>Comma separator (,)</summary>
     Comma,
 
