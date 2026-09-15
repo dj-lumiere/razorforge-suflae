@@ -571,12 +571,6 @@ common routine U8.from_bytes_be(bytes: Array[Byte, 1]) -> U8
 # Type Conversions (creator syntax)
 # ============================================================================
 
-### Reinterprets the 8-bit pattern of `from` as a signed `S8` (two's complement).
-### :param from: The `U8` value to reinterpret.
-### :returns: The `S8` with the same bit pattern.
-routine S8(from: U8) -> S8
-  return LLVM::reinterpret_bits[U8, S8](from)
-
 ### Zero-extends `from` to a 16-bit `U16`.
 ### :param from: The `U8` value to widen.
 ### :returns: A `U16` equal in value to `from`.

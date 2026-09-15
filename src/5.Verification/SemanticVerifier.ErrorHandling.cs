@@ -58,8 +58,14 @@ public sealed partial class SemanticVerifier
 
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
-            if (node is not RoutineDeclaration routineDecl || !routineDecl.IsFailable ||
-                routineDecl.Body == null)
+            // Failability is inferred from the body when the `!` marker is absent (`foo` and `foo!` are the
+            // SAME routine — failability is never a factor in identity/lookup). Pre-register variants for any
+            // routine that is `!`-marked OR whose body directly `throw`/`absent`s, so its recovery variants
+            // exist for a `try`/`grab`/`lookup` call resolving during Phase-5. (Purely-propagated failability
+            // — no direct throw/absent — is still finalized by the Phase-7 fixpoint.)
+            if (node is not RoutineDeclaration routineDecl || routineDecl.Body == null ||
+                !(routineDecl.IsFailable ||
+                  ErrorHandlingGenerator.BodyHasThrowOrAbsent(body: routineDecl.Body)))
             {
                 continue;
             }
@@ -157,9 +163,22 @@ public sealed partial class SemanticVerifier
 
         RoutineInfo? routineInfo =
             ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
-        if (routineInfo == null || !routineInfo.IsFailable)
+        if (routineInfo == null)
         {
             return;
+        }
+
+        // Infer failability from a direct throw/absent when the `!` marker is absent — `foo` ≡ `foo!`, so the
+        // routine IS failable and must carry recovery infrastructure regardless of the surface marker. (A
+        // routine with neither `!` nor a direct throw/absent is left to the Phase-7 propagation fixpoint.)
+        if (!routineInfo.IsFailable)
+        {
+            if (!hasDirect)
+            {
+                return;
+            }
+
+            routineInfo.IsFailable = true;
         }
 
         if (routineInfo.Annotations.Contains(item: "crash_only"))
