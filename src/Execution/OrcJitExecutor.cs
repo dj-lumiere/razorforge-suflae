@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using LLVMSharp.Interop;
@@ -29,6 +30,15 @@ internal static unsafe class OrcJitExecutor
 {
     private static readonly object InitLock = new();
     private static bool _initialized;
+
+    // --- Fully-lazy on-demand materialization (resident-JIT incremental (B), M2a) ---
+    // Set for the duration of one JitAndRunLazy call. The ORC custom definition generator fires (under the
+    // ExecutionSession lock) with the batch of unresolved RF symbols a materialization needs; the callback
+    // codegens each one's external-linkage one-routine module on demand and adds it, so ONLY what @main
+    // transitively reaches AT RUNTIME is ever emitted + JIT-compiled — no caller-side closure walk.
+    private static Func<string, string?>? _lazyMaterialize;
+    private static LLVMOrcOpaqueLLJIT* _lazyJit;
+    private static readonly HashSet<string> _lazyDone = new(comparer: StringComparer.Ordinal);
 
     // LLVM 21 replaced LLVMOrcThreadSafeContextGetContext with this; LLVMSharp 20 doesn't bind it, so we
     // resolve it from our own libLLVM handle and call it through a function pointer.
@@ -356,43 +366,6 @@ internal static unsafe class OrcJitExecutor
     }
 
     /// <summary>
-    /// Resident-JIT incremental (B), M1b: JITs a set of modules (the main @main module + one per on-demand
-    /// materialized routine, computed by following the declare-closure from @main) into ONE JITDylib and runs
-    /// @main. This is the deadlock-free demand path — the caller pre-materializes exactly the routines
-    /// transitively DECLARED from @main (demand == liveness), so nothing unreached is built. (A fully-lazy ORC
-    /// custom-definition-generator variant needs a MaterializationUnit — adding a module from inside
-    /// tryToGenerate does not satisfy the in-flight lookup; that is the M2 refinement, see the wiki.)
-    /// </summary>
-    public static int JitAndRunModules(IReadOnlyList<string> irModules, string programName,
-        string[] programArgs)
-    {
-        if (!TryInitialize(error: out string? error))
-        {
-            throw new InvalidOperationException(message: $"ORC JIT unavailable: {error}");
-        }
-
-        LLVMOrcOpaqueLLJITBuilder* builder = LLVM.OrcCreateLLJITBuilder();
-        if (OperatingSystem.IsWindows())
-        {
-            OrcContiguousMemoryManager.InstallOn(builder: builder);
-        }
-
-        LLVMOrcOpaqueLLJIT* jit;
-        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
-        LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
-
-        for (int i = 0; i < irModules.Count; i++)
-        {
-            LLVMOrcOpaqueThreadSafeModule* tsm =
-                ParseToTsm(llvmIr: irModules[index: i], modName: $"rf_mod{i}");
-            CheckErr(err: LLVM.OrcLLJITAddLLVMIRModule(J: jit, JD: dylib, TSM: tsm),
-                what: $"AddLLVMIRModule(mod{i})");
-        }
-
-        return RunMain(jit: jit, programName: programName, programArgs: programArgs);
-    }
-
-    /// <summary>
     /// Resident-JIT incremental Phase 0a (step 3): JITs a precompiled non-pruned BASE module plus a small
     /// per-run DELTA module (whose extern <c>declare</c>s for base symbols resolve to the base's
     /// definitions), then calls <c>@main</c> (emitted by the delta, not the base). Both modules go into the
@@ -445,5 +418,104 @@ internal static unsafe class OrcJitExecutor
         JitStage(s: "delta module added — resolving main");
 
         return RunMain(jit: jit, programName: programName, programArgs: programArgs);
+    }
+
+    /// <summary>
+    /// Resident-JIT incremental (B) FULLY-LAZY on-demand materialization (M2a). JITs <paramref name="mainIr"/>
+    /// (@main + user routines + shared runtime globals; every stdlib callee an extern <c>declare</c>) and
+    /// attaches an ORC custom definition generator: when a materialization needs an unresolved RF symbol,
+    /// <paramref name="materialize"/> is called with that symbol's mangled name and returns its
+    /// external-linkage one-routine IR module (or null → defer to the process-search generator for <c>rf_*</c>
+    /// runtime symbols). Codegen happens strictly on demand as ORC resolves each symbol — only what <c>@main</c>
+    /// transitively reaches at run time is emitted, with NO caller-side closure walk (that was M1b's
+    /// <see cref="JitAndRunModules"/>). The materialize output MUST use external linkage
+    /// (<c>LlvmEmitterOptions.ForExternalJitModule</c>) or sibling modules can't see the define.
+    /// </summary>
+    public static int JitAndRunLazy(string mainIr, Func<string, string?> materialize,
+        string programName, string[] programArgs)
+    {
+        if (!TryInitialize(error: out string? error))
+        {
+            throw new InvalidOperationException(message: $"ORC JIT unavailable: {error}");
+        }
+
+        _lazyMaterialize = materialize;
+        _lazyDone.Clear();
+
+        LLVMOrcOpaqueThreadSafeModule* tsmMain = ParseToTsm(llvmIr: mainIr, modName: "rf_main");
+
+        LLVMOrcOpaqueLLJITBuilder* builder = LLVM.OrcCreateLLJITBuilder();
+        if (OperatingSystem.IsWindows())
+        {
+            OrcContiguousMemoryManager.InstallOn(builder: builder);
+        }
+
+        LLVMOrcOpaqueLLJIT* jit;
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        _lazyJit = jit;
+        LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
+
+        // Attach the on-demand generator BEFORE adding main, so main's unresolved stdlib callees route to it.
+        // LLVMSharp 20 binds F as a raw `delegate* unmanaged[Cdecl]` fn-ptr (not the managed delegate type),
+        // so the callback is an [UnmanagedCallersOnly] static whose address we take with `&`.
+        delegate* unmanaged[Cdecl]<LLVMOrcOpaqueDefinitionGenerator*, void*,
+            LLVMOrcOpaqueLookupState**, LLVMOrcLookupKind, LLVMOrcOpaqueJITDylib*,
+            LLVMOrcJITDylibLookupFlags, LLVMOrcCLookupSetElement*, nuint, LLVMOpaqueError*> cb =
+            &LazyGeneratorCallback;
+        LLVMOrcOpaqueDefinitionGenerator* gen =
+            LLVM.OrcCreateCustomCAPIDefinitionGenerator(F: cb, Ctx: null, Dispose: null);
+        LLVM.OrcJITDylibAddGenerator(JD: dylib, DG: gen);
+
+        CheckErr(err: LLVM.OrcLLJITAddLLVMIRModule(J: jit, JD: dylib, TSM: tsmMain),
+            what: "AddLLVMIRModule(main)");
+
+        return RunMain(jit: jit, programName: programName, programArgs: programArgs);
+    }
+
+    /// <summary>The ORC custom-definition-generator callback: for each requested RF symbol, codegen its
+    /// external-linkage one-routine module (via the materialize delegate) and add it to the dylib on demand.
+    /// Runs under the ExecutionSession lock — adding the module here IS re-entrancy-safe (the added module's
+    /// definitions satisfy the in-flight lookup, and its own unresolved callees re-fire this generator). A
+    /// symbol the delegate can't produce is left for the process-search generator (rf_* runtime).</summary>
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static LLVMOpaqueError* LazyGeneratorCallback(
+        LLVMOrcOpaqueDefinitionGenerator* generatorObj, void* ctx,
+        LLVMOrcOpaqueLookupState** lookupState, LLVMOrcLookupKind kind, LLVMOrcOpaqueJITDylib* jd,
+        LLVMOrcJITDylibLookupFlags jdLookupFlags, LLVMOrcCLookupSetElement* lookupSet,
+        nuint lookupSetSize)
+    {
+        Func<string, string?>? materialize = _lazyMaterialize;
+        if (materialize == null)
+        {
+            return null;
+        }
+
+        ulong n = (ulong)lookupSetSize;
+        for (ulong i = 0; i < n; i++)
+        {
+            sbyte* namePtr = LLVM.OrcSymbolStringPoolEntryStr(S: lookupSet[i].Name);
+            if (namePtr == null)
+            {
+                continue;
+            }
+
+            string name = new(value: namePtr);
+            if (!_lazyDone.Add(item: name))
+            {
+                continue;
+            }
+
+            string? ir = materialize(arg: name);
+            if (ir == null)
+            {
+                continue; // not ours — process-search (rf_* runtime) resolves it
+            }
+
+            LLVMOrcOpaqueThreadSafeModule* tsm = ParseToTsm(llvmIr: ir, modName: "rf_lazy");
+            CheckErr(err: LLVM.OrcLLJITAddLLVMIRModule(J: _lazyJit, JD: jd, TSM: tsm),
+                what: $"AddLLVMIRModule(lazy:{name})");
+        }
+
+        return null;
     }
 }

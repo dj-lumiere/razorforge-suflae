@@ -449,13 +449,15 @@ public sealed partial class BaseEmissionTests
     }
 
     /// <summary>
-    /// Resident-JIT incremental (B) LAZY ON-DEMAND M1b — proves `show("hi")` runs with NO pruning pass and NO
-    /// base: a MAIN module (@main + user routines + trace globals; every stdlib callee an extern declare) plus
-    /// an ORC custom definition generator that codegens each unresolved RF symbol's one-routine module on
-    /// demand. demand == liveness. NEEDS libLLVM staged + runs the native runtime in-process → Skip'd in CI.
+    /// Resident-JIT incremental (B) FULLY-LAZY on-demand M2a — proves `show("hi")` runs with NO pruning pass,
+    /// NO base, and NO caller-side closure walk: a MAIN module (@main + user routines + trace globals; every
+    /// stdlib callee an extern declare) plus an ORC custom definition generator that codegens each unresolved
+    /// RF symbol's external-linkage one-routine module ON DEMAND as ORC resolves it. demand == liveness (only
+    /// what runs is built — even fewer than the declare-closure). NEEDS libLLVM staged + runs the native
+    /// runtime in-process → Skip'd in CI.
     /// </summary>
     [Fact(Skip =
-        "Local ORC-JIT lazy run: needs libLLVM staged + runs the native RF runtime in-process. PASSES locally — proves (B) demand-driven on-demand materialization: `show(\"hi\")` runs by materializing only the @main declare-closure (~78 of ~360 routines) as external-linkage one-routine modules; nothing unreached is built. See .claude-memory/resident-jit-pruned-base-works.md M1b.")]
+        "Local ORC-JIT fully-lazy run: needs libLLVM staged + runs the native RF runtime in-process. PASSES locally — the ORC custom definition generator materializes each unresolved RF symbol's external-linkage one-routine module on demand; `show(\"hi\")` runs materializing only ~71 of ~360 routines (call-time lazy, no caller closure). See .claude-memory/resident-jit-pruned-base-works.md M2a.")]
     public void JitAndRunLazy_OnDemand_RunsMain()
     {
         AnalysisResult r =
@@ -494,11 +496,21 @@ public sealed partial class BaseEmissionTests
                 MaySuspendRoutineKeys = r.MaySuspendRoutineKeys
             }).Generate();
 
-        // materialize(name) → the one-routine module defining `name` (trace globals externed via deltaMode).
-        string Materialize(MonomorphizedBody body, string quotedName)
+        // materialize(name) → the ONE-routine external-linkage module defining `name` (or null when it isn't an
+        // RF routine we own — rf_* runtime resolves via process-search). ForExternalJitModule makes the define
+        // external (sibling modules can call it) and externs the shared trace globals (main owns them). The ORC
+        // generator calls this ON DEMAND as it resolves each unresolved symbol — no caller-side closure walk.
+        int materialized = 0;
+        string? Materialize(string name)
         {
+            if (!index.TryGetValue(key: name, value: out MonomorphizedBody? body))
+            {
+                return null;
+            }
+
             var resident = new HashSet<string>(collection: allQuoted, comparer: StringComparer.Ordinal);
-            resident.Remove(item: quotedName);
+            resident.Remove(item: LlvmEmitter.MangleRoutineName(routine: body.Info));
+            materialized++;
             return new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
                 registry: r.Registry,
                 options: new LlvmEmitterOptions
@@ -506,58 +518,25 @@ public sealed partial class BaseEmissionTests
                     StdlibPrograms = r.Registry.StdlibPrograms,
                     SynthesizedBodies = r.SynthesizedBodies,
                     InstantiatedGenericBodies =
-                        new Dictionary<string, MonomorphizedBody> { [key: quotedName.Trim(trimChar: '"')] = body },
+                        new Dictionary<string, MonomorphizedBody> { [key: name] = body },
                     ResidentSymbols = resident,
                     ForExternalJitModule = true
                 }).Generate();
         }
 
-        // Demand closure: follow the RF-mangled `declare`s from @main, materializing each owned routine once
-        // (demand == liveness). Nothing unreached from @main is ever built. The `declare`d symbols are the
-        // UNQUOTED-content of `@"..."` — DeclaredSymbols returns them quoted, so trim to match the index key.
-        var modules = new List<string> { mainIr };
-        var done = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var worklist = new Queue<string>();
-        foreach (string d in DeclaredSymbols(ll: mainIr))
-        {
-            worklist.Enqueue(item: d.Trim(trimChar: '"'));
-        }
-
-        while (worklist.Count > 0)
-        {
-            string name = worklist.Dequeue();
-            if (!done.Add(item: name) || !index.TryGetValue(key: name, value: out MonomorphizedBody? body))
-            {
-                continue; // already done, or not ours (rf_* runtime → process-search resolves)
-            }
-
-            string mod = Materialize(body: body,
-                quotedName: LlvmEmitter.MangleRoutineName(routine: body.Info));
-            modules.Add(item: mod);
-            foreach (string d in DeclaredSymbols(ll: mod))
-            {
-                string u = d.Trim(trimChar: '"');
-                if (!done.Contains(item: u))
-                {
-                    worklist.Enqueue(item: u);
-                }
-            }
-        }
-
-        int rc = Builder.Execution.OrcJitExecutor.JitAndRunModules(irModules: modules,
+        int rc = Builder.Execution.OrcJitExecutor.JitAndRunLazy(mainIr: mainIr,
+            materialize: Materialize,
             programName: "test",
             programArgs: Array.Empty<string>());
 
-        // exit 0 (no crash, no "Symbols not found") + only the @main-reachable closure materialized
-        // (demand == liveness: far fewer than the full set) is the M1b success signal. The program's own
-        // `show("hi")` output goes to the native runtime's stdout fd (bypasses C# Console), so it isn't
-        // asserted here — the run reaching a clean exit through the on-demand modules is the proof.
-        int materialized = modules.Count - 1;
+        // exit 0 (no crash, no "Symbols not found") + only the @main-reachable set materialized on demand
+        // (demand == liveness: far fewer than the full set). The program's own `show("hi")` output goes to the
+        // native runtime's stdout fd (bypasses C# Console), so the clean exit through the generator is the proof.
         _out.WriteLine(
             message:
-            $"lazy-closure: {materialized} routines materialized (of {index.Count} available), exit={rc}");
+            $"lazy-generator: {materialized} routines materialized on demand (of {index.Count} available), exit={rc}");
         Assert.Equal(expected: 0, actual: rc);
-        Assert.True(condition: materialized < index.Count,
+        Assert.True(condition: materialized > 0 && materialized < index.Count,
             userMessage:
             $"demand should materialize a SUBSET, got {materialized}/{index.Count}");
     }
