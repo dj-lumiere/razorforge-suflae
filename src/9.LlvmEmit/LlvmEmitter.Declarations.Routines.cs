@@ -639,7 +639,9 @@ public partial class LlvmEmitter
         // stable breakpoints; base mode keeps external for the resident base/delta split.
         bool optimizing = _buildMode is RfBuildMode.Release or RfBuildMode.ReleaseTime
             or RfBuildMode.ReleaseSpace;
-        bool internalize = !_baseMode && (isCompilerGenerated || optimizing);
+        // A per-routine on-demand JIT module must expose its routine EXTERNALLY so sibling modules can call it
+        // (internal is module-local, invisible across the multi-module dylib) — same reason base mode does.
+        bool internalize = !_baseMode && !_forExternalJitModule && (isCompilerGenerated || optimizing);
         string linkagePrefix = internalize
             ? "internal "
             : "";

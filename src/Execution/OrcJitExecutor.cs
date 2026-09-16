@@ -356,6 +356,43 @@ internal static unsafe class OrcJitExecutor
     }
 
     /// <summary>
+    /// Resident-JIT incremental (B), M1b: JITs a set of modules (the main @main module + one per on-demand
+    /// materialized routine, computed by following the declare-closure from @main) into ONE JITDylib and runs
+    /// @main. This is the deadlock-free demand path — the caller pre-materializes exactly the routines
+    /// transitively DECLARED from @main (demand == liveness), so nothing unreached is built. (A fully-lazy ORC
+    /// custom-definition-generator variant needs a MaterializationUnit — adding a module from inside
+    /// tryToGenerate does not satisfy the in-flight lookup; that is the M2 refinement, see the wiki.)
+    /// </summary>
+    public static int JitAndRunModules(IReadOnlyList<string> irModules, string programName,
+        string[] programArgs)
+    {
+        if (!TryInitialize(error: out string? error))
+        {
+            throw new InvalidOperationException(message: $"ORC JIT unavailable: {error}");
+        }
+
+        LLVMOrcOpaqueLLJITBuilder* builder = LLVM.OrcCreateLLJITBuilder();
+        if (OperatingSystem.IsWindows())
+        {
+            OrcContiguousMemoryManager.InstallOn(builder: builder);
+        }
+
+        LLVMOrcOpaqueLLJIT* jit;
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
+
+        for (int i = 0; i < irModules.Count; i++)
+        {
+            LLVMOrcOpaqueThreadSafeModule* tsm =
+                ParseToTsm(llvmIr: irModules[index: i], modName: $"rf_mod{i}");
+            CheckErr(err: LLVM.OrcLLJITAddLLVMIRModule(J: jit, JD: dylib, TSM: tsm),
+                what: $"AddLLVMIRModule(mod{i})");
+        }
+
+        return RunMain(jit: jit, programName: programName, programArgs: programArgs);
+    }
+
+    /// <summary>
     /// Resident-JIT incremental Phase 0a (step 3): JITs a precompiled non-pruned BASE module plus a small
     /// per-run DELTA module (whose extern <c>declare</c>s for base symbols resolve to the base's
     /// definitions), then calls <c>@main</c> (emitted by the delta, not the base). Both modules go into the

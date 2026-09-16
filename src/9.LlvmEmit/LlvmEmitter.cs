@@ -72,6 +72,11 @@ public partial class LlvmEmitter
     /// </summary>
     private bool _baseMode;
 
+    /// <summary>Resident-JIT incremental (B): this module is one routine in a multi-module JIT dylib —
+    /// force external linkage on its define + extern the shared runtime trace globals. See
+    /// <see cref="LlvmEmitterOptions.ForExternalJitModule"/>.</summary>
+    private bool _forExternalJitModule;
+
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     // These types will eventually all map to an opaque llvm ptr; until then codegen needs this list.
     private static readonly IReadOnlySet<string> WrapperTypeNames = RuntimeContract.WrapperTypes;
@@ -335,6 +340,7 @@ public partial class LlvmEmitter
                 comparer: StringComparer.Ordinal);
         }
 
+        _forExternalJitModule = options.ForExternalJitModule;
         _buildMode = options.BuildMode;
         _pointerBitWidth = _target.PointerBitWidth;
         _pointerSizeBytes = _target.PointerBitWidth / 8;
@@ -956,7 +962,7 @@ public partial class LlvmEmitter
             // trace TLS globals as extern, not re-define them — else the base+delta JIT combine hits a
             // duplicate-definition of `__emutls_v._rf_trace_stack`. Base/normal-cold builds define them.
             AppendShadowStackHelpers(output: output,
-                deltaMode: _residentSymbols.Count > 0 && !_baseMode);
+                deltaMode: _forExternalJitModule || (_residentSymbols.Count > 0 && !_baseMode));
         }
 
         // Auxiliary helper definitions
