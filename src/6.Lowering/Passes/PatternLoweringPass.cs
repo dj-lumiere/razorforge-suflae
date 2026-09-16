@@ -441,7 +441,8 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
             ElsePattern ep => !ep.VariableName.HasValue() || IsResultOrLookup(type: subjectType) ||
                               IsMaybeEntity(type: subjectType) || IsMaybeRecord(type: subjectType),
 
-            NonePattern => IsMaybeRecord(type: subjectType) || IsMaybeEntity(type: subjectType),
+            NonePattern => IsMaybeRecord(type: subjectType) || IsMaybeEntity(type: subjectType) ||
+                           IsResultOrLookup(type: subjectType),
 
             // Maybe[T record] TypePattern: lowerable (uses bool present field, if/else is optimal)
             TypePattern when IsMaybeRecord(type: subjectType) => true,
@@ -559,6 +560,16 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
             }
 
             // -----------------------------------------------------------------------------
+
+            case NonePattern when IsResultOrLookup(type: subjectType):
+                // Lookup/Check carrier: absent is `type_id == 0` (mirrors the TypePattern("None")
+                // path in GetResultLookupTypePatternCondition). A grab/lookup composition's
+                // BuildCarrierPropagationWhen emits a raw NonePattern (not TypePattern) for an
+                // inner call whose best-available variant is lookup_, so this arm must lower too.
+                return (MakeTypeIdIsZero(subject: subject,
+                    loc: loc,
+                    boolType: boolType,
+                    u64Type: ctx.Registry.LookupType(name: "U64")), null);
 
             case NonePattern:
                 // Maybe[T] (both entity and record T): use the present flag. Bound T is

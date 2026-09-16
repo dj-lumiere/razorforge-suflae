@@ -23,4 +23,6 @@ U64 try '-42' (must fail): none
 U64 format 0: \x30
 U64 format U64_MAX: \x31\x38\x34\x34\x36\x37\x34\x34\x30\x37\x33\x37\x30\x39\x35\x35\x31\x36\x31\x35
 S64 round-trip [-100..100]: true
+grab compose: 42
+lookup compose: 7
 DONE

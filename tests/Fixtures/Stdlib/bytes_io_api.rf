@@ -72,6 +72,22 @@ routine start()
               ok = false
   show(f"S64 round-trip [-100..100]: {ok}")
 
+  # --- grab/lookup whole-expression composition over a NON-TAIL Bytes payload ---
+  # Two failable calls compose: the inner `to_digit_bytes_s64` returns Bytes (a
+  # non-tail hoisted temp), consumed by `from_digit_bytes`. The inner call's
+  # best-available variant is lookup_ (Bytes carrier), so the propagation `when`
+  # carries a raw NonePattern arm — regression guard that it lowers to type_id==0
+  # rather than reaching codegen unlowered.
+  var comp = grab S64.from_digit_bytes(bytes: to_digit_bytes_s64(v: 42))
+  when comp
+    is S64 n => show(f"grab compose: {n}")
+    else e   => show("grab compose: err")
+  var compl = lookup S64.from_digit_bytes(bytes: to_digit_bytes_s64(v: 7))
+  when compl
+    is S64 n => show(f"lookup compose: {n}")
+    is None  => show("lookup compose: none")
+    else e   => show("lookup compose: err")
+
   show("DONE")
   return
 
