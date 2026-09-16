@@ -489,14 +489,19 @@ public partial class Parser
                 TokenType.Lookup => RecoveryKind.Lookup,
                 _ => RecoveryKind.Try
             };
-            Expression recoveryInner = ParseUnary(); // right-associative; wraps the postfix call chain
+            // The keyword takes the WHOLE following expression (down to — but not including — `??`, which
+            // ParseNoneCoalesce sits above and thus applies to the recovery RESULT). ParseLogicalOr captures
+            // arithmetic/comparison/range/logical operators so `try a + b` recovers the checked-arith overflow
+            // as a whole-expression composition (`try (a + b)`, not `(try a) + b`); SA's AnalyzeRecoveryExpression
+            // hoists every failable sub-call AND checked-arith operator inside it.
+            Expression recoveryInner = ParseLogicalOr();
 
             // A trailing force-unwrap binds LOOSER than the recovery keyword: `try route()!!` means
             // `(try route())!!`, not `try (route()!!)`. The keyword PRODUCES a carrier and `!!` CONSUMES it,
-            // so `!!` applies to the recovery RESULT. ParseUnary already folded the `!!` onto the inner call
-            // (`ForceUnwrap(route())`); peel those force-unwraps off, recover the inner CALL, then re-apply
+            // so `!!` applies to the recovery RESULT. ParseUnary already folded the `!!` onto the inner
+            // (`ForceUnwrap(route())`); peel those TOP-LEVEL force-unwraps off, recover the inner, then re-apply
             // them on top of the RecoveryExpression. (`??` needs no such handling — it is a binary operator
-            // parsed above ParseUnary, so it already applies to the recovery result.)
+            // above ParseLogicalOr, so it already applies to the recovery result.)
             var forceUnwraps = new List<SourceLocation>();
             Expression callSpine = recoveryInner;
             while (callSpine is UnaryExpression
@@ -508,15 +513,9 @@ public partial class Parser
                 callSpine = unwrapped;
             }
 
-            if (callSpine is not CallExpression)
-            {
-                throw ThrowParseError(
-                    message:
-                    $"'{recoveryKw.Text}' must wrap a call to a failable routine " +
-                    $"(e.g. `{recoveryKw.Text} foo(...)` or `{recoveryKw.Text} x.foo(...)`).",
-                    token: recoveryKw);
-            }
-
+            // No CallExpression requirement: the inner may be any expression (a bare call, a member chain, or
+            // a checked-arith composition like `a + b`). An operand with no failable call or operator degenerates
+            // to an always-present carrier in SA — harmless, and keeping the surface uniform.
             Expression recovery = new RecoveryExpression(Kind: recoveryKind,
                 Inner: callSpine,
                 Location: GetLocation(token: recoveryKw));

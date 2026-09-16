@@ -15,4 +15,12 @@ try_neg S64_MIN: none
 try_neg 5: -5
 try_abs S64_MIN: none
 try_abs -5: 5
+try + overflow: none
+try + ok: 9223372036854775807
+try * overflow: none
+try // by zero: none
+try // ok: 5
+try % by zero: none
+try nested: none
+grab *: caught IntegerOverflowError
 DONE

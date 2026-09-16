@@ -34,5 +34,22 @@ routine start()
   show(f"try_abs S64_MIN: {try S64_MIN.abs()}")
   show(f"try_abs -5: {try (-5_s64).abs()}")
 
+  # --- Operator-form recovery: `try a + b` ≡ `try a.add(you: b)` (checked-arith operator
+  #     overflow is recovered as a whole-expression composition, not just the method form) ---
+  show(f"try + overflow: {try S64_MAX + 1_s64}")
+  show(f"try + ok: {try S64_MAX + 0_s64}")
+  show(f"try * overflow: {try S64_MAX * 2_s64}")
+  show(f"try // by zero: {try 10_s64 // 0_s64}")
+  show(f"try // ok: {try 10_s64 // 2_s64}")
+  show(f"try % by zero: {try 10_s64 % 0_s64}")
+  # nested checked-arith composition: (S64_MAX + 1) overflows before the divide
+  show(f"try nested: {try (S64_MAX + 1_s64) // 2_s64}")
+  # grab keeps the caught crashable
+  var g = grab S64_MAX * 2_s64
+  when g
+    is IntegerOverflowError => show("grab *: caught IntegerOverflowError")
+    is S64 n                => show(f"grab *: {n}")
+    else e                  => show("grab *: other")
+
   show("DONE")
   return

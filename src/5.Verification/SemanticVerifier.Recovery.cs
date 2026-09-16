@@ -1,3 +1,4 @@
+using Builder.Declaration;
 using Builder.Diagnostics;
 using SyntaxTree;
 using TypeModel.Enums;
@@ -49,7 +50,7 @@ public sealed partial class SemanticVerifier
         // evaluation order) into `var __rc_tN = <call>`, replacing the call with a reference to the temp.
         // Referenced identifiers are collected in the SAME walk so we can pass the outer locals the body
         // reads as parameters of the synthesized routine.
-        var hoister = new RecoveryFailableHoister(seed: 0);
+        var hoister = new RecoveryFailableHoister(seed: 0, registry: _registry);
         Expression residual = hoister.VisitExpression(expr: recovery.Inner);
 
         string recoveryPrefix = recovery.Kind switch
@@ -259,7 +260,7 @@ public sealed partial class SemanticVerifier
     /// tree by a reference to that temp. All identifier names encountered are recorded in
     /// <see cref="ReferencedNames"/> so the caller can capture the outer locals the body reads as parameters.
     /// </summary>
-    private sealed class RecoveryFailableHoister(int seed) : AstRewriter
+    private sealed class RecoveryFailableHoister(int seed, TypeRegistry registry) : AstRewriter
     {
         private int _seq = seed;
 
@@ -293,6 +294,87 @@ public sealed partial class SemanticVerifier
                 return rewritten;
             }
 
+            return HoistFailable(call: call);
+        }
+
+        /// <summary>
+        /// A checked-arithmetic operator (<c>+ - * / // % **</c>) dispatches to a failable member routine
+        /// (<c>add</c>/<c>sub</c>/… throw on overflow / divide-by-zero), so `try a + b` must recover the
+        /// overflow just like `try a.add(b)` would. The operator→member-call lowering normally happens at
+        /// Phase 6 (OperatorLoweringPass), AFTER this Phase-5 hoist — so here we resolve + build the same
+        /// failable member call from the already-analyzed operands and hoist it. Non-arithmetic operators,
+        /// and arithmetic on non-failable types (float add never overflows to a crash; text `+` is
+        /// concatenation), are left as a plain <see cref="BinaryExpression"/> for the normal Phase-6 path.
+        /// </summary>
+        protected override Expression VisitBinary(BinaryExpression e)
+        {
+            // Rewrite operands first (post-order = left→right eval order) so any inner failable calls hoist.
+            Expression rewritten = base.VisitBinary(e: e);
+            if (rewritten is not BinaryExpression bin)
+            {
+                return rewritten;
+            }
+
+            // Only the CHECKED arithmetic operators can throw. Wrapping/clamping/unchecked never do; the
+            // rest (comparison, bitwise, shift, logical, membership, assign) are not arithmetic.
+            if (bin.Operator is not (BinaryOperator.Add or BinaryOperator.Subtract
+                or BinaryOperator.Multiply or BinaryOperator.TrueDivide or BinaryOperator.FloorDivide
+                or BinaryOperator.Modulo or BinaryOperator.Power))
+            {
+                return bin;
+            }
+
+            if (bin.Operator.GetMemberRoutineName() is not { } opMethod ||
+                bin.Left.ResolvedType is not { } leftType || bin.Right.ResolvedType is not { } rightType)
+            {
+                return bin;
+            }
+
+            // Resolve the operator's member routine on the left operand (mirrors OperatorLoweringPass'
+            // ResolveBinaryOperatorRoutine). Only hoist when it actually fails (throw/absent); a non-failable
+            // arithmetic type keeps the plain binary for the Phase-6 lowering.
+            RoutineInfo? opRoutine =
+                registry.LookupMemberRoutineOverload(type: leftType,
+                    memberRoutineName: opMethod,
+                    argTypes: [rightType]) ??
+                registry.LookupMemberRoutine(type: leftType,
+                    memberRoutineName: opMethod,
+                    isFailable: true);
+            if (opRoutine is null || !(opRoutine.IsFailable || opRoutine.HasThrow || opRoutine.HasAbsent))
+            {
+                return bin;
+            }
+
+            // Build the resolved failable member call `left.<op>(paramName: right)` — the exact shape
+            // OperatorLoweringPass emits — so the composition machinery treats it as an ordinary hoisted
+            // failable call.
+            string paramName = opRoutine.Parameters.Count > 0
+                ? opRoutine.Parameters[index: 0].Name
+                : "you";
+            var callee = new MemberExpression(Object: bin.Left,
+                MemberName: opMethod,
+                Location: bin.Location) { IsFailable = true };
+            var call = new CallExpression(Callee: callee,
+                Arguments:
+                [
+                    new NamedArgumentExpression(Name: paramName,
+                        Value: bin.Right,
+                        Location: bin.Location)
+                ],
+                Location: bin.Location)
+            {
+                ResolvedType = bin.ResolvedType,
+                ResolvedRoutine = opRoutine,
+                LoweringKind = CallClassifier.ClassifyMemberRoutineCall(memberRoutine: opRoutine)
+            };
+
+            return HoistFailable(call: call);
+        }
+
+        /// <summary>Hoists a resolved failable call into a fresh <c>var __rc_tN = call</c> and returns a
+        /// reference to the temp (carrying the call's result type).</summary>
+        private Expression HoistFailable(CallExpression call)
+        {
             string tempName = $"{RecoveryTempPrefix}{_seq++}";
             var decl = new VariableDeclaration(Name: tempName,
                 Type: null,
