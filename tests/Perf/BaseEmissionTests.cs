@@ -1,3 +1,4 @@
+using Builder.Instantiation;
 using Builder.LlvmEmit;
 using Builder.Tokenizer;
 using SyntaxTree;
@@ -132,6 +133,77 @@ public sealed partial class BaseEmissionTests
                 MaySuspendRoutineKeys = r.MaySuspendRoutineKeys,
                 ResidentSymbols = residentSymbols
             }).Generate();
+    }
+
+    /// <summary>
+    /// Resident-JIT incremental (B) lazy-on-demand M1 SPIKE — the "emit ONE routine on demand" primitive.
+    /// Proves an LlvmEmitter fed a SINGLE instantiated body (+ residentSymbols = every OTHER emitted symbol)
+    /// produces a valid module that DEFINES exactly that one routine and DECLARES its callees extern — the
+    /// per-symbol module an ORC custom definition generator will materialize on an unresolved-symbol callback.
+    /// </summary>
+    [Fact]
+    public void EmitOneRoutine_DefinesTargetDeclaresCallees()
+    {
+        AnalysisResult r =
+            new SemanticVerifier(language: Language.RazorForge).Analyze(
+                program: Parse(src: Trivial, file: "bench.rf"));
+        Assert.Empty(collection: r.Errors);
+        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+            programs: r.Registry.UserPrograms,
+            instantiatedBodies: r.InstantiatedGenericBodies,
+            maySuspendKeys: r.MaySuspendRoutineKeys,
+            registry: r.Registry);
+
+        // The full reachable set (bare mangled names) — the "everything already materialized" universe.
+        (string _, IReadOnlyCollection<string> allDefs) = new LlvmEmitter(
+            userPrograms: new List<(Program, string, string)>(),
+            registry: r.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = r.Registry.StdlibPrograms,
+                SynthesizedBodies = r.SynthesizedBodies,
+                InstantiatedGenericBodies = r.InstantiatedGenericBodies
+            }).GenerateBase();
+        var allDefsSet = new HashSet<string>(collection: allDefs, comparer: StringComparer.Ordinal);
+
+        // Pick one real (non-synthesized, non-sentinel) stdlib body to materialize alone.
+        KeyValuePair<string, MonomorphizedBody> target = r.InstantiatedGenericBodies.First(
+            predicate: kv => !kv.Value.IsSynthesized &&
+                             kv.Value.Ast.Body is BlockStatement { Statements.Count: > 0 } &&
+                             kv.Value.Info.OwnerType is not { IsGenericDefinition: true } &&
+                             allDefsSet.Contains(item: LlvmEmitter.MangleRoutineName(routine: kv.Value.Info)));
+        string targetName = LlvmEmitter.MangleRoutineName(routine: target.Value.Info);
+
+        // residentSymbols = every OTHER emitted symbol ⇒ this module defines ONLY the target.
+        var resident = new HashSet<string>(collection: allDefs, comparer: StringComparer.Ordinal);
+        resident.Remove(item: targetName);
+
+        string oneIr = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
+            registry: r.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = r.Registry.StdlibPrograms,
+                SynthesizedBodies = r.SynthesizedBodies,
+                InstantiatedGenericBodies =
+                    new Dictionary<string, MonomorphizedBody> { [key: target.Key] = target.Value },
+                ResidentSymbols = resident
+            }).Generate();
+
+        HashSet<string> defs = DefinedSymbols(ll: oneIr);
+        // RF-mangled defines are quoted (`@"[member] …"`); bare-name defines (_rf_trace_push, …) are the
+        // shared-runtime shadow-stack HELPERS the emitter inlines into every module regardless of the body
+        // set. Those are the GLOBALS-analogue-of-C4 concern (define once in the main module, extern in the
+        // per-routine on-demand modules) — handled at the ORC wiring step, NOT part of the one-routine body set.
+        var rfDefs = defs.Where(predicate: d => d.StartsWith(value: '"')).ToList();
+        _out.WriteLine(message: $"target={targetName}");
+        _out.WriteLine(message: $"one-routine module: rf-defines={rfDefs.Count} (bare-runtime={defs.Count - rfDefs.Count}), chars={oneIr.Length}");
+        _out.WriteLine(message: "RF-DEFINES:\n  " + string.Join(separator: "\n  ", values: rfDefs));
+
+        // The primitive defines EXACTLY the target RF routine, nothing resident re-defined, no @main.
+        Assert.DoesNotContain(expectedSubstring: "define i32 @main(", actualString: oneIr);
+        Assert.Single(collection: rfDefs);
+        Assert.Equal(expected: targetName.Trim(trimChar: '"'),
+            actual: rfDefs[index: 0].Trim(trimChar: '"'));
     }
 
     [Fact]
