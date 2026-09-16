@@ -47,6 +47,17 @@ internal static class LazyJitPlanner
         return segs.ToList();
     }
 
+    /// <summary>The Phase-9 skip predicate (resident-JIT incremental (B) §2A.2②): true for a monomorphized
+    /// instance whose one-routine IR is already on disk in <paramref name="cache"/>. Mangles the instance's
+    /// name exactly as <see cref="Build"/>'s materializer does (unquoted, matching the disk key), so
+    /// check-skip ⟺ codegen-skip by construction. Consumed via <c>SemanticVerifier.SkipInstanceCheckIfIrCached</c>.
+    /// Lives here (not in the daemon) so the LlvmEmit mangling stays in the JIT layer.</summary>
+    public static Func<TypeModel.Symbols.RoutineInfo, bool> IrCachedPredicate(RoutineIrCache cache)
+    {
+        return info => cache.Has(
+            mangledName: LlvmEmitter.MangleRoutineName(routine: info).Trim(trimChar: '"'));
+    }
+
     /// <summary>Builds the (mainIr, materialize) plan. <paramref name="cache"/> is consulted+populated per
     /// on-demand routine; pass one keyed by the stdlib+compiler fingerprint.</summary>
     public static (string mainIr, Func<string, string?> materialize) Build(LazyJitInputs inputs,

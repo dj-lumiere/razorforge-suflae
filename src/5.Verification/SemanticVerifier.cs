@@ -349,6 +349,17 @@ public sealed partial class SemanticVerifier
     public bool SaTiming { get; set; }
 
     /// <summary>
+    /// Resident-JIT incremental (B) §2A.2②: an optional predicate — set ONLY on the incremental JIT path —
+    /// that returns true for a monomorphized instance whose codegen'd IR is ALREADY in the per-routine disk
+    /// cache. Phase 9 (<see cref="RunPhase9PostDesugarChecks"/>) skips backend-representation + validation for
+    /// such an instance, because a cached instance will be an M2b codegen cache HIT this run (its body is never
+    /// re-emitted), making the ~repr+validate work redundant. Null on every non-JIT path ⇒ no behavior change.
+    /// The predicate is built in the Execution/daemon layer (it mangles the name + probes the cache) and passed
+    /// in as a closure, so this stage stays free of any LlvmEmit / cache dependency.
+    /// </summary>
+    public Func<RoutineInfo, bool>? SkipInstanceCheckIfIrCached { get; set; }
+
+    /// <summary>
     /// When true, stops after Phase 5 (semantic analysis) and skips Phase 6 global
     /// desugaring, Phase 7 instantiation, Phase 8 postprocessing, and Phase 9 checks.
     /// Use for tests that only assert on SA errors or type annotations — saves ~10× time
@@ -1106,6 +1117,23 @@ public sealed partial class SemanticVerifier
         var reprPass = new BackendRepresentationPass(registry: _registry, target: _target);
         var validator = new BackendEntryValidator(registry: _registry);
 
+        // SaTiming diagnostic: split the three loops. These are cheap (single-digit ms) — the bulk once
+        // attributed to "PostDesugarChecks" was actually the demand collector (RunShadowCollectorIfNeeded),
+        // now timed separately by its own `mark` in RunMultipleFullPipeline.
+        System.Diagnostics.Stopwatch? sw = SaTiming
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
+        void Mark(string label)
+        {
+            if (sw == null)
+            {
+                return;
+            }
+
+            Console.Error.WriteLine(value: $"    P9sub - {label}: {sw.ElapsedMilliseconds} ms");
+            sw.Restart();
+        }
+
         foreach ((Program program, _, _) in _registry.UserPrograms)
         {
             reprPass.Run(program: program);
@@ -1114,6 +1142,8 @@ public sealed partial class SemanticVerifier
                 AddError(error: error);
             }
         }
+
+        Mark(label: $"user-programs repr ({_registry.UserPrograms.Count} prog)");
 
         // Warm-restore: the stdlib program ASTs are shared read-only across warm compiles and were
         // already lowered to backend representation at capture time — re-running reprPass on them each
@@ -1126,6 +1156,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
+        int variantsDone = 0;
         foreach ((string key, Statement body) in _variantBodies)
         {
             // Warm-restore: variants captured from the snapshot were already repr'd + validated.
@@ -1139,13 +1170,30 @@ public sealed partial class SemanticVerifier
             {
                 AddError(error: error with { Message = $"[{key}] {error.Message}" });
             }
+
+            variantsDone++;
         }
 
+        Mark(label: $"variant-bodies repr ({variantsDone}/{_variantBodies.Count} done)");
+
+        int instancesDone = 0;
+        int instancesSkipped = 0;
         foreach ((string key, MonomorphizedBody mono) in _instantiatedGenericBodies)
         {
             // Warm-restore: instantiations captured from the snapshot were already repr'd + validated.
             if (_memo.RestoredInstantiationKeys.Contains(item: key))
             {
+                instancesSkipped++;
+                continue;
+            }
+
+            // Incremental JIT: this instance's codegen'd IR is already in the disk cache, so its body will
+            // be served from disk (M2b hit) and NEVER re-emitted this run — repr+validate is redundant. Safe
+            // ONLY because the same cache gates codegen: cached ⟺ codegen-skipped, so no un-repr'd body reaches
+            // the backend. (See SkipInstanceCheckIfIrCached; null on every non-JIT path.)
+            if (SkipInstanceCheckIfIrCached?.Invoke(arg: mono.Info) == true)
+            {
+                instancesSkipped++;
                 continue;
             }
 
@@ -1159,8 +1207,12 @@ public sealed partial class SemanticVerifier
             {
                 AddError(error: error with { Message = $"[mono:{key}] {error.Message}" });
             }
+
+            instancesDone++;
         }
 
+        Mark(label:
+            $"instance repr+validate ({instancesDone} done, {instancesSkipped} skipped / {_instantiatedGenericBodies.Count} total)");
     }
 
     /// <summary>
@@ -1938,6 +1990,10 @@ public sealed partial class SemanticVerifier
         // (subscript/operator → real call expressions), so the demand collector can walk from
         // the entry points. Flag-gated — a no-op in normal builds; builds into an isolated copy.
         RunShadowCollectorIfNeeded();
+        // The demand collector (RoutineCollectionPass) is the sole monomorphizer + liveness authority under
+        // the pull flip; on a warm dev-loop compile it is the dominant SA cost, so time it on its own line
+        // instead of folding it into PostDesugarChecks below (which is actually cheap).
+        mark(obj: "Phase 8b -> demand collector (RoutineCollectionPass)");
 
         RunPhase9PostDesugarChecks();
         mark(obj: $"Phase 9 -> PostDesugarChecks");

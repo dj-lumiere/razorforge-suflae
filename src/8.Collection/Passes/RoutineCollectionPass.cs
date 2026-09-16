@@ -68,6 +68,29 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         List<(string Key, Statement Body)> entrySeeds = CollectEntrySeeds();
         Dictionary<string, Statement> programBodies;
 
+        // SaTiming diagnostic: accumulate per-category time across the fixpoint so a `[debug] timing` build
+        // shows where RunCollect's ms go (index vs monomorphize `collect` vs lower vs materialize vs resolve).
+        // The demand `collect` walk dominates on a warm dev-loop compile; the rest are single-digit ms.
+        Dictionary<string, double>? acc = ctx.SaTiming
+            ? new Dictionary<string, double>(comparer: StringComparer.Ordinal)
+            : null;
+        System.Diagnostics.Stopwatch? clk = ctx.SaTiming
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
+        int rounds = 0;
+        void Meas(string k, Action a)
+        {
+            if (clk == null)
+            {
+                a();
+                return;
+            }
+
+            double t = clk.Elapsed.TotalMilliseconds;
+            a();
+            acc![key: k] = acc.GetValueOrDefault(key: k) + (clk.Elapsed.TotalMilliseconds - t);
+        }
+
         // FIXPOINT: a freshly-built body is walked PRE-lowering, so references revealed only by lowering (a
         // subscript `list[i]` → `list.getitem(i)`) aren't seen the first round. Loop: collect → LOWER the
         // fresh bodies → collect again (the lowered bodies now expose their callees) → … until a round builds
@@ -82,6 +105,7 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         int guard = 0;
         while (guard++ < 100)
         {
+            rounds++;
             var before = new HashSet<string>(collection: adapter.InstantiatedGenericBodies.Keys,
                 comparer: StringComparer.Ordinal);
             int liveBefore = ctx.LiveRoutineKeys.Count;
@@ -94,11 +118,23 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
             // crash_message, a `create`'s `gt`, a nested `getitem`) are never seeded → link over-prune (the ④
             // collector-walk-completeness residual). Rebuilding here lets the next walk step THROUGH those
             // freshly-lowered bodies and discover their callees.
-            programBodies = BuildProgramBodyIndex();
-            int built = new GenericMonomorphizationPass(ctx: adapter).CollectReferencedInIsolation(
-                entrySeeds: entrySeeds,
-                programBodies: programBodies,
-                synthesizedBodies: synthesizedBodies);
+            Dictionary<string, Statement> idx = null!;
+            Meas(k: "index", a: () => idx = BuildProgramBodyIndex());
+            programBodies = idx;
+            int built = 0;
+            double tC0 = clk?.Elapsed.TotalMilliseconds ?? 0;
+            Meas(k: "collect",
+                a: () => built = new GenericMonomorphizationPass(ctx: adapter)
+                   .CollectReferencedInIsolation(
+                        entrySeeds: entrySeeds,
+                        programBodies: idx,
+                        synthesizedBodies: synthesizedBodies));
+            if (clk != null)
+            {
+                Console.Error.WriteLine(
+                    value:
+                    $"  RunCollect - round {rounds} collect: {clk.Elapsed.TotalMilliseconds - tC0:F0} ms (built={built}, liveNow={ctx.LiveRoutineKeys.Count})");
+            }
             // Synthesize protocol-default-impls referenced by the bodies built this round, BEFORE lowering, so
             // their fresh bodies join the same lower-all-fresh sweep below. Their OWN referenced generic
             // instances are built DEMAND-scoped by the NEXT fixpoint round's CollectReferencedInIsolation walk
@@ -107,7 +143,8 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
             // instance the registry holds. That drain is the warm/cold divergence: warm's restored registry
             // holds the whole stdlib's instances, so it over-materialized derives (Maybe[X].duplicate,
             // *Emittable.destroy) a cold partial-registry build never reaches. Demand-only keeps them identical.
-            bool pdilSynth = pdil.Run();
+            bool pdilSynth = false;
+            Meas(k: "pdil", a: () => pdilSynth = pdil.Run());
             var freshBodies = adapter.InstantiatedGenericBodies
                                      .Where(predicate: kv => !before.Contains(item: kv.Key))
                                      .ToDictionary(keySelector: kv => kv.Key,
@@ -115,9 +152,9 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
                                           comparer: StringComparer.Ordinal);
             if (freshBodies.Count > 0)
             {
-                GenericClosurePass.LowerFreshBodies(ctx: ctx,
+                Meas(k: "lower", a: () => GenericClosurePass.LowerFreshBodies(ctx: ctx,
                     adapter: adapter,
-                    freshBodies: freshBodies);
+                    freshBodies: freshBodies));
                 // LowerFreshBodies REASSIGNS entries (`dict[key] = body with { … }`, MonomorphizedBody is a
                 // record) on the `freshBodies` COPY, not the shared adapter map — so the lowered results
                 // (FString/Operator/VariantReturn/…) live only in the copy. Merge them back or codegen reads
@@ -139,13 +176,18 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
             // reached stdlib files (U64.rf etc.), which reassigned their decl.Body to lowered form. The
             // top-of-round index predates that, so materializing from it would emit an UN-lowered body (a raw
             // `me == 0u64` in U64.represent). Rebuild so materialization copies the lowered decls.
-            programBodies = BuildProgramBodyIndex();
-            if (synthesizedBodies != null)
+            Dictionary<string, Statement> idx2 = null!;
+            Meas(k: "index", a: () => idx2 = BuildProgramBodyIndex());
+            programBodies = idx2;
+            Meas(k: "materialize", a: () =>
             {
-                MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
-            }
+                if (synthesizedBodies != null)
+                {
+                    MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
+                }
 
-            MaterializeReachedStdlibBodies(programBodies: programBodies);
+                MaterializeReachedStdlibBodies(programBodies: idx2);
+            });
             // RESOLVE this round's built + materialized bodies BEFORE the next walk. A body materialized from a
             // buildtime-`expand`/SoA template reaches here with un-resolved member calls (`me.col[index]` →
             // `Array[S64,4].getitem`); the post-loop CallOverloadResolutionPass resolves them, but by then the
@@ -158,10 +200,10 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
                     variantBodies: ctx.VariantBodies,
                     target: ctx.Target,
                     buildMode: ctx.BuildMode));
-            roundResolver.RunOnBodiesWithOwners(
+            Meas(k: "resolve", a: () => roundResolver.RunOnBodiesWithOwners(
                 bodies: ctx.InstantiatedGenericBodies.Values.Select(selector: b =>
                     (b.Ast.Body, b.Info.OwnerType,
-                        (IReadOnlyList<ParamInfo>?)b.Info.Parameters)));
+                        (IReadOnlyList<ParamInfo>?)b.Info.Parameters))));
             // Terminate only when a round adds NO new built instance, NO PDIL synth, AND NO new live key. The
             // live-key check is load-bearing: a reached NON-generic stdlib body (U64.represent, Text.create)
             // grows LiveRoutineKeys without incrementing `built`, and its callees are only discovered when the
@@ -177,21 +219,27 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         // new decl in program.Declarations). The index built at RunCollect start therefore holds STALE
         // UN-desugared body references for on-demand-processed files; materializing from it would feed codegen
         // raw bodies (un-inlined presets, un-lowered operators). Re-read now that all reached files are lowered.
-        programBodies = BuildProgramBodyIndex();
-        if (synthesizedBodies != null)
+        Dictionary<string, Statement> idx3 = null!;
+        Meas(k: "index", a: () => idx3 = BuildProgramBodyIndex());
+        programBodies = idx3;
+        Meas(k: "materialize", a: () =>
         {
-            MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
-        }
+            if (synthesizedBodies != null)
+            {
+                MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
+            }
 
-        MaterializeReachedStdlibBodies(programBodies: programBodies);
+            MaterializeReachedStdlibBodies(programBodies: idx3);
+        });
 
         // Systematic GMCE sweep over the COMPLETE body set: bodies materialized AFTER the fixpoint
         // (MaterializePerOwnerSynthesizedBodies / MaterializeReachedStdlibBodies) never went through
         // GenericClosurePass.LowerFreshBodies, so a GenericMemberRoutineCallExpression in them survives to
         // codegen (which hard-errors). Lower any remaining GMCE across the whole map here — idempotent on
         // already-lowered bodies. (Fixes the class, not one symbol.)
-        new Builder.Desugaring.Passes.GenericCallLoweringPass(ctx: adapter)
-           .RunOnInstantiatedGenericBodies(bodies: ctx.InstantiatedGenericBodies);
+        Meas(k: "postLower", a: () =>
+            new Builder.Desugaring.Passes.GenericCallLoweringPass(ctx: adapter)
+               .RunOnInstantiatedGenericBodies(bodies: ctx.InstantiatedGenericBodies));
 
         // Classify (resolve call overloads / set LoweringKind) across EVERY collector-built body. With eager
         // monomorphization retired, InstantiatedGenericBodies is populated ENTIRELY by the collector (demand
@@ -208,10 +256,24 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         // member calls (`n == 0` → `n.eq(...)`) are lowered with LoweringKind set but ResolvedRoutine null and
         // reach codegen unresolved unless classified here. Idempotent — fully-classified calls are skipped.
         var resolver = new Declaration.CallOverloadResolutionPass(ctx: classCtx);
-        resolver.RunOnBodiesWithOwners(bodies: ctx.InstantiatedGenericBodies.Values.Select(
-            selector: b => (b.Ast.Body, b.Info.OwnerType,
-                (IReadOnlyList<ParamInfo>?)b.Info.Parameters)));
-        resolver.RunOnVariantBodies();
+        Meas(k: "postResolve", a: () =>
+        {
+            resolver.RunOnBodiesWithOwners(bodies: ctx.InstantiatedGenericBodies.Values.Select(
+                selector: b => (b.Ast.Body, b.Info.OwnerType,
+                    (IReadOnlyList<ParamInfo>?)b.Info.Parameters)));
+            resolver.RunOnVariantBodies();
+        });
+
+        if (acc != null)
+        {
+            Console.Error.WriteLine(
+                value:
+                $"  RunCollect - rounds={rounds}, instances={ctx.InstantiatedGenericBodies.Count}, live={ctx.LiveRoutineKeys.Count}");
+            foreach ((string k, double v) in acc.OrderByDescending(keySelector: kv => kv.Value))
+            {
+                Console.Error.WriteLine(value: $"  RunCollect - {k}: {v:F0} ms");
+            }
+        }
     }
 
     /// <summary>

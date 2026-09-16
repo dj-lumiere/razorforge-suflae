@@ -66,6 +66,18 @@ public sealed class RoutineIrCache
         return Path.Combine(path1: _dir, path2: Convert.ToHexString(inArray: h) + ".ll");
     }
 
+    /// <summary>True IFF a cached one-routine IR module for <paramref name="mangledName"/> exists on disk
+    /// (and the routine is cacheable) — a disk-existence probe with NO read. Used by the analysis-side
+    /// PostDesugarChecks skip (resident-JIT incremental (B) §2A.2②): an instance whose IR is already cached
+    /// will be an M2b cache HIT this run (codegen served from disk, never re-emitted), so its backend-repr +
+    /// validate is redundant and safe to skip. The coupling is exact — this shares <see cref="PathFor"/> and
+    /// <see cref="IsCacheable"/> with <see cref="TryGet"/>, so <c>Has(n) ⟹ TryGet(n)</c> hits.</summary>
+    public bool Has(string mangledName)
+    {
+        return IsCacheable(mangledName: mangledName) &&
+               File.Exists(path: PathFor(mangledName: mangledName));
+    }
+
     /// <summary>Returns a cached one-routine IR module for <paramref name="mangledName"/>, or false (miss /
     /// uncacheable). A hit skips codegen entirely.</summary>
     public bool TryGet(string mangledName, out string ir)

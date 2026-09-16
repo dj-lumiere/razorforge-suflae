@@ -403,7 +403,8 @@ internal partial class Program
         Action<string>? IrCallback,
         Func<Language, IReadOnlyList<string>, IReadOnlyDictionary<string, string>?>?
             StdlibIndexProvider,
-        Action<LazyJitInputs>? LazyJitSink = null);
+        Action<LazyJitInputs>? LazyJitSink = null,
+        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null);
 
     /// <summary>
     /// Bundles the inputs that drive Phase 2 (semantic analysis) of the multi-file pipeline,
@@ -415,7 +416,8 @@ internal partial class Program
         bool SaTiming,
         bool ShowBuildStages,
         bool RequireStartRoutine,
-        Func<Language, SemanticVerifier.CompiledStdlibState?>? WarmProvider);
+        Func<Language, SemanticVerifier.CompiledStdlibState?>? WarmProvider,
+        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null);
 
     /// <summary>Groups the parameters for <see cref="RunPhase1BuildDriver"/>.</summary>
     private sealed record Phase1Context(
@@ -1331,6 +1333,7 @@ internal partial class Program
         Func<Language, IReadOnlyList<string>, IReadOnlyDictionary<string, string>?>?
             stdlibIndexProvider = warm?.StdlibIndexProvider;
         Action<LazyJitInputs>? lazyJitSink = warm?.LazyJitSink;
+        Func<TypeModel.Symbols.RoutineInfo, bool>? instanceCheckSkip = warm?.InstanceCheckSkip;
         // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
         // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
         // AST is available; stays empty on the early-error paths below.
@@ -1394,7 +1397,8 @@ internal partial class Program
                 SaTiming: saTiming,
                 ShowBuildStages: showBuildStages,
                 RequireStartRoutine: requireStartRoutine,
-                WarmProvider: warmProvider);
+                WarmProvider: warmProvider,
+                InstanceCheckSkip: instanceCheckSkip);
             int phase2Result = RunPhase2SemanticAnalysis(ctx: phase2Ctx,
                 driver: driver,
                 orderedFiles: orderedFiles,
@@ -1482,6 +1486,9 @@ internal partial class Program
         }
 
         analyzer.Registry.UseModuleResolver(resolver: driver.Resolver);
+        // Incremental JIT only: skip Phase-9 backend-repr+validate for instances whose IR is already cached
+        // (they will be M2b codegen-cache hits, never re-emitted this run). Null on every other path.
+        analyzer.SkipInstanceCheckIfIrCached = ctx.InstanceCheckSkip;
         swPhase = DiagnosticFlags.PhaseTiming
             ? Stopwatch.StartNew()
             : null;
@@ -2395,7 +2402,8 @@ internal partial class Program
             warm: new WarmProviders(WarmProvider: warm?.WarmProvider,
                 IrCallback: null,
                 StdlibIndexProvider: warm?.StdlibIndexProvider,
-                LazyJitSink: x => captured = x));
+                LazyJitSink: x => captured = x,
+                InstanceCheckSkip: warm?.InstanceCheckSkip));
         inputs = captured;
         return rc;
     }

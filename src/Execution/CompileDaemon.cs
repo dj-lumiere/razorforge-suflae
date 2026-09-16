@@ -572,6 +572,57 @@ internal partial class Program
                 : Language.RazorForge;
             string entryFull = Path.GetFullPath(path: resolved.EntryFile!);
 
+            // Resident-JIT (A) split-at-IR: prefer the WARM DAEMON. It holds the analyzed stdlib snapshot in
+            // RAM (captured once at startup), so routing the analysis THERE removes the ~840 ms per-run `.pbrf`
+            // reload the in-process path below pays in this disposable client. The daemon compiles warm and
+            // ships IR; THIS throwaway client only JITs+runs it, so a user crash (rf_crash → exit(1)) kills only
+            // the client and never the warm daemon (§3 crash isolation preserved). Falls through to the
+            // in-process lazy path when no daemon is reachable.
+            if (resolved.UseDaemon &&
+                TryGetWarmDaemonIr(resolved: resolved, ir: out string daemonIr,
+                    exitCode: out int daemonRc))
+            {
+                if (daemonRc != 0)
+                {
+                    exitCode = daemonRc;
+                    return true;
+                }
+
+                try
+                {
+                    var swJit = System.Diagnostics.Stopwatch.StartNew();
+                    exitCode = OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
+                        programName: entryFull,
+                        programArgs: []);
+                    swJit.Stop();
+                    if (PhaseTiming())
+                    {
+                        Console.Error.WriteLine(
+                            value: $"[timing] JIT compile + run (daemon IR): {swJit.ElapsedMilliseconds} ms");
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(value: $"[jit] incremental (daemon) execution failed: {ex.Message}");
+                    exitCode = 1;
+                    return true;
+                }
+            }
+
+            // The IR-cache fingerprint is stdlib+compiler-only (program-INVARIANT), so it is known before the
+            // program is analyzed. Build a predicate cache now and hand its Phase-9 skip predicate to the WARM
+            // analysis: an instance whose IR is already cached from a prior run will be an M2b codegen HIT this
+            // run (never re-emitted), so its backend-repr+validate (the ~440 ms PostDesugarChecks bulk) is
+            // redundant and skipped. (Empty user segments: the predicate only probes file existence, and PathFor
+            // ignores segments — a user-dependent instance's IR is never written by Build's real-segs cache, so
+            // its file never exists and the predicate never skips it. See RoutineIrCache.Has.)
+            string fingerprint =
+                Builder.Serialization.StdlibSnapshotCache.ComputeStdlibHash(language: lang) ?? "nofp";
+            var predicateCache =
+                new RoutineIrCache(fingerprint: fingerprint, userModuleSegments: Array.Empty<string>());
+
             // Use the WARM stdlib (GetWarm loads the .pbrf snapshot in ~1-2 s, or captures once), so the
             // in-process analysis is constructed WARM (IsWarm=true) — PreRegisterStdlibVariants + the stdlib
             // program repr in PostDesugarChecks are skipped (already in the restored snapshot), instead of the
@@ -581,7 +632,8 @@ internal partial class Program
                 config: resolved,
                 warm: new WarmProviders(WarmProvider: GetWarm,
                     IrCallback: null,
-                    StdlibIndexProvider: null));
+                    StdlibIndexProvider: null,
+                    InstanceCheckSkip: LazyJitPlanner.IrCachedPredicate(cache: predicateCache)));
             if (rc != 0 || inputs == null)
             {
                 exitCode = rc != 0
@@ -593,8 +645,6 @@ internal partial class Program
             List<string> segs =
                 LazyJitPlanner.UserModuleSegments(userPrograms: inputs.UserPrograms,
                     entryModule: inputs.EntryModule);
-            string fingerprint =
-                Builder.Serialization.StdlibSnapshotCache.ComputeStdlibHash(language: lang) ?? "nofp";
             var cache = new RoutineIrCache(fingerprint: fingerprint, userModuleSegments: segs);
             (string mainIr, Func<string, string?> materialize) =
                 LazyJitPlanner.Build(inputs: inputs, cache: cache);
