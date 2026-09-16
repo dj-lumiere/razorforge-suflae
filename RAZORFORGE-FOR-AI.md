@@ -39,9 +39,12 @@ When unsure, consult ground truth in the repo/package:
    `try EXPR` → `Maybe[T]` (present | absent, no error kept);
    `grab EXPR` → `Check[T]` (T | the caught `Crashable`);
    `lookup EXPR` → `Lookup[T]` (T | absent | `Crashable`).
-   The keyword composes EVERY failable call inside the expression, short-circuiting
-   to the carrier on the first failure. There is no `try_foo` name form — recovery
-   is a keyword at the call site, not a mangled variant name. There are no
+   The keyword composes EVERY failable call inside the expression — AND every
+   checked-arithmetic operator (`try a + b` recovers the overflow, `grab a // b` the
+   divide-by-zero) — short-circuiting to the carrier on the first failure. It takes
+   the whole following expression down to `??` (so `try f() ?? d` = `(try f()) ?? d`);
+   a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
+   recovery is a keyword at the call site, not a mangled variant name. There are no
    exceptions in the Java/C# sense.
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
