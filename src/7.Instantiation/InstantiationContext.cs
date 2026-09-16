@@ -138,7 +138,7 @@ public sealed class InstantiationContext
     /// name callees, each callee is analyzed on reach, and so on). Null ⇒ bodies were analyzed eagerly
     /// (the pre-(B) pipeline), so the collector just reads the already-set resolutions.
     /// </summary>
-    public Func<string, bool>? AnalyzeRoutineOnDemand { get; set; }
+    public Func<string, SyntaxTree.Program?>? AnalyzeRoutineOnDemand { get; set; }
 
     /// <summary>
     /// Demand hook for a derive-template body materialized on reach (a scalar's <c>lt</c>/<c>le</c>/

@@ -48,32 +48,75 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     // Built once in RunGlobal() before the fixed-point loop.
     private Dictionary<string, List<RoutineDeclaration>> _routineIndex = new();
 
+    // Per-program record of the (key, decl) entries THIS program contributed to _routineIndex, so a single
+    // re-desugared program can be re-indexed in isolation (remove exactly its old entries, add its current
+    // ones) instead of rebuilding the whole index. Keyed by program REFERENCE (the demand analyzer mutates a
+    // program's Declarations in place, so the object identity is stable across a re-desugar).
+    private Dictionary<Program, List<(string Key, RoutineDeclaration Decl)>> _indexedByProgram =
+        new(comparer: ReferenceEqualityComparer.Instance);
+
     private void BuildRoutineIndex()
     {
         _routineIndex = new Dictionary<string, List<RoutineDeclaration>>();
+        _indexedByProgram = new Dictionary<Program, List<(string, RoutineDeclaration)>>(
+            comparer: ReferenceEqualityComparer.Instance);
         IEnumerable<(Program Program, string FilePath, string Module)> allPrograms =
             ctx.Registry.StdlibPrograms.Concat(second: ctx.Registry.UserPrograms);
         foreach ((Program program, string _, string _) in allPrograms)
         {
-            foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
-            {
-                AddDeclToIndex(key: decl.QualifiedName, decl: decl);
+            IndexProgram(program: program);
+        }
+    }
 
-                // A constructor `routine T(...)` / `routine T[params](...)` is registered as a creator
-                // (RoutineKind.Creator) on its owner type with NO member name, but its AST decl.Name is
-                // just the bare base type ("List", generics live in GenericParameters). Monomorphization
-                // looks a creator up via BuildAstName(owner, CreatorName), so index it under that same key
-                // too — otherwise generic constructor bodies never get monomorphized and codegen
-                // over-prunes them. (Both sides use the empty creator name, so the keys agree.)
-                if (decl.ResolvedInfo is { IsCreator: true, OwnerType: { } ctorOwner })
+    // Add every routine decl of ONE program to _routineIndex, recording the contributed (key, decl) pairs in
+    // _indexedByProgram so ReindexProgram can later remove exactly them.
+    private void IndexProgram(Program program)
+    {
+        var entries = new List<(string, RoutineDeclaration)>();
+        foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
+        {
+            AddDeclToIndex(key: decl.QualifiedName, decl: decl);
+            entries.Add(item: (decl.QualifiedName, decl));
+
+            // A constructor `routine T(...)` / `routine T[params](...)` is registered as a creator
+            // (RoutineKind.Creator) on its owner type with NO member name, but its AST decl.Name is
+            // just the bare base type ("List", generics live in GenericParameters). Monomorphization
+            // looks a creator up via BuildAstName(owner, CreatorName), so index it under that same key
+            // too — otherwise generic constructor bodies never get monomorphized and codegen
+            // over-prunes them. (Both sides use the empty creator name, so the keys agree.)
+            if (decl.ResolvedInfo is { IsCreator: true, OwnerType: { } ctorOwner })
+            {
+                string creatorKey =
+                    BuildAstName(genDef: ctorOwner, routineName: RoutineInfo.CreatorName);
+                AddDeclToIndex(key: creatorKey, decl: decl);
+                entries.Add(item: (creatorKey, decl));
+            }
+        }
+
+        _indexedByProgram[key: program] = entries;
+    }
+
+    // Re-index a SINGLE program after the demand analyzer re-desugared it: remove exactly the entries it had
+    // contributed (by key + decl reference), then re-add its current decls. End state is identical to a full
+    // BuildRoutineIndex (a re-desugar only mutates THIS program's decls), at O(program decls) not O(all decls).
+    private void ReindexProgram(Program program)
+    {
+        if (_indexedByProgram.TryGetValue(key: program,
+                value: out List<(string Key, RoutineDeclaration Decl)>? old))
+        {
+            foreach ((string key, RoutineDeclaration decl) in old)
+            {
+                if (_routineIndex.TryGetValue(key: key,
+                        value: out List<RoutineDeclaration>? bucket))
                 {
-                    AddDeclToIndex(key: BuildAstName(genDef: ctorOwner,
-                            routineName: RoutineInfo.CreatorName),
-                        decl: decl);
+                    bucket.Remove(item: decl);
                 }
             }
         }
+
+        IndexProgram(program: program);
     }
+
     private void AddDeclToIndex(string key, RoutineDeclaration decl)
     {
         if (!_routineIndex.TryGetValue(key: key, value: out List<RoutineDeclaration>? bucket))
@@ -1262,22 +1305,29 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // is keyed by the ROOT source decl's RegistryKey, so intermediate concrete-owner keys need the chain walk.
         private void TriggerOnDemandAnalysis(RoutineInfo r, string key)
         {
-            bool desugaredNewFile = _ctx.AnalyzeRoutineOnDemand?.Invoke(arg: key) ?? false;
+            Program? desugared = _ctx.AnalyzeRoutineOnDemand?.Invoke(arg: key);
             for (RoutineInfo? gd = r.GenericDefinition; gd != null; gd = gd.GenericDefinition)
             {
                 if (gd.RegistryKey is { } gdKey && gdKey != key)
                 {
-                    desugaredNewFile |= _ctx.AnalyzeRoutineOnDemand?.Invoke(arg: gdKey) ?? false;
+                    Program? gdDesugared = _ctx.AnalyzeRoutineOnDemand?.Invoke(arg: gdKey);
+                    // Reindex each distinct program the chain desugared (usually 0-1; the def and the
+                    // concrete-owner key can live in different files). The demand analyzer REASSIGNS decl.Body
+                    // when it desugars a file (immutable rewriters → new decl objects in program.Declarations),
+                    // so _routineIndex holds the OLD decls and ProcessResolvedMemberRoutineGenericRoutine would
+                    // clone the STALE, un-lowered template. Re-indexing ONLY the freshly-desugared program
+                    // (remove its old decls, add its current ones) is O(file decls), vs an O(all stdlib+user
+                    // decls) full rebuild per reached file.
+                    if (gdDesugared != null && !ReferenceEquals(objA: gdDesugared, objB: desugared))
+                    {
+                        gmp.ReindexProgram(program: gdDesugared);
+                    }
                 }
             }
 
-            // The demand analyzer REASSIGNS decl.Body when it desugars a newly-reached file (immutable
-            // rewriters → new decl in program.Declarations). Our _routineIndex snapshotted the OLD decls at
-            // walk start, so ProcessResolvedMemberRoutineGenericRoutine below would clone the STALE, un-lowered
-            // template. Rebuild the index so monomorphization sources the freshly-desugared def.
-            if (desugaredNewFile)
+            if (desugared != null)
             {
-                gmp.BuildRoutineIndex();
+                gmp.ReindexProgram(program: desugared);
             }
         }
 

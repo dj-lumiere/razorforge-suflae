@@ -56,8 +56,10 @@ public sealed class DesugaringContext
 
     /// <summary>Stage-2 (pull/(B)) demand-resolution hook, mirrored from
     /// <see cref="InstantiationContext.AnalyzeRoutineOnDemand"/> when the collector runs on this adapter.
-    /// Given a reached routine key, ensures its body is analyzed before the collector walks it.</summary>
-    public Func<string, bool>? AnalyzeRoutineOnDemand { get; set; }
+    /// Given a reached routine key, ensures its body is analyzed before the collector walks it. Returns the
+    /// program it desugared on demand (so the collector re-indexes just that program's decls), or null when
+    /// nothing new was analyzed.</summary>
+    public Func<string, SyntaxTree.Program?>? AnalyzeRoutineOnDemand { get; set; }
 
     /// <summary>Demand hook for a derive-template body materialized on reach, mirrored from
     /// <see cref="InstantiationContext.AnalyzeMaterializedDeriveBody"/> when the collector runs on this

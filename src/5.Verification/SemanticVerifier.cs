@@ -1446,13 +1446,13 @@ public sealed partial class SemanticVerifier
     /// <see cref="AnalyzeStdlibBodies"/>. No-op if the file is already analyzed or the key is not a stdlib
     /// routine. This is the hook <see cref="InstantiationContext.AnalyzeRoutineOnDemand"/> is bound to.
     /// </summary>
-    internal bool AnalyzeStdlibProgramOnDemand(string routineKey)
+    internal Program? AnalyzeStdlibProgramOnDemand(string routineKey)
     {
         // While the eager sweep is in effect, every stdlib file is already analyzed → no-op (avoids
         // double-analysis / duplicate registration). Becomes active after the Stage-5 flip.
         if (_eagerStdlibAnalyzed)
         {
-            return false;
+            return null;
         }
 
         if (_demandStdlibProgramForKey == null)
@@ -1473,12 +1473,12 @@ public sealed partial class SemanticVerifier
         if (!_demandStdlibProgramForKey.TryGetValue(key: routineKey,
                 value: out (Program Program, string FilePath, string Module) entry))
         {
-            return false;
+            return null;
         }
 
         if (!_demandAnalyzedFiles.Add(item: entry.FilePath))
         {
-            return false;
+            return null;
         }
 
         Language savedLanguage = _registry.Language;
@@ -1626,7 +1626,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        return true; // analyzed+desugared a NEW file → collector rebuilds its template index
+        return entry.Program; // analyzed+desugared a NEW file → collector re-indexes THAT program's decls
     }
 
     /// <summary>
