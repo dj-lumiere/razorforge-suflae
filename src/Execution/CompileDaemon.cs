@@ -572,9 +572,16 @@ internal partial class Program
                 : Language.RazorForge;
             string entryFull = Path.GetFullPath(path: resolved.EntryFile!);
 
+            // Use the WARM stdlib (GetWarm loads the .pbrf snapshot in ~1-2 s, or captures once), so the
+            // in-process analysis is constructed WARM (IsWarm=true) — PreRegisterStdlibVariants + the stdlib
+            // program repr in PostDesugarChecks are skipped (already in the restored snapshot), instead of the
+            // cold path re-doing that stdlib-invariant work every run.
             int rc = BuildToLazyJitInputs(entryFile: entryFull,
                 inputs: out LazyJitInputs? inputs,
-                config: resolved);
+                config: resolved,
+                warm: new WarmProviders(WarmProvider: GetWarm,
+                    IrCallback: null,
+                    StdlibIndexProvider: null));
             if (rc != 0 || inputs == null)
             {
                 exitCode = rc != 0
