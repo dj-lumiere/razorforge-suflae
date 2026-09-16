@@ -540,4 +540,130 @@ public sealed partial class BaseEmissionTests
             userMessage:
             $"demand should materialize a SUBSET, got {materialized}/{index.Count}");
     }
+
+    /// <summary>
+    /// Resident-JIT incremental (B) M2b — the CROSS-RUN win: a per-routine on-disk IR cache
+    /// (<see cref="Builder.Execution.RoutineIrCache"/>) makes the fully-lazy JIT reuse each pure-stdlib
+    /// routine's one-routine module across runs instead of re-codegen'ing it every time (M2a re-emits every
+    /// reached routine each run). Runs `show("hi")` TWICE sharing one cache dir: run 1 is cold (every
+    /// cacheable routine codegen'd + written), run 2 is warm (served from disk, ZERO codegen). Both exit 0.
+    /// NEEDS libLLVM staged + runs the native runtime in-process → Skip'd in CI.
+    /// </summary>
+    [Fact(Skip =
+        "Local ORC-JIT M2b IR-cache run: needs libLLVM staged + runs the native RF runtime in-process. PASSES locally — run 2 serves every pure-stdlib routine from the disk IR cache (0 codegen) while run 1 populated it (run1: 71 codegen/71 miss; run2: 0 codegen/71 hit). See .claude-memory/resident-jit-pruned-base-works.md M2b.")]
+    public void JitAndRunLazy_IrCache_ReusesAcrossRuns()
+    {
+        AnalysisResult r =
+            new SemanticVerifier(language: Language.RazorForge).Analyze(
+                program: Parse(src: Trivial, file: "bench.rf"));
+        Assert.Empty(collection: r.Errors);
+        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+            programs: r.Registry.UserPrograms,
+            instantiatedBodies: r.InstantiatedGenericBodies,
+            maySuspendKeys: r.MaySuspendRoutineKeys,
+            registry: r.Registry);
+
+        var index = new Dictionary<string, MonomorphizedBody>(comparer: StringComparer.Ordinal);
+        var allQuoted = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (MonomorphizedBody b in r.InstantiatedGenericBodies.Values)
+        {
+            string mangled = LlvmEmitter.MangleRoutineName(routine: b.Info);
+            index[key: mangled.Trim(trimChar: '"')] = b;
+            allQuoted.Add(item: mangled);
+        }
+
+        string mainIr = new LlvmEmitter(userPrograms: r.Registry.UserPrograms,
+            registry: r.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = r.Registry.StdlibPrograms,
+                SynthesizedBodies = r.SynthesizedBodies,
+                InstantiatedGenericBodies = new Dictionary<string, MonomorphizedBody>(),
+                LiveRoutineKeys = r.LiveRoutineKeys,
+                MaySuspendRoutineKeys = r.MaySuspendRoutineKeys
+            }).Generate();
+
+        string EmitOne(string name, MonomorphizedBody body)
+        {
+            var resident = new HashSet<string>(collection: allQuoted, comparer: StringComparer.Ordinal);
+            resident.Remove(item: LlvmEmitter.MangleRoutineName(routine: body.Info));
+            return new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
+                registry: r.Registry,
+                options: new LlvmEmitterOptions
+                {
+                    StdlibPrograms = r.Registry.StdlibPrograms,
+                    SynthesizedBodies = r.SynthesizedBodies,
+                    InstantiatedGenericBodies =
+                        new Dictionary<string, MonomorphizedBody> { [key: name] = body },
+                    ResidentSymbols = resident,
+                    ForExternalJitModule = true
+                }).Generate();
+        }
+
+        // A fresh per-test cache dir (fixed fingerprint — the two runs share the same stdlib/compiler).
+        string cacheDir = Path.Combine(path1: Path.GetTempPath(),
+            path2: "rf_jit_ir_cache_test_" + Guid.NewGuid().ToString(format: "N"));
+
+        int RunOnce(Builder.Execution.RoutineIrCache cache, out int codegens)
+        {
+            int cg = 0;
+            string? Materialize(string name)
+            {
+                if (!index.TryGetValue(key: name, value: out MonomorphizedBody? body))
+                {
+                    return null;
+                }
+
+                if (cache.TryGet(mangledName: name, ir: out string cached))
+                {
+                    return cached;
+                }
+
+                cg++;
+                string ir = EmitOne(name: name, body: body);
+                cache.Put(mangledName: name, ir: ir);
+                return ir;
+            }
+
+            int rc = Builder.Execution.OrcJitExecutor.JitAndRunLazy(mainIr: mainIr,
+                materialize: Materialize,
+                programName: "test",
+                programArgs: Array.Empty<string>());
+            codegens = cg;
+            return rc;
+        }
+
+        try
+        {
+            // Run 1 (cold): every cacheable routine is codegen'd + written; nothing served from disk.
+            var cache1 = new Builder.Execution.RoutineIrCache(fingerprint: "test-fp",
+                userModuleSegments: new[] { "Bench" }, dir: cacheDir);
+            int rc1 = RunOnce(cache: cache1, codegens: out int cg1);
+            Assert.Equal(expected: 0, actual: rc1);
+            Assert.Equal(expected: 0, actual: cache1.Hits);
+            Assert.True(condition: cache1.Misses > 0, userMessage: "run 1 should populate the cache");
+
+            // Run 2 (warm): the same pure-stdlib routines are served from the disk cache — ZERO fresh codegen.
+            var cache2 = new Builder.Execution.RoutineIrCache(fingerprint: "test-fp",
+                userModuleSegments: new[] { "Bench" }, dir: cacheDir);
+            int rc2 = RunOnce(cache: cache2, codegens: out int cg2);
+            _out.WriteLine(
+                message:
+                $"run1: codegens={cg1} misses={cache1.Misses} uncacheable={cache1.Uncacheable}; " +
+                $"run2: codegens={cg2} hits={cache2.Hits} uncacheable={cache2.Uncacheable}");
+            Assert.Equal(expected: 0, actual: rc2);
+            Assert.True(condition: cache2.Hits > 0, userMessage: "run 2 should reuse cached IR");
+            // Every cacheable routine run 2 reached was a disk hit (no fresh codegen for cacheable ones);
+            // cg2 counts only uncacheable re-emits, which must be < run 1's total codegen.
+            Assert.True(condition: cg2 < cg1,
+                userMessage: $"run 2 should codegen fewer than run 1 (cg2={cg2}, cg1={cg1})");
+        }
+        finally
+        {
+            if (Directory.Exists(path: cacheDir))
+            {
+                Directory.Delete(path: cacheDir, recursive: true);
+            }
+        }
+    }
 }
