@@ -506,6 +506,16 @@ internal partial class Program
                 return false;
             }
 
+            // Resident-JIT incremental (B) M3: `[target] incremental` runs the program via the FULLY-LAZY JIT +
+            // per-routine disk IR cache instead of a single eager module — @main is materialized on demand and
+            // each pure-stdlib routine is served from / written to the cross-run cache. Analysis is still
+            // in-process here (the cross-run analysis-reuse is a separate Phase-2 concern); the win is skipping
+            // codegen + JIT of routines already cached from a previous run.
+            if (resolved.Incremental)
+            {
+                return TryClientJitRunIncremental(resolved: resolved, exitCode: out exitCode);
+            }
+
             // Obtain IR: warm via the daemon when opted-in and reachable, else a cold in-process compile.
             string ir = "";
             int rc = 0;
@@ -544,6 +554,64 @@ internal partial class Program
             catch (Exception ex)
             {
                 Console.Error.WriteLine(value: $"[jit] execution failed: {ex.Message}");
+                exitCode = 1;
+                return true;
+            }
+        }
+
+        /// <summary>The `[target] incremental` JIT path (resident-JIT incremental (B) M3): analyze in-process,
+        /// then JIT-run @main with a fully-lazy ORC generator that materializes each reached routine on demand
+        /// — served from / written to the per-routine disk IR cache (keyed by stdlib+compiler fingerprint), so
+        /// a re-run skips codegen + JIT of every routine already cached. Returns true (handled) with the exit
+        /// code; a build error is handled (no AOT fallback — it would fail identically).</summary>
+        private static bool TryClientJitRunIncremental(ResolvedEntry resolved, out int exitCode)
+        {
+            exitCode = 0;
+            Language lang = InvokedAsSuflae
+                ? Language.Suflae
+                : Language.RazorForge;
+            string entryFull = Path.GetFullPath(path: resolved.EntryFile!);
+
+            int rc = BuildToLazyJitInputs(entryFile: entryFull,
+                inputs: out LazyJitInputs? inputs,
+                config: resolved);
+            if (rc != 0 || inputs == null)
+            {
+                exitCode = rc != 0
+                    ? rc
+                    : 1;
+                return true;
+            }
+
+            List<string> segs =
+                LazyJitPlanner.UserModuleSegments(userPrograms: inputs.UserPrograms,
+                    entryModule: inputs.EntryModule);
+            string fingerprint =
+                Builder.Serialization.StdlibSnapshotCache.ComputeStdlibHash(language: lang) ?? "nofp";
+            var cache = new RoutineIrCache(fingerprint: fingerprint, userModuleSegments: segs);
+            (string mainIr, Func<string, string?> materialize) =
+                LazyJitPlanner.Build(inputs: inputs, cache: cache);
+
+            try
+            {
+                var swJit = System.Diagnostics.Stopwatch.StartNew();
+                exitCode = OrcJitExecutor.JitAndRunLazy(mainIr: mainIr,
+                    materialize: materialize,
+                    programName: entryFull,
+                    programArgs: []);
+                swJit.Stop();
+                if (PhaseTiming())
+                {
+                    Console.Error.WriteLine(
+                        value:
+                        $"[timing] incremental JIT (cache: {cache.Hits} reused, {cache.Misses} fresh, {cache.Uncacheable} user): {swJit.ElapsedMilliseconds} ms");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"[jit] incremental execution failed: {ex.Message}");
                 exitCode = 1;
                 return true;
             }

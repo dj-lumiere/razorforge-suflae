@@ -305,7 +305,9 @@ public static class ManifestLoader
             target.UseDaemon = useDaemon is true;
         }
 
-        // Reserved: incremental compilation (parsed now, consumed once the incremental pipeline lands).
+        // Incremental JIT (resident-JIT (B) M3): `mode="debug-jit"` + this runs @main via the fully-lazy ORC
+        // generator + per-routine disk IR cache (CompileDaemon.TryClientJitRunIncremental) — a re-run reuses
+        // each cached pure-stdlib routine instead of re-codegen'ing it.
         if (table.TryGetValue(key: "incremental", value: out object? incremental))
         {
             target.Incremental = incremental is true;

@@ -104,10 +104,11 @@ public sealed class BuildTarget
     /// dev-loop path (was <c>RAZORFORGE_JIT</c>) is now selected by the <c>mode = "debug-jit"</c> build mode.</summary>
     public bool UseDaemon { get; set; }
 
-    /// <summary>Enable incremental compilation — reuse per-run monomorphization/lowering across builds so a
-    /// warm rebuild only processes the user delta (the path to the sub-250ms dev loop / SF hot reload).
-    /// Controlled by the <c>[target] incremental</c> field. RESERVED: parsed and carried now; the
-    /// incremental pipeline that consumes it is not yet built, so today this is a no-op placeholder.</summary>
+    /// <summary>Enable the incremental JIT dev loop (resident-JIT (B)): with <c>mode="debug-jit"</c>, run
+    /// <c>@main</c> via the fully-lazy ORC generator + a per-routine on-disk IR cache, so a re-run reuses each
+    /// cached pure-stdlib routine instead of re-codegen'ing it (the path toward the sub-250ms loop). Controlled
+    /// by the <c>[target] incremental</c> field; consumed by <c>CompileDaemon.TryClientJitRunIncremental</c>.
+    /// (Cross-run ANALYSIS reuse — the dominant cost — is a separate later step.)</summary>
     public bool Incremental { get; set; }
 }
 

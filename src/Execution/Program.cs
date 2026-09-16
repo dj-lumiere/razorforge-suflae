@@ -402,7 +402,8 @@ internal partial class Program
         Func<Language, SemanticVerifier.CompiledStdlibState?>? WarmProvider,
         Action<string>? IrCallback,
         Func<Language, IReadOnlyList<string>, IReadOnlyDictionary<string, string>?>?
-            StdlibIndexProvider);
+            StdlibIndexProvider,
+        Action<LazyJitInputs>? LazyJitSink = null);
 
     /// <summary>
     /// Bundles the inputs that drive Phase 2 (semantic analysis) of the multi-file pipeline,
@@ -438,7 +439,8 @@ internal partial class Program
         bool DumpAst,
         bool ShowBuildStages,
         Action<string>? IrCallback,
-        Stopwatch? SwPhase);
+        Stopwatch? SwPhase,
+        Action<LazyJitInputs>? LazyJitSink = null);
 
     /// <summary>
     /// The fully-resolved build configuration for a <c>build</c>/<c>buildandrun</c>/<c>check</c> invocation:
@@ -1328,6 +1330,7 @@ internal partial class Program
         Action<string>? irCallback = warm?.IrCallback;
         Func<Language, IReadOnlyList<string>, IReadOnlyDictionary<string, string>?>?
             stdlibIndexProvider = warm?.StdlibIndexProvider;
+        Action<LazyJitInputs>? lazyJitSink = warm?.LazyJitSink;
         // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
         // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
         // AST is available; stays empty on the early-error paths below.
@@ -1412,7 +1415,8 @@ internal partial class Program
                     DumpAst: dumpAst,
                     ShowBuildStages: showBuildStages,
                     IrCallback: irCallback,
-                    SwPhase: _swPhase),
+                    SwPhase: _swPhase,
+                    LazyJitSink: lazyJitSink),
                 orderedFiles: orderedFiles,
                 unitsByFile: unitsByFile,
                 result: result);
@@ -1695,6 +1699,19 @@ internal partial class Program
             unitsByFile.TryGetValue(key: entryFull, value: out FileBuildUnit? entryUnit)
                 ? entryUnit.Module
                 : null;
+
+        // Resident-JIT incremental (B) M3: hand the analysis pieces to the caller (which builds a MAIN module
+        // + on-demand materializer + disk IR cache and JIT-runs them lazily) INSTEAD of emitting the whole
+        // program eagerly. CancellationInstrumentationPass has already run above, so the ASTs are codegen-ready.
+        if (p3.LazyJitSink is { } lazyJitSink)
+        {
+            lazyJitSink(obj: new LazyJitInputs(UserPrograms: userPrograms,
+                Result: result,
+                Target: target,
+                BuildMode: buildMode,
+                EntryModule: entryModule));
+            return 0;
+        }
 
         var generator = new LlvmEmitter(userPrograms: userPrograms,
             registry: result.Registry,
@@ -2361,6 +2378,25 @@ internal partial class Program
                 IrCallback: s => captured = s,
                 StdlibIndexProvider: warm?.StdlibIndexProvider));
         ir = captured;
+        return rc;
+    }
+
+    /// <summary>Runs the full front pipeline like <see cref="BuildToIr"/> but STOPS before eager codegen and
+    /// captures the analysis pieces (<see cref="LazyJitInputs"/>) instead — the resident-JIT incremental (B)
+    /// path then builds a MAIN module + on-demand materializer from them (see <see cref="LazyJitPlanner"/>).</summary>
+    private static int BuildToLazyJitInputs(string entryFile, out LazyJitInputs? inputs,
+        ResolvedEntry config, WarmProviders? warm = null)
+    {
+        LazyJitInputs? captured = null;
+        int rc = BuildMultiFile(entryFile: entryFile,
+            outputFile: null,
+            discoveredLinkLibraries: out _,
+            config: config,
+            warm: new WarmProviders(WarmProvider: warm?.WarmProvider,
+                IrCallback: null,
+                StdlibIndexProvider: warm?.StdlibIndexProvider,
+                LazyJitSink: x => captured = x));
+        inputs = captured;
         return rc;
     }
 
