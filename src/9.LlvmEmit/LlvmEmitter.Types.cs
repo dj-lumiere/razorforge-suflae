@@ -220,7 +220,7 @@ public partial class LlvmEmitter
             // Error placeholder
             ErrorTypeSymbol => throw new InvalidOperationException(
                 message:
-                "Error type found in codegen - semantic analysis should have caught this"),
+                $"Error type found in codegen - semantic analysis should have caught this [inRoutine={_currentEmittingRoutine?.FullName}]"),
 
             // Unknown
             _ => throw new InvalidOperationException(

@@ -1404,6 +1404,29 @@ public sealed partial class SemanticVerifier
             _importedModules.Add(item: importModule);
         }
 
+        // Repair declarations that reference a LAZILY-loaded imported module's type. A `module Core` file
+        // (eagerly registered) whose signature/field names a type from an on-demand module — e.g.
+        // FloatConvert's `round_and_pack(num_in: Integer, …)` or a record field `mantissa: Integer`, where
+        // `Integer` lives in the lazily-loaded `Numerics` module — had that param/field collapse to
+        // `<error>`/get dropped at eager Core registration (the removed cross-module short-name scan). Now
+        // that this file is being analyzed on demand (its imported modules loaded), re-resolve its member
+        // variables + routine signatures with the file's imports installed, so the bare cross-module names
+        // bind and the corrected, re-keyed routine is what body analysis below resolves calls against.
+        // Idempotent: member re-resolution only fills a type whose field count is short; signature
+        // re-resolution only rewrites an entry still carrying an error param / missing return.
+        IReadOnlyCollection<string>? savedImports = _registry.ActiveRegistrationImports;
+        _registry.ActiveRegistrationImports = _importedModules.ToArray();
+        try
+        {
+            StdlibLoader.ReResolveProgramForLazyImports(registry: _registry,
+                program: program,
+                moduleName: module);
+        }
+        finally
+        {
+            _registry.ActiveRegistrationImports = savedImports;
+        }
+
         AnalyzeBodies(program: program);
     }
 
@@ -1745,7 +1768,7 @@ public sealed partial class SemanticVerifier
         Mark(label: "Phase 2 -> Type/signature resolution");
 
         // Divergent cross-file duplicate constructors: same signature + different body in different
-        // files -> last-wins registration silently shadows one (the F64(from:F128) recursion class).
+        // files -> last-wins registration silently shadows one (the B64(from:B128) recursion class).
         // Benign identical duplicates (equal BodyHash) were not recorded, so anything here is a real bug.
         foreach ((RoutineInfo first, RoutineInfo second) in _registry.DivergentDuplicateCreators)
         {

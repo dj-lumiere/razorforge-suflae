@@ -70,6 +70,20 @@ public sealed partial class TypeRegistry
     /// </summary>
     public string ResolutionRealm { get; set; } = "RF";
 
+    /// <summary>
+    /// The imported-module namespaces of the stdlib file whose declarations are CURRENTLY being
+    /// (re-)registered — consulted by the stdlib registration's bare-type resolver as an import-scoped
+    /// fallback. The unscoped cross-module short-name scan was removed (a bare <c>Name</c> no longer binds
+    /// ANY module's <c>*.Name</c>), which broke a <c>module Core</c> file that references an on-demand
+    /// module's type in a SIGNATURE or FIELD (e.g. <c>FloatConvert</c>'s <c>round_and_pack(num_in: Integer)</c>
+    /// / a record field <c>mantissa: Integer</c> where <c>Integer</c> lives in the lazily-loaded
+    /// <c>Numerics</c> module): the type is unloaded at eager Core-registration time, so its param/field
+    /// collapses to <c>&lt;error&gt;</c>. Set (to the file's imports) around the on-demand signature/member
+    /// re-resolution, when the imported module IS loaded; null otherwise. Mirrors the body-analysis
+    /// <c>TypeResolver</c>'s import-aware lookup, scoped to genuine imports (not the removed unscoped scan).
+    /// </summary>
+    public IReadOnlyCollection<string>? ActiveRegistrationImports { get; set; }
+
     #region Type Storage
 
     /// <summary>All registered types by their full name.</summary>

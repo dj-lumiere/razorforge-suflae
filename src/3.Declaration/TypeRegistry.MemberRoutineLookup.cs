@@ -41,7 +41,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Divergent cross-file duplicate constructors found during registration: two creators sharing a
     /// signature but with DIFFERENT bodies, defined in DIFFERENT files. Registration is last-wins, so
-    /// one silently shadows the other — the hazard class that made <c>F64(from: F128)</c> resolve to a
+    /// one silently shadows the other — the hazard class that made <c>B64(from: B128)</c> resolve to a
     /// recursive-forwarder stub instead of the real engine impl (infinite recursion). Surfaced as a
     /// build error by <see cref="Builder.Verification.SemanticVerifier"/>. Benign identical duplicates (same
     /// body, e.g. <c>U16(from: U8)</c> in both U8.rf and U16.rf) are NOT recorded (equal BodyHash).
@@ -338,6 +338,56 @@ public sealed partial class TypeRegistry
         return LookupRoutine(fullName: baseName);
     }
 
+    /// <summary>
+    /// Finds a STALE overload to repair: an entry registered under <paramref name="baseName"/> (or a
+    /// <c>baseName#…</c> overload key) with the same arity as <paramref name="resolvedParams"/>, carrying at
+    /// least one <see cref="ErrorTypeSymbol"/> param, whose NON-error params agree with the freshly-resolved
+    /// ones. Used by the on-demand signature re-resolution: an <c>&lt;error&gt;</c> param poisons the
+    /// registry key (e.g. <c>round_and_pack#Core.Bool,&lt;error&gt;,&lt;error&gt;,Core.S32</c>), so the
+    /// exact-type overload lookup by the now-correct types misses the stale entry — this recovers it so
+    /// <see cref="UpdateRoutine"/> can rewrite it with the resolved signature (and its correct key).
+    /// </summary>
+    internal RoutineInfo? LookupOverloadNeedingRepair(string baseName, List<ParamInfo> resolvedParams)
+    {
+        string prefix = baseName + "#";
+        foreach ((string key, RoutineInfo r) in _routines)
+        {
+            if (key != baseName &&
+                !key.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (r.Parameters.Count != resolvedParams.Count ||
+                r.Parameters.All(predicate: p => p.Type is not ErrorTypeSymbol))
+            {
+                continue;
+            }
+
+            bool nonErrorAgree = true;
+            for (int i = 0; i < r.Parameters.Count; i++)
+            {
+                if (r.Parameters[index: i].Type is ErrorTypeSymbol)
+                {
+                    continue;
+                }
+
+                if (r.Parameters[index: i].Type?.FullName != resolvedParams[index: i].Type?.FullName)
+                {
+                    nonErrorAgree = false;
+                    break;
+                }
+            }
+
+            if (nonErrorAgree)
+            {
+                return r;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>True if <paramref name="baseName"/> has more than one registered overload (keys
     /// <c>baseName</c> and/or <c>baseName#…</c>). Used to gate the first-wins fallback, which is only
     /// correct for a lone overload.</summary>
@@ -596,14 +646,14 @@ public sealed partial class TypeRegistry
     /// <param name="returnType">The resolved return type.</param>
     /// <param name="genericParameters">Updated generic parameters (may include implicit ones from protocol-as-type).</param>
     /// <param name="genericConstraints">Updated generic constraints (may include implicit ones from protocol-as-type).</param>
-    public void UpdateRoutine(RoutineInfo routine, List<ParamInfo> parameters,
+    public RoutineInfo? UpdateRoutine(RoutineInfo routine, List<ParamInfo> parameters,
         TypeSymbol? returnType, List<string>? genericParameters,
         List<GenericConstraintDeclaration>? genericConstraints)
     {
         string baseName = routine.BaseName;
         if (!_routines.ContainsKey(key: baseName))
         {
-            return;
+            return null;
         }
 
         // Create updated routine with resolved signature
@@ -664,6 +714,8 @@ public sealed partial class TypeRegistry
                 updatedRoutine: updatedRoutine,
                 baseName: baseName);
         }
+
+        return updatedRoutine;
     }
 
     /// <summary>Replaces the by-owner overload-list entry for a re-resolved member routine in place.</summary>

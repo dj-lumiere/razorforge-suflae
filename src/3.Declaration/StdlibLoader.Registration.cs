@@ -619,7 +619,7 @@ public sealed partial class StdlibLoader
             if (node is PresetDeclaration preset)
             {
                 // Pass the module context so the preset's type resolves via its OWN module prefix
-                // (e.g. `Q32_IDENTITY: Q32` in `module Math3D` → `Math3D.Q32`) instead of a bare lookup
+                // (e.g. `Q128_IDENTITY: Q128` in `module Math3D` → `Math3D.Q128`) instead of a bare lookup
                 // that depended on the cross-module short-name scan. A null type would drop the preset
                 // entirely (a bare cross-module reference then fails as UnknownIdentifier).
                 TypeSymbol? presetType = ResolveSimpleType(registry: registry,
@@ -2020,6 +2020,22 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
+    /// On-demand repair for a stdlib file whose declarations reference a type from a LAZILY-loaded module
+    /// (a <c>module Core</c> file importing <c>Numerics.Integer</c>): at eager Core registration that module
+    /// was not loaded, so the file's routine signatures and record/entity fields collapsed to
+    /// <c>&lt;error&gt;</c>/were dropped. Called when the file is analyzed on demand (the imported module now
+    /// loaded), with the file's imports installed on <see cref="TypeRegistry.ActiveRegistrationImports"/> so
+    /// the bare cross-module names resolve — re-resolves member variables THEN routine signatures (both
+    /// idempotent; the routine pass only rewrites entries that still carry an error param / missing return).
+    /// </summary>
+    public static void ReResolveProgramForLazyImports(TypeRegistry registry, Program program,
+        string moduleName)
+    {
+        ResolveProgramMemberVariables(registry: registry, program: program);
+        ResolveRoutineSignatures(registry: registry, program: program, moduleName: moduleName);
+    }
+
+    /// <summary>
     /// Re-resolves routine signatures after all module types are registered.
     /// This repairs stdlib routines that were registered before a referenced return type or
     /// parameter type became available and were later finalized to None/Error.
@@ -2094,11 +2110,23 @@ public sealed partial class StdlibLoader
             return;
         }
 
-        registry.UpdateRoutine(routine: existingRoutine,
+        RoutineInfo? updated = registry.UpdateRoutine(routine: existingRoutine,
             parameters: parameters,
             returnType: resolvedReturnType,
             genericParameters: existingRoutine.GenericParameters,
             genericConstraints: existingRoutine.GenericConstraints);
+
+        // Re-point the DECLARATION at the repaired RoutineInfo. `decl.ResolvedInfo` was stamped at initial
+        // registration with the error-keyed entry (`…#…,<error>,…`); the demand collector indexes each
+        // body by `decl.ResolvedInfo.RegistryKey` (BuildProgramBodyIndex) and materializes it under that
+        // key. If ResolvedInfo still carried the poisoned key, the body would index under the dead key
+        // while the (now-correct) call site references the repaired key — the definition is never emitted
+        // and the call link-fails ("undefined symbol"). Syncing ResolvedInfo keeps body-index key ==
+        // call-site key so the reached body is materialized.
+        if (updated != null)
+        {
+            routine.ResolvedInfo = updated;
+        }
     }
 
     /// <summary>
@@ -2158,11 +2186,27 @@ public sealed partial class StdlibLoader
         string baseName = ownerType != null
             ? $"{ownerType.Name}.{memberRoutineName}"
             : freeBaseName;
-        return parameters.Count > 0
+        RoutineInfo? exact = parameters.Count > 0
             ? registry.LookupRoutineOverload(baseName: baseName,
                 argTypes: parameters.Select(selector: p => p.Type)
                                     .ToList())
             : registry.LookupRoutine(fullName: baseName, isFailable: routine.IsFailable);
+        if (exact != null)
+        {
+            return exact;
+        }
+
+        // The exact-type lookup misses when the stale entry's registry key was POISONED by an `<error>`
+        // param (a cross-module type unresolved at eager registration): its key is
+        // `name#…,<error>,…` while we now look up by the correct types. Recover the stale entry by
+        // (base name, arity, matching non-error params) so its signature can be repaired. Free routines
+        // key by the module-qualified base name; try that too when the owner-less lookup above missed.
+        return registry.LookupOverloadNeedingRepair(baseName: baseName,
+                   resolvedParams: parameters) ??
+               (ownerType == null && baseName != freeBaseName
+                   ? registry.LookupOverloadNeedingRepair(baseName: freeBaseName,
+                       resolvedParams: parameters)
+                   : null);
     }
 
     /// <summary>

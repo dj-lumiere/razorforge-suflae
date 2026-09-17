@@ -730,9 +730,32 @@ public sealed partial class StdlibLoader
 
         // Own-module FIRST, then the bare (auto-import/Core-prefix) lookup — see the generic-def branch
         // above for why the overlay's same-named types must not collapse to the RazorForge realm.
-        return (moduleName != null
+        TypeSymbol? resolved = (moduleName != null
             ? registry.LookupType(name: $"{moduleName}.{typeName}")
             : null) ?? registry.LookupType(name: typeName);
+        if (resolved != null)
+        {
+            return resolved;
+        }
+
+        // Import-scoped fallback: a bare cross-module type name (e.g. `Integer` in a `module Core` file
+        // that `import Numerics.Integer`) no longer resolves via a global short-name scan (removed), and
+        // its module loads on-demand — so it is unresolved at eager Core registration. When re-resolved
+        // on demand (the imported module now loaded) with the file's imports installed, try each imported
+        // namespace as a prefix. Mirrors the body-analysis TypeResolver, scoped to genuine imports only.
+        if (!typeName.Contains(value: '.') &&
+            registry.ActiveRegistrationImports is { Count: > 0 } imports)
+        {
+            foreach (string ns in imports)
+            {
+                if (registry.LookupType(name: $"{ns}.{typeName}") is { } viaImport)
+                {
+                    return viaImport;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
