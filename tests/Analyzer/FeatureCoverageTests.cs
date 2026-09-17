@@ -262,7 +262,7 @@ public class FeatureCoverageTests
                                 var s: Set[T] = Set[T]()
                                 each x in items
                                   discard s.add(value: x)
-                                return target in s
+                                return s have target
 
                               routine start()
                                 var nums: List[S64] = [10, 20, 30]
@@ -439,14 +439,14 @@ public class FeatureCoverageTests
 
                               variant Number
                                 S64
-                                F64
+                                B64
                                 Text
                                 None
 
                               routine describe(n: Number) -> Text
                                 when n
                                   is S64 v  => return f"int:{v}"
-                                  is F64 v  => return f"float:{v}"
+                                  is B64 v  => return f"float:{v}"
                                   is Text v => return f"text:{v}"
                                   is None   => return "none"
 

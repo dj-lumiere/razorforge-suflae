@@ -30,8 +30,8 @@ routine start()
   show(f"concat == kor: {(head + tail) == kor}")
 
   # contains across multi-byte boundaries
-  show(f"mix contains '한글': {"한글" in mix}")
-  show(f"mix contains '한x': {"한x" in mix}")
+  show(f"mix contains '한글': {mix have "한글"}")
+  show(f"mix contains '한x': {mix have "한x"}")
 
   show("DONE")
   return

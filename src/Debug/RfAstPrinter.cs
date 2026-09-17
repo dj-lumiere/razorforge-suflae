@@ -491,18 +491,15 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
             TokenType.AddressLiteral => $"Address({Int10(value: value, suffix: "addr")})",
             TokenType.IntegerLiteral => $"Integer({Int10(value: value, suffix: "")})",
             // Floating point: strip the suffix + separators; the mantissa is already decimal.
-            TokenType.F16Literal => $"F16({Real(value: value, suffix: "f16")})",
-            TokenType.F32Literal => $"F32({Real(value: value, suffix: "f32")})",
-            TokenType.F64Literal => $"F64({Real(value: value, suffix: "f64")})",
-            TokenType.F128Literal => $"F128({Real(value: value, suffix: "f128")})",
+            TokenType.B16Literal => $"B16({Real(value: value, suffix: "b16")})",
+            TokenType.B32Literal => $"B32({Real(value: value, suffix: "b32")})",
+            TokenType.B64Literal => $"B64({Real(value: value, suffix: "b64")})",
+            TokenType.B128Literal => $"B128({Real(value: value, suffix: "b128")})",
             TokenType.D32Literal => $"D32({Real(value: value, suffix: "d32")})",
             TokenType.D64Literal => $"D64({Real(value: value, suffix: "d64")})",
             TokenType.D128Literal => $"D128({Real(value: value, suffix: "d128")})",
             TokenType.DecimalLiteral => $"Decimal({Real(value: value, suffix: "")})",
-            TokenType.J32Literal => $"J32({Real(value: value, suffix: "j32")})",
-            TokenType.J64Literal => $"J64({Real(value: value, suffix: "j64")})",
-            TokenType.J128Literal => $"J128({Real(value: value, suffix: "j128")})",
-            TokenType.JnLiteral => $"Jn({Real(value: value, suffix: "j")})",
+            TokenType.ImaginaryLiteral => $"Imaginary({Real(value: value, suffix: "i")})",
             // Context-inferred bare literals with no resolved type available at this call site.
             TokenType.UndecidedInteger => $"Integer({Int10(value: value, suffix: "")})",
             TokenType.UndecidedDecimal => $"Decimal({Real(value: value, suffix: "")})",
@@ -1108,8 +1105,8 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string flags = string.Join(separator: connective, values: node.TestFlags);
         string kind = node.Kind switch
         {
-            FlagsTestKind.Is => "is",
-            FlagsTestKind.IsNot => "isnot",
+            FlagsTestKind.Have => "have",
+            FlagsTestKind.Lack => "lack",
             _ => node.Kind
                      .ToString()
                      .ToLower()

@@ -15,20 +15,20 @@ routine start()
   var c = Color.RED
   show(f"c: {c}")
   show(f"c (diagnose): {c:?}")
-  show(f"c is RED: {c is Color.RED}")
-  show(f"c is GREEN: {c is Color.GREEN}")
-  show(f"c isnot BLUE: {c isnot Color.BLUE}")
+  show(f"c == RED: {c == Color.RED}")
+  show(f"c == GREEN: {c == Color.GREEN}")
+  show(f"c != BLUE: {c != Color.BLUE}")
 
   # Switching via when
   when c
-    is Color.RED   => show("  matched RED")
-    is Color.GREEN => show("  matched GREEN")
+    == Color.RED   => show("  matched RED")
+    == Color.GREEN => show("  matched GREEN")
     else           => show("  matched BLUE")
 
   # Numeric-valued choice
   var s = HttpStatus.OK
   show(f"s: {s}")
-  show(f"s == OK: {s is HttpStatus.OK}")
+  show(f"s == OK: {s == HttpStatus.OK}")
 
   show("DONE")
   return

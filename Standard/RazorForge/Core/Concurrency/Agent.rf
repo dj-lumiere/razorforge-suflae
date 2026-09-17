@@ -53,7 +53,7 @@ record Agent[AnyType T] obeys Assignable
 ### List element miscompiles today; going through a member routine monomorphizes the receiver cleanly).
 ### :returns: true if coroutine-backed, false if thread-backed.
 routine Agent[T].is_coro() -> Bool
-  return me.kind is AgentKind.CORO
+  return me.kind == AgentKind.CORO
 
 ### The raw coroutine handle (valid for kind CORO). Internal plumbing for `race!`.
 ### :returns: the rf_coro* as a CPtr.
@@ -71,7 +71,7 @@ routine Agent[T].task_handle() -> Address
 ### read it. Branches on kind: a coroutine is done at status COMPLETED (3); a thread at COMPLETED (4).
 ### :returns: `true` if the work has completed.
 routine Agent[T].is_done() -> Bool
-  if me.kind is AgentKind.CORO
+  if me.kind == AgentKind.CORO
     if me.coro.is_none()
       return true
     danger
@@ -94,7 +94,7 @@ routine Agent[T].is_running() -> Bool
 ### read through a member routine so it works on a `List[Agent[T]]` element accessed as a temporary
 ### (the flag persists in C even though the RF `Agent` copy does not).
 dangerous routine Agent[T].request_cancel()
-  if me.kind is AgentKind.CORO
+  if me.kind == AgentKind.CORO
     if not me.coro.is_none()
       C::rf_coro_request_cancel(coro: me.coro)
     return
@@ -123,7 +123,7 @@ routine Agent[T].waitfor(deadline: Duration) -> Agent[T]
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 ### :returns: The value the routine returned.
 routine Agent[T].retrieve!() -> T
-  if me.kind is AgentKind.CORO
+  if me.kind == AgentKind.CORO
     if me.coro.is_none()
       throw TaskSpawnError()
     danger
@@ -192,7 +192,7 @@ routine Agent[T].retrieve!() -> T
 ### :throws: {TaskSpawnError} if the work could not be spawned.
 ### :throws: {TaskTimeoutError} if a deadline was set and elapsed before completion.
 routine Agent[T].execute!()
-  if me.kind is AgentKind.CORO
+  if me.kind == AgentKind.CORO
     if me.coro.is_none()
       throw TaskSpawnError()
     danger
@@ -224,7 +224,7 @@ routine Agent[T].execute!()
 ### rendezvous — a still-running worker (a deadline give-up, or a race loser) frees its own block as its
 ### final act, so reaping is NON-BLOCKING (no join).
 dangerous routine Agent[T].reap()
-  if me.kind is AgentKind.CORO
+  if me.kind == AgentKind.CORO
     if not me.coro.is_none()
       var status = C::rf_coro_status_get(coro: me.coro)
       # Dispose race-free against the work-stealing workers. `rf_sched_dispose_default` detaches the

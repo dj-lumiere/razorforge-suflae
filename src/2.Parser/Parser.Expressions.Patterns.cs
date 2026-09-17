@@ -16,8 +16,8 @@ public partial class Parser
         var flags = new List<string> { firstFlag };
         List<string>? excluded = null;
         FlagsTestKind kind = isNegated
-            ? FlagsTestKind.IsNot
-            : FlagsTestKind.Is;
+            ? FlagsTestKind.Lack
+            : FlagsTestKind.Have;
 
         if (CheckAndAdvance(type: TokenType.And))
         {
@@ -574,18 +574,15 @@ public partial class Parser
                 TokenType.U256Literal,
                 TokenType.AddressLiteral,
                 TokenType.IntegerLiteral,
-                TokenType.F16Literal,
-                TokenType.F32Literal,
-                TokenType.F64Literal,
-                TokenType.F128Literal,
+                TokenType.B16Literal,
+                TokenType.B32Literal,
+                TokenType.B64Literal,
+                TokenType.B128Literal,
                 TokenType.D32Literal,
                 TokenType.D64Literal,
                 TokenType.D128Literal,
                 TokenType.DecimalLiteral,
-                TokenType.J32Literal,
-                TokenType.J64Literal,
-                TokenType.J128Literal,
-                TokenType.JnLiteral))
+                TokenType.ImaginaryLiteral))
         {
             // Parse the literal
             Expression literal = ParsePostfix();

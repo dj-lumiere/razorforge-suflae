@@ -147,14 +147,14 @@ public record IsPatternExpression(
     }
 }
 
-/// <summary>Flags test kind: is or isnot.</summary>
+/// <summary>Flags test kind: have or lack.</summary>
 public enum FlagsTestKind
 {
-    /// <summary>Tests whether the subject has the specified flags.</summary>
-    Is,
+    /// <summary>Tests whether the subject HAS the specified flags (`flags have READ`).</summary>
+    Have,
 
-    /// <summary>Tests whether the subject does not have the specified flags.</summary>
-    IsNot
+    /// <summary>Tests whether the subject LACKS the specified flags (`flags lack READ`).</summary>
+    Lack
 }
 
 /// <summary>Connective for combining flag names in a flags test.</summary>

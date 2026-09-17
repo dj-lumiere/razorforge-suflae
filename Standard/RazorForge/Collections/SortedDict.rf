@@ -513,7 +513,7 @@ routine SortedDict[K, V].get_from_node!(node: Accessing[BTreeDictNode[K, V]], ke
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
 routine SortedDict[K, V].setitem!(key: Accessing[K], value: V)
-  if key notin me
+  if me lack key
     absent
   discard me.add(key: key, value: value)
   return

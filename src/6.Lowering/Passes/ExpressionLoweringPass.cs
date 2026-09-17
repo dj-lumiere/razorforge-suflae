@@ -530,9 +530,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 Operator: BinaryOperator.Is or BinaryOperator.IsNot,
                 Left.ResolvedType: VariantTypeSymbol
             } => LowerVariantIsExpression(bin: bin),
-            // Step 1f-3: choice discriminant test -> S32 equality
+            // Step 1f-3: choice discriminant test (`is`/`isnot` or `==`/`!=`) -> S32 equality
             {
-                Operator: BinaryOperator.Is or BinaryOperator.IsNot,
+                Operator: BinaryOperator.Is or BinaryOperator.IsNot
+                    or BinaryOperator.Equal or BinaryOperator.NotEqual,
                 Left.ResolvedType: ChoiceTypeSymbol ct
             } => LowerChoiceIsExpression(bin: bin, choiceType: ct),
             // Step 1g: boolean And -> short-circuit ConditionalExpression
@@ -1170,15 +1171,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         return undecDec.ResolvedType?.Name switch
         {
-            "F16" => TokenType.F16Literal,
-            "F32" => TokenType.F32Literal,
-            "F128" => TokenType.F128Literal,
+            "B16" => TokenType.B16Literal,
+            "B32" => TokenType.B32Literal,
+            "B128" => TokenType.B128Literal,
             "D32" => TokenType.D32Literal,
             "D64" => TokenType.D64Literal,
             "D128" => TokenType.D128Literal,
             "Decimal" => TokenType.DecimalLiteral,
             _ => TokenType
-               .F64Literal // This should be language specific: Suflae should use DecimalLiteral
+               .B64Literal // This should be language specific: Suflae should use DecimalLiteral
         };
     }
 
@@ -1291,42 +1292,28 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 ResolvedType = u64Type
             };
 
-        Expression bitResult = flagsTest.Kind switch
+        // `(subject & mask)` — the tested bits of the subject. Immutable AST record, safe to share.
+        var masked = new BinaryExpression(Left: loweredSubj,
+            Operator: BinaryOperator.BitwiseAnd,
+            Right: maskLit,
+            Location: loc) { ResolvedType = u64Type };
+        bool isAnd = flagsTest.Connective == FlagsTestConnective.And;
+        // Per the have/lack test table (subject elided; and/or distribute over the repeated predicate):
+        //   have R and W -> (s & m) == m   (has ALL)
+        //   have R or  W -> (s & m) != 0   (has ANY)
+        //   lack R and W -> (s & m) == 0   (has NONE)
+        //   lack R or  W -> (s & m) != m   (missing at least one)
+        (BinaryOperator cmpOp, Expression rhs) = (flagsTest.Kind, isAnd) switch
         {
-            FlagsTestKind.Is when flagsTest.Connective == FlagsTestConnective.And => new
-                BinaryExpression(
-                    Left: new BinaryExpression(Left: loweredSubj,
-                        Operator: BinaryOperator.BitwiseAnd,
-                        Right: maskLit,
-                        Location: loc) { ResolvedType = u64Type },
-                    Operator: BinaryOperator.Equal,
-                    Right: maskLit,
-                    Location: loc) { ResolvedType = boolType },
-            FlagsTestKind.Is => new BinaryExpression(
-                Left: new BinaryExpression(Left: loweredSubj,
-                    Operator: BinaryOperator.BitwiseAnd,
-                    Right: maskLit,
-                    Location: loc) { ResolvedType = u64Type },
-                Operator: BinaryOperator.NotEqual,
-                Right: zeroLit,
-                Location: loc) { ResolvedType = boolType },
-            FlagsTestKind.IsNot => new BinaryExpression(
-                Left: new BinaryExpression(Left: loweredSubj,
-                    Operator: BinaryOperator.BitwiseAnd,
-                    Right: maskLit,
-                    Location: loc) { ResolvedType = u64Type },
-                Operator: BinaryOperator.NotEqual,
-                Right: maskLit,
-                Location: loc) { ResolvedType = boolType },
-            _ => new BinaryExpression(
-                Left: new BinaryExpression(Left: loweredSubj,
-                    Operator: BinaryOperator.BitwiseAnd,
-                    Right: maskLit,
-                    Location: loc) { ResolvedType = u64Type },
-                Operator: BinaryOperator.Equal,
-                Right: maskLit,
-                Location: loc) { ResolvedType = boolType }
+            (FlagsTestKind.Have, true) => (BinaryOperator.Equal, (Expression)maskLit),
+            (FlagsTestKind.Have, false) => (BinaryOperator.NotEqual, zeroLit),
+            (FlagsTestKind.Lack, true) => (BinaryOperator.Equal, zeroLit),
+            _ => (BinaryOperator.NotEqual, maskLit)
         };
+        Expression bitResult = new BinaryExpression(Left: masked,
+            Operator: cmpOp,
+            Right: rhs,
+            Location: loc) { ResolvedType = boolType };
 
         if (excludedMask > 0)
         {
@@ -2188,7 +2175,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         (List<Statement> leftH, Expression loweredLeft) = LowerExpr(expr: bin.Left);
         (List<Statement> rightH, Expression loweredRight) = LowerExpr(expr: bin.Right);
-        bool isNot = bin.Operator == BinaryOperator.IsNot;
+        bool isNot = bin.Operator is BinaryOperator.IsNot or BinaryOperator.NotEqual;
         SourceLocation loc = bin.Location;
 
         TypeSymbol? boolType = ctx.Registry.LookupType(name: "Bool");

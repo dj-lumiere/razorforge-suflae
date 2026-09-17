@@ -25,7 +25,7 @@ internal enum NumericTypeKind
     /// <summary>Address-sized unsigned integer (Address).</summary>
     Address,
 
-    /// <summary>Binary floating point (f16, f32, f64, f128).</summary>
+    /// <summary>Binary floating point (b16, b32, b64, b128).</summary>
     BinaryFloat,
 
     /// <summary>Decimal floating point (d32, d64, d128).</summary>
@@ -1247,7 +1247,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Returns true if the type implements the <c>BinaryFP</c> protocol (i.e., is a binary
-    /// floating-point type such as f32 or f64).
+    /// floating-point type such as b32 or b64).
     /// </summary>
     private bool IsFloatType(TypeSymbol type)
     {
@@ -1265,10 +1265,10 @@ public sealed partial class SemanticVerifier
         return ImplementsProtocol(type: type, protocolName: "DecimalFP");
     }
 
-    /// <summary>Returns true if the type is a complex number type (C32, C64, C128, Complex).</summary>
+    /// <summary>Returns true if the type is a complex number type (C64, C128, C256, Complex).</summary>
     private static bool IsComplexType(TypeSymbol type)
     {
-        return type.Name is "C32" or "C64" or "C128" or "Complex";
+        return type.Name is "C64" or "C128" or "C256" or "Complex";
     }
 
     /// <summary>
@@ -1293,6 +1293,15 @@ public sealed partial class SemanticVerifier
 
     private bool SupportsOperator(TypeSymbol type, BinaryOperator op)
     {
+        // Choice types support ==/!= natively: they carry a discrete integer discriminant, and
+        // ExpressionLoweringPass lowers `a == b` / `a != b` to an S32 tag compare (there is no `eq`
+        // member routine to find, so the routine-lookup below would spuriously reject them).
+        if (type is ChoiceTypeSymbol &&
+            op is BinaryOperator.Equal or BinaryOperator.NotEqual)
+        {
+            return true;
+        }
+
         // Check the BASE wired memberRoutine, not the derived one: `!=`/`==` are both backed by `eq`
         // (ne is auto-derived from eq), and all ordering operators are backed by `cmp`
         // (lt/le/gt/ge are auto-derived). Protocols (Equatable/Comparable) declare only the
@@ -1517,8 +1526,9 @@ public sealed partial class SemanticVerifier
     {
         return op is BinaryOperator.Equal or BinaryOperator.NotEqual or BinaryOperator.Less
             or BinaryOperator.LessEqual or BinaryOperator.Greater or BinaryOperator.GreaterEqual
-            or BinaryOperator.In or BinaryOperator.NotIn or BinaryOperator.Is
-            or BinaryOperator.IsNot or BinaryOperator.Obeys or BinaryOperator.Disobeys;
+            or BinaryOperator.In or BinaryOperator.NotIn or BinaryOperator.Have or BinaryOperator.Lack
+            or BinaryOperator.Is or BinaryOperator.IsNot or BinaryOperator.Obeys
+            or BinaryOperator.Disobeys;
     }
 
     /// <summary>Returns true if the operator is a short-circuit logical operator (<c>and</c> or <c>or</c>).</summary>
@@ -1607,6 +1617,22 @@ public sealed partial class SemanticVerifier
                 ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
                     message:
                     $"Type '{right.Name}' does not support 'in'/'notin' (no contains member routine).",
+                    location: location);
+            }
+
+            return;
+        }
+
+        // Container-first membership (have, lack): the LEFT is the container. Flags membership is a bit
+        // test (handled before this by TryAnalyzeFlagsOperator); any other container must have `contains`.
+        if (op is BinaryOperator.Have or BinaryOperator.Lack)
+        {
+            if (left is not FlagsTypeSymbol &&
+                _registry.LookupMemberRoutine(type: left, memberRoutineName: "contains") == null)
+            {
+                ReportError(code: SemanticDiagnosticCode.IncompatibleComparisonTypes,
+                    message:
+                    $"Type '{left.Name}' does not support 'have'/'lack' (no contains member routine).",
                     location: location);
             }
 

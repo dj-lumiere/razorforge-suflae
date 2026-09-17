@@ -335,7 +335,7 @@ routine Set[T].union(other: Accessing[Set[T]]) -> Set[T]
 routine Set[T].intersection(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
-    if val in other
+    if other have val
       discard result.add(val)
   return steal result
 
@@ -343,7 +343,7 @@ routine Set[T].intersection(other: Accessing[Set[T]]) -> Set[T]
 routine Set[T].difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
-    if val notin other
+    if other lack val
       discard result.add(val)
   return steal result
 
@@ -351,10 +351,10 @@ routine Set[T].difference(other: Accessing[Set[T]]) -> Set[T]
 routine Set[T].symmetric_difference(other: Accessing[Set[T]]) -> Set[T]
   var result = Set[T]()
   each val in me
-    if val notin other
+    if other lack val
       discard result.add(val)
   each val in other
-    if val notin me
+    if me lack val
       discard result.add(val)
   return steal result
 
@@ -363,7 +363,7 @@ routine Set[T].is_subset(other: Accessing[Set[T]]) -> Bool
   if me.count > other.count
     return false
   each val in me
-    if val notin other
+    if other lack val
       return false
   return true
 
@@ -374,7 +374,7 @@ routine Set[T].is_superset(other: Accessing[Set[T]]) -> Bool
 @readonly
 routine Set[T].is_disjoint(other: Accessing[Set[T]]) -> Bool
   each val in me
-    if val in other
+    if other have val
       return false
   return true
 
@@ -430,7 +430,7 @@ routine Set[T].eq(other: Accessing[Set[T]]) -> Bool
   if me.count != other.count
     return false
   each val in me
-    if val notin other
+    if other lack val
       return false
   return true
 

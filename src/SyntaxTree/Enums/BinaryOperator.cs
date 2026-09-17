@@ -134,11 +134,19 @@ public enum BinaryOperator
     /// <summary>Three-way comparison (spaceship) operator (&lt;=&gt;)</summary>
     ThreeWayComparator,
 
-    /// <summary>Collection membership operator (in)</summary>
+    /// <summary>Collection membership operator (in) — RETIRED at the expression level (iteration-only);
+    /// kept for legacy mapping. Use <see cref="Have"/>.</summary>
     In,
 
-    /// <summary>Negated collection membership operator (notin)</summary>
+    /// <summary>Negated collection membership operator (notin) — RETIRED. Use <see cref="Lack"/>.</summary>
     NotIn,
+
+    /// <summary>Container-first containment operator (have): <c>coll have x</c> / <c>flags have READ</c>.
+    /// Container is the LEFT operand — no operand reversal in lowering (unlike <see cref="In"/>).</summary>
+    Have,
+
+    /// <summary>Negated container-first containment operator (lack): <c>coll lack x</c>.</summary>
+    Lack,
 
     /// <summary>Type check or pattern matching operator (is)</summary>
     Is,
@@ -260,6 +268,8 @@ public static class BinaryOperatorExtensions
 
                 BinaryOperator.In => "in",
                 BinaryOperator.NotIn => "notin",
+                BinaryOperator.Have => "have",
+                BinaryOperator.Lack => "lack",
                 BinaryOperator.Is => "is",
                 BinaryOperator.IsNot => "isnot",
                 BinaryOperator.Obeys => "obeys",
@@ -341,11 +351,15 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.LogicalLeftShift => "lshl",
                 BinaryOperator.LogicalRightShift => "lshr",
 
-                // Membership (note: operands are reversed in desugaring)
-                // x in coll -> coll.contains(x)
-                // x notin coll -> coll.notcontains(x)
+                // Legacy element-first membership (operands reversed in desugaring):
+                // x in coll -> coll.contains(x); x notin coll -> coll.notcontains(x)
                 BinaryOperator.In => "contains",
                 BinaryOperator.NotIn => "notcontains",
+
+                // Container-first containment (NO operand reversal — container is already the receiver):
+                // coll have x -> coll.contains(x); coll lack x -> coll.notcontains(x)
+                BinaryOperator.Have => "contains",
+                BinaryOperator.Lack => "notcontains",
 
                 // Unwrap operators
                 BinaryOperator.NoneCoalesce => "unwrap_or",

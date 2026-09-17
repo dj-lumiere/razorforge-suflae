@@ -8,8 +8,8 @@ routine start()
   show(f"is_empty: {s.is_empty()}")
 
   # contains / starts_with / ends_with
-  show(f"contains 'world': {"world" in s}")
-  show(f"contains 'absent': {"absent" in s}")
+  show(f"contains 'world': {s have "world"}")
+  show(f"contains 'absent': {s have "absent"}")
   show(f"starts_with 'hello': {s.starts_with(prefix: "hello")}")
   show(f"ends_with 'world': {s.ends_with(suffix: "world")}")
 

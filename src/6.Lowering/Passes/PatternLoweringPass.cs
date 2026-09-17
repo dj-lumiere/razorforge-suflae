@@ -635,7 +635,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
             case FlagsPattern fp:
             {
                 var cond = new FlagsTestExpression(Subject: subject,
-                    Kind: FlagsTestKind.Is,
+                    Kind: fp.IsNegated ? FlagsTestKind.Lack : FlagsTestKind.Have,
                     TestFlags: fp.FlagNames,
                     Connective: fp.Connective,
                     ExcludedFlags: fp.ExcludedFlags,

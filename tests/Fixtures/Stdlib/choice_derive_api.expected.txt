@@ -7,5 +7,5 @@ all_cases size: 4
 hash HEART==HEART: true
 hash HEART==CLUB: false
 from 2: DIAMOND
-from 2 is DIAMOND: true
+from 2 == DIAMOND: true
 DONE

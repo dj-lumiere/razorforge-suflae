@@ -226,10 +226,12 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Verifies semantic analysis behavior for choice equality and reports the expected error.
+    /// Choice equality (<c>==</c>/<c>!=</c>) is ALLOWED — a choice is a plain enum whose cases compare by
+    /// their discriminant. Only genuine ARITHMETIC/ORDERING on a choice is rejected (see the <c>&lt;</c>
+    /// test above). So <c>d == SOUTH</c> must NOT report <see cref="SemanticDiagnosticCode.ArithmeticOnChoiceType"/>.
     /// </summary>
     [Fact]
-    public void Analyze_ChoiceEquality_ReportsError()
+    public void Analyze_ChoiceEquality_IsAllowed()
     {
         string source = """
                         choice Direction
@@ -243,7 +245,7 @@ public class ChoiceValidationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
 

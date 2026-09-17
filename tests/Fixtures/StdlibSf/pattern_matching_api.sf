@@ -17,8 +17,8 @@ routine classify(n: S64) -> Text
 
 routine name_color(c: Color) -> Text
   when c
-    is Color.RED   => return "red"
-    is Color.GREEN => return "green"
+    == Color.RED   => return "red"
+    == Color.GREEN => return "green"
     else           => return "blue"
 
 routine start()

@@ -9,7 +9,7 @@ needs T obeys Equatable, Hashable
   var s: Set[T] = Set[T]()
   each x in items
     discard s.add(value: x)
-  return target in s
+  return s have target
 
 routine start()
   var nums: List[S64] = [10, 20, 30, 40]

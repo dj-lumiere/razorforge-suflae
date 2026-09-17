@@ -382,7 +382,7 @@ routine Dict[K, V].getitem!(key: Accessing[K]) -> V
   return me.read_val_at(me.read_index(slot))
 
 routine Dict[K, V].setitem!(key: Accessing[K], value: V)
-  if key notin me
+  if me lack key
     absent
   var slot = me.find_slot(key)
   me.write_val_at(ei: me.read_index(slot), val: value)

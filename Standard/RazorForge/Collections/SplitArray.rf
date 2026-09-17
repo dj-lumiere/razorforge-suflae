@@ -213,6 +213,6 @@ routine SplitArray[T, N].cmp(you: SplitArray[T, N]) -> ComparisonSign
 needs T obeys Comparable
   each i in 0u64 til N
     var sign = me[i].cmp(you[i])
-    if sign isnot SAME
+    if sign != SAME
       return sign
   return SAME

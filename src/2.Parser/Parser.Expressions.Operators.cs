@@ -432,11 +432,13 @@ public partial class Parser
     {
         Expression expr = ParseBitwiseOr();
 
-        // Handle is/isnot/in/notin/obeys/disobeys expressions when not in when pattern/clause context
+        // Handle is/isnot/have/lack/obeys/disobeys expressions when not in when pattern/clause context.
+        // (`in`/`notin` are RETIRED at the expression level — `in` is iteration-only, containment is
+        // `have`/`lack`.)
         while (!_inWhenPatternContext && !_inWhenClauseBody && CheckAndAdvance(TokenType.Is,
                    TokenType.IsNot,
-                   TokenType.In,
-                   TokenType.NotIn,
+                   TokenType.Have,
+                   TokenType.Lack,
                    TokenType.Obeys,
                    TokenType.Disobeys))
         {
@@ -446,6 +448,10 @@ public partial class Parser
             if (op.Type is TokenType.Is or TokenType.IsNot)
             {
                 expr = ParseIsOrIsNotPattern(expr: expr, op: op, location: location);
+            }
+            else if (op.Type is TokenType.Have or TokenType.Lack)
+            {
+                expr = ParseHaveOrLackExpression(container: expr, op: op, location: location);
             }
             else
             {
@@ -459,6 +465,39 @@ public partial class Parser
         }
 
         return expr;
+    }
+
+    /// <summary>
+    /// Parses a container-first containment expression (<c>container have/lack rhs</c>), the operator
+    /// already consumed. A bare flag name followed by <c>and</c>/<c>or</c>/<c>but</c> is a multi-flag
+    /// <see cref="FlagsTestExpression"/> (all/any/none + exclusion); anything else — a single flag or a
+    /// general collection element — is a <see cref="BinaryExpression"/> with <see cref="BinaryOperator.Have"/>
+    /// / <see cref="BinaryOperator.Lack"/> that SA resolves by the container's type (flags bit-test vs
+    /// <c>contains</c>).
+    /// </summary>
+    private Expression ParseHaveOrLackExpression(Expression container, Token op,
+        SourceLocation location)
+    {
+        bool isNegated = op.Type == TokenType.Lack;
+
+        // Multi-flag chain: `have READ and WRITE`, `lack READ or WRITE`, `have READ but WRITE`.
+        if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+               .Type is TokenType.And or TokenType.Or or TokenType.But)
+        {
+            string firstFlag = ConsumeIdentifier(errorMessage: "Expected flag name");
+            return ParseFlagsTestChain(subject: container,
+                firstFlag: firstFlag,
+                isNegated: isNegated,
+                location: location);
+        }
+
+        Expression element = ParseBitwiseOr();
+        return new BinaryExpression(Left: container,
+            Operator: isNegated
+                ? BinaryOperator.Lack
+                : BinaryOperator.Have,
+            Right: element,
+            Location: location);
     }
 
     /// <summary>
@@ -483,14 +522,13 @@ public partial class Parser
                 "The 'None' pattern binds no value — remove the binding or destructuring after 'None'.");
         }
 
-        // Check if this is a flags test chain: identifier followed by and/or/but
+        // `is` matches a variant TYPE only — flags membership moved to `have`/`lack`. A flags-chain
+        // shape here (`is READ and WRITE`) is now an error steering to the new operator.
         if (Check(type: TokenType.And) || Check(type: TokenType.Or) || Check(type: TokenType.But))
         {
-            string firstFlag = type.Name;
-            return ParseFlagsTestChain(subject: expr,
-                firstFlag: firstFlag,
-                isNegated: isNegated,
-                location: location);
+            throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                message:
+                $"'is' matches a variant TYPE only. For a flags membership test, use '{expr switch { IdentifierExpression ie => ie.Name, _ => "flags" }} have {type.Name} …' (or 'lack …').");
         }
 
         return BuildIsPatternExpression(expr: expr,

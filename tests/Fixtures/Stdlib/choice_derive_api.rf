@@ -32,7 +32,7 @@ routine start()
   # Me(from: S32) — reverse constructor: discriminant back to the case.
   var rebuilt = Suit(from: 2)
   show(f"from 2: {rebuilt}")
-  show(f"from 2 is DIAMOND: {rebuilt is Suit.DIAMOND}")
+  show(f"from 2 == DIAMOND: {rebuilt == Suit.DIAMOND}")
 
   show("DONE")
   return

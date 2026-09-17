@@ -118,7 +118,7 @@ public class ExhaustivenessTests
     /// Verifies that validates when expression choice equals operator reports error.
     /// </summary>
     [Fact]
-    public void WhenExpression_Choice_EqualsOperator_ReportsError()
+    public void WhenExpression_Choice_EqualsOperator_IsAccepted()
     {
         string source = """
                         choice Direction
@@ -128,13 +128,13 @@ public class ExhaustivenessTests
                           WEST
                         routine test(d: Direction) -> S32
                           return when d
-                            == Direction.NORTH => 1
-                            else => 0
-                          return
+                            == Direction.NORTH => 1_s32
+                            else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        // Choice case matching now uses `==` / `!=` — this must NOT be flagged.
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
 
@@ -650,16 +650,16 @@ public class ExhaustivenessTests
                           WEST
                         routine test(d: Direction) -> S32
                           return when d
-                            is NORTH => 1
-                            == Direction.SOUTH => 2
-                            is EAST => 3
-                            is WEST => 4
-                          return
+                            is NORTH => 1_s32
+                            == Direction.SOUTH => 2_s32
+                            is EAST => 3_s32
+                            is WEST => 4_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
+        // `is` no longer matches a choice case — the `is` arms must be flagged (use `==`).
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
     /// Verifies that validates when expression choice is pattern invalid case reports error.
@@ -700,14 +700,14 @@ public class ExhaustivenessTests
                           WEST
                         routine test(d: Direction) -> S32
                           return when d
-                            is NORTH n => 1
-                            else => 0
-                          return
+                            is NORTH n => 1_s32
+                            else => 0_s32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
+        // `is` no longer matches a choice case (with or without a binding) — steer to `==`.
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
+            filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
 
     #endregion

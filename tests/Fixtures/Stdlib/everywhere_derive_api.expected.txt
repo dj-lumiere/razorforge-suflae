@@ -4,5 +4,5 @@ a < b: true
 a <= c: true
 b > a: true
 b >= a: true
-a.cmp(b) is ME_SMALL: true
-a.cmp(c) is SAME: true
+a.cmp(b) == ME_SMALL: true
+a.cmp(c) == SAME: true

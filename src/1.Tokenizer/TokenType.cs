@@ -125,17 +125,17 @@ public enum TokenType
     AddressLiteral,
 
     // Floating point
-    /// <summary>16-bit floating point literal (3.14f16)</summary>
-    F16Literal,
+    /// <summary>16-bit floating point literal (3.14b16)</summary>
+    B16Literal,
 
-    /// <summary>32-bit floating point literal (3.14f32)</summary>
-    F32Literal,
+    /// <summary>32-bit floating point literal (3.14b32)</summary>
+    B32Literal,
 
-    /// <summary>64-bit floating point literal (3.14f64)</summary>
-    F64Literal,
+    /// <summary>64-bit floating point literal (3.14b64)</summary>
+    B64Literal,
 
-    /// <summary>128-bit floating point literal (3.14f128)</summary>
-    F128Literal,
+    /// <summary>128-bit floating point literal (3.14b128)</summary>
+    B128Literal,
 
     // Decimal
     /// <summary>32-bit decimal literal (3.14d32)</summary>
@@ -151,17 +151,9 @@ public enum TokenType
     DecimalLiteral,
 
     // Imaginary (for complex numbers)
-    /// <summary>32-bit imaginary literal (4.0j32)</summary>
-    J32Literal,
-
-    /// <summary>64-bit imaginary literal (4.0j64 or 4.0j)</summary>
-    J64Literal,
-
-    /// <summary>128-bit imaginary literal (4.0j128)</summary>
-    J128Literal,
-
-    /// <summary>Arbitrary precision imaginary literal (4.0jn)</summary>
-    JnLiteral,
+    /// <summary>Width-less imaginary literal (`4.0i` or `4.0_i`). Width/radix is fixed by context
+    /// (the surrounding complex type); with no context it defaults to <c>C128</c>.</summary>
+    ImaginaryLiteral,
 
     #endregion
 
@@ -496,14 +488,21 @@ public enum TokenType
     /// </summary>
     Steal,
 
-    /// <summary>In keyword for iteration and containment (each i in list, x in set)</summary>
+    /// <summary>In keyword for iteration ONLY (each i in list). Containment moved to `have`/`lack`.</summary>
     In,
 
-    /// <summary>Not in keyword - negated containment check (x notin set)</summary>
+    /// <summary>Not in keyword - RETIRED containment token, retained only for the BinaryOperator mapping;
+    /// the tokenizer no longer emits it (use `lack`).</summary>
     NotIn,
 
     /// <summary>Is not keyword - negated type/pattern check (x isnot Type)</summary>
     IsNot,
+
+    /// <summary>Have keyword - container-first containment (coll have x, flags have READ and WRITE).</summary>
+    Have,
+
+    /// <summary>Lack keyword - negated container-first containment (coll lack x, flags lack READ).</summary>
+    Lack,
 
     /// <summary>To keyword for ascending Range (each i in 1 to 10)</summary>
     To,

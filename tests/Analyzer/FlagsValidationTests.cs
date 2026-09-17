@@ -390,7 +390,7 @@ public class FlagsValidationTests
                           WRITE
 
                         routine test(perms: Permissions)
-                          var result = perms is EXECUTE
+                          var result = perms have READ or EXECUTE
                           return
                         """;
 

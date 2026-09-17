@@ -15,13 +15,13 @@ routine start()
   show(f"size after add 10/20/30/20: {s.count()}")
   show(f"contents: {s}")
 
-  show(f"contains 20: {20 in s}")
-  show(f"contains 99: {99 in s}")
+  show(f"contains 20: {s have 20}")
+  show(f"contains 99: {s have 99}")
 
   discard s.remove(value: 10)
   show(f"size after remove(10): {s.count()}")
   show(f"contents after remove: {s}")
-  show(f"contains 10: {10 in s}")
+  show(f"contains 10: {s have 10}")
 
   show(f"diagnose: {s.diagnose()}")
 

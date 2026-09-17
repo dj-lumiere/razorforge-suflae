@@ -96,10 +96,18 @@ public sealed partial class SemanticVerifier
                 break;
 
             case ComparisonPattern cmp when matchedType is ChoiceTypeSymbol:
-                // Choice types must use 'is CASE_NAME', not '== CASE_NAME'
-                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
-                    message: "Use 'is' instead of comparison operators for choice case matching.",
-                    location: cmp.Location);
+                // Choice case matching in a when-arm uses `== CASE` / `!= CASE` (discriminant equality).
+                // Ordering (`<`, `<=`, …) has no meaning on a choice.
+                if (cmp.Operator is not (TokenType.Equal or TokenType.NotEqual))
+                {
+                    ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                        message:
+                        $"Operator '{cmp.Operator}' cannot match a choice case. Use '== CASE' / '!= CASE'.",
+                        location: cmp.Location);
+                    break;
+                }
+
+                _ = AnalyzeExpression(expression: cmp.Value, expectedType: matchedType);
                 break;
         }
     }
@@ -217,21 +225,11 @@ public sealed partial class SemanticVerifier
             ExtractChoiceCaseFromTypePattern(typePat: typePat, choice: choiceForIs);
         if (choiceCaseName != null)
         {
-            // Valid choice case match via 'is' — no type resolution needed
-            if (typePat.VariableName != null)
-            {
-                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
-                    message: "Choice case patterns cannot bind variables.",
-                    location: typePat.Location);
-            }
-
-            if (typePat.Bindings is { Count: > 0 })
-            {
-                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
-                    message: "Choice case patterns cannot destructure.",
-                    location: typePat.Location);
-            }
-
+            // `is` no longer matches a choice case — case matching is `==` / `!=`.
+            ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                message:
+                $"'is' cannot match a choice case '{choiceCaseName}'. Use '== {choiceCaseName}' / '!= {choiceCaseName}'.",
+                location: typePat.Location);
             return;
         }
 
@@ -249,30 +247,15 @@ public sealed partial class SemanticVerifier
     private void HandleFlagsMemberTypePattern(TypePattern typePat, FlagsTypeSymbol flagsForIs)
     {
         string flagName = typePat.Type.Name;
-        if (flagsForIs.Members.Any(predicate: m => m.Name == flagName))
+        // `is` no longer tests flags — a flags membership arm is `have`/`lack`.
+        if (flagsForIs.Members.Any(predicate: m => m.Name == flagName) ||
+            _registry.CurrentScope.LookupVariable(name: flagName)?.Type is FlagsTypeSymbol vf &&
+            vf.Name == flagsForIs.Name)
         {
-            if (typePat.VariableName != null)
-            {
-                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
-                    message: "Flags member patterns cannot bind variables.",
-                    location: typePat.Location);
-            }
-
-            if (typePat.Bindings is { Count: > 0 })
-            {
-                ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
-                    message: "Flags member patterns cannot destructure.",
-                    location: typePat.Location);
-            }
-
-            return;
-        }
-
-        // Option A: `subj is <name>` where <name> is a variable of the same
-        // flags type — lowered to subset check `(subj & rhs) == rhs`.
-        VariableInfo? flagVar = _registry.CurrentScope.LookupVariable(name: flagName);
-        if (flagVar?.Type is FlagsTypeSymbol varFlagsType && varFlagsType.Name == flagsForIs.Name)
-        {
+            ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                message:
+                $"'is' cannot test flags. Use 'have {flagName}' / 'lack {flagName}' in the when arm.",
+                location: typePat.Location);
             return;
         }
 

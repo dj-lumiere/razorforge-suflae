@@ -29,7 +29,8 @@ public sealed partial class SemanticVerifier
                 expectedType: expectedType),
             IdentifierExpression id => AnalyzeIdentifierExpression(id: id),
             CompoundAssignmentExpression compound => AnalyzeCompoundAssignment(compound: compound),
-            BinaryExpression binary => AnalyzeBinaryExpression(binary: binary),
+            BinaryExpression binary => AnalyzeBinaryExpression(binary: binary,
+                expectedType: expectedType),
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
             CallExpression call => AnalyzeCallExpression(call: call, expectedType: expectedType),
             MemberExpression member => AnalyzeMemberExpression(member: member),
@@ -467,7 +468,7 @@ public sealed partial class SemanticVerifier
             location: location);
     }
 
-    private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
+    private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary, TypeSymbol? expectedType = null)
     {
         // Buildtime `expand` gate: a comparison/equality on a buildtime member value (me.$nameof(m)) is a
         // gated wired op (eq/cmp) — it needs the enclosing template's `needs P everywhere` guarantee.
@@ -480,13 +481,22 @@ public sealed partial class SemanticVerifier
             _deadrefVariables.Remove(item: rebindId.Name);
         }
 
+        // A complex expected type propagates into arithmetic operands so both `3` and `4i` in
+        // `x: C64 = 3 + 4i` conform to C64 (real/imaginary literal -> complex; see
+        // ApplyContextualTypeInference). Only for arithmetic (+ - * /); other operators are unaffected.
+        TypeSymbol? complexCtx = expectedType != null && IsComplexType(type: expectedType) &&
+                                 binary.Operator is BinaryOperator.Add or BinaryOperator.Subtract
+                                     or BinaryOperator.Multiply or BinaryOperator.TrueDivide
+            ? expectedType
+            : null;
+
         // Logical negation should eventually lower through member routines rather than a not operator.
-        TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
+        TypeSymbol leftType = AnalyzeExpression(expression: binary.Left, expectedType: complexCtx);
         // Pass leftType as expected for assignments so RHS literals like `none`
         // see the target's carrier-slot type as their contextual expected type.
         TypeSymbol rightType = binary.Operator == BinaryOperator.Assign
             ? AnalyzeExpression(expression: binary.Right, expectedType: leftType)
-            : AnalyzeExpression(expression: binary.Right);
+            : AnalyzeExpression(expression: binary.Right, expectedType: complexCtx);
 
         (leftType, rightType) = ReinferBinaryLiteralOperands(binary: binary,
             leftType: leftType,
@@ -593,11 +603,27 @@ public sealed partial class SemanticVerifier
             case BinaryOperator.But:
                 result = leftType;
                 return true;
-            // #128: 'or' cannot be used to combine flags outside is/isnot tests
+            // Flags membership (container-first): `flags have READ` / `flags lack READ` → Bool. A single
+            // flag member/mask on the right; a multi-flag and/or/but chain is a FlagsTestExpression, not
+            // this binary. Both operands must be the same flags type.
+            case BinaryOperator.Have or BinaryOperator.Lack when leftType is FlagsTypeSymbol:
+                if (rightType.Name != leftType.Name)
+                {
+                    ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
+                        message:
+                        $"Flags '{binary.Operator.ToStringRepresentation()}' test needs a '{leftType.Name}' member on the right, but got '{rightType.Name}'.",
+                        location: binary.Location);
+                    result = ErrorTypeSymbol.Instance;
+                    return true;
+                }
+
+                result = _registry.LookupType(name: "Bool") ?? ErrorTypeSymbol.Instance;
+                return true;
+            // #128: 'or' cannot be used to combine flags outside have/lack tests
             case BinaryOperator.Or when leftType is FlagsTypeSymbol || rightType is FlagsTypeSymbol:
                 ReportError(code: SemanticDiagnosticCode.FlagsOrInAssignment,
                     message:
-                    "Cannot use 'or' to combine flags values. Use 'is FLAG_A or FLAG_B' for testing, " +
+                    "Cannot use 'or' to combine flags values. Use 'flags have FLAG_A or FLAG_B' for testing, " +
                     "or separate flag assignments.",
                     location: binary.Location);
                 result = leftType;
@@ -713,7 +739,7 @@ public sealed partial class SemanticVerifier
                 memberRoutineName: memberRoutineName);
 
         // Apply failable-call checking for integer arithmetic operators.
-        // Floats (F16/F32/F64/F128) and software decimals (D32/D64/D128) are excluded
+        // Floats (B16/B32/B64/B128) and software decimals (D32/D64/D128) are excluded
         // because the codegen emits raw float instructions (fadd/fmul/...) for them,
         // bypassing the checked dispatch path.
         bool isIntegerCheckedOp = memberRoutine is { IsFailable: true } &&
@@ -819,6 +845,26 @@ public sealed partial class SemanticVerifier
             leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
         }
 
+        // A bare real numeric literal paired with a complex PEER (no expected-type context, e.g.
+        // `3 + 4i` where `4i` defaulted to C128) conforms to the complex type as its real component,
+        // so the sum is one Complex+Complex op (Decision 4 / ApplyContextualTypeInference).
+        if (binary.Operator is BinaryOperator.Add or BinaryOperator.Subtract
+                or BinaryOperator.Multiply or BinaryOperator.TrueDivide)
+        {
+            if (binary.Right is LiteralExpression
+                    { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
+                IsComplexType(type: leftType) && !IsComplexType(type: rightType))
+            {
+                rightType = AnalyzeExpression(expression: binary.Right, expectedType: leftType);
+            }
+            else if (binary.Left is LiteralExpression
+                         { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
+                     IsComplexType(type: rightType) && !IsComplexType(type: leftType))
+            {
+                leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
+            }
+        }
+
         // Membership (`x in coll` / `x notin coll`) reverses to `coll.contains(x)`: the LEFT operand
         // must conform to the collection's ELEMENT type, not stay at the bare-literal default. Without
         // this a Suflae `20 in list_of_s64` keeps `20` at the `Integer` default → the element type
@@ -834,6 +880,20 @@ public sealed partial class SemanticVerifier
                 IsFixedWidthIntegerType(type: contArgs[index: 0]))
             {
                 leftType = AnalyzeExpression(expression: binary.Left,
+                    expectedType: contArgs[index: 0]);
+            }
+        }
+
+        // Container-first `coll have 20` / `coll lack 20`: the container is LEFT, the ELEMENT (to conform)
+        // is RIGHT — mirror the reversed In/NotIn handling above with the operands swapped.
+        if (binary.Operator is BinaryOperator.Have or BinaryOperator.Lack &&
+            binary.Right is LiteralExpression { LiteralType: TokenType.UndecidedInteger })
+        {
+            TypeSymbol container = UnwrapCollectionLiteralExpectedType(type: leftType);
+            if (container.TypeArguments is { Count: >= 1 } contArgs &&
+                IsFixedWidthIntegerType(type: contArgs[index: 0]))
+            {
+                rightType = AnalyzeExpression(expression: binary.Right,
                     expectedType: contArgs[index: 0]);
             }
         }
@@ -854,19 +914,24 @@ public sealed partial class SemanticVerifier
         // Flags do not support arithmetic/comparison/bitwise operators — use 'is'/'isnot'/'but'
         switch (leftType)
         {
-            case ChoiceTypeSymbol:
+            // Choices support `==`/`!=` (discriminant equality, lowered to an S32 tag compare by
+            // ExpressionLoweringPass); every other operator is rejected.
+            case ChoiceTypeSymbol
+                when binary.Operator is not (BinaryOperator.Equal or BinaryOperator.NotEqual):
                 ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
                     message:
-                    $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with choice type '{leftType.Name}'. Use 'is' for case matching.",
+                    $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with choice type '{leftType.Name}'. Use '==' / '!=' for case matching.",
                     location: binary.Location);
                 return true;
+            // Flags support `==`/`!=` (exact bitmask) and `have`/`lack` (container-first membership /
+            // bit tests); every other operator is rejected.
             case FlagsTypeSymbol
-                when binary.Operator is not (BinaryOperator.Equal or BinaryOperator.NotEqual):
+                when binary.Operator is not (BinaryOperator.Equal or BinaryOperator.NotEqual
+                    or BinaryOperator.Have or BinaryOperator.Lack):
                 ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                     message:
                     $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used " +
-                    $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for " + $"" +
-                    $"flag" + $" operations.",
+                    $"with flags type '{leftType.Name}'. Use 'have'/'lack'/'==' for flag operations.",
                     location: binary.Location);
                 return true;
         }

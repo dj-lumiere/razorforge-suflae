@@ -675,11 +675,11 @@ public partial class Parser
     /// indicate a flags chain (identifier followed by and/or/but).
     /// Examples: is READ and WRITE =&gt; ..., is READ or WRITE =&gt; ...
     /// </summary>
-    private FlagsPattern ParseFlagsIsWhenPattern()
+    private FlagsPattern ParseFlagsWhenPattern(bool isNegated)
     {
         SourceLocation loc = GetLocation();
         var flags = new List<string>();
-        flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'is'"));
+        flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'have'/'lack'"));
 
         FlagsTestConnective connective = FlagsTestConnective.And;
         List<string>? excluded = null;
@@ -712,6 +712,7 @@ public partial class Parser
         return new FlagsPattern(FlagNames: flags,
             Connective: connective,
             ExcludedFlags: excluded,
+            IsNegated: isNegated,
             Location: loc);
     }
 

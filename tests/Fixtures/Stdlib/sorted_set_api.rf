@@ -17,8 +17,8 @@ routine start()
   each x in ss
     show(f"  iter: {x}")
 
-  show(f"contains 20: {20 in ss}")
-  show(f"contains 99: {99 in ss}")
+  show(f"contains 20: {ss have 20}")
+  show(f"contains 99: {ss have 99}")
 
   # Rank access (O(log n) — named to signal cost)
   show(f"ss.get_by_rank(0): {(try ss.get_by_rank(rank: 0_u64))!!}")

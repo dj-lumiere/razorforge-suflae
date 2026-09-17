@@ -7,5 +7,5 @@ all (diagnose): Tests/Stdlib/FlagsApi.Permission(value: %111, READ and WRITE and
 rw == READ and WRITE: true
 rw == READ: false
 all == rw: false
-all is rw: true
+all have rw: true
 DONE

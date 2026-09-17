@@ -25,6 +25,6 @@ routine start()
   show(f"b >= a: {b >= a}")
 
   # cmp directly.
-  show(f"a.cmp(b) is ME_SMALL: {a.cmp(you: b) is ComparisonSign.ME_SMALL}")
-  show(f"a.cmp(c) is SAME: {a.cmp(you: c) is ComparisonSign.SAME}")
+  show(f"a.cmp(b) == ME_SMALL: {a.cmp(you: b) == ComparisonSign.ME_SMALL}")
+  show(f"a.cmp(c) == SAME: {a.cmp(you: c) == ComparisonSign.SAME}")
   return

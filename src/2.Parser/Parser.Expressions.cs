@@ -397,6 +397,17 @@ public partial class Parser
             return new ExpressionPattern(Expression: condExpr, Location: clauseLocation);
         }
 
+        // Flags membership arms: `have READ and WRITE => …` / `lack READ => …` (container-first).
+        if (CheckAndAdvance(type: TokenType.Have))
+        {
+            return ParseFlagsWhenPattern(isNegated: false);
+        }
+
+        if (CheckAndAdvance(type: TokenType.Lack))
+        {
+            return ParseFlagsWhenPattern(isNegated: true);
+        }
+
         if (CheckAndAdvance(type: TokenType.Is))
         {
             return ParseIsWhenPattern();
@@ -528,9 +539,13 @@ public partial class Parser
         if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type is TokenType.And or TokenType.Or or TokenType.But)
         {
-            pattern = ParseFlagsIsWhenPattern();
+            // `is` no longer tests flags — flags membership is `have`/`lack`.
+            throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                message:
+                $"'is' matches a variant TYPE only. For a flags membership test, use 'have {CurrentToken.Text} …' (or 'lack …').");
         }
-        else if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
+
+        if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
         {
             pattern = ParseTypePattern();
         }

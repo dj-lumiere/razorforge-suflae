@@ -734,6 +734,27 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     /// </summary>
     private Expression LowerBinaryExpression(Expression expr, BinaryExpression bin)
     {
+        // Single-flag container-first membership: `flags have X` / `flags lack X`. Flags have no
+        // `contains` routine — rewrite to a bit test `(flags bitand X) ==/!= X` (X's bits all present /
+        // not all present) and re-lower it through the normal operator path. (A multi-flag and/or/but
+        // chain parses as a FlagsTestExpression instead, lowered in ExpressionLoweringPass.)
+        if (bin.Operator is BinaryOperator.Have or BinaryOperator.Lack &&
+            bin.Left.ResolvedType is FlagsTypeSymbol flagsType)
+        {
+            TypeSymbol? boolType = ctx.Registry.LookupType(name: "Bool");
+            var masked = new BinaryExpression(Left: bin.Left,
+                Operator: BinaryOperator.BitwiseAnd,
+                Right: bin.Right,
+                Location: bin.Location) { ResolvedType = flagsType };
+            var test = new BinaryExpression(Left: masked,
+                Operator: bin.Operator == BinaryOperator.Have
+                    ? BinaryOperator.Equal
+                    : BinaryOperator.NotEqual,
+                Right: bin.Right,
+                Location: bin.Location) { ResolvedType = boolType };
+            return VisitExpression(expr: test);
+        }
+
         string? memberRoutineName = bin.Operator.GetMemberRoutineName();
         if (memberRoutineName == null)
         {

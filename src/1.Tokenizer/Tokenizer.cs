@@ -201,8 +201,10 @@ public partial class Tokenizer
             [key: "with"] = TokenType.With,
             [key: "given"] = TokenType.Given,
             [key: "in"] = TokenType.In,
-            [key: "notin"] = TokenType.NotIn,
             [key: "isnot"] = TokenType.IsNot,
+            // Container-first containment (collections AND flags). `notin` is retired — use `lack`.
+            [key: "have"] = TokenType.Have,
+            [key: "lack"] = TokenType.Lack,
             [key: "to"] = TokenType.To,
             [key: "til"] = TokenType.Til,
             [key: "by"] = TokenType.By,
@@ -255,7 +257,7 @@ public partial class Tokenizer
             _keywords[key: "expand"] = TokenType.Expand;
         }
 
-        // Numeric suffix map - shared between both languages except "j" default
+        // Numeric suffix map - shared between both languages
         _numericSuffixToTokenType = new Dictionary<string, TokenType>
         {
             // Signed integers
@@ -275,25 +277,20 @@ public partial class Tokenizer
             [key: "addr"] = TokenType.AddressLiteral,
 
             // Floating-point
-            [key: "f16"] = TokenType.F16Literal,
-            [key: "f32"] = TokenType.F32Literal,
-            [key: "f64"] = TokenType.F64Literal,
-            [key: "f128"] = TokenType.F128Literal,
+            [key: "b16"] = TokenType.B16Literal,
+            [key: "b32"] = TokenType.B32Literal,
+            [key: "b64"] = TokenType.B64Literal,
+            [key: "b128"] = TokenType.B128Literal,
 
             // Decimal floating-point
             [key: "d32"] = TokenType.D32Literal,
             [key: "d64"] = TokenType.D64Literal,
             [key: "d128"] = TokenType.D128Literal,
 
-            // Imaginary (for complex numbers)
-            // RF defaults "j" to J64Literal, SF defaults to JnLiteral
-            [key: "j"] = _language == Language.RazorForge
-                ? TokenType.J64Literal
-                : TokenType.JnLiteral,
-            [key: "j32"] = TokenType.J32Literal,
-            [key: "j64"] = TokenType.J64Literal,
-            [key: "j128"] = TokenType.J128Literal,
-            [key: "jn"] = TokenType.JnLiteral
+            // Imaginary (for complex numbers): a single width-less `i` suffix (also spellable
+            // `_i`, via the underscore-before-suffix separator). Width/radix comes from context;
+            // with no context it defaults to C128. The old width-carrying j32/j64/j128/jn are gone.
+            [key: "i"] = TokenType.ImaginaryLiteral
         };
     }
 

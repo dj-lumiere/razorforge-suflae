@@ -70,7 +70,7 @@ public sealed partial class SemanticVerifier
         // The object is an identifier that resolves to a routine, not a type or variable
         if (generic.Object is IdentifierExpression funcId)
         {
-            // A realm-qualified foreign generic call (`LLVM::atan2[F32](...)` / `C::name[...]`) must
+            // A realm-qualified foreign generic call (`LLVM::atan2[B32](...)` / `C::name[...]`) must
             // resolve to the FOREIGN routine, not the bare-name slot — which an ambient same-named free
             // routine may now own (the free `atan2(y, x)` vs the `LLVM::atan2` intrinsic). The realm-
             // qualified index and the generic-overload index both reach the intrinsic; the ambient
@@ -708,6 +708,24 @@ public sealed partial class SemanticVerifier
     {
         TypeSymbol exprType = AnalyzeExpression(expression: isPat.Expression);
 
+        // `is` matches a variant TYPE only. A choice case is matched with `==`; a flags membership with
+        // `have`/`lack`. Steer either off `is`.
+        switch (exprType)
+        {
+            case ChoiceTypeSymbol:
+                ReportError(code: SemanticDiagnosticCode.ArithmeticOnChoiceType,
+                    message:
+                    $"'is' cannot match a choice case on '{exprType.Name}'. Use '== {isPat.Pattern switch { TypePattern tp => tp.Type.Name, _ => "CASE" }}' (or '!=') for case matching.",
+                    location: isPat.Location);
+                return _registry.LookupType(name: "Bool") ?? ErrorTypeSymbol.Instance;
+            case FlagsTypeSymbol:
+                ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
+                    message:
+                    $"'is' cannot test flags on '{exprType.Name}'. Use 'have {isPat.Pattern switch { TypePattern tp => tp.Type.Name, _ => "FLAG" }}' / 'lack …' for membership.",
+                    location: isPat.Location);
+                return _registry.LookupType(name: "Bool") ?? ErrorTypeSymbol.Instance;
+        }
+
         // Analyze the pattern (may bind variables)
         AnalyzePattern(pattern: isPat.Pattern, matchedType: exprType);
 
@@ -728,7 +746,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
                 message:
-                $"Flags test operators (is/isnot) require a flags type, but got '{subjectType.Name}'.",
+                $"Flags test operators (have/lack) require a flags type, but got '{subjectType.Name}'.",
                 location: flagsTest.Location);
             return _registry.LookupType(name: "Bool") ?? ErrorTypeSymbol.Instance;
         }

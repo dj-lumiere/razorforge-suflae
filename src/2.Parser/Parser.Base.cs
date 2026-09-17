@@ -241,6 +241,7 @@ public partial class Parser
             // Comparison operators
             TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
             TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
+            TokenType.Have or TokenType.Lack => Precedence.Comparison,
             TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
                 Precedence.Comparison,
             TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
@@ -679,6 +680,8 @@ public partial class Parser
             TokenType.Assign => BinaryOperator.Assign,
             TokenType.In => BinaryOperator.In,
             TokenType.NotIn => BinaryOperator.NotIn,
+            TokenType.Have => BinaryOperator.Have,
+            TokenType.Lack => BinaryOperator.Lack,
             TokenType.Is => BinaryOperator.Is,
             TokenType.IsNot => BinaryOperator.IsNot,
             TokenType.Obeys => BinaryOperator.Obeys,
@@ -722,7 +725,7 @@ public partial class Parser
     /// Parse numeric literal value
     /// </summary>
     /// <remarks>
-    /// Types without direct C# equivalents (f128, d32, d64, d128, Integer, Decimal) are stored
+    /// Types without direct C# equivalents (b128, d32, d64, d128, Integer, Decimal) are stored
     /// as raw strings in the AST. The semantic analyzer handles parsing these using native libraries.
     /// </remarks>
     protected static object ParseNumericLiteral(Token token)
@@ -750,16 +753,16 @@ public partial class Parser
             TokenType.U256Literal => CleanNumericSuffix(text: text, suffix: "u256"),
 
             // Fixed-width floats with C# equivalents - parse immediately
-            TokenType.F16Literal => ParseTypedFloat<Half>(text: text, suffix: "f16"),
-            TokenType.F32Literal => ParseTypedFloat<float>(text: text, suffix: "f32"),
-            TokenType.F64Literal => ParseTypedFloat<double>(text: text, suffix: "f64"),
+            TokenType.B16Literal => ParseTypedFloat<Half>(text: text, suffix: "b16"),
+            TokenType.B32Literal => ParseTypedFloat<float>(text: text, suffix: "b32"),
+            TokenType.B64Literal => ParseTypedFloat<double>(text: text, suffix: "b64"),
 
             // Deferred types - store raw string for semantic analyzer to parse with native libraries
-            // f128: IEEE binary128, requires LibBF
+            // b128: IEEE binary128, requires LibBF
             // d32/d64/d128: IEEE decimal floating-point, requires decNumber
             // Integer: arbitrary precision, requires LibTomMath
             // Decimal: arbitrary precision, requires decNumber
-            TokenType.F128Literal => CleanNumericSuffix(text: text, suffix: "f128"),
+            TokenType.B128Literal => CleanNumericSuffix(text: text, suffix: "b128"),
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
             TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),
             TokenType.D128Literal => CleanNumericSuffix(text: text, suffix: "d128"),
