@@ -5,20 +5,20 @@ namespace Builder.Verification.Results;
 
 /// <summary>
 /// Represents a parsed numeric literal value ready for code generation.
-/// Used for types that require native library parsing (f128, d32, d64, d128, Integer, Decimal).
+/// Used for types that require native library parsing (b128, d32, d64, d128, Integer, Decimal).
 /// </summary>
 public abstract record ParsedLiteral(SourceLocation Location);
 
 /// <summary>
-/// Parsed f128 (IEEE binary128) value.
+/// Parsed b128 (IEEE binary128) value.
 /// </summary>
-public sealed record ParsedF128(SourceLocation Location, ulong Lo, ulong Hi)
+public sealed record ParsedB128(SourceLocation Location, ulong Lo, ulong Hi)
     : ParsedLiteral(Location: Location)
 {
     /// <inheritdoc/>
     public override string ToString()
     {
-        return $"f128(0x{Hi:X16}{Lo:X16})";
+        return $"b128(0x{Hi:X16}{Lo:X16})";
     }
 }
 
@@ -151,8 +151,8 @@ public sealed record ParsedWideInt(SourceLocation Location, string TypeName, Big
 }
 
 /// <summary>
-/// Parsed fixed-width float value (F16, F32, F64).
-/// F128 uses ParsedF128 with native library parsing.
+/// Parsed fixed-width float value (B16, B32, B64).
+/// B128 uses ParsedB128 with native library parsing.
 /// </summary>
 public sealed record ParsedFloat(SourceLocation Location, string TypeName, double Value)
     : ParsedLiteral(Location: Location)
@@ -193,69 +193,17 @@ public sealed record ParsedByteSize(SourceLocation Location, ulong Bytes, string
 }
 
 /// <summary>
-/// Parsed imaginary component for J32 (F32-based complex).
+/// Parsed width-less imaginary literal (<c>4.0i</c>). Validation-only: it retains the magnitude
+/// string, and <see cref="Builder.Lowering.Passes.LiteralLoweringPass"/> rebuilds the pure-imaginary
+/// constructor for the resolved complex type (C64/C128/C256/Complex). The magnitude carries no width;
+/// the surrounding complex type fixes the component radix/precision.
 /// </summary>
-public sealed record ParsedJ32(SourceLocation Location, float Value)
+public sealed record ParsedImaginary(SourceLocation Location, string Magnitude)
     : ParsedLiteral(Location: Location)
 {
     /// <inheritdoc/>
     public override string ToString()
     {
-        return $"J32({Value}i)";
-    }
-}
-
-/// <summary>
-/// Parsed imaginary component for J64 (F64-based complex).
-/// </summary>
-public sealed record ParsedJ64(SourceLocation Location, double Value)
-    : ParsedLiteral(Location: Location)
-{
-    /// <inheritdoc/>
-    public override string ToString()
-    {
-        return $"J64({Value}i)";
-    }
-}
-
-/// <summary>
-/// Parsed imaginary component for J128 (F128-based complex).
-/// Uses the same representation as ParsedF128.
-/// </summary>
-public sealed record ParsedJ128(SourceLocation Location, ulong Lo, ulong Hi)
-    : ParsedLiteral(Location: Location)
-{
-    /// <inheritdoc/>
-    public override string ToString()
-    {
-        return $"J128(0x{Hi:X16}{Lo:X16}i)";
-    }
-}
-
-/// <summary>
-/// Parsed imaginary component for Jn (arbitrary-precision Decimal-based complex).
-/// Uses the same representation as ParsedDecimal.
-/// </summary>
-public sealed record ParsedJn(
-    SourceLocation Location,
-    string StringValue,
-    int Sign,
-    int Exponent,
-    int SignificantDigits) : ParsedLiteral(Location: Location)
-{
-    /// <summary>
-    /// Gets whether the parsed arbitrary-precision imaginary component has a negative sign.
-    /// </summary>
-    public bool IsNegative => Sign < 0;
-
-    /// <summary>
-    /// Gets whether the parsed arbitrary-precision imaginary component represents zero.
-    /// </summary>
-    public bool IsZero => Sign == 0;
-
-    /// <inheritdoc/>
-    public override string ToString()
-    {
-        return $"Jn({StringValue}i, exp={Exponent})";
+        return $"Imaginary({Magnitude}i)";
     }
 }

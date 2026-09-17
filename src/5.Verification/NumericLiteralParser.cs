@@ -6,20 +6,20 @@ namespace Builder.Verification;
 /// <summary>
 /// P/Invoke bindings for native numeric literal parsing functions.
 /// Used by the semantic analyzer to parse types without C# equivalents:
-/// f128, d32, d64, d128, Integer, Decimal.
+/// b128, d32, d64, d128, Integer, Decimal.
 /// </summary>
 public static partial class NumericLiteralParser
 {
     private const string RuntimeLib = "razorforge_runtime";
 
-    #region f128 (IEEE binary128)
+    #region b128 (IEEE binary128)
 
     /// <summary>
     /// 128-bit IEEE binary floating point value.
     /// Stored as two 64-bit unsigned integers (little-endian).
     /// </summary>
     [StructLayout(layoutKind: LayoutKind.Sequential)]
-    public struct F128
+    public struct B128
     {
         /// <summary>
         /// Gets or sets the low 64 bits of the binary128 payload.
@@ -34,25 +34,25 @@ public static partial class NumericLiteralParser
         /// <inheritdoc/>
         public override string ToString()
         {
-            return $"f128(0x{Hi:X16}{Lo:X16})";
+            return $"b128(0x{Hi:X16}{Lo:X16})";
         }
     }
 
     /// <summary>
-    /// Parses a string to IEEE binary128 (f128) using LibBF.
+    /// Parses a string to IEEE binary128 (b128) using LibBF.
     /// </summary>
     /// <param name="str">The string representation of the number.</param>
-    /// <returns>The parsed f128 value.</returns>
-    public static F128 ParseF128(string str)
+    /// <returns>The parsed b128 value.</returns>
+    public static B128 ParseB128(string str)
     {
         ArgumentNullException.ThrowIfNull(argument: str);
-        return ParseF128Native(str: str);
+        return ParseB128Native(str: str);
     }
 
     [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_f128_from_string",
+        EntryPoint = "rf_b128_from_string",
         StringMarshalling = StringMarshalling.Utf8)]
-    private static partial F128 ParseF128Native(string str);
+    private static partial B128 ParseB128Native(string str);
 
     #endregion
 
@@ -214,7 +214,7 @@ public static partial class NumericLiteralParser
 
     /// <summary>
     /// Strips a trailing decimal/float type suffix — WITH or WITHOUT the optional leading
-    /// underscore — so all spellings (`3.14f128`, `3.14_f128`) work. The semantic-analyzer path
+    /// underscore — so all spellings (`3.14b128`, `3.14_b128`) work. The semantic-analyzer path
     /// passes the literal with its type suffix (e.g. "6.0_d128" or the underscore-less "6.0d128");
     /// codegen passes the cleaned digits. Longest-first avoids a short suffix matching prematurely.
     /// (Digit-group separators "_" between digits are handled by the caller.)
@@ -224,7 +224,7 @@ public static partial class NumericLiteralParser
         foreach (string suf in new[]
                  {
                      "decimal",
-                     "f128",
+                     "b128",
                      "d128",
                      "d64",
                      "d32",
@@ -508,18 +508,18 @@ public static partial class NumericLiteralParser
     }
 
     /// <summary>
-    /// Encodes a decimal literal into IEEE binary128 (Core.F128, @llvm("i128")) bits, correctly
+    /// Encodes a decimal literal into IEEE binary128 (Core.B128, @llvm("i128")) bits, correctly
     /// rounded to nearest-even via exact BigInteger arithmetic. Replaces the
-    /// <c>rf_f128_from_string</c> FFI. Throws <see cref="OverflowException"/> when the value is out
+    /// <c>rf_b128_from_string</c> FFI. Throws <see cref="OverflowException"/> when the value is out
     /// of binary128's finite range (a compile-time literal overflow); the explicit <c>inf</c>/
     /// <c>nan</c> literals are handled by the caller before this is reached.
     /// </summary>
-    public static F128 EncodeF128(string str)
+    public static B128 EncodeB128(string str)
     {
         DecimalLiteralParts p = ParseDecimalLiteral(str: str);
         if (p.Coeff.IsZero)
         {
-            return PackF128(sign: p.Sign, biasedExp: 0, mant: 0);
+            return PackB128(sign: p.Sign, biasedExp: 0, mant: 0);
         }
 
         // value = coeff * 10^exp10, written as the positive ratio num/den.
@@ -565,12 +565,12 @@ public static partial class NumericLiteralParser
         {
             throw new OverflowException(
                 message:
-                $"float literal '{str}' is out of range for F128 (overflows to infinity)");
+                $"float literal '{str}' is out of range for B128 (overflows to infinity)");
         }
 
         if (biased <= 0)
         {
-            return EncodeF128Subnormal(sign: p.Sign,
+            return EncodeB128Subnormal(sign: p.Sign,
                 num: num,
                 den: den,
                 mantBits: mantBits,
@@ -578,31 +578,31 @@ public static partial class NumericLiteralParser
         }
 
         var mant = (UInt128)(q - (BigInteger.One << mantBits));
-        return PackF128(sign: p.Sign, biasedExp: biased, mant: mant);
+        return PackB128(sign: p.Sign, biasedExp: biased, mant: mant);
     }
 
     /// <summary>
     /// Rounds the significand at the minimum exponent (biased 0) to produce a subnormal, the
     /// smallest normal, or a signed zero for a binary128 value that underflows the normal range.
     /// </summary>
-    private static F128 EncodeF128Subnormal(bool sign, BigInteger num, BigInteger den,
+    private static B128 EncodeB128Subnormal(bool sign, BigInteger num, BigInteger den,
         int mantBits, int bias)
     {
         int eMin = 1 - bias; // -16382
         BigInteger qs = RoundedScale(num: num, den: den, shift: mantBits - eMin);
         if (qs.IsZero)
         {
-            return PackF128(sign: sign, biasedExp: 0, mant: 0); // -> +/-0
+            return PackB128(sign: sign, biasedExp: 0, mant: 0); // -> +/-0
         }
 
         if (qs >= BigInteger.One << mantBits)
         {
-            return PackF128(sign: sign,
+            return PackB128(sign: sign,
                 biasedExp: 1,
                 mant: (UInt128)(qs - (BigInteger.One << mantBits))); // smallest normal
         }
 
-        return PackF128(sign: sign, biasedExp: 0, mant: (UInt128)qs); // subnormal
+        return PackB128(sign: sign, biasedExp: 0, mant: (UInt128)qs); // subnormal
     }
 
     /// <summary>Exact sign of <c>(num/den) - 2^k</c>, i.e. compares the value to a power of two
@@ -645,7 +645,7 @@ public static partial class NumericLiteralParser
         return q;
     }
 
-    private static F128 PackF128(bool sign, int biasedExp, UInt128 mant)
+    private static B128 PackB128(bool sign, int biasedExp, UInt128 mant)
     {
         UInt128 bits = (UInt128)(uint)biasedExp << 112 | mant & ((UInt128)1 << 112) - 1;
         if (sign)
@@ -653,7 +653,7 @@ public static partial class NumericLiteralParser
             bits |= (UInt128)1 << 127;
         }
 
-        return new F128 { Lo = (ulong)(bits & ulong.MaxValue), Hi = (ulong)(bits >> 64) };
+        return new B128 { Lo = (ulong)(bits & ulong.MaxValue), Hi = (ulong)(bits >> 64) };
     }
 
     /// <summary>

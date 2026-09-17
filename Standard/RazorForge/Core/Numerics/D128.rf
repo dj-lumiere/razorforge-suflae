@@ -635,7 +635,7 @@ routine d128_div(a: D128, b: D128) -> D128
 # Wired operators
 # ============================================================================
 
-# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
@@ -711,7 +711,7 @@ routine D128.eq(you: D128) -> Bool
   return LLVM::int_eq[U128](a: d128_sub(a: me, b: you).decode().coeff, b: 0)
 
 ### Three-way decimal comparison under IEEE ordered semantics. NaN is unordered and
-### maps to `SAME` (matching the F128 engine convention). Compares finite values by the
+### maps to `SAME` (matching the B128 engine convention). Compares finite values by the
 ### sign of `me - you`; handles infinities explicitly.
 routine D128.cmp(you: D128) -> ComparisonSign
   if me.is_nan() or you.is_nan()
@@ -1072,19 +1072,19 @@ routine D128(from: U256) -> D128
 # ============================================================================
 
 ### Converts a binary float to decimal128 (correctly rounded via the W=192 engine).
-routine D128(from: F16) -> D128
-  return D128(from: from.F32())
+routine D128(from: B16) -> D128
+  return D128(from: from.B32())
 
-### Converts an F32 to decimal128 (widen to F64 -> F128 -> W=192 engine, correctly rounded).
-routine D128(from: F32) -> D128
-  return D128(from: from.F64())
+### Converts an B32 to decimal128 (widen to B64 -> B128 -> W=192 engine, correctly rounded).
+routine D128(from: B32) -> D128
+  return D128(from: from.B64())
 
-### Converts an F64 to decimal128 (widen to F128 -> W=192 engine, correctly rounded).
-routine D128(from: F64) -> D128
-  return uf192_to_d128(x: F128(from: from).to_uf192())
+### Converts an B64 to decimal128 (widen to B128 -> W=192 engine, correctly rounded).
+routine D128(from: B64) -> D128
+  return uf192_to_d128(x: B128(from: from).to_uf192())
 
-### Converts an F128 to decimal128 (via the W=192 engine, correctly rounded).
-routine D128(from: F128) -> D128
+### Converts an B128 to decimal128 (via the W=192 engine, correctly rounded).
+routine D128(from: B128) -> D128
   return uf192_to_d128(x: from.to_uf192())
 
 # ============================================================================
@@ -1113,7 +1113,7 @@ routine D128(from: D128) -> D128
 ### optional `e`/`E` exponent, and the special values `inf`/`infinity`/`nan` (case-insensitive).
 ### :throws: {InvalidValueError} if the text is not a valid decimal literal.
 ### Scans decimal text into raw parts (sign, special, coeff, exp10) WITHOUT rounding to
-### 34 digits — the shared front end for both `D128` and `F128`/`F64` parsing. Keeping the
+### 34 digits — the shared front end for both `D128` and `B128`/`B64` parsing. Keeping the
 ### full coefficient (up to 38 digits in the U128) lets the binary parsers round once,
 ### correctly, instead of double-rounding through decimal128.
 ### :throws: {InvalidValueError} on malformed input.

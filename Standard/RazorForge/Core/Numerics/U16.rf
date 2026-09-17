@@ -120,32 +120,32 @@ routine U16!(from: U256) -> U16
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, U16](from)
 
-### Converts an `F16` to `U16` by first converting to `U32`, then truncating.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16!(from: F16) -> U16
+routine U16!(from: B16) -> U16
   return from.U32!().U16!()
 
-### Converts an `F32` to `U16` by first converting to `U32`, then truncating.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16!(from: F32) -> U16
+routine U16!(from: B32) -> U16
   return from.U32!().U16!()
 
-### Converts an `F64` to `U16` by first converting to `U32`, then truncating.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16!(from: F64) -> U16
+routine U16!(from: B64) -> U16
   return from.U32!().U16!()
 
-### Converts an `F128` to `U16` by first converting to `U32`, then truncating.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as a `U16`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
-routine U16!(from: F128) -> U16
+routine U16!(from: B128) -> U16
   return from.U32!().U16!()
 
 ### Converts a `D32` to `U16` by first converting to `U32`, then truncating.

@@ -78,7 +78,7 @@ public partial class LlvmEmitter
                 item: GetImplicitMeParameterDeclaration(routine: routine, includeName: false));
         }
 
-        // Add explicit parameters. For external C functions, F16 (half) becomes i16 (integer ABI register).
+        // Add explicit parameters. For external C functions, B16 (half) becomes i16 (integer ABI register).
         paramTypes.AddRange(collection: routine.Parameters.Select(selector: param =>
             FormatDeclarationParameter(routine: routine, param: param, isCExtern: isCExtern)));
 
@@ -629,7 +629,7 @@ public partial class LlvmEmitter
                                    ownerIsMonomorphizedInstance;
         // Whole-program (non-base) OPTIMIZING builds: give EVERY routine internal linkage, not just
         // compiler-generated ones. With external linkage LLVM keeps hand-written stdlib helpers
-        // (to_bits/from_bits/decode/f64_signbit/decfin32/...) as standalone interposable symbols and is
+        // (to_bits/from_bits/decode/b64_signbit/decfin32/...) as standalone interposable symbols and is
         // far more conservative about inlining/DCE-ing them; internal linkage lets the O2/O3 cost-inliner
         // flatten the small ones and GlobalDCE strip the dead originals (measured ~20-35% on the heavier
         // decimal<->float conversions, whose helper chains are deepest). The sole real entry is @main

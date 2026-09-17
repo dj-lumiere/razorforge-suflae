@@ -112,33 +112,33 @@ routine U64!(from: U256) -> U64
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, U64](from)
 
-### Truncates a 16-bit float to `U64` by first widening to `F32`.
+### Truncates a 16-bit float to `U64` by first widening to `B32`.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64!(from: F16) -> U64
-  return from.F32().U64!()
+routine U64!(from: B16) -> U64
+  return from.B32().U64!()
 
 ### Truncates a 32-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64!(from: F32) -> U64
-  if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
+routine U64!(from: B32) -> U64
+  if from.is_nan() or not (0.0_b32 <= from <= 18446744073709551615.0_b32)
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F32, U64](from)
+  return LLVM::float_to_unsigned[B32, U64](from)
 
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64!(from: F64) -> U64
-  if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
+routine U64!(from: B64) -> U64
+  if from.is_nan() or not (0.0_b64 <= from <= 18446744073709551615.0_b64)
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F64, U64](from)
+  return LLVM::float_to_unsigned[B64, U64](from)
 
-### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
+### Truncates a 128-bit float to `U64` by narrowing to `B64` first.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
-routine U64!(from: F128) -> U64
-  return from.F64!().U64!()
+routine U64!(from: B128) -> U64
+  return from.B64!().U64!()
 
 ### Converts a 32-bit decimal float to `U64` via `S64`.
 ### :param from: The source decimal float value.

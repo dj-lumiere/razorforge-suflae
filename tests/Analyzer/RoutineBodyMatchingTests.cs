@@ -22,12 +22,12 @@ public class RoutineBodyMatchingTests
         // match their correct body via resolved overload keys
         string source = """
                         record Measurement
-                          value: F64
+                          value: B64
 
                         routine Measurement.$create(from: S32) -> Measurement
-                          return Measurement(value: from.F64())
+                          return Measurement(value: from.B64())
 
-                        routine Measurement.$create(from: F64) -> Measurement
+                        routine Measurement.$create(from: B64) -> Measurement
                           return Measurement(value: from)
 
                         routine test()

@@ -21,8 +21,8 @@ public class ParserErrorTests
     {
         string source = """
                         record Point
-                          x F32
-                          y: F32
+                          x B32
+                          y: B32
                         """;
 
         // Parser either throws on the malformed member or recovers and reports errors — both are acceptable.
@@ -44,7 +44,7 @@ public class ParserErrorTests
         string source = """
                         record Point
                           x:
-                          y: F32
+                          y: B32
                         """;
 
         // Should not parse cleanly - missing type after colon: either throw or recover with errors.
@@ -67,8 +67,8 @@ public class ParserErrorTests
         // 'var' should not be allowed in record member variables
         string source = """
                         record Point
-                          var x: F32
-                          y: F32
+                          var x: B32
+                          y: B32
                         """;
 
         // This tests that var in record member variable is either rejected or ignored
@@ -245,8 +245,8 @@ public class ParserErrorTests
     {
         string source = """
                         variant Shape obeys Equatable
-                          Circle: F32
-                          Rect: F32
+                          Circle: B32
+                          Rect: B32
                         """;
 
         // Variants cannot obey protocols — parser does not support 'obeys' on variants: expect throw or parse error.
@@ -560,8 +560,8 @@ public class ParserErrorTests
     {
         string source = """
                         common variant Shape
-                          Circle: F32
-                          Rect: F32
+                          Circle: B32
+                          Rect: B32
                         """;
 
         AssertParseError(source: source);
@@ -574,8 +574,8 @@ public class ParserErrorTests
     {
         string source = """
                         common record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
                         """;
 
         AssertParseError(source: source);

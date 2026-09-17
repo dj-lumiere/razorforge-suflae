@@ -1,5 +1,5 @@
 /*
- * RazorForge Runtime - f128 (Quad Precision) Floating Point Functions
+ * RazorForge Runtime - B128 (Quad Precision) Floating Point Functions
  *
  * Math (arithmetic, comparisons, conversions, transcendentals) is backed by
  * TLFloat: correctly-rounded IEEE binary128 soft-float with a full
@@ -18,19 +18,19 @@
 #include <math.h>
 #include "../include/razorforge_math.h"
 
-// NOTE: TLFloat retired. F128 arithmetic/libm/conversions are now pure-RF (SoftFloat/F128*.rf);
-// this file keeps only the LibBF context + f128<->bf bridges used by rf_f128_from_string
-// (compile-time literal fallback) / rf_f128_to_string and the trivial special-value constructors.
+// NOTE: TLFloat retired. B128 arithmetic/libm/conversions are now pure-RF (SoftFloat/B128*.rf);
+// this file keeps only the LibBF context + b128<->bf bridges used by rf_b128_from_string
+// (compile-time literal fallback) / rf_b128_to_string and the trivial special-value constructors.
 #include "libbf.h"
 
 // IEEE binary128 format:
 // - 1 bit sign
 // - 15 bits exponent (bias 16383)
 // - 112 bits mantissa (+ 1 implicit bit = 113 bits precision)
-#define F128_MANT_BITS 112
-#define F128_EXP_BITS 15
-#define F128_EXP_BIAS 16383
-#define F128_PREC 113  // mantissa bits including implicit bit
+#define B128_MANT_BITS 112
+#define B128_EXP_BITS 15
+#define B128_EXP_BIAS 16383
+#define B128_PREC 113  // mantissa bits including implicit bit
 
 // 128-bit integer types for LLVM i128 compatibility
 // Layout matches LLVM's i128 ABI on x86_64/AArch64: low word first
@@ -61,8 +61,8 @@ void ensure_bf_ctx(void)
     }
 }
 
-// Convert f128_t to bf_t
-static void f128_to_bf(bf_t *r, f128_t x)
+// Convert b128_t to bf_t
+static void b128_to_bf(bf_t *r, b128_t x)
 {
     ensure_bf_ctx();
     bf_init(&bf_ctx, r);
@@ -114,20 +114,20 @@ static void f128_to_bf(bf_t *r, f128_t x)
     // Build mantissa: 1 + (mant_high * 2^64 + mant_low) / 2^112
     bf_set_ui(&mant_bf, mant_high);
     bf_set_ui(&two_bf, 1);
-    bf_mul_2exp(&mant_bf, 64, F128_PREC, BF_RNDN);  // mant_high << 64
+    bf_mul_2exp(&mant_bf, 64, B128_PREC, BF_RNDN);  // mant_high << 64
 
     bf_set_ui(&temp, mant_low);
-    bf_add(&mant_bf, &mant_bf, &temp, F128_PREC, BF_RNDN);  // + mant_low
+    bf_add(&mant_bf, &mant_bf, &temp, B128_PREC, BF_RNDN);  // + mant_low
 
     // Divide by 2^112 to get fractional part
-    bf_mul_2exp(&mant_bf, -F128_MANT_BITS, F128_PREC, BF_RNDN);
+    bf_mul_2exp(&mant_bf, -B128_MANT_BITS, B128_PREC, BF_RNDN);
 
     // Add 1 for implicit bit
     bf_set_ui(r, 1);
-    bf_add(r, r, &mant_bf, F128_PREC, BF_RNDN);
+    bf_add(r, r, &mant_bf, B128_PREC, BF_RNDN);
 
     // Multiply by 2^(exp - bias)
-    bf_mul_2exp(r, exp - F128_EXP_BIAS, F128_PREC, BF_RNDN);
+    bf_mul_2exp(r, exp - B128_EXP_BIAS, B128_PREC, BF_RNDN);
 
     // Set sign
     r->sign = sign;
@@ -137,11 +137,11 @@ static void f128_to_bf(bf_t *r, f128_t x)
     bf_delete(&temp);
 }
 
-// Convert bf_t to f128_t (non-static for use by csharp_interop.c)
+// Convert bf_t to b128_t (non-static for use by csharp_interop.c)
 // Direct bit extraction from LibBF - no precision loss
-f128_t bf_to_f128(const bf_t *a)
+b128_t bf_to_b128(const bf_t *a)
 {
-    f128_t result = {0, 0};
+    b128_t result = {0, 0};
 
     // Handle special cases
     if (bf_is_nan(a)) {
@@ -159,20 +159,20 @@ f128_t bf_to_f128(const bf_t *a)
         return result;
     }
 
-    // Round to f128 precision to ensure exactly 113 bits
+    // Round to b128 precision to ensure exactly 113 bits
     bf_t rounded;
     bf_init(&bf_ctx, &rounded);
     bf_set(&rounded, a);
-    bf_round(&rounded, F128_PREC, BF_RNDN);
+    bf_round(&rounded, B128_PREC, BF_RNDN);
 
     // Calculate IEEE biased exponent
     // LibBF: value = mantissa * 2^(expn - len*64) where mantissa MSB is at bit (len*64-1)
     // For normalized bf_t with len=2: value = m * 2^(expn - 128) where m in [2^127, 2^128)
     // IEEE: value = 1.fraction * 2^(exp - bias)
     // Therefore: exp = expn + bias - 1 = expn + 16382
-    slimb_t ieee_exp = rounded.expn + (F128_EXP_BIAS - 1);
+    slimb_t ieee_exp = rounded.expn + (B128_EXP_BIAS - 1);
 
-    // Handle overflow (exponent too large for f128)
+    // Handle overflow (exponent too large for b128)
     if (ieee_exp >= 0x7FFF) {
         bf_delete(&rounded);
         result.high = a->sign ? 0xFFFF000000000000ULL : 0x7FFF000000000000ULL;
@@ -220,7 +220,7 @@ f128_t bf_to_f128(const bf_t *a)
         mant_low = (tab0 & 0x7FFFULL) << 49;
     }
 
-    // Assemble the f128 result
+    // Assemble the b128 result
     result.high = ((uint64_t)rounded.sign << 63) |
                   ((uint64_t)ieee_exp << 48) |
                   mant_high;
@@ -230,16 +230,16 @@ f128_t bf_to_f128(const bf_t *a)
     return result;
 }
 
-// Convert f128 to decimal string (caller must free)
-char* rf_f128_to_string(f128_t x)
+// Convert b128 to decimal string (caller must free)
+char* rf_b128_to_string(b128_t x)
 {
     ensure_bf_ctx();
     bf_t bx;
-    f128_to_bf(&bx, x);
+    b128_to_bf(&bx, x);
 
     char *buf;
     size_t len;
-    // Use bf_ftoa with 36 significant digits (enough for f128's ~34 digits)
+    // Use bf_ftoa with 36 significant digits (enough for b128's ~34 digits)
     buf = bf_ftoa(&len, &bx, 10, 36, BF_FTOA_FORMAT_FREE_MIN | BF_RNDN);
 
     bf_delete(&bx);
@@ -255,27 +255,27 @@ char* rf_f128_to_string(f128_t x)
 // Special values
 // ============================================================================
 
-f128_t rf_f128_nan(void)
+b128_t rf_b128_nan(void)
 {
-    f128_t r = {0, 0x7FFF800000000000ULL};
+    b128_t r = {0, 0x7FFF800000000000ULL};
     return r;
 }
 
-f128_t rf_f128_inf(void)
+b128_t rf_b128_inf(void)
 {
-    f128_t r = {0, 0x7FFF000000000000ULL};  // Positive infinity
+    b128_t r = {0, 0x7FFF000000000000ULL};  // Positive infinity
     return r;
 }
 
-f128_t rf_f128_neg_inf(void)
+b128_t rf_b128_neg_inf(void)
 {
-    f128_t r = {0, 0xFFFF000000000000ULL};  // Negative infinity
+    b128_t r = {0, 0xFFFF000000000000ULL};  // Negative infinity
     return r;
 }
 
-f128_t rf_f128_zero(int negative)
+b128_t rf_b128_zero(int negative)
 {
-    f128_t r = {0, negative ? 0x8000000000000000ULL : 0};
+    b128_t r = {0, negative ? 0x8000000000000000ULL : 0};
     return r;
 }
 

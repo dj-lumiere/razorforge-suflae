@@ -146,7 +146,7 @@ public class PatternValidationTests
         string source = """
                         variant Value
                           S32
-                          F64
+                          B64
 
                         routine test(v: Value) -> S32
                           return when v

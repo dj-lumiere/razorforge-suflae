@@ -184,8 +184,8 @@ public class MutabilityTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         routine test()
                           var p = Point(x: 1.0, y: 2.0)

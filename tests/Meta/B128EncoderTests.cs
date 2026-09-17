@@ -3,12 +3,12 @@ using Builder.Verification;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// Cross-checks the managed <see cref="NumericLiteralParser.EncodeF128"/> (pure C#, BigInteger,
-/// round-to-nearest-even) against the native <see cref="NumericLiteralParser.ParseF128"/> (TLFloat,
+/// Cross-checks the managed <see cref="NumericLiteralParser.EncodeB128"/> (pure C#, BigInteger,
+/// round-to-nearest-even) against the native <see cref="NumericLiteralParser.ParseB128"/> (TLFloat,
 /// correctly rounded) for a battery of decimal literals. They must agree bit-for-bit. Once this is
-/// green the native F128 parser (and TLFloat) can be retired.
+/// green the native B128 parser (and TLFloat) can be retired.
 /// </summary>
-public sealed class F128EncoderTests
+public sealed class B128EncoderTests
 {
     [Theory]
     [InlineData("0")]
@@ -33,17 +33,17 @@ public sealed class F128EncoderTests
     [InlineData("1e-1000")]
     [InlineData("1e4000")]
     [InlineData("1e-4000")]
-    [InlineData("1.18973149535723176508575932662800702e4932")] // near F128_MAX
+    [InlineData("1.18973149535723176508575932662800702e4932")] // near B128_MAX
     [InlineData("3.36210314311209350626267781732175260e-4932")] // smallest normal
     [InlineData("9.99999999999999999999999999999999999e4931")]
     [InlineData("0.333333333333333333333333333333333333")]
     [InlineData("7")]
     [InlineData("0.0001220703125")] // exact binary fraction
     [InlineData("12345678901234567890123456789012345678")]
-    public void EncodeF128_MatchesNativeParser_OnFiniteNormals(string s)
+    public void EncodeB128_MatchesNativeParser_OnFiniteNormals(string s)
     {
-        NumericLiteralParser.F128 managed = NumericLiteralParser.EncodeF128(str: s);
-        NumericLiteralParser.F128 native = NumericLiteralParser.ParseF128(str: s);
+        NumericLiteralParser.B128 managed = NumericLiteralParser.EncodeB128(str: s);
+        NumericLiteralParser.B128 native = NumericLiteralParser.ParseB128(str: s);
         Assert.Equal(expected: (native.Hi, native.Lo), actual: (managed.Hi, managed.Lo));
     }
 
@@ -59,10 +59,10 @@ public sealed class F128EncoderTests
     [InlineData("1.5e-4950")]
     [InlineData("1e-4960")]
     [InlineData("6.475175119438025110924438958227646552e-4966")] // smallest subnormal
-    public void EncodeF128_SubnormalsAreCorrect_NativeFlushesToZero(string s)
+    public void EncodeB128_SubnormalsAreCorrect_NativeFlushesToZero(string s)
     {
-        NumericLiteralParser.F128 managed = NumericLiteralParser.EncodeF128(str: s);
-        NumericLiteralParser.F128 native = NumericLiteralParser.ParseF128(str: s);
+        NumericLiteralParser.B128 managed = NumericLiteralParser.EncodeB128(str: s);
+        NumericLiteralParser.B128 native = NumericLiteralParser.ParseB128(str: s);
 
         // Native TLFloat flushes the subnormal to zero — the bug we're moving off of.
         Assert.Equal(expected: (0UL, 0UL), actual: (native.Hi, native.Lo));

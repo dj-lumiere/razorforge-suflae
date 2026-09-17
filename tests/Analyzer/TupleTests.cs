@@ -114,7 +114,7 @@ public class TupleTests
     {
         string source = """
                         routine test()
-                          var mixed = (1_s32, 2.5f64, true)
+                          var mixed = (1_s32, 2.5b64, true)
                           return
                         """;
 

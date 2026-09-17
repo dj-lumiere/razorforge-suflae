@@ -196,7 +196,7 @@ public class ExpressionTests
     {
         string source = """
                         @readonly
-                        routine Point.get_x() -> F32
+                        routine Point.get_x() -> B32
                           return me.x
                         """;
 
@@ -804,7 +804,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var x = 42.F64()
+                          var x = 42.B64()
                           return
                         """;
 
@@ -1072,7 +1072,7 @@ public class ExpressionTests
     {
         string source = """
                         routine test()
-                          var result = 3 - 2j
+                          var result = 3 - 2i
                           return
                         """;
 
@@ -1094,10 +1094,10 @@ public class ExpressionTests
         Assert.NotNull(@object: left);
         Assert.Equal(expected: "3", actual: left!.Value);
 
-        // Right operand should be "2j", NOT "-2j"
+        // Right operand should be "2i", NOT "-2i"
         var right = binary.Right as LiteralExpression;
         Assert.NotNull(@object: right);
-        Assert.Equal(expected: "2j", actual: right!.Value);
+        Assert.Equal(expected: "2i", actual: right!.Value);
     }
 
     /// <summary>

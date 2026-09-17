@@ -96,54 +96,54 @@ routine S256!(from: U256) -> S256
     throw IntegerOverflowError()
   return LLVM::reinterpret_bits[U256, S256](from)
 
-### Converts an `F16` to `S256`, truncating toward zero.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `S256`, truncating toward zero.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256!(from: F16) -> S256
-  return from.F32().S256!()
+routine S256!(from: B16) -> S256
+  return from.B32().S256!()
 
-### Converts an `F32` to `S256`, truncating toward zero.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `S256`, truncating toward zero.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN or infinite.
-routine S256!(from: F32) -> S256
+routine S256!(from: B32) -> S256
   if not from.is_finite()
     throw IntegerOverflowError()
-  return LLVM::float_to_signed[F32, S256](from)
+  return LLVM::float_to_signed[B32, S256](from)
 
-### Converts an `F64` to `S256`, truncating toward zero.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `S256`, truncating toward zero.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or outside [-2^255, 2^255-1].
-routine S256!(from: F64) -> S256
-  if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_f64
+routine S256!(from: B64) -> S256
+  if from.is_nan() or from < -57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64 or from >= 57896044618658097711785492504343953926634992332820282019728792003956564819968.0_b64
     throw IntegerOverflowError()
-  return LLVM::float_to_signed[F64, S256](from)
+  return LLVM::float_to_signed[B64, S256](from)
 
-### Converts an `F128` to `S256`, truncating toward zero.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `S256`, truncating toward zero.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as an `S256`.
 ### :throws: {NumericOverflowError} if out of range; {NumericDomainError} if NaN.
-routine S256!(from: F128) -> S256
+routine S256!(from: B128) -> S256
   var bits = from.to_bits()
   var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
   var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
-  var frac = LLVM::bit_and(a: bits, b: f128_mant_mask())
+  var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
   if biased == 0x7FFF_u64
     if LLVM::int_eq(a: frac, b: 0_u128)
-      throw NumericOverflowError(description: "cannot convert infinite F128 to S256")
-    throw NumericDomainError(description: "cannot convert NaN F128 to S256")
+      throw NumericOverflowError(description: "cannot convert infinite B128 to S256")
+    throw NumericDomainError(description: "cannot convert NaN B128 to S256")
   if biased < 16383_u64
     return 0_s256
   var actual_exp = LLVM::sub(a: biased, b: 16383_u64)
   if actual_exp >= 256_u64
-    throw NumericOverflowError(description: "F128 value out of range for S256")
+    throw NumericOverflowError(description: "B128 value out of range for S256")
   if actual_exp == 255_u64
     if sign == 0_u64 or LLVM::int_ne(a: frac, b: 0_u128)
-      throw NumericOverflowError(description: "F128 value out of range for S256")
+      throw NumericOverflowError(description: "B128 value out of range for S256")
     return LLVM::reinterpret_bits[U256, S256](LLVM::shift_left(value: 1_u256, bits: 255_u256))
-  var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: f128_implicit(), b: frac))
+  var sig = LLVM::zero_extend[U128, U256](LLVM::bit_or(a: b128_implicit(), b: frac))
   lateinit var int_part: U256
   if actual_exp <= 112_u64
     int_part = LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U256](LLVM::sub(a: 112_u64, b: actual_exp)))

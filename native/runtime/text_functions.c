@@ -19,85 +19,10 @@
 #include <math.h>
 #include "types.h"
 
-// Forward declaration from f16_functions.c
-extern float rf_f16_to_f32(uint16_t x);
-extern uint16_t rf_f16_from_f32(float x);
-
-// ============================================================================
-// Formatting: Binary Floating Point
-// ============================================================================
-
-// Canonical NaN/Inf spellings. printf's output for specials is platform-flavored
-// (MSVC UCRT prints "-nan(ind)", glibc prints "-nan"), so format them ourselves —
-// "NaN" (always unsigned: the NaN payload/sign carries no value information) /
-// "inf" / "-inf". Same canonical set as F128 and the decimal formats.
-// Returns NULL for ordinary finite values.
-static char* format_special_float(double value)
-{
-    if (!isnan(value) && !isinf(value)) return NULL;
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return NULL;
-    if (isnan(value))
-        snprintf(buffer, 8, "NaN");
-    else
-        snprintf(buffer, 8, "%sinf", signbit(value) ? "-" : "");
-    return buffer;
-}
-
-rf_address rf_format_F16(rf_U16 value)
-{
-    float f = rf_f16_to_f32(value);
-    char* special = format_special_float((double)f);
-    if (special) return (rf_address)special;
-    char* buffer = (char*)malloc(64);
-    if (!buffer) return 0;
-    snprintf(buffer, 64, "%.4g", (double)f);
-    return (rf_address)buffer;
-}
-
-rf_address rf_format_F32(float value)
-{
-    char* special = format_special_float((double)value);
-    if (special) return (rf_address)special;
-    char* buffer = (char*)malloc(64);
-    if (!buffer) return 0;
-    snprintf(buffer, 64, "%.7g", (double)value);
-    return (rf_address)buffer;
-}
-
-rf_address rf_format_F64(double value)
-{
-    char* special = format_special_float(value);
-    if (special) return (rf_address)special;
-    char* buffer = (char*)malloc(64);
-    if (!buffer) return 0;
-    snprintf(buffer, 64, "%.15g", value);
-    return (rf_address)buffer;
-}
-
-// F128 formatting is in f128_functions.c (requires LibBF)
-
-// ============================================================================
-// Parsing: Binary Floating Point
-// ============================================================================
-
-rf_U16 rf_parse_F16(const char* str)
-{
-    float val = strtof(str, NULL);
-    return rf_f16_from_f32(val);
-}
-
-float rf_parse_F32(const char* str)
-{
-    return strtof(str, NULL);
-}
-
-double rf_parse_F64(const char* str)
-{
-    return strtod(str, NULL);
-}
-
-// F128 parsing is in f128_functions.c (requires LibBF)
+// Binary-float formatting (B16/B32/B64) and parsing are now pure RazorForge
+// (Standard/RazorForge/Core/Numerics/FloatConvert.rf — exact-rational, correctly
+// rounded). B128 formatting/parsing stays in b128_functions.c (requires LibBF).
+// This file retains only the pointer-format + Text concatenation runtime below.
 
 // ============================================================================
 // Text Concatenation

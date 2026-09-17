@@ -1,6 +1,6 @@
 module Tests/Stdlib/LiteralsApi
 import IO/Console
-import Numerics.[Integer, Decimal, Complex]
+import Numerics.[Integer, Decimal, Complex, Real, C64, C128, C256]
 
 # Exercises every literal token form the tokenizer produces (see src/01.Tokenizer/TokenType.cs):
 # signed/unsigned fixed-width integers, Address, arbitrary-precision Integer (`n`),
@@ -36,12 +36,12 @@ routine start()
   show(f"binary: {0b1010_u8}")
   show(f"sep: {1_234_567_s64}")
 
-  # --- Floats (F16..F128) ---
-  show(f"f16: {1.5_f16}")
-  show(f"f32: {3.14_f32}")
-  show(f"f64: {2.5_f64}")
-  show(f"f128: {1.25_f128}")
-  show(f"sci: {1.5e3_f64}")
+  # --- Floats (B16..B128) ---
+  show(f"b16: {1.5_b16}")
+  show(f"b32: {3.14_b32}")
+  show(f"b64: {2.5_b64}")
+  show(f"b128: {1.25_b128}")
+  show(f"sci: {1.5e3_b64}")
 
   # --- Decimals (D32..D128) ---
   show(f"d32: {3.5_d32}")
@@ -52,12 +52,20 @@ routine start()
   show(f"dn: {3.14dn}")
   show(f"dn exact: {0.1dn + 0.2dn}")
 
-  # --- Imaginary literals (j32/j64/j128/jn) -> pure-imaginary complex ---
-  show(f"j32: {2.0j32}")
-  show(f"j64: {3.0j64}")
-  show(f"j64 short: {4.0j}")
-  show(f"j128: {5.0j128}")
-  show(f"jn: {6.0jn}")
+  # --- Imaginary literal (width-less `i`) -> pure-imaginary complex ---
+  # No context -> defaults to C128 (2xB64). The `_i` spelling is accepted too.
+  show(f"i default: {2.0i}")
+  show(f"i sep: {4.0_i}")
+  # Natural `real + imag*i` construction: the real literal fills the real part, `i` the imaginary,
+  # and the type comes from context (default C128).
+  var c_default = 3 + 4i
+  show(f"c default: {c_default}")
+  var c64: C64 = 1 + 3i
+  show(f"c in C64: {c64}")
+  var c256: C256 = 2 + 5i
+  show(f"c in C256: {c256}")
+  var carb: Complex = 3 + 6i
+  show(f"c in Complex: {carb}")
 
   # --- Bool ---
   show(f"true: {true}")

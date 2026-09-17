@@ -114,52 +114,52 @@ routine U128!(from: U256) -> U128
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, U128](from)
 
-### Converts an `F16` to `U128`, truncating toward zero.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `U128`, truncating toward zero.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
-routine U128!(from: F16) -> U128
-  return from.F32().U128!()
+routine U128!(from: B16) -> U128
+  return from.B32().U128!()
 
-### Converts an `F32` to `U128`, truncating toward zero.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `U128`, truncating toward zero.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, or negative.
-routine U128!(from: F32) -> U128
-  if not from.is_finite() or from < 0.0_f32
+routine U128!(from: B32) -> U128
+  if not from.is_finite() or from < 0.0_b32
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F32, U128](from)
+  return LLVM::float_to_unsigned[B32, U128](from)
 
-### Converts an `F64` to `U128`, truncating toward zero.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `U128`, truncating toward zero.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {IntegerOverflowError} if `from` is NaN, infinite, negative, or >= 2^128.
-routine U128!(from: F64) -> U128
-  if from.is_nan() or from < 0.0_f64 or from >= 340282366920938463463374607431768211456.0_f64
+routine U128!(from: B64) -> U128
+  if from.is_nan() or from < 0.0_b64 or from >= 340282366920938463463374607431768211456.0_b64
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F64, U128](from)
+  return LLVM::float_to_unsigned[B64, U128](from)
 
-### Converts an `F128` to `U128`, truncating toward zero.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `U128`, truncating toward zero.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as a `U128`.
 ### :throws: {NumericOverflowError} if negative or >= 2^128; {NumericDomainError} if NaN.
-routine U128!(from: F128) -> U128
+routine U128!(from: B128) -> U128
   var bits = from.to_bits()
   var sign = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(bits, 127_u128))
   var biased = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
-  var frac = LLVM::bit_and(a: bits, b: f128_mant_mask())
+  var frac = LLVM::bit_and(a: bits, b: b128_mant_mask())
   if biased == 0x7FFF_u64
     if LLVM::int_eq(a: frac, b: 0_u128)
-      throw NumericOverflowError(description: "cannot convert infinite F128 to U128")
-    throw NumericDomainError(description: "cannot convert NaN F128 to U128")
+      throw NumericOverflowError(description: "cannot convert infinite B128 to U128")
+    throw NumericDomainError(description: "cannot convert NaN B128 to U128")
   if sign == 1_u64 and (LLVM::int_ne(a: biased, b: 0_u64) or LLVM::int_ne(a: frac, b: 0_u128))
-    throw NumericOverflowError(description: "cannot convert negative F128 to U128")
+    throw NumericOverflowError(description: "cannot convert negative B128 to U128")
   if biased < 16383_u64
     return 0_u128
   var actual_exp = LLVM::sub(a: biased, b: 16383_u64)
   if actual_exp >= 128_u64
-    throw NumericOverflowError(description: "F128 value out of range for U128")
-  var sig = LLVM::bit_or(a: f128_implicit(), b: frac)
+    throw NumericOverflowError(description: "B128 value out of range for U128")
+  var sig = LLVM::bit_or(a: b128_implicit(), b: frac)
   if actual_exp <= 112_u64
     return LLVM::shift_right_unsigned(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: 112_u64, b: actual_exp)))
   return LLVM::shift_left(sig, LLVM::zero_extend[U64, U128](LLVM::sub(a: actual_exp, b: 112_u64)))

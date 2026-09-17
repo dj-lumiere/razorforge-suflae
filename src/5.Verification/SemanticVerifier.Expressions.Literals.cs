@@ -38,17 +38,6 @@ public sealed partial class SemanticVerifier
             return ErrorTypeSymbol.Instance;
         }
 
-        if (IsSuflaeSuffixGateViolation(literal: literal, typeName: typeName))
-        {
-            ReportError(code: SemanticDiagnosticCode.SuflaeNumericImportRequired,
-                message:
-                $"Fixed-width numeric literal suffix '{typeName}' is import-gated in Suflae — add " +
-                "`import Numerics`. Bare numbers default to Integer/Decimal (fixed-width types like " +
-                "S32/U64/F128 stay behind the import to keep the surface approachable).",
-                location: literal.Location);
-            return ErrorTypeSymbol.Instance;
-        }
-
         typeName = ApplyContextualTypeInference(literal: literal,
             expectedType: expectedType,
             typeName: typeName,
@@ -70,26 +59,6 @@ public sealed partial class SemanticVerifier
         }
 
         return type;
-    }
-
-    /// <summary>
-    /// Returns true when a fixed-width/complex numeric suffix is used in a Suflae source file but the
-    /// required <c>Numerics</c> import is absent — i.e. the literal slips the TypeResolver gate.
-    /// </summary>
-    private bool IsSuflaeSuffixGateViolation(LiteralExpression literal, string typeName)
-    {
-        // Only fires for explicit fixed-width / complex suffixes; unsuffixed literals stay bare.
-        if (literal.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal
-            or TokenType.IntegerLiteral or TokenType.DecimalLiteral)
-        {
-            return false;
-        }
-
-        return Declaration.TypeResolver.IsImportGatedNumeric(name: typeName) &&
-               UsesSuflaeNumericDefaults(literal: literal) &&
-               !IsStdlibFile(filePath: literal.Location.FileName ?? "") &&
-               !(_importedModules.Contains(item: "Numerics") &&
-                 !_importedSymbolNames.Contains(item: IntegerTypeName));
     }
 
     /// <summary>
@@ -124,6 +93,23 @@ public sealed partial class SemanticVerifier
 
         if (literal.LiteralType is TokenType.UndecidedDecimal &&
             (IsFloatType(type: expectedType) || IsDecimalType(type: expectedType)))
+        {
+            return expectedType.Name;
+        }
+
+        // Width-less imaginary literal `i` conforms to a contextual complex type (C64/C128/C256/
+        // Complex); otherwise it keeps its C128 default (see MapLiteralTypeName).
+        if (literal.LiteralType is TokenType.ImaginaryLiteral && IsComplexType(type: expectedType))
+        {
+            return expectedType.Name;
+        }
+
+        // A bare real int/float literal conforms to a contextual complex type as its REAL component
+        // (imag = 0). This is the RF-S767 path that makes `3 + 4i` legible: `3` becomes `C(3, 0)` and
+        // `4i` becomes `C(0, 4)`, so the sum is one Complex+Complex add. LiteralLoweringPass builds the
+        // pure-real constructor from the resolved complex type.
+        if (literal.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal &&
+            IsComplexType(type: expectedType))
         {
             return expectedType.Name;
         }
@@ -182,7 +168,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Maps a literal's token type to its resolved type name (PascalCase), or null for an unknown
-    /// literal type. Unsuffixed integer/decimal literals default to S64/F64 (RF) or Integer/Decimal
+    /// literal type. Unsuffixed integer/decimal literals default to S64/B64 (RF) or Integer/Decimal
     /// (Suflae) per the literal's own source-file language.
     /// </summary>
     private string? MapLiteralTypeName(LiteralExpression literal)
@@ -206,17 +192,17 @@ public sealed partial class SemanticVerifier
             TokenType.AddressLiteral => AddressTypeName,
 
             // Floating-point
-            TokenType.F16Literal => "F16",
-            TokenType.F32Literal => "F32",
-            TokenType.F64Literal => "F64",
-            TokenType.F128Literal => "F128",
+            TokenType.B16Literal => "B16",
+            TokenType.B32Literal => "B32",
+            TokenType.B64Literal => "B64",
+            TokenType.B128Literal => "B128",
 
             // Decimal floating-point
             TokenType.D32Literal => "D32",
             TokenType.D64Literal => "D64",
             TokenType.D128Literal => "D128",
 
-            // Unsuffixed literals: type inference resolves these; fallback is S64/F64 (RF) or Integer/Decimal
+            // Unsuffixed literals: type inference resolves these; fallback is S64/B64 (RF) or Integer/Decimal
             // (Suflae). CRITICAL: the Suflae default applies ONLY to Suflae SOURCE. The RF stdlib is shared
             // by SF ("SF's Core IS RF's Core") and its bodies get (re-)analyzed under an SF compile (generic
             // monomorphization / variant-body collection) OUTSIDE the AnalyzeStdlibBodies RF-mode override —
@@ -230,7 +216,7 @@ public sealed partial class SemanticVerifier
                 : "S64",
             TokenType.UndecidedDecimal => UsesSuflaeNumericDefaults(literal: literal)
                 ? "Decimal"
-                : "F64",
+                : "B64",
 
             // Explicit arbitrary-precision suffix (n): always Integer or Decimal
             TokenType.IntegerLiteral => IntegerTypeName,
@@ -258,11 +244,10 @@ public sealed partial class SemanticVerifier
                 or TokenType.MillisecondLiteral or TokenType.MicrosecondLiteral
                 or TokenType.NanosecondLiteral => "Duration",
 
-            // Complex/Imaginary literals
-            TokenType.J32Literal => "C32",
-            TokenType.J64Literal => "C64",
-            TokenType.J128Literal => "C128",
-            TokenType.JnLiteral => "Complex",
+            // Imaginary literal: width-less `i`. Default (no contextual complex type) is C128
+            // (2×B64, double-precision), mirroring the B64 default for bare float literals.
+            // ApplyContextualTypeInference adapts it to a C64/C256/Complex expected type.
+            TokenType.ImaginaryLiteral => "C128",
 
             // Unknown literal type - error
             _ => null
@@ -279,10 +264,10 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// The unsuffixed-literal default (Integer/Decimal vs S64/F64) follows the literal's SOURCE-FILE
+    /// The unsuffixed-literal default (Integer/Decimal vs S64/B64) follows the literal's SOURCE-FILE
     /// LANGUAGE, not the compile's language and not stdlib-ness: a <c>.sf</c> file uses Suflae defaults,
     /// a <c>.rf</c> file uses RF defaults. This is correct for every mix — RF/SF user code, the shared RF
-    /// stdlib (<c>.rf</c>) borrowed by an SF compile (must keep S64/F64 so `int_eq[U256](b: 0)` stays a
+    /// stdlib (<c>.rf</c>) borrowed by an SF compile (must keep S64/B64 so `int_eq[U256](b: 0)` stays a
     /// coercible scalar, not a heap Integer record), AND a future dedicated Suflae stdlib (<c>.sf</c>),
     /// which SHOULD get Suflae defaults. (Keying on <c>_registry.Language</c> wrongly gave RF stdlib bodies
     /// the SF default when re-analyzed under an SF compile; keying on stdlib-directory membership would
@@ -493,6 +478,16 @@ public sealed partial class SemanticVerifier
     private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue,
         string resolvedTypeName)
     {
+        // A bare int/float literal SA promoted to a complex type (the real component of `3 + 4i`) is
+        // already valid as a scalar from its first analysis; LiteralLoweringPass rebuilds the complex
+        // constructor from the raw text, so no parsed-value cache entry is needed. Route it away from
+        // ParseIntegerByResolvedType/ParseDecimalByResolvedType, which only know scalar numeric types.
+        if (resolvedTypeName is "C64" or "C128" or "C256" or "Complex" &&
+            literal.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal)
+        {
+            return null;
+        }
+
         try
         {
             return literal.LiteralType switch
@@ -543,11 +538,11 @@ public sealed partial class SemanticVerifier
                     maxValue: ulong.MaxValue,
                     suffix: "addr"),
 
-                // Fixed-width floats (F16, F32, F64 use .NET native types; F128 uses native library)
-                TokenType.F16Literal => ParseF16Literal(literal: literal, rawValue: rawValue),
-                TokenType.F32Literal => ParseF32Literal(literal: literal, rawValue: rawValue),
-                TokenType.F64Literal => ParseF64Literal(literal: literal, rawValue: rawValue),
-                TokenType.F128Literal => ParseF128Literal(literal: literal, rawValue: rawValue),
+                // Fixed-width floats (B16, B32, B64 use .NET native types; B128 uses native library)
+                TokenType.B16Literal => ParseB16Literal(literal: literal, rawValue: rawValue),
+                TokenType.B32Literal => ParseB32Literal(literal: literal, rawValue: rawValue),
+                TokenType.B64Literal => ParseB64Literal(literal: literal, rawValue: rawValue),
+                TokenType.B128Literal => ParseB128Literal(literal: literal, rawValue: rawValue),
 
                 // Decimal floating-point (all use native library)
                 TokenType.D32Literal => ParseD32Literal(literal: literal, rawValue: rawValue),
@@ -570,11 +565,11 @@ public sealed partial class SemanticVerifier
                     rawValue: rawValue,
                     resolvedTypeName: resolvedTypeName),
 
-                // Imaginary literals for complex numbers
-                TokenType.J32Literal => ParseJ32Literal(literal: literal, rawValue: rawValue),
-                TokenType.J64Literal => ParseJ64Literal(literal: literal, rawValue: rawValue),
-                TokenType.J128Literal => ParseJ128Literal(literal: literal, rawValue: rawValue),
-                TokenType.JnLiteral => ParseJnLiteral(literal: literal, rawValue: rawValue),
+                // Imaginary literal (width-less `i`): validated against the resolved complex type's
+                // component domain (C64→B32, C128→B64, C256→B128, Complex→arbitrary).
+                TokenType.ImaginaryLiteral => ParseImaginaryLiteral(literal: literal,
+                    rawValue: rawValue,
+                    resolvedTypeName: resolvedTypeName),
 
                 // Duration literals
                 TokenType.NanosecondLiteral => ParseDurationLiteral(literal: literal,
@@ -653,22 +648,22 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Parse f128 literal as part of this compiler phase.
+    /// Parse b128 literal as part of this compiler phase.
     /// </summary>
-    private static ParsedF128 ParseF128Literal(LiteralExpression literal, string rawValue)
+    private static ParsedB128 ParseB128Literal(LiteralExpression literal, string rawValue)
     {
         if (rawValue == "inf")
         {
-            return new ParsedF128(Location: literal.Location, Lo: 0UL, Hi: 0x7FFF000000000000UL);
+            return new ParsedB128(Location: literal.Location, Lo: 0UL, Hi: 0x7FFF000000000000UL);
         }
 
         if (rawValue == "nan")
         {
-            return new ParsedF128(Location: literal.Location, Lo: 0UL, Hi: 0x7FFF800000000000UL);
+            return new ParsedB128(Location: literal.Location, Lo: 0UL, Hi: 0x7FFF800000000000UL);
         }
 
-        NumericLiteralParser.F128 result = NumericLiteralParser.EncodeF128(str: rawValue);
-        return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
+        NumericLiteralParser.B128 result = NumericLiteralParser.EncodeB128(str: rawValue);
+        return new ParsedB128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
     }
 
     /// <summary>
@@ -939,10 +934,10 @@ public sealed partial class SemanticVerifier
     {
         return resolvedTypeName switch
         {
-            "F16" => ParseF16Literal(literal: literal, rawValue: rawValue),
-            "F32" => ParseF32Literal(literal: literal, rawValue: rawValue),
-            "F64" => ParseF64Literal(literal: literal, rawValue: rawValue),
-            "F128" => ParseF128Literal(literal: literal, rawValue: rawValue),
+            "B16" => ParseB16Literal(literal: literal, rawValue: rawValue),
+            "B32" => ParseB32Literal(literal: literal, rawValue: rawValue),
+            "B64" => ParseB64Literal(literal: literal, rawValue: rawValue),
+            "B128" => ParseB128Literal(literal: literal, rawValue: rawValue),
             "D32" => ParseD32Literal(literal: literal, rawValue: rawValue),
             "D64" => ParseD64Literal(literal: literal, rawValue: rawValue),
             "D128" => ParseD128Literal(literal: literal, rawValue: rawValue),
@@ -1064,23 +1059,23 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Parses an F16 (half-precision) floating-point literal using .NET Half type.
+    /// Parses an B16 (half-precision) floating-point literal using .NET Half type.
     /// </summary>
-    private ParsedFloat? ParseF16Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseB16Literal(LiteralExpression literal, string rawValue)
     {
         if (rawValue == "inf")
         {
             return new ParsedFloat(Location: literal.Location,
-                TypeName: "F16",
+                TypeName: "B16",
                 Value: double.PositiveInfinity);
         }
 
         if (rawValue == "nan")
         {
-            return new ParsedFloat(Location: literal.Location, TypeName: "F16", Value: double.NaN);
+            return new ParsedFloat(Location: literal.Location, TypeName: "B16", Value: double.NaN);
         }
 
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f16");
+        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b16");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
         Half value;
@@ -1091,7 +1086,7 @@ public sealed partial class SemanticVerifier
         else if (!Half.TryParse(s: cleanedValue, result: out value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
-                message: $"Invalid F16 literal: '{rawValue}'",
+                message: $"Invalid B16 literal: '{rawValue}'",
                 location: literal.Location);
             return null;
         }
@@ -1099,34 +1094,34 @@ public sealed partial class SemanticVerifier
         if (!Half.IsInfinity(value: value))
         {
             return new ParsedFloat(Location: literal.Location,
-                TypeName: "F16",
+                TypeName: "B16",
                 Value: (double)value);
         }
 
         ReportError(code: SemanticDiagnosticCode.FloatLiteralOverflow,
-            message: $"F16 literal '{rawValue}' overflows the representable range.",
+            message: $"B16 literal '{rawValue}' overflows the representable range.",
             location: literal.Location);
         return null;
     }
 
     /// <summary>
-    /// Parses an F32 (single-precision) floating-point literal using .NET float type.
+    /// Parses an B32 (single-precision) floating-point literal using .NET float type.
     /// </summary>
-    private ParsedFloat? ParseF32Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseB32Literal(LiteralExpression literal, string rawValue)
     {
         if (rawValue == "inf")
         {
             return new ParsedFloat(Location: literal.Location,
-                TypeName: "F32",
+                TypeName: "B32",
                 Value: double.PositiveInfinity);
         }
 
         if (rawValue == "nan")
         {
-            return new ParsedFloat(Location: literal.Location, TypeName: "F32", Value: double.NaN);
+            return new ParsedFloat(Location: literal.Location, TypeName: "B32", Value: double.NaN);
         }
 
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f32");
+        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b32");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
         float value;
@@ -1137,40 +1132,40 @@ public sealed partial class SemanticVerifier
         else if (!float.TryParse(s: cleanedValue, result: out value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
-                message: $"Invalid F32 literal: '{rawValue}'",
+                message: $"Invalid B32 literal: '{rawValue}'",
                 location: literal.Location);
             return null;
         }
 
         if (!float.IsInfinity(f: value))
         {
-            return new ParsedFloat(Location: literal.Location, TypeName: "F32", Value: value);
+            return new ParsedFloat(Location: literal.Location, TypeName: "B32", Value: value);
         }
 
         ReportError(code: SemanticDiagnosticCode.FloatLiteralOverflow,
-            message: $"F32 literal '{rawValue}' overflows the representable range.",
+            message: $"B32 literal '{rawValue}' overflows the representable range.",
             location: literal.Location);
         return null;
     }
 
     /// <summary>
-    /// Parses an F64 (double-precision) floating-point literal using .NET double type.
+    /// Parses an B64 (double-precision) floating-point literal using .NET double type.
     /// </summary>
-    private ParsedFloat? ParseF64Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseB64Literal(LiteralExpression literal, string rawValue)
     {
         if (rawValue == "inf")
         {
             return new ParsedFloat(Location: literal.Location,
-                TypeName: "F64",
+                TypeName: "B64",
                 Value: double.PositiveInfinity);
         }
 
         if (rawValue == "nan")
         {
-            return new ParsedFloat(Location: literal.Location, TypeName: "F64", Value: double.NaN);
+            return new ParsedFloat(Location: literal.Location, TypeName: "B64", Value: double.NaN);
         }
 
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f64");
+        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b64");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
         double value;
@@ -1181,18 +1176,18 @@ public sealed partial class SemanticVerifier
         else if (!double.TryParse(s: cleanedValue, result: out value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
-                message: $"Invalid F64 literal: '{rawValue}'",
+                message: $"Invalid B64 literal: '{rawValue}'",
                 location: literal.Location);
             return null;
         }
 
         if (!double.IsInfinity(d: value))
         {
-            return new ParsedFloat(Location: literal.Location, TypeName: "F64", Value: value);
+            return new ParsedFloat(Location: literal.Location, TypeName: "B64", Value: value);
         }
 
         ReportError(code: SemanticDiagnosticCode.FloatLiteralOverflow,
-            message: $"F64 literal '{rawValue}' overflows the representable range.",
+            message: $"B64 literal '{rawValue}' overflows the representable range.",
             location: literal.Location);
         return null;
     }
@@ -1288,106 +1283,54 @@ public sealed partial class SemanticVerifier
     #region Imaginary Literal Parsing
 
     /// <summary>
-    /// Parses a J32 (F32-based) imaginary literal.
+    /// Parses a width-less imaginary literal (<c>4.0i</c> / <c>4.0_i</c>). The magnitude is validated
+    /// against the resolved complex type's component domain (C64→B32 float, C128→B64 double,
+    /// C256→B128 via the native encoder, Complex→arbitrary decimal); the retained magnitude string is
+    /// consumed by <see cref="Lowering.Passes.LiteralLoweringPass"/> to build the pure-imaginary
+    /// constructor. The parsed record is validation-only (codegen sees the lowered constructor call).
     /// </summary>
-    private ParsedJ32? ParseJ32Literal(LiteralExpression literal, string rawValue)
+    private ParsedImaginary? ParseImaginaryLiteral(LiteralExpression literal, string rawValue,
+        string resolvedTypeName)
     {
-        // Remove 'j32' suffix
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "j32");
-        string cleanedValue = CleanNumericLiteral(value: numericPart);
-
-        if (float.TryParse(s: cleanedValue, result: out float value))
-        {
-            return new ParsedJ32(Location: literal.Location, Value: value);
-        }
-
-        ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
-            message: $"Invalid J32 literal: '{rawValue}'",
-            location: literal.Location);
-        return null;
-    }
-
-    /// <summary>
-    /// Parses a J64 (F64-based) imaginary literal.
-    /// </summary>
-    private ParsedJ64? ParseJ64Literal(LiteralExpression literal, string rawValue)
-    {
-        // Remove 'j64' or 'j' suffix
-        string numericPart =
-            rawValue.EndsWith(value: "j64", comparisonType: StringComparison.OrdinalIgnoreCase)
-                ? ExtractNumericPart(rawValue: rawValue, suffix: "j64")
-                : ExtractNumericPart(rawValue: rawValue, suffix: "j");
-        string cleanedValue = CleanNumericLiteral(value: numericPart);
-
-        if (double.TryParse(s: cleanedValue, result: out double value))
-        {
-            return new ParsedJ64(Location: literal.Location, Value: value);
-        }
-
-        ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
-            message: $"Invalid J64 literal: '{rawValue}'",
-            location: literal.Location);
-        return null;
-    }
-
-    /// <summary>
-    /// Parses a J128 (F128-based) imaginary literal using native library.
-    /// </summary>
-    private ParsedJ128? ParseJ128Literal(LiteralExpression literal, string rawValue)
-    {
-        // Remove 'j128' suffix
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "j128");
+        // Strip the `i` suffix (a `_i` spelling loses its separator underscore in CleanNumericLiteral).
+        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "i");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
         try
         {
-            NumericLiteralParser.F128 result = NumericLiteralParser.EncodeF128(str: cleanedValue);
-            return new ParsedJ128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
-        }
-        catch (Exception ex)
-        {
-            ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
-                message: $"Invalid J128 literal: '{rawValue}': {ex.Message}",
-                location: literal.Location);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Parses a Jn (arbitrary-precision Decimal-based) imaginary literal using native library.
-    /// </summary>
-    private ParsedJn? ParseJnLiteral(LiteralExpression literal, string rawValue)
-    {
-        // Remove 'jn' suffix
-        string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "jn");
-        string cleanedValue = CleanNumericLiteral(value: numericPart);
-
-        try
-        {
-            (string value, int sign, int exponent, int significantDigits, bool _) =
-                NumericLiteralParser.ParseDecimalInfo(str: cleanedValue);
-
-            if (string.IsNullOrEmpty(value: value))
+            bool ok = resolvedTypeName switch
             {
-                ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
-                    message: $"Invalid Jn literal: '{rawValue}'",
-                    location: literal.Location);
-                return null;
-            }
+                "C64" => float.TryParse(s: cleanedValue, result: out float _),
+                "C128" => double.TryParse(s: cleanedValue, result: out double _),
+                "C256" => ValidateB128Magnitude(cleanedValue: cleanedValue),
+                _ => !string.IsNullOrEmpty(
+                    value: NumericLiteralParser.ParseDecimalInfo(str: cleanedValue).Item1)
+            };
 
-            return new ParsedJn(Location: literal.Location,
-                StringValue: value,
-                Sign: sign,
-                Exponent: exponent,
-                SignificantDigits: significantDigits);
+            if (ok)
+            {
+                return new ParsedImaginary(Location: literal.Location, Magnitude: cleanedValue);
+            }
         }
         catch (Exception ex)
         {
             ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
-                message: $"Invalid Jn literal: '{rawValue}': {ex.Message}",
+                message: $"Invalid imaginary literal '{rawValue}': {ex.Message}",
                 location: literal.Location);
             return null;
         }
+
+        ReportError(code: SemanticDiagnosticCode.ImaginaryLiteralParseFailed,
+            message: $"Invalid imaginary literal: '{rawValue}'",
+            location: literal.Location);
+        return null;
+    }
+
+    /// <summary>Returns true if the magnitude is a valid B128 value (via the native encoder).</summary>
+    private static bool ValidateB128Magnitude(string cleanedValue)
+    {
+        NumericLiteralParser.EncodeB128(str: cleanedValue);
+        return true;
     }
 
     #endregion

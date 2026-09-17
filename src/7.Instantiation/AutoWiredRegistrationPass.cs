@@ -382,7 +382,7 @@ internal sealed class AutoWiredRegistrationPass
         // memberRoutine, e.g. an Atomic / lock-flag field) and is semantically wrong for opaque /
         // container types whose logical value is not their field tuple. Auto eq / hash is
         // reserved for tuple / choice / flags (simple, unambiguous tag/element compare). The
-        // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C32/64/128)
+        // stdlib's equatable/hashable struct records (Complex, Integer, Decimal, C64/64/128)
         // already hand-write these. store (below) + represent / diagnose stay auto-derived.
 
         // `assign` (Assignable) / `copy` (Copyable) are now registered by the declaration-driven

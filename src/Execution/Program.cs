@@ -2306,7 +2306,7 @@ internal partial class Program
                 LiteralType: TokenType.False,
                 Location: loc),
             "S8" or "S16" or "S32" or "S64" or "S128" or "S256" or "U8" or "U16" or "U32" or "U64"
-                or "U128" or "U256" or "F16" or "F32" or "F64" or "F128" or "F256" or "Decimal"
+                or "U128" or "U256" or "B16" or "B32" or "B64" or "B128" or "F256" or "Decimal"
                 or "D32" or "D64" or "D128" or "Integer" => new LiteralExpression(Value: "0",
                     LiteralType: TokenType.UndecidedInteger,
                     Location: loc),

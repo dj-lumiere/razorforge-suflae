@@ -564,7 +564,7 @@ public partial class Parser
     /// [N is S32] - Const generic (N is a build-time constant of type S32)
     ///
     /// TYPE EQUALITY CONSTRAINTS (in):
-    /// [T in [S32, S64, F64]] - T must be one of the listed types
+    /// [T in [S32, S64, B64]] - T must be one of the listed types
     ///
     /// DISAMBIGUATION CHALLENGE:
     /// When parsing "T obeys A, B", we need to distinguish between:
@@ -633,7 +633,7 @@ public partial class Parser
             // ─────────────────────────────────────────────────────────────────────
             // CONSTRAINT TYPE 3: in - type equality (must be one of listed types)
             // ─────────────────────────────────────────────────────────────────────
-            // Form: T in [S32, S64, F64]
+            // Form: T in [S32, S64, B64]
             else if (CheckAndAdvance(type: TokenType.In))
             {
                 inlineConstraints.Add(item: ParseInlineInConstraint(paramName: paramName,
@@ -671,7 +671,7 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Parses an INLINE <c>[T in [S32, S64, F64]]</c> type-equality constraint after <c>in</c> has been
+    /// Parses an INLINE <c>[T in [S32, S64, B64]]</c> type-equality constraint after <c>in</c> has been
     /// consumed.
     /// </summary>
     private GenericConstraintDeclaration ParseInlineInConstraint(string paramName,

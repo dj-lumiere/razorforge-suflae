@@ -1,15 +1,15 @@
-module Tests/Stdlib/F128ParseTest
+module Tests/Stdlib/B128ParseTest
 import IO/Console
 
-# Covers Text -> F128 parse via rf_parse_F128. The native function uses an
-# out-param ABI (void f(const char*, f128_t*)) to sidestep the Windows x64
-# sret/xmm0 mismatch that would otherwise make a returned f128_t silently zero.
+# Covers Text -> B128 parse via rf_parse_B128. The native function uses an
+# out-param ABI (void f(const char*, b128_t*)) to sidestep the Windows x64
+# sret/xmm0 mismatch that would otherwise make a returned b128_t silently zero.
 
 routine start()
-  var a = F128!("3.14")
-  var b = F128!("2.718281828459045")
-  var c = F128!("0")
-  var d = F128!("-1.5e10")
+  var a = B128!("3.14")
+  var b = B128!("2.718281828459045")
+  var c = B128!("0")
+  var d = B128!("-1.5e10")
   show(f"3.14 -> {a}")
   show(f"e     -> {b}")
   show(f"0     -> {c}")

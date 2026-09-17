@@ -803,7 +803,7 @@ public record DefineDeclaration(
 /// <remarks>
 /// Preset declarations provide build-time constants:
 /// <list type="bullet">
-/// <item>Simple constants: preset PI: f64 = 3.14159</item>
+/// <item>Simple constants: preset PI: b64 = 3.14159</item>
 /// <item>Integer constants: preset MAX_SIZE: u32 = 1024u32</item>
 /// <item>Pointer constants: preset cnullptr: Address = 0a</item>
 /// <item>Must be evaluable at build time</item>

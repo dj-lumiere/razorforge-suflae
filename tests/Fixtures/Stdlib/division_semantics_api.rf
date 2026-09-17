@@ -22,11 +22,11 @@ routine start()
   show(f"-7 % -2 = {-7_s64 % -2_s64}")    # remainder sign = divisor (-2) -> -1
 
   # Float true division (no `//` on floats — that's a compile error)
-  show(f"7.0 / 2.0 = {7.0_f64 / 2.0_f64}")
-  show(f"-7.0 / 2.0 = {-7.0_f64 / 2.0_f64}")
+  show(f"7.0 / 2.0 = {7.0_b64 / 2.0_b64}")
+  show(f"-7.0 / 2.0 = {-7.0_b64 / 2.0_b64}")
   # Float floor via explicit `.floor()`
-  show(f"floor(7.0 / 2.0) = {(7.0_f64 / 2.0_f64).floor()}")
-  show(f"floor(-7.0 / 2.0) = {(-7.0_f64 / 2.0_f64).floor()}")
+  show(f"floor(7.0 / 2.0) = {(7.0_b64 / 2.0_b64).floor()}")
+  show(f"floor(-7.0 / 2.0) = {(-7.0_b64 / 2.0_b64).floor()}")
 
   # Divisor invariant: (a // b) * b + (a % b) == a
   var a = -7_s64

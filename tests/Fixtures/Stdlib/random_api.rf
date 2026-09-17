@@ -2,7 +2,7 @@ module Tests/Stdlib/RandomApi
 
 # Random stdlib module — end-to-end smoke test for the xoshiro256** generator and its
 # Sized-powered collection helpers. Exercises make_random (splitmix64 seeding), next_u64
-# determinism, next_f64 range, chance() distribution, pick! across List + CircularList (the
+# determinism, next_b64 range, chance() distribution, pick! across List + CircularList (the
 # MutableIndexable extension), and in-place Fisher-Yates shuffle. All draws use fixed seeds
 # so the output is fully deterministic.
 
@@ -24,23 +24,23 @@ routine run_demo!() -> S64
     i = i +% 1u64
   show(f"same-seed streams match: {same}")
 
-  # next_f64 stays in the half-open unit interval.
+  # next_b64 stays in the half-open unit interval.
   var d = make_random(seed: 7u64)
   var in_range = true
   var j = 0u64
   while j < 1000u64
-    var x = d.next_f64()
-    if x < 0.0_f64 or x >= 1.0_f64
+    var x = d.next_b64()
+    if x < 0.0_b64 or x >= 1.0_b64
       in_range = false
     j = j +% 1u64
-  show(f"1000 f64 draws all in [0,1): {in_range}")
+  show(f"1000 b64 draws all in [0,1): {in_range}")
 
   # chance(0.5) over 10000 trials — deterministic count for this seed.
   var e = make_random(seed: 2024u64)
   var heads = 0u64
   var k = 0u64
   while k < 10000u64
-    if e.chance(probability: 0.5_f64)
+    if e.chance(probability: 0.5_b64)
       heads = heads +% 1u64
     k = k +% 1u64
   show(f"heads out of 10000: {heads}")

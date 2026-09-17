@@ -745,7 +745,7 @@ internal sealed class CallOverloadResolutionPass
             return localT;
         }
 
-        // An explicitly-suffixed numeric literal (`0u64`, `1u64`, `3.0f32`) carries its type in its
+        // An explicitly-suffixed numeric literal (`0u64`, `1u64`, `3.0b32`) carries its type in its
         // LiteralType token even when an un-SA'd body never stamped ResolvedType. Recover it so a local
         // seeded from such a literal (`var n = 0u64`) gets a receiver type for a downstream `n.add(1u64)`
         // — the cold-path monomorph of `Iterable[T].get_count`'s `n = n + 1u64`. Unsuffixed literals
@@ -848,10 +848,10 @@ internal sealed class CallOverloadResolutionPass
             TokenType.U64Literal => "U64",
             TokenType.U128Literal => "U128",
             TokenType.U256Literal => "U256",
-            TokenType.F16Literal => "F16",
-            TokenType.F32Literal => "F32",
-            TokenType.F64Literal => "F64",
-            TokenType.F128Literal => "F128",
+            TokenType.B16Literal => "B16",
+            TokenType.B32Literal => "B32",
+            TokenType.B64Literal => "B64",
+            TokenType.B128Literal => "B128",
             TokenType.D32Literal => "D32",
             TokenType.D64Literal => "D64",
             TokenType.D128Literal => "D128",

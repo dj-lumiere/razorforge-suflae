@@ -1,0 +1,449 @@
+module Core
+
+import Collections
+import Numerics.Integer
+
+# ============================================================================
+# Pure-RF binary-float text conversion (formatting + parsing) for B16/B32/B64.
+#
+# Replaces the old C runtime (snprintf "%g" / strtof / strtod, plus the b16
+# software shims). Both directions are EXACT-RATIONAL: a binary float is
+# f = m · 2^e with integer m, e, so every question ("what are the first N
+# decimal digits, correctly rounded?" / "which float is nearest this decimal?")
+# is an exact big-integer comparison. The unbounded `Integer` (LibTomMath) is
+# the scratch type — formatting is a cold path, so clarity/correctness beat the
+# table-heavy speed tricks (Ryū/Grisu) that only pay off in a hot loop.
+#
+# FORMAT: `format_binary(value, sig)` renders `value` to `sig` significant
+# decimal digits (round-half-even), then lays them out with C `%g` rules
+# (scientific when the decimal exponent is < -4 or >= sig, else fixed). B16/B32
+# widen EXACTLY to B64 first, so one core covers all three.
+#
+# PARSE: `parse_float_components` validates + extracts (kind, sign, significand,
+# decimal-exponent); `b{16,32,64}_from_ratio` builds the exact rational and
+# rounds it straight to the TARGET precision (single rounding — no B64 detour,
+# so no double-rounding error), then packs the IEEE 754 bit pattern.
+# ============================================================================
+
+# Small result records carry a `Text` alongside scalars. (A managed `Integer`
+# field is deliberately NOT used: the LLVM emitter currently drops a cross-module
+# `Integer` field from a Core record's layout — see the codegen to-fix note — so
+# the parsed significand travels as its decimal digit STRING and is rebuilt into
+# an `Integer` at the use site. The binary-float round/pack keeps its `Integer`s
+# as locals and returns a scalar `U64` bit pattern, never an aggregate.)
+
+### Correctly-rounded decimal digits of a float, with the exponent of the leading digit.
+record FloatDigits
+  ### The significant digit string (exactly `sig` characters).
+  digits: Text
+  ### Decimal exponent E: the value equals d0.d1… × 10^E.
+  point_exp: S64
+
+### A parsed decimal-float string: a finite magnitude equals digits × 10^dec_exp.
+record FloatParsed
+  ### 0 finite, 1 NaN, 2 infinity, 3 invalid (malformed input).
+  kind: S32
+  ### Whether a leading `-` was present.
+  is_neg: Bool
+  ### The significand as a decimal digit string (rebuilt into an `Integer` by the caller).
+  digits: Text
+  ### The base-10 exponent applied to the significand.
+  dec_exp: S64
+
+# ----------------------------------------------------------------------------
+# Big-integer helpers
+# ----------------------------------------------------------------------------
+
+### Returns 10^k as an Integer. `k` must be non-negative.
+routine pow10_int(k: S64) -> Integer
+  return Integer(value: 10u64).pow(exp: LLVM::int_truncate[S64, U32](k))
+
+### Returns round-half-to-even of n/d for non-negative n and positive d.
+routine div_round_half_even(n: Integer, d: Integer) -> Integer
+  var qr = n.divmod!(other: d)
+  var q = qr.item0
+  var r = qr.item1
+  var r2 = r.add(other: r)
+  var c = r2.cmp(you: d)
+  if c == ME_LARGE
+    return q.add(other: Integer.one())
+  if c == SAME
+    if q.is_odd()
+      return q.add(other: Integer.one())
+    return q
+  return q
+
+### True when num/den >= 2^k (k may be negative), an exact big-integer test.
+routine ratio_ge_pow2(num: Integer, den: Integer, k: S64) -> Bool
+  if k >= 0_s64
+    return num.cmp(you: den.shl(bits: LLVM::int_truncate[S64, S32](k))) != ME_SMALL
+  return num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - k)).cmp(you: den) != ME_SMALL
+
+# ----------------------------------------------------------------------------
+# Formatting: significant-digit extraction + %g layout
+# ----------------------------------------------------------------------------
+
+### Extracts `sig` correctly-rounded significant decimal digits of the positive
+### value m·2^e2. Returns (digits, E) where the value equals d0.d1d2… × 10^E and
+### `digits` is exactly `sig` characters long.
+routine binary_float_digits(m: U64, e2: S64, sig: U64) -> FloatDigits
+  var num = Integer(value: m)
+  var den = Integer.one()
+  if e2 >= 0_s64
+    num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
+  else
+    den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
+  var sigi = LLVM::reinterpret_bits[U64, S64](sig)
+  var sigm1 = sigi - 1_s64
+  var lo = pow10_int(k: sigm1)
+  var hi = pow10_int(k: sigi)
+  # Decimal-exponent estimate: log10(value) ≈ (bitlen(num) - bitlen(den))·log10(2).
+  var bl = LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())
+  var ee = (bl * 30103_s64) // 100000_s64
+  var dd = Integer.zero()
+  var guard = 0_s64
+  var done = false
+  while not done
+    var pp = sigm1 - ee
+    var n2 = num
+    var d2 = den
+    if pp >= 0_s64
+      n2 = num.mul(other: pow10_int(k: pp))
+    else
+      d2 = den.mul(other: pow10_int(k: 0_s64 - pp))
+    dd = div_round_half_even(n: n2, d: d2)
+    if guard >= 6_s64
+      done = true
+    elseif dd.cmp(you: hi) != ME_SMALL
+      ee = ee + 1_s64
+      guard = guard + 1_s64
+    elseif dd.cmp(you: lo) == ME_SMALL
+      ee = ee - 1_s64
+      guard = guard + 1_s64
+    else
+      done = true
+  # Safety: if the guard tripped with a rounded-up extra digit, drop it.
+  if dd.cmp(you: hi) != ME_SMALL
+    dd = dd.floordiv!(other: Integer(value: 10u64))
+    ee = ee + 1_s64
+  return FloatDigits(digits: dd.represent(), point_exp: ee)
+
+### Builds `n` copies of '0' as Text.
+routine zeros_text(n: U64) -> Text
+  var r = Text()
+  var i = 0u64
+  while i < n
+    r = r + "0"
+    i = i + 1u64
+  return r
+
+### Lays out the significant digits with C `%g` rules. `digits` is the sig-digit
+### string, `E` the exponent of the leading digit (value ≈ d0.d1… × 10^E).
+routine assemble_decimal(neg: Bool, digits: Text, ee: S64, sig: U64) -> Text
+  var k = digits.count()
+  while k > 1u64 and digits[k - 1u64] == Character(0x0030u32)
+    k = k - 1u64
+  var s = digits[0u64 til k]
+  var sigi = LLVM::reinterpret_bits[U64, S64](sig)
+  var body = Text()
+  if ee < -4_s64 or ee >= sigi
+    # Scientific: d[.ddd]e±XX
+    if k == 1u64
+      body = s
+    else
+      body = s[0u64 til 1u64] + "." + s[1u64 til k]
+    var ea = ee
+    var esign = "+"
+    if ee < 0_s64
+      ea = 0_s64 - ee
+      esign = "-"
+    var edig = int_to_text(mag: LLVM::reinterpret_bits[S64, U64](ea), negative: false)
+    if edig.count() < 2u64
+      edig = "0" + edig
+    body = body + "e" + esign + edig
+  elseif ee >= 0_s64
+    var iplen = LLVM::reinterpret_bits[S64, U64](ee + 1_s64)
+    if k <= iplen
+      body = s + zeros_text(n: iplen - k)
+    else
+      body = s[0u64 til iplen] + "." + s[iplen til k]
+  else
+    var zc = LLVM::reinterpret_bits[S64, U64](0_s64 - ee - 1_s64)
+    body = "0." + zeros_text(n: zc) + s
+  if neg
+    return "-" + body
+  return body
+
+### Renders a B64 to `sig` significant digits with `%g` layout. B16/B32 widen to
+### B64 EXACTLY before calling here, so this single core serves all three.
+### Specials: "NaN" / "inf" / "-inf"; zero renders as "0" / "-0".
+routine format_binary(value: B64, sig: U64) -> Text
+  if value.is_nan()
+    return "NaN"
+  if value.is_infinite()
+    if value.signbit()
+      return "-inf"
+    return "inf"
+  var neg = value.signbit()
+  if value.is_zero()
+    if neg
+      return "-0"
+    return "0"
+  var raw = value.to_bits()
+  var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
+  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
+  var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
+  var m = 0u64
+  var e2 = 0_s64
+  if LLVM::int_eq(a: ef, b: 0u64)
+    m = mf
+    e2 = -1074_s64
+  else
+    m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
+    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
+  var pr = binary_float_digits(m: m, e2: e2, sig: sig)
+  return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sig)
+
+# ----------------------------------------------------------------------------
+# Parsing: decimal text -> nearest binary float (rounded straight to target)
+# ----------------------------------------------------------------------------
+
+### Rounds the positive rational num_in/den_in to the nearest binary float of the
+### given format (ties to even) and returns the full IEEE 754 bit pattern in the low
+### bits of a `U64` (the caller truncates for B32/B16). Every `Integer` stays a local
+### here — no aggregate carries a managed value across the routine boundary.
+### `fmt` selects the format's field widths: 0 = B64, 1 = B32, 2 = B16.
+routine round_and_pack(neg: Bool, num_in: Integer, den_in: Integer, fmt: S32) -> U64
+  # Format constants: p = significand bits, min_lsb = smallest representable bit-
+  # exponent, emin/emax = unbiased normal-exponent range, bias, mant_bits = p-1,
+  # exp_bits = exponent field width. Defaults are B64; narrower formats override.
+  var p = 53_s64
+  var min_lsb = -1074_s64
+  var emin = -1022_s64
+  var emax = 1023_s64
+  var bias = 1023_s64
+  var mant_bits = 52u64
+  var exp_bits = 11u64
+  if fmt == 1_s32
+    p = 24_s64
+    min_lsb = -149_s64
+    emin = -126_s64
+    emax = 127_s64
+    bias = 127_s64
+    mant_bits = 23u64
+    exp_bits = 8u64
+  elseif fmt == 2_s32
+    p = 11_s64
+    min_lsb = -24_s64
+    emin = -14_s64
+    emax = 15_s64
+    bias = 15_s64
+    mant_bits = 10u64
+    exp_bits = 5u64
+  var num = num_in
+  var den = den_in
+  # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
+  var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
+  while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
+    ee = ee + 1_s64
+  while not ratio_ge_pow2(num: num, den: den, k: ee)
+    ee = ee - 1_s64
+  var lsb = ee - (p - 1_s64)
+  if lsb < min_lsb
+    lsb = min_lsb
+  var n2 = num
+  var d2 = den
+  if lsb >= 0_s64
+    d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+  else
+    n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
+  var q = div_round_half_even(n: n2, d: d2)
+  # A round-up can carry to 2^p; renormalize one bit.
+  var pbits = Integer(value: 1u64).shl(bits: LLVM::int_truncate[S64, S32](p))
+  if q.cmp(you: pbits) != ME_SMALL
+    q = q.shr(bits: 1_s32)
+    lsb = lsb + 1_s64
+  # Pack the IEEE fields (generic over the format's widths).
+  var sign = 0u64
+  if neg
+    sign = LLVM::shift_left(1u64, LLVM::add(a: mant_bits, b: exp_bits))
+  if q.is_zero()
+    return sign
+  var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
+  var efinal = lsb + leading - 1_s64
+  var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
+  if efinal > emax
+    return LLVM::bit_or(a: sign, b: LLVM::shift_left(exp_all_ones, mant_bits))
+  var qbits = U64(from: q)
+  var mant_mask = LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64)
+  if leading == p and efinal >= emin
+    var biased = LLVM::reinterpret_bits[S64, U64](efinal + bias)
+    var mant = LLVM::bit_and(a: qbits, b: mant_mask)
+    return LLVM::bit_or(a: sign, b: LLVM::bit_or(a: LLVM::shift_left(biased, mant_bits), b: mant))
+  return LLVM::bit_or(a: sign, b: qbits)
+
+### Validates a decimal float string and extracts (kind, neg, significand, dec_exp)
+### where a finite magnitude equals significand × 10^dec_exp. kind: 0 finite,
+### 1 NaN, 2 infinity. Throws {InvalidValueError} on malformed input.
+routine parse_float_components(from_text: Text, target: Text) -> FloatParsed
+  var len = from_text.count()
+  if len == 0u64
+    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+  var i = 0u64
+  var neg = false
+  var first = from_text[0u64]
+  if first == Character(0x002Bu32) or first == Character(0x002Du32)
+    neg = first == Character(0x002Du32)
+    i = 1u64
+    if i >= len
+      return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+  var rest = len - i
+  if rest >= 3u64
+    var c0 = from_text[i].to_lowercase()
+    var c1 = from_text[i + 1u64].to_lowercase()
+    var c2 = from_text[i + 2u64].to_lowercase()
+    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
+      return FloatParsed(kind: 1_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+    if rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      var c3 = from_text[i + 3u64].to_lowercase()
+      var c4 = from_text[i + 4u64].to_lowercase()
+      var c5 = from_text[i + 5u64].to_lowercase()
+      var c6 = from_text[i + 6u64].to_lowercase()
+      var c7 = from_text[i + 7u64].to_lowercase()
+      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
+        return FloatParsed(kind: 2_s32, is_neg: neg, digits: "0", dec_exp: 0_s64)
+  var m = Integer.zero()
+  var ten = Integer(value: 10u64)
+  var frac_digits = 0_s64
+  var seen_dot = false
+  var has_digit = false
+  var has_exp = false
+  var exp_val = 0_s64
+  var exp_neg = false
+  var exp_has_digit = false
+  while i < len
+    var ch = from_text[i]
+    if ch.is_numeric()
+      if has_exp
+        exp_has_digit = true
+        if exp_val < 1000000_s64
+          exp_val = exp_val * 10_s64 + S64(from: ch.digit_value())
+      else
+        has_digit = true
+        m = m.mul(other: ten).add(other: Integer(from: ch.digit_value()))
+        if seen_dot
+          frac_digits = frac_digits + 1_s64
+    elseif ch == Character(0x002Eu32)
+      if seen_dot or has_exp
+        return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+      seen_dot = true
+    elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+      if has_exp or not has_digit
+        return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+      has_exp = true
+      if i + 1u64 < len
+        var next_ch = from_text[i + 1u64]
+        if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
+          exp_neg = next_ch == Character(0x002Du32)
+          i = i + 1u64
+    else
+      return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+    i = i + 1u64
+  if not has_digit
+    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+  if has_exp and not exp_has_digit
+    return FloatParsed(kind: 3_s32, is_neg: false, digits: "0", dec_exp: 0_s64)
+  var signed_exp = exp_val
+  if exp_neg
+    signed_exp = 0_s64 - exp_val
+  return FloatParsed(kind: 0_s32, is_neg: neg, digits: m.represent(), dec_exp: signed_exp - frac_digits)
+
+# ----------------------------------------------------------------------------
+# Per-type entry points: rational -> IEEE 754 bit pattern (via round_and_pack)
+# ----------------------------------------------------------------------------
+
+### Rounds significand × 10^dec_exp to the nearest B64.
+routine b64_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B64
+  var m = Integer.from_literal(text: digits)
+  if m.is_zero()
+    var z = 0u64
+    if neg
+      z = 0x8000000000000000u64
+    return B64.from_bits(bits: z)
+  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+  if mag > 320_s64
+    var big = 0x7FF0000000000000u64
+    if neg
+      big = 0xFFF0000000000000u64
+    return B64.from_bits(bits: big)
+  if mag < -330_s64
+    var zz = 0u64
+    if neg
+      zz = 0x8000000000000000u64
+    return B64.from_bits(bits: zz)
+  var num = m
+  var den = Integer.one()
+  if dec_exp >= 0_s64
+    num = m.mul(other: pow10_int(k: dec_exp))
+  else
+    den = pow10_int(k: 0_s64 - dec_exp)
+  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 0_s32)
+  return B64.from_bits(bits: bits)
+
+### Rounds significand × 10^dec_exp to the nearest B32 (single rounding).
+routine b32_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B32
+  var m = Integer.from_literal(text: digits)
+  if m.is_zero()
+    var z = 0u32
+    if neg
+      z = 0x80000000u32
+    return B32.from_bits(bits: z)
+  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+  if mag > 320_s64
+    var big = 0x7F800000u32
+    if neg
+      big = 0xFF800000u32
+    return B32.from_bits(bits: big)
+  if mag < -330_s64
+    var zz = 0u32
+    if neg
+      zz = 0x80000000u32
+    return B32.from_bits(bits: zz)
+  var num = m
+  var den = Integer.one()
+  if dec_exp >= 0_s64
+    num = m.mul(other: pow10_int(k: dec_exp))
+  else
+    den = pow10_int(k: 0_s64 - dec_exp)
+  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 1_s32)
+  return B32.from_bits(bits: LLVM::int_truncate[U64, U32](bits))
+
+### Rounds significand × 10^dec_exp to the nearest B16 (single rounding).
+routine b16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B16
+  var m = Integer.from_literal(text: digits)
+  if m.is_zero()
+    var z = 0u16
+    if neg
+      z = 0x8000u16
+    return B16.from_bits(bits: z)
+  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+  if mag > 320_s64
+    var big = 0x7C00u16
+    if neg
+      big = 0xFC00u16
+    return B16.from_bits(bits: big)
+  if mag < -330_s64
+    var zz = 0u16
+    if neg
+      zz = 0x8000u16
+    return B16.from_bits(bits: zz)
+  var num = m
+  var den = Integer.one()
+  if dec_exp >= 0_s64
+    num = m.mul(other: pow10_int(k: dec_exp))
+  else
+    den = pow10_int(k: 0_s64 - dec_exp)
+  var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 2_s32)
+  return B16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))

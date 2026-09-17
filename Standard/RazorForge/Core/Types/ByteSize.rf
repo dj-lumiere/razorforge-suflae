@@ -84,24 +84,24 @@ routine ByteSize.bit_size() -> U64
 
 ### Returns this size expressed in kibibytes.
 ### The conversion uses powers of 1024.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.kib_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1024.0
+routine ByteSize.kib_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1024.0
 
 ### Returns this size expressed in mebibytes.
 ### The conversion uses powers of 1024.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.mib_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1048576.0
+routine ByteSize.mib_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1048576.0
 
 ### Returns this size expressed in gibibytes.
 ### The conversion uses powers of 1024.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.gib_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1073741824.0
+routine ByteSize.gib_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1073741824.0
 
 # ============================================================================
 # Decimal unit conversions (powers of 1000)
@@ -109,24 +109,24 @@ routine ByteSize.gib_size() -> F64
 
 ### Returns this size expressed in kilobytes.
 ### The conversion uses powers of 1000.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.kb_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000.0
+routine ByteSize.kb_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000.0
 
 ### Returns this size expressed in megabytes.
 ### The conversion uses powers of 1000.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.mb_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000000.0
+routine ByteSize.mb_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000000.0
 
 ### Returns this size expressed in gigabytes.
 ### The conversion uses powers of 1000.
-### :returns: The resulting `F64` value.
+### :returns: The resulting `B64` value.
 @readonly
-routine ByteSize.gb_size() -> F64
-  return F64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000000000.0
+routine ByteSize.gb_size() -> B64
+  return B64(LLVM::reinterpret_bits[ByteSize, U64](me)) / 1000000000.0
 
 # ============================================================================
 # Arithmetic operators

@@ -257,8 +257,8 @@ public class VariableDeclarationTests
                           var f: U16 = 6
                           var g: U32 = 7
                           var h: U64 = 8
-                          var i: F32 = 9.0_f32
-                          var j: F64 = 10.0_f64
+                          var i: B32 = 9.0_b32
+                          var j: B64 = 10.0_b64
                           var k: bool = true
                           return
                         """;
@@ -355,8 +355,8 @@ public class VariableDeclarationTests
                         routine test()
                           var a = 42_s32
                           var b = 100_u64
-                          var c = 3.14_f32
-                          var d = 2.718_f64
+                          var c = 3.14_b32
+                          var d = 2.718_b64
                           return
                         """;
 
@@ -463,8 +463,8 @@ public class VariableDeclarationTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
                         """;
 
         Program program = AssertParses(source: source);

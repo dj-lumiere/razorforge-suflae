@@ -2,7 +2,7 @@ module Math3D
 import Simd
 
 ### A 4-row, 4-column single-precision matrix, stored **column-major** as four
-### SIMD column vectors (`Vector[F32, 4]`). This layout matches the GPU convention
+### SIMD column vectors (`Vector[B32, 4]`). This layout matches the GPU convention
 ### (GLSL/WGSL column-major) and lets `matrix · vector` lower to hardware vector
 ### FMA on the columns.
 ###
@@ -18,35 +18,35 @@ import Simd
 # Column helper
 # ============================================================================
 
-### Builds a `Vector[F32, 4]` from its four lanes (no bounds-checked setitem — uses
+### Builds a `Vector[B32, 4]` from its four lanes (no bounds-checked setitem — uses
 ### the raw `insert_element` intrinsic, like the SIMD splat constructor).
 ### :param x: Lane 0.
 ### :param y: Lane 1.
 ### :param z: Lane 2.
 ### :param w: Lane 3.
 ### :returns: The packed 4-lane vector `<x, y, z, w>`.
-routine vec4(x: F32, y: F32, z: F32, w: F32) -> Vector[F32, 4]
-  var v = LLVM::zero_value[Vector[F32, 4]]()
-  v = LLVM::insert_element[Vector[F32, 4], F32](v, x, 0u64)
-  v = LLVM::insert_element[Vector[F32, 4], F32](v, y, 1u64)
-  v = LLVM::insert_element[Vector[F32, 4], F32](v, z, 2u64)
-  v = LLVM::insert_element[Vector[F32, 4], F32](v, w, 3u64)
+routine vec4(x: B32, y: B32, z: B32, w: B32) -> Vector[B32, 4]
+  var v = LLVM::zero_value[Vector[B32, 4]]()
+  v = LLVM::insert_element[Vector[B32, 4], B32](v, x, 0u64)
+  v = LLVM::insert_element[Vector[B32, 4], B32](v, y, 1u64)
+  v = LLVM::insert_element[Vector[B32, 4], B32](v, z, 2u64)
+  v = LLVM::insert_element[Vector[B32, 4], B32](v, w, 3u64)
   return v
 
 # ============================================================================
 # Type
 # ============================================================================
 
-### A 4x4 matrix of `F32`, stored as four column vectors (column-major).
+### A 4x4 matrix of `B32`, stored as four column vectors (column-major).
 record Matrix4R4C obeys Addable, Subtractable, Negatable, Equatable
   ### Column 0.
-  c0: Vector[F32, 4]
+  c0: Vector[B32, 4]
   ### Column 1.
-  c1: Vector[F32, 4]
+  c1: Vector[B32, 4]
   ### Column 2.
-  c2: Vector[F32, 4]
+  c2: Vector[B32, 4]
   ### Column 3.
-  c3: Vector[F32, 4]
+  c3: Vector[B32, 4]
 
 # ============================================================================
 # Constructors / factories
@@ -55,15 +55,15 @@ record Matrix4R4C obeys Addable, Subtractable, Negatable, Equatable
 ### The 4x4 identity matrix.
 ### :returns: A matrix with ones on the diagonal, zeros elsewhere.
 common routine Matrix4R4C.identity() -> Matrix4R4C
-  return Matrix4R4C(c0: vec4(1.0_f32, 0.0_f32, 0.0_f32, 0.0_f32),
-                    c1: vec4(0.0_f32, 1.0_f32, 0.0_f32, 0.0_f32),
-                    c2: vec4(0.0_f32, 0.0_f32, 1.0_f32, 0.0_f32),
-                    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+  return Matrix4R4C(c0: vec4(1.0_b32, 0.0_b32, 0.0_b32, 0.0_b32),
+                    c1: vec4(0.0_b32, 1.0_b32, 0.0_b32, 0.0_b32),
+                    c2: vec4(0.0_b32, 0.0_b32, 1.0_b32, 0.0_b32),
+                    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 ### The 4x4 zero matrix (every element zero).
 ### :returns: A matrix of all zeros.
 common routine Matrix4R4C.zero() -> Matrix4R4C
-  var z = LLVM::zero_value[Vector[F32, 4]]()
+  var z = LLVM::zero_value[Vector[B32, 4]]()
   return Matrix4R4C(c0: z, c1: z, c2: z, c3: z)
 
 ### An affine translation matrix.
@@ -71,60 +71,60 @@ common routine Matrix4R4C.zero() -> Matrix4R4C
 ### :param ty: Y translation.
 ### :param tz: Z translation.
 ### :returns: The translation matrix (identity with `(tx, ty, tz)` in column 3).
-common routine Matrix4R4C.translation(tx: F32, ty: F32, tz: F32) -> Matrix4R4C
-  return Matrix4R4C(c0: vec4(1.0_f32, 0.0_f32, 0.0_f32, 0.0_f32),
-                    c1: vec4(0.0_f32, 1.0_f32, 0.0_f32, 0.0_f32),
-                    c2: vec4(0.0_f32, 0.0_f32, 1.0_f32, 0.0_f32),
-                    c3: vec4(tx, ty, tz, 1.0_f32))
+common routine Matrix4R4C.translation(tx: B32, ty: B32, tz: B32) -> Matrix4R4C
+  return Matrix4R4C(c0: vec4(1.0_b32, 0.0_b32, 0.0_b32, 0.0_b32),
+                    c1: vec4(0.0_b32, 1.0_b32, 0.0_b32, 0.0_b32),
+                    c2: vec4(0.0_b32, 0.0_b32, 1.0_b32, 0.0_b32),
+                    c3: vec4(tx, ty, tz, 1.0_b32))
 
 ### A non-uniform scaling matrix.
 ### :param sx: X scale.
 ### :param sy: Y scale.
 ### :param sz: Z scale.
 ### :returns: The scaling matrix.
-common routine Matrix4R4C.scaling(sx: F32, sy: F32, sz: F32) -> Matrix4R4C
-  return Matrix4R4C(c0: vec4(sx, 0.0_f32, 0.0_f32, 0.0_f32),
-                    c1: vec4(0.0_f32, sy, 0.0_f32, 0.0_f32),
-                    c2: vec4(0.0_f32, 0.0_f32, sz, 0.0_f32),
-                    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+common routine Matrix4R4C.scaling(sx: B32, sy: B32, sz: B32) -> Matrix4R4C
+  return Matrix4R4C(c0: vec4(sx, 0.0_b32, 0.0_b32, 0.0_b32),
+                    c1: vec4(0.0_b32, sy, 0.0_b32, 0.0_b32),
+                    c2: vec4(0.0_b32, 0.0_b32, sz, 0.0_b32),
+                    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 ### A right-handed rotation about the X axis.
 ### :param angle: The rotation angle in radians.
 ### :returns: The rotation matrix.
-common routine Matrix4R4C.rotation_x(angle: F32) -> Matrix4R4C
+common routine Matrix4R4C.rotation_x(angle: B32) -> Matrix4R4C
   var c = angle.cos()
   var s = angle.sin()
-  return Matrix4R4C(c0: vec4(1.0_f32, 0.0_f32, 0.0_f32, 0.0_f32),
-                    c1: vec4(0.0_f32, c, s, 0.0_f32),
-                    c2: vec4(0.0_f32, -s, c, 0.0_f32),
-                    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+  return Matrix4R4C(c0: vec4(1.0_b32, 0.0_b32, 0.0_b32, 0.0_b32),
+                    c1: vec4(0.0_b32, c, s, 0.0_b32),
+                    c2: vec4(0.0_b32, -s, c, 0.0_b32),
+                    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 ### A right-handed rotation about the Y axis.
 ### :param angle: The rotation angle in radians.
 ### :returns: The rotation matrix.
-common routine Matrix4R4C.rotation_y(angle: F32) -> Matrix4R4C
+common routine Matrix4R4C.rotation_y(angle: B32) -> Matrix4R4C
   var c = angle.cos()
   var s = angle.sin()
-  return Matrix4R4C(c0: vec4(c, 0.0_f32, -s, 0.0_f32),
-                    c1: vec4(0.0_f32, 1.0_f32, 0.0_f32, 0.0_f32),
-                    c2: vec4(s, 0.0_f32, c, 0.0_f32),
-                    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+  return Matrix4R4C(c0: vec4(c, 0.0_b32, -s, 0.0_b32),
+                    c1: vec4(0.0_b32, 1.0_b32, 0.0_b32, 0.0_b32),
+                    c2: vec4(s, 0.0_b32, c, 0.0_b32),
+                    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 ### A right-handed rotation about the Z axis.
 ### :param angle: The rotation angle in radians.
 ### :returns: The rotation matrix.
-common routine Matrix4R4C.rotation_z(angle: F32) -> Matrix4R4C
+common routine Matrix4R4C.rotation_z(angle: B32) -> Matrix4R4C
   var c = angle.cos()
   var s = angle.sin()
-  return Matrix4R4C(c0: vec4(c, s, 0.0_f32, 0.0_f32),
-                    c1: vec4(-s, c, 0.0_f32, 0.0_f32),
-                    c2: vec4(0.0_f32, 0.0_f32, 1.0_f32, 0.0_f32),
-                    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+  return Matrix4R4C(c0: vec4(c, s, 0.0_b32, 0.0_b32),
+                    c1: vec4(-s, c, 0.0_b32, 0.0_b32),
+                    c2: vec4(0.0_b32, 0.0_b32, 1.0_b32, 0.0_b32),
+                    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 ### A rotation matrix from a (unit) quaternion.
 ### :param q: The rotation quaternion (assumed normalized).
 ### :returns: The equivalent rotation matrix.
-common routine Matrix4R4C.from_quaternion(q: Q32) -> Matrix4R4C
+common routine Matrix4R4C.from_quaternion(q: Q128) -> Matrix4R4C
   var xx = q.x * q.x
   var yy = q.y * q.y
   var zz = q.z * q.z
@@ -134,22 +134,22 @@ common routine Matrix4R4C.from_quaternion(q: Q32) -> Matrix4R4C
   var wx = q.w * q.x
   var wy = q.w * q.y
   var wz = q.w * q.z
-  var two = 2.0_f32
+  var two = 2.0_b32
   return Matrix4R4C(
-    c0: vec4(1.0_f32 - two * (yy + zz), two * (xy + wz), two * (xz - wy), 0.0_f32),
-    c1: vec4(two * (xy - wz), 1.0_f32 - two * (xx + zz), two * (yz + wx), 0.0_f32),
-    c2: vec4(two * (xz + wy), two * (yz - wx), 1.0_f32 - two * (xx + yy), 0.0_f32),
-    c3: vec4(0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32))
+    c0: vec4(1.0_b32 - two * (yy + zz), two * (xy + wz), two * (xz - wy), 0.0_b32),
+    c1: vec4(two * (xy - wz), 1.0_b32 - two * (xx + zz), two * (yz + wx), 0.0_b32),
+    c2: vec4(two * (xz + wy), two * (yz - wx), 1.0_b32 - two * (xx + yy), 0.0_b32),
+    c3: vec4(0.0_b32, 0.0_b32, 0.0_b32, 1.0_b32))
 
 # ============================================================================
 # Element access
 # ============================================================================
 
-### Returns column `index` (0 to 3) as a `Vector[F32, 4]`.
+### Returns column `index` (0 to 3) as a `Vector[B32, 4]`.
 ### :param index: The column index.
 ### :returns: The column vector.
 @readonly
-routine Matrix4R4C.column(index: U64) -> Vector[F32, 4]
+routine Matrix4R4C.column(index: U64) -> Vector[B32, 4]
   if index == 0u64
     return me.c0
   if index == 1u64
@@ -163,23 +163,23 @@ routine Matrix4R4C.column(index: U64) -> Vector[F32, 4]
 ### :param col: The column index.
 ### :returns: The scalar element.
 @readonly
-routine Matrix4R4C.get(row: U64, col: U64) -> F32
-  return LLVM::extract_element[Vector[F32, 4], F32](me.column(index: col), row)
+routine Matrix4R4C.get(row: U64, col: U64) -> B32
+  return LLVM::extract_element[Vector[B32, 4], B32](me.column(index: col), row)
 
-### Returns row `index` (0 to 3) as a `Vector[F32, 4]` — the `me[index]` read operator. Chained subscripts
+### Returns row `index` (0 to 3) as a `Vector[B32, 4]` — the `me[index]` read operator. Chained subscripts
 ### read naturally as `m[row][col]`: `m[row]` yields the row vector (gathered across the stored columns),
 ### and the second subscript picks the column element via `Vector`'s own `getitem`.
 ### :param index: The row index (0 to 3).
 ### :returns: The row vector `<m(row,0), m(row,1), m(row,2), m(row,3)>`.
 ### :throws: {IndexOutOfBoundsError} if `index >= 4`.
 @readonly
-routine Matrix4R4C.getitem!(index: U64) -> Vector[F32, 4]
+routine Matrix4R4C.getitem!(index: U64) -> Vector[B32, 4]
   if index >= 4u64
     throw IndexOutOfBoundsError(index: index, count: 4u64)
-  return vec4(LLVM::extract_element[Vector[F32, 4], F32](me.c0, index),
-              LLVM::extract_element[Vector[F32, 4], F32](me.c1, index),
-              LLVM::extract_element[Vector[F32, 4], F32](me.c2, index),
-              LLVM::extract_element[Vector[F32, 4], F32](me.c3, index))
+  return vec4(LLVM::extract_element[Vector[B32, 4], B32](me.c0, index),
+              LLVM::extract_element[Vector[B32, 4], B32](me.c1, index),
+              LLVM::extract_element[Vector[B32, 4], B32](me.c2, index),
+              LLVM::extract_element[Vector[B32, 4], B32](me.c3, index))
 
 # ============================================================================
 # Arithmetic
@@ -205,7 +205,7 @@ routine Matrix4R4C.neg() -> Matrix4R4C
 ### Scales every element by a scalar.
 ### :param factor: The scalar multiplier.
 ### :returns: `factor · me`.
-routine Matrix4R4C.scale(factor: F32) -> Matrix4R4C
+routine Matrix4R4C.scale(factor: B32) -> Matrix4R4C
   return Matrix4R4C(c0: me.c0.scale(factor: factor), c1: me.c1.scale(factor: factor),
                     c2: me.c2.scale(factor: factor), c3: me.c3.scale(factor: factor))
 
@@ -213,11 +213,11 @@ routine Matrix4R4C.scale(factor: F32) -> Matrix4R4C
 ### :param v: The vector to transform.
 ### :returns: `me · v`, computed as `c0·v.x + c1·v.y + c2·v.z + c3·v.w`.
 @readonly
-routine Matrix4R4C.transform(v: Vector[F32, 4]) -> Vector[F32, 4]
-  var vx = LLVM::extract_element[Vector[F32, 4], F32](v, 0u64)
-  var vy = LLVM::extract_element[Vector[F32, 4], F32](v, 1u64)
-  var vz = LLVM::extract_element[Vector[F32, 4], F32](v, 2u64)
-  var vw = LLVM::extract_element[Vector[F32, 4], F32](v, 3u64)
+routine Matrix4R4C.transform(v: Vector[B32, 4]) -> Vector[B32, 4]
+  var vx = LLVM::extract_element[Vector[B32, 4], B32](v, 0u64)
+  var vy = LLVM::extract_element[Vector[B32, 4], B32](v, 1u64)
+  var vz = LLVM::extract_element[Vector[B32, 4], B32](v, 2u64)
+  var vw = LLVM::extract_element[Vector[B32, 4], B32](v, 3u64)
   return me.c0.scale(factor: vx) + me.c1.scale(factor: vy) + me.c2.scale(factor: vz) + me.c3.scale(factor: vw)
 
 ### Matrix product `me · you`. Each result column is `me · you.column`.
@@ -233,15 +233,15 @@ routine Matrix4R4C.mul(you: Matrix4R4C) -> Matrix4R4C
 routine Matrix4R4C.transpose() -> Matrix4R4C
   # SSE `_MM_TRANSPOSE4_PS`: four shuffles to interleave, four to recombine. The transposed matrix's
   # columns are the original's rows, produced without any scalar lane extraction.
-  var tmp0 = LLVM::shuffle_unpacklo_4[Vector[F32, 4]](me.c0, me.c1)
-  var tmp1 = LLVM::shuffle_unpacklo_4[Vector[F32, 4]](me.c2, me.c3)
-  var tmp2 = LLVM::shuffle_unpackhi_4[Vector[F32, 4]](me.c0, me.c1)
-  var tmp3 = LLVM::shuffle_unpackhi_4[Vector[F32, 4]](me.c2, me.c3)
+  var tmp0 = LLVM::shuffle_unpacklo_4[Vector[B32, 4]](me.c0, me.c1)
+  var tmp1 = LLVM::shuffle_unpacklo_4[Vector[B32, 4]](me.c2, me.c3)
+  var tmp2 = LLVM::shuffle_unpackhi_4[Vector[B32, 4]](me.c0, me.c1)
+  var tmp3 = LLVM::shuffle_unpackhi_4[Vector[B32, 4]](me.c2, me.c3)
   return Matrix4R4C(
-    c0: LLVM::shuffle_movelh_4[Vector[F32, 4]](tmp0, tmp1),
-    c1: LLVM::shuffle_movehl_4[Vector[F32, 4]](tmp0, tmp1),
-    c2: LLVM::shuffle_movelh_4[Vector[F32, 4]](tmp2, tmp3),
-    c3: LLVM::shuffle_movehl_4[Vector[F32, 4]](tmp2, tmp3))
+    c0: LLVM::shuffle_movelh_4[Vector[B32, 4]](tmp0, tmp1),
+    c1: LLVM::shuffle_movehl_4[Vector[B32, 4]](tmp0, tmp1),
+    c2: LLVM::shuffle_movelh_4[Vector[B32, 4]](tmp2, tmp3),
+    c3: LLVM::shuffle_movehl_4[Vector[B32, 4]](tmp2, tmp3))
 
 # ============================================================================
 # Determinant / inverse
@@ -250,7 +250,7 @@ routine Matrix4R4C.transpose() -> Matrix4R4C
 ### The determinant of this matrix.
 ### :returns: `det(me)`.
 @readonly
-routine Matrix4R4C.determinant() -> F32
+routine Matrix4R4C.determinant() -> B32
   # m{row}{col}
   var m00 = me.get(row: 0u64, col: 0u64)
   var m01 = me.get(row: 0u64, col: 1u64)
@@ -321,9 +321,9 @@ routine Matrix4R4C.inverse() -> Matrix4R4C
   var b5 = m22 * m33 - m23 * m32
 
   var det = a0 * b5 - a1 * b4 + a2 * b3 + a3 * b2 - a4 * b1 + a5 * b0
-  if det == 0.0_f32
+  if det == 0.0_b32
     return Matrix4R4C.zero()
-  var inv = 1.0_f32 / det
+  var inv = 1.0_b32 / det
 
   # Adjugate (transpose of the cofactor matrix), scaled by 1/det. Columns of the result:
   var r00 = (m11 * b5 - m12 * b4 + m13 * b3) * inv

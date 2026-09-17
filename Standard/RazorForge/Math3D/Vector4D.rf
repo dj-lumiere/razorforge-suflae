@@ -1,6 +1,6 @@
 module Math3D
 
-### Fixed-size single-precision Euclidean vector `Vector4D`. Stores plain `F32`
+### Fixed-size single-precision Euclidean vector `Vector4D`. Stores plain `B32`
 ### components, so a vector is a trivially copyable value record. This is a
 ### geometry-facing companion to the complex types in this directory; for
 ### arbitrary-length elementwise math use the SIMD `Vector[T, N]` type instead.
@@ -11,26 +11,26 @@ module Math3D
 ### are exposed as named routines rather than through `*`/`/`, which have no
 ### canonical vector meaning.
 
-# Math routines use the component F32's `_unchecked` ops (raw IEEE, no overflow
+# Math routines use the component B32's `_unchecked` ops (raw IEEE, no overflow
 # checks); NaN/±inf therefore propagate through the vector result per IEEE 754.
 
-### A four-dimensional vector with `F32` components.
+### A four-dimensional vector with `B32` components.
 record Vector4D obeys Addable, Subtractable, Negatable, Equatable
   ### The x component.
-  x: F32
+  x: B32
   ### The y component.
-  y: F32
+  y: B32
   ### The z component.
-  z: F32
+  z: B32
   ### The w component.
-  w: F32
+  w: B32
 
 # Vector4D constants
-preset VECTOR4D_ZERO: Vector4D = Vector4D(x: 0.0_f32, y: 0.0_f32, z: 0.0_f32, w: 0.0_f32)
-preset VECTOR4D_UNIT_X: Vector4D = Vector4D(x: 1.0_f32, y: 0.0_f32, z: 0.0_f32, w: 0.0_f32)
-preset VECTOR4D_UNIT_Y: Vector4D = Vector4D(x: 0.0_f32, y: 1.0_f32, z: 0.0_f32, w: 0.0_f32)
-preset VECTOR4D_UNIT_Z: Vector4D = Vector4D(x: 0.0_f32, y: 0.0_f32, z: 1.0_f32, w: 0.0_f32)
-preset VECTOR4D_UNIT_W: Vector4D = Vector4D(x: 0.0_f32, y: 0.0_f32, z: 0.0_f32, w: 1.0_f32)
+preset VECTOR4D_ZERO: Vector4D = Vector4D(x: 0.0_b32, y: 0.0_b32, z: 0.0_b32, w: 0.0_b32)
+preset VECTOR4D_UNIT_X: Vector4D = Vector4D(x: 1.0_b32, y: 0.0_b32, z: 0.0_b32, w: 0.0_b32)
+preset VECTOR4D_UNIT_Y: Vector4D = Vector4D(x: 0.0_b32, y: 1.0_b32, z: 0.0_b32, w: 0.0_b32)
+preset VECTOR4D_UNIT_Z: Vector4D = Vector4D(x: 0.0_b32, y: 0.0_b32, z: 1.0_b32, w: 0.0_b32)
+preset VECTOR4D_UNIT_W: Vector4D = Vector4D(x: 0.0_b32, y: 0.0_b32, z: 0.0_b32, w: 1.0_b32)
 
 ### Returns the component-wise sum `me + you`.
 ### :param you: The addend.
@@ -52,23 +52,23 @@ routine Vector4D.neg() -> Vector4D
 ### Returns this vector scaled by a scalar `factor`.
 ### :param factor: The scalar multiplier.
 ### :returns: `factor · me`, component-wise.
-routine Vector4D.scale(factor: F32) -> Vector4D
+routine Vector4D.scale(factor: B32) -> Vector4D
   return Vector4D(x: me.x * factor, y: me.y * factor, z: me.z * factor, w: me.w * factor)
 
 ### Returns the dot product `me · you`.
 ### :param you: The right operand.
 ### :returns: `me.x·you.x + me.y·you.y + me.z·you.z + me.w·you.w`.
-routine Vector4D.dot(you: Vector4D) -> F32
+routine Vector4D.dot(you: Vector4D) -> B32
   return me.x * you.x + me.y * you.y + me.z * you.z + me.w * you.w
 
 ### Returns the squared Euclidean length (avoids the square root of `length`).
 ### :returns: `me · me`.
-routine Vector4D.length_squared() -> F32
+routine Vector4D.length_squared() -> B32
   return me.x * me.x + me.y * me.y + me.z * me.z + me.w * me.w
 
 ### Returns the Euclidean length (magnitude) of this vector.
 ### :returns: `√(x² + y² + z² + w²)`.
-routine Vector4D.length() -> F32
+routine Vector4D.length() -> B32
   return me.length_squared().sqrt_unchecked()
 
 ### Returns the unit vector pointing in the same direction. A zero vector is
@@ -76,21 +76,21 @@ routine Vector4D.length() -> F32
 ### :returns: `me / |me|`, or `me` when `|me| == 0`.
 routine Vector4D.normalize() -> Vector4D
   var len = me.length()
-  if len == 0.0_f32
+  if len == 0.0_b32
     return me
-  return me.scale(factor: 1.0_f32 / len)
+  return me.scale(factor: 1.0_b32 / len)
 
 ### Returns the Euclidean distance between this vector and `you`.
 ### :param you: The other point.
 ### :returns: `|me − you|`.
-routine Vector4D.distance(you: Vector4D) -> F32
+routine Vector4D.distance(you: Vector4D) -> B32
   return (me - you).length()
 
 ### Returns the linear interpolation between `me` (at `t = 0`) and `you` (at `t = 1`).
 ### :param you: The endpoint.
 ### :param t: The interpolation parameter (unclamped).
 ### :returns: `me + t·(you − me)`.
-routine Vector4D.lerp(you: Vector4D, t: F32) -> Vector4D
+routine Vector4D.lerp(you: Vector4D, t: B32) -> Vector4D
   return me + (you - me).scale(factor: t)
 
 ### Returns `true` if all four components compare equal.

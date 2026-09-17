@@ -56,7 +56,7 @@ When unsure, consult ground truth in the repo:
 4. **The default number types are `Integer` and `Decimal`, not fixed-width.**
    A bare `42` is an arbitrary-precision `Integer`; a bare `3.14` is a `Decimal`.
    Indices and counts are also `Integer`. (In RF, bare literals default to
-   `S64`/`F64`.)
+   `S64`/`B64`.)
 5. **`Decimal` is base-10, not binary.** `0.1 + 0.2 == 0.3` holds in Suflae —
    that footgun-freedom is the whole point. (`Real`, the arbitrary-precision
    *binary* float, is import-only and still can't represent `0.1` exactly.)
@@ -91,9 +91,9 @@ When unsure, consult ground truth in the repo:
    global reference `g` is rewritten to a field access `__globals.g`. So a single-statement
    read-modify-write (`box.count = box.count + 1`, `name = name + "!"`) is atomic across workers
    (measured: 8 agents × 5000 → exactly 40 000). **Atomic-width scalar fields** — integers
-   `S8`…`S64`/`U8`…`U64` and floats `F32`/`F64` — take a lock-free fast path: `g = g + d` / `g = g - d`
+   `S8`…`S64`/`U8`…`U64` and binary floats `B32`/`B64` — take a lock-free fast path: `g = g + d` / `g = g - d`
    lowers to one `atomicrmw` on the field address (`add`/`sub` for ints, `fadd`/`fsub` for floats), no
-   lock taken. **Everything wider or heavier** — `S128`/`S256`, `F16`/`F128`, `Text`, `Decimal`,
+   lock taken. **Everything wider or heavier** — `S128`/`S256`, `B16`/`B128`, `Text`, `Decimal`,
    records — serializes through the entity's per-statement task-keyed access lock instead (correct,
    just not lock-free). `Bool` needs nothing extra — a byte store/load is already atomic. The atomic
    RMW **wraps on overflow** (like every language's atomics), unlike the checked `+` — opting a global
@@ -262,14 +262,14 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
 - **Prelude defaults (no import):** `Integer` (arbitrary-precision signed),
   `Decimal` (exact, base-10), `Bool`, plus `Text`/`Bytes`. A bare `42` is an
   `Integer`, a bare `3.14` is a `Decimal`.
-- **Import-gated behind `import Numerics`:** the whole fixed-width / complex /
-  quaternion zoo — `S8..U1024`, `F16..F512`, `D32/D64/D128`, `C32/C64/C128`,
-  `Q32/Q64` — plus `Real`/`Complex` (arbitrary-precision *binary*). Naming one of
-  these in a `.sf` **without** a whole-module `import Numerics` is **RF-S636**
-  ("add `import Numerics`"). The prelude quietly imports just `Numerics { Integer }`
-  so the default vocabulary resolves; a user's own `import Numerics` unlocks the
-  rest. (The gate fires on explicit type NAMES in annotations/generic args; a
-  literal suffix like `5_s32` is not yet gated.)
+- **Fixed-width scalar/complex zoo is available directly (no import):** `S8..U1024`,
+  `B16..B128`, `D32/D64/D128`, `C64/C128/C256`, `Q128/Q256` all live in the Core
+  auto-prelude and can be named in a `.sf` with no `import` — bare literals still
+  default to `Integer`/`Decimal`, but writing `S32`/`B64`/`C128`/`5_s32` directly is
+  fine. (The old SF import-gate on these — RF-S636 — was removed.) Only the
+  **arbitrary-precision** `Real` and `Complex` still live in `module Numerics` and
+  need an explicit `import Numerics` (the prelude imports just `Numerics { Integer }`
+  so the default vocabulary resolves).
 - Mixing `Integer` ↔ a fixed-width type is an explicit, range-checked (throwing)
   conversion. `//` is floor division, `/` is true division — same as RF.
 

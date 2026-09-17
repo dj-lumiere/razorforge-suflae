@@ -271,7 +271,7 @@ needs AnyType T
   expand m in allmemvarof(T)
     if not first
       result = result + ", "
-    if visibilityof(m) is SECRET
+    if visibilityof(m) == SECRET
       result = result + "[secret] "
     result = result + nameof(m) + ": " + me.$nameof(m).represent()
     first = false
@@ -298,7 +298,7 @@ needs T obeys Equatable
 routine T.cmp(you: T) -> ComparisonSign
 needs T obeys Comparable
   expand m in allmemvarof(T)
-    if me.$nameof(m).cmp(you: you.$nameof(m)) isnot SAME
+    if me.$nameof(m).cmp(you: you.$nameof(m)) != SAME
       return me.$nameof(m).cmp(you: you.$nameof(m))
   return SAME
 
@@ -389,19 +389,19 @@ needs FlagsType T
 ### so `a < b` (-> `a.lt(b)`) resolves for Character, numerics, records, collections uniformly.
 routine T.lt(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) is ME_SMALL
+  return me.cmp(you: you) == ME_SMALL
 
 routine T.le(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) isnot ME_LARGE
+  return me.cmp(you: you) != ME_LARGE
 
 routine T.gt(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) is ME_LARGE
+  return me.cmp(you: you) == ME_LARGE
 
 routine T.ge(you: T) -> Bool
 needs T obeys Comparable
-  return me.cmp(you: you) isnot ME_SMALL
+  return me.cmp(you: you) != ME_SMALL
 
 ### The auto-derived fast `hash()` for any record/entity/tuple: XOR-fold each member variable's fast
 ### hash. Seeded at `0` (the XOR identity), so a single-field type hashes to exactly that field's hash
@@ -446,8 +446,8 @@ needs AnyType T
     is U16 => return SerialValue(from: me)
     is U32 => return SerialValue(from: me)
     is U64 => return SerialValue(from: me)
-    is F32 => return SerialValue(from: me)
-    is F64 => return SerialValue(from: me)
+    is B32 => return SerialValue(from: me)
+    is B64 => return SerialValue(from: me)
     is Moment => return SerialValue(from: me)
     is Bytes => return SerialValue(from: me)
     is Text => return SerialValue(from: me)

@@ -19,8 +19,8 @@ typedef struct d128_t {
     uint64_t high;
 } d128_t;
 
-// Forward declaration of f128_t (defined later in this header)
-typedef struct f128_t f128_t;
+// Forward declaration of b128_t (defined later in this header)
+typedef struct b128_t b128_t;
 
 // ============================================================================
 // d32 operations (decimal32 - 7 significant digits)
@@ -120,30 +120,30 @@ uint64_t rf_d128_to_d64(uint64_t x_low, uint64_t x_high);
 // Binary float to decimal conversions
 // ============================================================================
 
-uint32_t rf_f32_to_d32(float x);
-uint64_t rf_f32_to_d64(float x);
-d128_t rf_f32_to_d128(float x);
+uint32_t rf_b32_to_d32(float x);
+uint64_t rf_b32_to_d64(float x);
+d128_t rf_b32_to_d128(float x);
 
-uint32_t rf_f64_to_d32(double x);
-uint64_t rf_f64_to_d64(double x);
-d128_t rf_f64_to_d128(double x);
+uint32_t rf_b64_to_d32(double x);
+uint64_t rf_b64_to_d64(double x);
+d128_t rf_b64_to_d128(double x);
 
 // ============================================================================
 // Decimal to binary float conversions
 // ============================================================================
 
-float rf_d32_to_f32(uint32_t x);
-double rf_d32_to_f64(uint32_t x);
+float rf_d32_to_b32(uint32_t x);
+double rf_d32_to_b64(uint32_t x);
 uint64_t rf_d32_to_d64(uint32_t x);
 d128_t rf_d32_to_d128(uint32_t x);
 
-float rf_d64_to_f32(uint64_t x);
-double rf_d64_to_f64(uint64_t x);
+float rf_d64_to_b32(uint64_t x);
+double rf_d64_to_b64(uint64_t x);
 uint32_t rf_d64_to_d32(uint64_t x);
 d128_t rf_d64_to_d128(uint64_t x);
 
-float rf_d128_to_f32(uint64_t x_low, uint64_t x_high);
-double rf_d128_to_f64(uint64_t x_low, uint64_t x_high);
+float rf_d128_to_b32(uint64_t x_low, uint64_t x_high);
+double rf_d128_to_b64(uint64_t x_low, uint64_t x_high);
 uint32_t rf_d128_to_d32(uint64_t x_low, uint64_t x_high);
 uint64_t rf_d128_to_d64(uint64_t x_low, uint64_t x_high);
 
@@ -223,12 +223,12 @@ int32_t rf_d128_iszero(uint64_t x_low, uint64_t x_high);
 int32_t rf_d128_signbit(uint64_t x_low, uint64_t x_high);
 
 // ============================================================================
-// d128 <-> f128 conversion
+// d128 <-> b128 conversion
 // Both types have ~34 decimal digits precision
 // ============================================================================
 
-f128_t rf_d128_to_f128(uint64_t x_low, uint64_t x_high);
-d128_t rf_f128_to_d128(f128_t x);
+b128_t rf_d128_to_b128(uint64_t x_low, uint64_t x_high);
+d128_t rf_b128_to_d128(b128_t x);
 
 // ============================================================================
 // Decimal transcendental functions (tiered TLFloat routing)
@@ -429,12 +429,12 @@ rf_bigdecimal rf_bigdec_copy(rf_bigdecimal a);
 
 // Initialization
 void rf_bigdec_set_s64(rf_bigdecimal a, int64_t val);
-void rf_bigdec_set_f64(rf_bigdecimal a, double val);
+void rf_bigdec_set_b64(rf_bigdecimal a, double val);
 void rf_bigdec_set_str(rf_bigdecimal a, const char* str);
 
 // Conversion
 int64_t rf_bigdec_get_s64(rf_bigdecimal a);
-double rf_bigdec_get_f64(rf_bigdecimal a);
+double rf_bigdec_get_b64(rf_bigdecimal a);
 char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places);
 
 // Arithmetic operations (with precision parameter)
@@ -482,382 +482,279 @@ void rf_bigdec_trunc(rf_bigdecimal result, int decimal_places, rf_bigdecimal a);
 // cmath-compliant math functions for binary floating point types
 // ============================================================================
 
-// ============================================================================
-// f16 (half-precision float) math functions
-// IEEE 754 binary16: 1 sign, 5 exponent, 10 mantissa bits
-// Range: ~6.1e-5 to 65504, ~3.3 decimal digits precision
-//
-// NOTE: f16 is stored as uint16_t in C. LLVM handles f16 natively for basic
-// arithmetic. Transcendental functions are computed by promoting to f32,
-// computing, then demoting back to f16.
-// ============================================================================
+// b16 (half-precision) math + text conversion is now pure RazorForge (see
+// Standard/RazorForge/Core/Numerics/B16.rf + FloatConvert.rf): transcendentals
+// route through the b32 path, and formatting/parsing is exact-rational. The old
+// b16_functions.c runtime and its rf_b16_* ABI have been removed.
 
-// Conversion functions
-uint16_t rf_f16_from_f32(float x);
-uint16_t rf_f16_from_f64(double x);
-float rf_f16_to_f32(uint16_t x);
-double rf_f16_to_f64(uint16_t x);
+// b32 (float) math functions
+float rf_b32_sin(float x);
+float rf_b32_cos(float x);
+float rf_b32_tan(float x);
+float rf_b32_asin(float x);
+float rf_b32_acos(float x);
+float rf_b32_atan(float x);
+float rf_b32_atan2(float y, float x);
+float rf_b32_sinh(float x);
+float rf_b32_cosh(float x);
+float rf_b32_tanh(float x);
+float rf_b32_asinh(float x);
+float rf_b32_acosh(float x);
+float rf_b32_atanh(float x);
+float rf_b32_exp(float x);
+float rf_b32_exp2(float x);
+float rf_b32_expm1(float x);
+float rf_b32_log(float x);
+float rf_b32_log2(float x);
+float rf_b32_log10(float x);
+float rf_b32_log1p(float x);
+float rf_b32_pow(float base, float exp);
+float rf_b32_sqrt(float x);
+float rf_b32_cbrt(float x);
+float rf_b32_hypot(float x, float y);
+float rf_b32_ceil(float x);
+float rf_b32_floor(float x);
+float rf_b32_trunc(float x);
+float rf_b32_round(float x);
+float rf_b32_fabs(float x);
+float rf_b32_fmod(float x, float y);
+float rf_b32_remainder(float x, float y);
+float rf_b32_fma(float x, float y, float z);
+float rf_b32_fmin(float x, float y);
+float rf_b32_fmax(float x, float y);
+float rf_b32_copysign(float x, float y);
+int32_t rf_b32_isnan(float x);
+int32_t rf_b32_isinf(float x);
+int32_t rf_b32_isfinite(float x);
+int32_t rf_b32_isnormal(float x);
+int32_t rf_b32_signbit(float x);
 
-// Arithmetic (these can be LLVM intrinsics)
-uint16_t rf_f16_add(uint16_t a, uint16_t b);
-uint16_t rf_f16_sub(uint16_t a, uint16_t b);
-uint16_t rf_f16_mul(uint16_t a, uint16_t b);
-uint16_t rf_f16_div(uint16_t a, uint16_t b);
-uint16_t rf_f16_neg(uint16_t x);
-
-// Comparison
-int32_t rf_f16_eq(uint16_t a, uint16_t b);
-int32_t rf_f16_ne(uint16_t a, uint16_t b);
-int32_t rf_f16_lt(uint16_t a, uint16_t b);
-int32_t rf_f16_le(uint16_t a, uint16_t b);
-int32_t rf_f16_gt(uint16_t a, uint16_t b);
-int32_t rf_f16_ge(uint16_t a, uint16_t b);
-
-// Basic math (can be LLVM intrinsics or simple operations)
-uint16_t rf_f16_abs(uint16_t x);
-uint16_t rf_f16_copysign(uint16_t x, uint16_t y);
-uint16_t rf_f16_min(uint16_t x, uint16_t y);
-uint16_t rf_f16_max(uint16_t x, uint16_t y);
-
-// Rounding (LLVM has intrinsics for these)
-uint16_t rf_f16_ceil(uint16_t x);
-uint16_t rf_f16_floor(uint16_t x);
-uint16_t rf_f16_trunc(uint16_t x);
-uint16_t rf_f16_round(uint16_t x);
-
-// Square root (LLVM intrinsic)
-uint16_t rf_f16_sqrt(uint16_t x);
-
-// Fused multiply-add (LLVM intrinsic)
-uint16_t rf_f16_fma(uint16_t x, uint16_t y, uint16_t z);
-
-// Classification predicates
-int32_t rf_f16_isnan(uint16_t x);
-int32_t rf_f16_isinf(uint16_t x);
-int32_t rf_f16_isfinite(uint16_t x);
-int32_t rf_f16_isnormal(uint16_t x);
-int32_t rf_f16_iszero(uint16_t x);
-int32_t rf_f16_signbit(uint16_t x);
-
-// Special values
-uint16_t rf_f16_nan(void);
-uint16_t rf_f16_inf(void);
-uint16_t rf_f16_neg_inf(void);
-uint16_t rf_f16_epsilon(void);   // Smallest x such that 1.0 + x != 1.0
-uint16_t rf_f16_min_positive(void); // Smallest positive normal
-uint16_t rf_f16_max_value(void);    // Largest finite value (65504)
-
-// Transcendental functions (computed via f32 promotion)
-uint16_t rf_f16_sin(uint16_t x);
-uint16_t rf_f16_cos(uint16_t x);
-uint16_t rf_f16_tan(uint16_t x);
-uint16_t rf_f16_asin(uint16_t x);
-uint16_t rf_f16_acos(uint16_t x);
-uint16_t rf_f16_atan(uint16_t x);
-uint16_t rf_f16_atan2(uint16_t y, uint16_t x);
-
-uint16_t rf_f16_sinh(uint16_t x);
-uint16_t rf_f16_cosh(uint16_t x);
-uint16_t rf_f16_tanh(uint16_t x);
-uint16_t rf_f16_asinh(uint16_t x);
-uint16_t rf_f16_acosh(uint16_t x);
-uint16_t rf_f16_atanh(uint16_t x);
-
-uint16_t rf_f16_exp(uint16_t x);
-uint16_t rf_f16_exp2(uint16_t x);
-uint16_t rf_f16_expm1(uint16_t x);
-uint16_t rf_f16_log(uint16_t x);
-uint16_t rf_f16_log2(uint16_t x);
-uint16_t rf_f16_log10(uint16_t x);
-uint16_t rf_f16_log1p(uint16_t x);
-
-uint16_t rf_f16_pow(uint16_t base, uint16_t exp);
-uint16_t rf_f16_cbrt(uint16_t x);
-uint16_t rf_f16_hypot(uint16_t x, uint16_t y);
-uint16_t rf_f16_fmod(uint16_t x, uint16_t y);
-uint16_t rf_f16_remainder(uint16_t x, uint16_t y);
-
-// f32 (float) math functions
-float rf_f32_sin(float x);
-float rf_f32_cos(float x);
-float rf_f32_tan(float x);
-float rf_f32_asin(float x);
-float rf_f32_acos(float x);
-float rf_f32_atan(float x);
-float rf_f32_atan2(float y, float x);
-float rf_f32_sinh(float x);
-float rf_f32_cosh(float x);
-float rf_f32_tanh(float x);
-float rf_f32_asinh(float x);
-float rf_f32_acosh(float x);
-float rf_f32_atanh(float x);
-float rf_f32_exp(float x);
-float rf_f32_exp2(float x);
-float rf_f32_expm1(float x);
-float rf_f32_log(float x);
-float rf_f32_log2(float x);
-float rf_f32_log10(float x);
-float rf_f32_log1p(float x);
-float rf_f32_pow(float base, float exp);
-float rf_f32_sqrt(float x);
-float rf_f32_cbrt(float x);
-float rf_f32_hypot(float x, float y);
-float rf_f32_ceil(float x);
-float rf_f32_floor(float x);
-float rf_f32_trunc(float x);
-float rf_f32_round(float x);
-float rf_f32_fabs(float x);
-float rf_f32_fmod(float x, float y);
-float rf_f32_remainder(float x, float y);
-float rf_f32_fma(float x, float y, float z);
-float rf_f32_fmin(float x, float y);
-float rf_f32_fmax(float x, float y);
-float rf_f32_copysign(float x, float y);
-int32_t rf_f32_isnan(float x);
-int32_t rf_f32_isinf(float x);
-int32_t rf_f32_isfinite(float x);
-int32_t rf_f32_isnormal(float x);
-int32_t rf_f32_signbit(float x);
-
-// f64 (double) math functions
-double rf_f64_sin(double x);
-double rf_f64_cos(double x);
-double rf_f64_tan(double x);
-double rf_f64_asin(double x);
-double rf_f64_acos(double x);
-double rf_f64_atan(double x);
-double rf_f64_atan2(double y, double x);
-double rf_f64_sinh(double x);
-double rf_f64_cosh(double x);
-double rf_f64_tanh(double x);
-double rf_f64_asinh(double x);
-double rf_f64_acosh(double x);
-double rf_f64_atanh(double x);
-double rf_f64_exp(double x);
-double rf_f64_exp2(double x);
-double rf_f64_expm1(double x);
-double rf_f64_log(double x);
-double rf_f64_log2(double x);
-double rf_f64_log10(double x);
-double rf_f64_log1p(double x);
-double rf_f64_pow(double base, double exp);
-double rf_f64_sqrt(double x);
-double rf_f64_cbrt(double x);
-double rf_f64_hypot(double x, double y);
-double rf_f64_ceil(double x);
-double rf_f64_floor(double x);
-double rf_f64_trunc(double x);
-double rf_f64_round(double x);
-double rf_f64_fabs(double x);
-double rf_f64_fmod(double x, double y);
-double rf_f64_remainder(double x, double y);
-double rf_f64_fma(double x, double y, double z);
-double rf_f64_fmin(double x, double y);
-double rf_f64_fmax(double x, double y);
-double rf_f64_copysign(double x, double y);
-int32_t rf_f64_isnan(double x);
-int32_t rf_f64_isinf(double x);
-int32_t rf_f64_isfinite(double x);
-int32_t rf_f64_isnormal(double x);
-int32_t rf_f64_signbit(double x);
+// b64 (double) math functions
+double rf_b64_sin(double x);
+double rf_b64_cos(double x);
+double rf_b64_tan(double x);
+double rf_b64_asin(double x);
+double rf_b64_acos(double x);
+double rf_b64_atan(double x);
+double rf_b64_atan2(double y, double x);
+double rf_b64_sinh(double x);
+double rf_b64_cosh(double x);
+double rf_b64_tanh(double x);
+double rf_b64_asinh(double x);
+double rf_b64_acosh(double x);
+double rf_b64_atanh(double x);
+double rf_b64_exp(double x);
+double rf_b64_exp2(double x);
+double rf_b64_expm1(double x);
+double rf_b64_log(double x);
+double rf_b64_log2(double x);
+double rf_b64_log10(double x);
+double rf_b64_log1p(double x);
+double rf_b64_pow(double base, double exp);
+double rf_b64_sqrt(double x);
+double rf_b64_cbrt(double x);
+double rf_b64_hypot(double x, double y);
+double rf_b64_ceil(double x);
+double rf_b64_floor(double x);
+double rf_b64_trunc(double x);
+double rf_b64_round(double x);
+double rf_b64_fabs(double x);
+double rf_b64_fmod(double x, double y);
+double rf_b64_remainder(double x, double y);
+double rf_b64_fma(double x, double y, double z);
+double rf_b64_fmin(double x, double y);
+double rf_b64_fmax(double x, double y);
+double rf_b64_copysign(double x, double y);
+int32_t rf_b64_isnan(double x);
+int32_t rf_b64_isinf(double x);
+int32_t rf_b64_isfinite(double x);
+int32_t rf_b64_isnormal(double x);
+int32_t rf_b64_signbit(double x);
 
 // ============================================================================
-// f128 (quad-precision float) math functions
+// b128 (quad-precision float) math functions
 // IEEE 754 binary128: 1 sign, 15 exponent, 112 mantissa bits
 // Range: ~3.4e-4932 to ~1.2e4932, ~34 decimal digits precision
 //
-// NOTE: f128 is implemented via Berkeley SoftFloat library.
+// NOTE: b128 is implemented via Berkeley SoftFloat library.
 // All operations are software-emulated for cross-platform compatibility.
 // ============================================================================
 
-// f128 type (quad precision - 128 bits)
-typedef struct f128_t {
+// b128 type (quad precision - 128 bits)
+typedef struct b128_t {
     uint64_t low;
     uint64_t high;
-} f128_t;
+} b128_t;
 
 // Conversion functions
-f128_t rf_f128_from_f32(float x);
-f128_t rf_f128_from_f64(double x);
-float rf_f128_to_f32(f128_t x);
-double rf_f128_to_f64(f128_t x);
+b128_t rf_b128_from_b32(float x);
+b128_t rf_b128_from_b64(double x);
+float rf_b128_to_b32(b128_t x);
+double rf_b128_to_b64(b128_t x);
 
 // Conversion from/to integers
-f128_t rf_f128_from_s32(int32_t x);
-f128_t rf_f128_from_s64(int64_t x);
-f128_t rf_f128_from_u32(uint32_t x);
-f128_t rf_f128_from_u64(uint64_t x);
-int32_t rf_f128_to_s32(f128_t x);
-int64_t rf_f128_to_s64(f128_t x);
-uint32_t rf_f128_to_u32(f128_t x);
-uint64_t rf_f128_to_u64(f128_t x);
+b128_t rf_b128_from_s32(int32_t x);
+b128_t rf_b128_from_s64(int64_t x);
+b128_t rf_b128_from_u32(uint32_t x);
+b128_t rf_b128_from_u64(uint64_t x);
+int32_t rf_b128_to_s32(b128_t x);
+int64_t rf_b128_to_s64(b128_t x);
+uint32_t rf_b128_to_u32(b128_t x);
+uint64_t rf_b128_to_u64(b128_t x);
 
 // Conversion from/to string
-f128_t rf_f128_from_string(const char* str);
-char* rf_f128_to_string(f128_t x);
+b128_t rf_b128_from_string(const char* str);
+char* rf_b128_to_string(b128_t x);
 
 // Arithmetic
-f128_t rf_f128_add(f128_t a, f128_t b);
-f128_t rf_f128_sub(f128_t a, f128_t b);
-f128_t rf_f128_mul(f128_t a, f128_t b);
-f128_t rf_f128_div(f128_t a, f128_t b);
-f128_t rf_f128_neg(f128_t x);
+b128_t rf_b128_add(b128_t a, b128_t b);
+b128_t rf_b128_sub(b128_t a, b128_t b);
+b128_t rf_b128_mul(b128_t a, b128_t b);
+b128_t rf_b128_div(b128_t a, b128_t b);
+b128_t rf_b128_neg(b128_t x);
 
 // Comparison
-int32_t rf_f128_eq(f128_t a, f128_t b);
-int32_t rf_f128_ne(f128_t a, f128_t b);
-int32_t rf_f128_lt(f128_t a, f128_t b);
-int32_t rf_f128_le(f128_t a, f128_t b);
-int32_t rf_f128_gt(f128_t a, f128_t b);
-int32_t rf_f128_ge(f128_t a, f128_t b);
-int32_t rf_f128_cmp(f128_t a, f128_t b);  // Returns -1, 0, 1
+int32_t rf_b128_eq(b128_t a, b128_t b);
+int32_t rf_b128_ne(b128_t a, b128_t b);
+int32_t rf_b128_lt(b128_t a, b128_t b);
+int32_t rf_b128_le(b128_t a, b128_t b);
+int32_t rf_b128_gt(b128_t a, b128_t b);
+int32_t rf_b128_ge(b128_t a, b128_t b);
+int32_t rf_b128_cmp(b128_t a, b128_t b);  // Returns -1, 0, 1
 
 // Basic math
-f128_t rf_f128_abs(f128_t x);
-f128_t rf_f128_copysign(f128_t x, f128_t y);
-f128_t rf_f128_min(f128_t x, f128_t y);
-f128_t rf_f128_max(f128_t x, f128_t y);
+b128_t rf_b128_abs(b128_t x);
+b128_t rf_b128_copysign(b128_t x, b128_t y);
+b128_t rf_b128_min(b128_t x, b128_t y);
+b128_t rf_b128_max(b128_t x, b128_t y);
 
 // Rounding
-f128_t rf_f128_ceil(f128_t x);
-f128_t rf_f128_floor(f128_t x);
-f128_t rf_f128_trunc(f128_t x);
-f128_t rf_f128_round(f128_t x);
+b128_t rf_b128_ceil(b128_t x);
+b128_t rf_b128_floor(b128_t x);
+b128_t rf_b128_trunc(b128_t x);
+b128_t rf_b128_round(b128_t x);
 
 // Square root and FMA
-f128_t rf_f128_sqrt(f128_t x);
-f128_t rf_f128_fma(f128_t x, f128_t y, f128_t z);
-f128_t rf_f128_fmod(f128_t x, f128_t y);
+b128_t rf_b128_sqrt(b128_t x);
+b128_t rf_b128_fma(b128_t x, b128_t y, b128_t z);
+b128_t rf_b128_fmod(b128_t x, b128_t y);
 
 // Classification predicates
-int32_t rf_f128_isnan(f128_t x);
-int32_t rf_f128_isinf(f128_t x);
-int32_t rf_f128_isfinite(f128_t x);
-int32_t rf_f128_isnormal(f128_t x);
-int32_t rf_f128_iszero(f128_t x);
-int32_t rf_f128_signbit(f128_t x);
+int32_t rf_b128_isnan(b128_t x);
+int32_t rf_b128_isinf(b128_t x);
+int32_t rf_b128_isfinite(b128_t x);
+int32_t rf_b128_isnormal(b128_t x);
+int32_t rf_b128_iszero(b128_t x);
+int32_t rf_b128_signbit(b128_t x);
 
 // Special values
-f128_t rf_f128_nan(void);
-f128_t rf_f128_inf(void);
-f128_t rf_f128_neg_inf(void);
-f128_t rf_f128_epsilon(void);
-f128_t rf_f128_min_positive(void);
-f128_t rf_f128_max_value(void);
+b128_t rf_b128_nan(void);
+b128_t rf_b128_inf(void);
+b128_t rf_b128_neg_inf(void);
+b128_t rf_b128_epsilon(void);
+b128_t rf_b128_min_positive(void);
+b128_t rf_b128_max_value(void);
 
 // Transcendental functions - full precision via LibBF
-f128_t rf_f128_sin(f128_t x);
-f128_t rf_f128_cos(f128_t x);
-f128_t rf_f128_tan(f128_t x);
-f128_t rf_f128_asin(f128_t x);
-f128_t rf_f128_acos(f128_t x);
-f128_t rf_f128_atan(f128_t x);
-f128_t rf_f128_atan2(f128_t y, f128_t x);
+b128_t rf_b128_sin(b128_t x);
+b128_t rf_b128_cos(b128_t x);
+b128_t rf_b128_tan(b128_t x);
+b128_t rf_b128_asin(b128_t x);
+b128_t rf_b128_acos(b128_t x);
+b128_t rf_b128_atan(b128_t x);
+b128_t rf_b128_atan2(b128_t y, b128_t x);
 
 // Hyperbolic functions
-f128_t rf_f128_sinh(f128_t x);
-f128_t rf_f128_cosh(f128_t x);
-f128_t rf_f128_tanh(f128_t x);
-f128_t rf_f128_asinh(f128_t x);
-f128_t rf_f128_acosh(f128_t x);
-f128_t rf_f128_atanh(f128_t x);
+b128_t rf_b128_sinh(b128_t x);
+b128_t rf_b128_cosh(b128_t x);
+b128_t rf_b128_tanh(b128_t x);
+b128_t rf_b128_asinh(b128_t x);
+b128_t rf_b128_acosh(b128_t x);
+b128_t rf_b128_atanh(b128_t x);
 
 // Exponential and logarithmic functions
-f128_t rf_f128_exp(f128_t x);
-f128_t rf_f128_exp2(f128_t x);
-f128_t rf_f128_expm1(f128_t x);
-f128_t rf_f128_log(f128_t x);
-f128_t rf_f128_log2(f128_t x);
-f128_t rf_f128_log10(f128_t x);
-f128_t rf_f128_log1p(f128_t x);
+b128_t rf_b128_exp(b128_t x);
+b128_t rf_b128_exp2(b128_t x);
+b128_t rf_b128_expm1(b128_t x);
+b128_t rf_b128_log(b128_t x);
+b128_t rf_b128_log2(b128_t x);
+b128_t rf_b128_log10(b128_t x);
+b128_t rf_b128_log1p(b128_t x);
 
 // Power functions
-f128_t rf_f128_pow(f128_t base, f128_t exp);
-f128_t rf_f128_cbrt(f128_t x);
-f128_t rf_f128_hypot(f128_t x, f128_t y);
+b128_t rf_b128_pow(b128_t base, b128_t exp);
+b128_t rf_b128_cbrt(b128_t x);
+b128_t rf_b128_hypot(b128_t x, b128_t y);
 
 // Rounding functions
-f128_t rf_f128_floor(f128_t x);
-f128_t rf_f128_ceil(f128_t x);
-f128_t rf_f128_trunc(f128_t x);
-f128_t rf_f128_round(f128_t x);
-f128_t rf_f128_fmod(f128_t x, f128_t y);
+b128_t rf_b128_floor(b128_t x);
+b128_t rf_b128_ceil(b128_t x);
+b128_t rf_b128_trunc(b128_t x);
+b128_t rf_b128_round(b128_t x);
+b128_t rf_b128_fmod(b128_t x, b128_t y);
 
 // ============================================================================
 // RazorForge-callable ABI bridges
 //
-// Passing/returning f128_t by value does not match the scalar fp128 call ABI
+// Passing/returning b128_t by value does not match the scalar fp128 call ABI
 // emitted by RazorForge codegen (SysV: SSE vs integer-register classing;
-// Win64: xmm0 vs hidden sret return). These variants take f128 inputs as
-// (low, high) u64 pairs and write f128 results through an out pointer —
+// Win64: xmm0 vs hidden sret return). These variants take b128 inputs as
+// (low, high) u64 pairs and write b128 results through an out pointer —
 // both forms have identical ABI on every supported platform.
 // ============================================================================
 
-void rf_f128_sin_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_cos_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_tan_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_asin_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_acos_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_atan_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_sinh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_cosh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_tanh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_asinh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_acosh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_atanh_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_exp_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_exp2_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_expm1_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_log_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_log2_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_log10_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_log1p_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_cbrt_parts(uint64_t low, uint64_t high, f128_t* out);
-void rf_f128_atan2_parts(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high, f128_t* out);
-void rf_f128_pow_parts(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high, f128_t* out);
-void rf_f128_hypot_parts(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high, f128_t* out);
-void rf_f128_copysign_parts(uint64_t value_low, uint64_t value_high, uint64_t sign_low, uint64_t sign_high, f128_t* out);
-uint64_t rf_format_F128_parts(uint64_t low, uint64_t high);
-void rf_d32_to_f128_parts(uint32_t bits, f128_t* out);
-void rf_d64_to_f128_parts(uint64_t bits, f128_t* out);
-void rf_d128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_b128_sin_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_cos_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_tan_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_asin_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_acos_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_atan_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_sinh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_cosh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_tanh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_asinh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_acosh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_atanh_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_exp_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_exp2_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_expm1_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_log_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_log2_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_log10_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_log1p_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_cbrt_parts(uint64_t low, uint64_t high, b128_t* out);
+void rf_b128_atan2_parts(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high, b128_t* out);
+void rf_b128_pow_parts(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high, b128_t* out);
+void rf_b128_hypot_parts(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high, b128_t* out);
+void rf_b128_copysign_parts(uint64_t value_low, uint64_t value_high, uint64_t sign_low, uint64_t sign_high, b128_t* out);
+uint64_t rf_format_B128_parts(uint64_t low, uint64_t high);
+void rf_d32_to_b128_parts(uint32_t bits, b128_t* out);
+void rf_d64_to_b128_parts(uint64_t bits, b128_t* out);
+void rf_d128_to_b128_parts(uint64_t low, uint64_t high, b128_t* out);
 
-// Extended C99/C23 libm (added for full F16/F32/F64 parity).
-double rf_f64_exp10(double x);
-double rf_f64_scalbn(double x, int64_t n);
-int64_t rf_f64_ilogb(double x);
-double rf_f64_nextafter(double x, double y);
-double rf_f64_rint(double x);
-double rf_f64_fdim(double x, double y);
-double rf_f64_sinpi(double x);
-double rf_f64_cospi(double x);
-double rf_f64_tanpi(double x);
-float rf_f32_erf(float x);
-float rf_f32_erfc(float x);
-float rf_f32_tgamma(float x);
-float rf_f32_lgamma(float x);
-float rf_f32_exp10(float x);
-float rf_f32_scalbn(float x, int64_t n);
-int64_t rf_f32_ilogb(float x);
-float rf_f32_nextafter(float x, float y);
-float rf_f32_rint(float x);
-float rf_f32_fdim(float x, float y);
-float rf_f32_sinpi(float x);
-float rf_f32_cospi(float x);
-float rf_f32_tanpi(float x);
-uint16_t rf_f16_erf(uint16_t x);
-uint16_t rf_f16_erfc(uint16_t x);
-uint16_t rf_f16_tgamma(uint16_t x);
-uint16_t rf_f16_lgamma(uint16_t x);
-uint16_t rf_f16_exp10(uint16_t x);
-uint16_t rf_f16_sinpi(uint16_t x);
-uint16_t rf_f16_cospi(uint16_t x);
-uint16_t rf_f16_tanpi(uint16_t x);
-uint16_t rf_f16_rint(uint16_t x);
-uint16_t rf_f16_fdim(uint16_t x, uint16_t y);
-uint16_t rf_f16_scalbn(uint16_t x, int64_t n);
-int64_t rf_f16_ilogb(uint16_t x);
-uint16_t rf_f16_nextafter(uint16_t x, uint16_t y);
+// Extended C99/C23 libm (added for full B16/B32/B64 parity).
+double rf_b64_exp10(double x);
+double rf_b64_scalbn(double x, int64_t n);
+int64_t rf_b64_ilogb(double x);
+double rf_b64_nextafter(double x, double y);
+double rf_b64_rint(double x);
+double rf_b64_fdim(double x, double y);
+double rf_b64_sinpi(double x);
+double rf_b64_cospi(double x);
+double rf_b64_tanpi(double x);
+float rf_b32_erf(float x);
+float rf_b32_erfc(float x);
+float rf_b32_tgamma(float x);
+float rf_b32_lgamma(float x);
+float rf_b32_exp10(float x);
+float rf_b32_scalbn(float x, int64_t n);
+int64_t rf_b32_ilogb(float x);
+float rf_b32_nextafter(float x, float y);
+float rf_b32_rint(float x);
+float rf_b32_fdim(float x, float y);
+float rf_b32_sinpi(float x);
+float rf_b32_cospi(float x);
+float rf_b32_tanpi(float x);
 
 #ifdef __cplusplus
 }

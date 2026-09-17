@@ -6,11 +6,11 @@ import Collections
 # Exercises `$typeof(m)` in TYPE-ARGUMENT position (the sibling of the expression-position splice): inside
 # `expand m in allmemvarof(T)`, the buildtime member type splices into a generic argument — `Hijacked[$typeof(m)]`
 # and `hijacked_from[$typeof(m)]` — folding to the field's concrete type at monomorphization ($Col ->
-# S64/F32/Bool). Allocates a 1-slot typed raw buffer per field, pokes the field value in, peeks it back.
+# S64/B32/Bool). Allocates a 1-slot typed raw buffer per field, pokes the field value in, peeks it back.
 
 record Trio
   a: S64
-  b: F32
+  b: B32
   c: Bool
 
 routine roundtrip[T](value: T) -> Text
@@ -25,6 +25,6 @@ routine roundtrip[T](value: T) -> Text
   return out
 
 routine start()
-  show(roundtrip[Trio](value: Trio(a: 42_s64, b: 3.5f32, c: true)))
+  show(roundtrip[Trio](value: Trio(a: 42_s64, b: 3.5b32, c: true)))
   show("DONE")
   return

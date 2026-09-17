@@ -830,11 +830,11 @@ internal static class NativeToolchain
     /// <summary>
     /// Target-architecture codegen feature flags for the clang codegen/link step.
     ///
-    /// On x86-64, `F16` (LLVM `half`) requires the F16C hardware conversion instructions
-    /// (vcvtph2ps / vcvtps2ph). Without `+f16c` the backend falls back to a soft-promotion
+    /// On x86-64, `B16` (LLVM `half`) requires the B16C hardware conversion instructions
+    /// (vcvtph2ps / vcvtps2ph). Without `+b16c` the backend falls back to a soft-promotion
     /// path that MISCOMPILES half values crossing a call ABI boundary at -O3 — a half return
-    /// value or a half spilled across a call decays to 0 (verified: an F16 transcendental loop
-    /// accumulated 0 instead of the correct sum without the flag, correct with it). F16C is
+    /// value or a half spilled across a call decays to 0 (verified: an B16 transcendental loop
+    /// accumulated 0 instead of the correct sum without the flag, correct with it). B16C is
     /// present on every x86-64 CPU since ~2012 (Intel Ivy Bridge, AMD Piledriver/Jaguar), which
     /// is well within the supported hardware floor.
     ///
@@ -910,7 +910,7 @@ internal static class NativeToolchain
     // Compiler-RT builtins resolve softfloat/softint symbols that LLVM emits for types
     // without direct hardware support:
     //   fp128 arithmetic: __addtf3, __subtf3, __multf3, __divtf3, __negtf2, __eqtf2, etc.
-    //   f16 conversions:  __extendhfsf2, __truncsfhf2
+    //   b16 conversions:  __extendhfsf2, __truncsfhf2
     //   i128 arithmetic:  __divti3, __modti3, __udivti3, __umodti3
     //
     // On Windows, neither MSVC link.exe nor lld-link automatically searches for the clang

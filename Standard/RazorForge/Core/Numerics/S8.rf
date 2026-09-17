@@ -124,32 +124,32 @@ routine S8!(from: U256) -> S8
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, S8](from)
 
-### Converts an `F16` to `S8` by first converting to `S32`, then truncating.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as an `S8`.
 ### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
-routine S8!(from: F16) -> S8
+routine S8!(from: B16) -> S8
   return from.S32!().S8!()
 
-### Converts an `F32` to `S8` by first converting to `S32`, then truncating.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as an `S8`.
 ### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
-routine S8!(from: F32) -> S8
+routine S8!(from: B32) -> S8
   return from.S32!().S8!()
 
-### Converts an `F64` to `S8` by first converting to `S32`, then truncating.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as an `S8`.
 ### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
-routine S8!(from: F64) -> S8
+routine S8!(from: B64) -> S8
   return from.S32!().S8!()
 
-### Converts an `F128` to `S8` by first converting to `S32`, then truncating.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as an `S8`.
 ### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
-routine S8!(from: F128) -> S8
+routine S8!(from: B128) -> S8
   return from.S32!().S8!()
 
 ### Converts a `D32` to `S8` by first converting to `S32`, then truncating.

@@ -65,10 +65,10 @@ routine Complex(real: Real, imag: Real) -> Complex
 routine Complex(from: S64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
-### Creates a purely real complex value from an `F64` (imaginary part zero).
+### Creates a purely real complex value from an `B64` (imaginary part zero).
 ### :param from: The real-axis double value.
 ### :returns: The resulting `Complex` value.
-routine Complex(from: F64) -> Complex
+routine Complex(from: B64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
 ### Creates a complex value from polar coordinates.
@@ -98,6 +98,21 @@ routine Complex.add(you: Complex) -> Complex
 @readonly
 routine Complex.sub(you: Complex) -> Complex
   return Complex(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). Only `+`/`-` allow
+### real↔complex mixing (arbitrary Real pairs with arbitrary Complex).
+### :param you: The real addend.
+### :returns: The complex sum.
+@readonly
+routine Complex.add(you: Real) -> Complex
+  return me.add(Complex(real: you))
+
+### Returns `me - you`, promoting the real `you` to complex (imaginary part 0).
+### :param you: The real value to subtract.
+### :returns: The complex difference.
+@readonly
+routine Complex.sub(you: Real) -> Complex
+  return me.sub(Complex(real: you))
 
 ### Multiplies this value by `you` using the standard complex product rule.
 ### :param you: The value to multiply by.
@@ -231,7 +246,7 @@ routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :param exp: The exponent value.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.pow!(exp: Complex) -> Complex
+routine Complex.pow(exp: Complex) -> Complex
   return (exp * me.log()).exp()
 
 ### Computes the complex sine of this value.
@@ -409,9 +424,9 @@ routine Complex.is_imaginary() -> Bool
 # Text Representation
 # ============================================================================
 
-### Formats this value compactly as `a+bj` / `a-bj`, with each component in its canonical decimal
+### Formats this value compactly as `a+bi` / `a-bi`, with each component in its canonical decimal
 ### form (full precision, no trailing zeros — e.g. `1+1j`, not `1.0000000000 + 1.0000000000j`).
-### The `j` spelling matches the imaginary literal suffixes (`2j`, `1.5jn`), so output is valid
+### The `i` spelling matches the imaginary literal suffixes (`2i`, `1.5i`), so output is valid
 ### literal syntax. Standard `represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
 @[readonly, override]
@@ -419,10 +434,10 @@ routine Complex.represent() -> Text
   var real_text = me.real.represent()
   var imag_abs = me.imag.abs().represent()
   if me.imag.is_negative()
-    return real_text + "-" + imag_abs + "j"
-  return real_text + "+" + imag_abs + "j"
+    return real_text + "-" + imag_abs + "i"
+  return real_text + "+" + imag_abs + "i"
 
-### Formats this value as `a +/- bj` with the requested precision.
+### Formats this value as `a +/- bi` with the requested precision.
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
@@ -430,8 +445,8 @@ routine Complex.represent_with_places(decimal_places: S32) -> Text
   var real_text = me.real.represent_with_places(decimal_places: decimal_places)
   var imag_abs = me.imag.abs().represent_with_places(decimal_places: decimal_places)
   if me.imag.is_negative()
-    return real_text + " - " + imag_abs + "j"
-  return real_text + " + " + imag_abs + "j"
+    return real_text + " - " + imag_abs + "i"
+  return real_text + " + " + imag_abs + "i"
 
 ### Returns a diagnostic string that includes the type name wrapper.
 ### Standard `diagnose` shape (no args) for f-string dispatch.

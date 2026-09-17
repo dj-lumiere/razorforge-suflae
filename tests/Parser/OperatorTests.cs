@@ -55,8 +55,8 @@ public class OperatorTests
     public void Parse_Division()
     {
         string source = """
-                        routine test() -> F32
-                          return 10.0_f32 / 3.0_f32
+                        routine test() -> B32
+                          return 10.0_b32 / 3.0_b32
                         """;
 
         AssertParses(source: source);
@@ -678,8 +678,8 @@ public class OperatorTests
     {
         string source = """
                         routine test()
-                          var x = 10.0_f32
-                          x /= 2.0_f32
+                          var x = 10.0_b32
+                          x /= 2.0_b32
                           return
                         """;
 

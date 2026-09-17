@@ -678,12 +678,12 @@ public partial class LlvmEmitter
             TokenType.S64Literal or TokenType.U64Literal => "i64",
             TokenType.S128Literal or TokenType.U128Literal => "i128",
             TokenType.S256Literal or TokenType.U256Literal => "i256",
-            TokenType.F16Literal => "half",
-            TokenType.F32Literal => "float",
-            TokenType.F64Literal => "double",
-            // F128 carries its bits as i128 (never LLVM fp128); literal patterns compare bit
+            TokenType.B16Literal => "half",
+            TokenType.B32Literal => "float",
+            TokenType.B64Literal => "double",
+            // B128 carries its bits as i128 (never LLVM fp128); literal patterns compare bit
             // patterns with icmp. IEEE edge divergence: a NaN pattern matches a bit-identical NaN.
-            TokenType.F128Literal => "i128",
+            TokenType.B128Literal => "i128",
             TokenType.True or TokenType.False => "i1",
             _ => subjectType != null
                 ? GetLlvmType(type: subjectType)

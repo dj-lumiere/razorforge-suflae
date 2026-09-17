@@ -372,263 +372,263 @@ dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
 
 
 # ============================================================================
-# F128 (Quadruple Precision) - LibBF Runtime
+# B128 (Quadruple Precision) - LibBF Runtime
 #
-# ABI note: the C runtime represents F128 as a 16-byte `f128_t` struct, whose
+# ABI note: the C runtime represents B128 as a 16-byte `b128_t` struct, whose
 # by-value call ABI does not match the scalar `fp128` ABI RazorForge emits
-# for `F128` parameters and returns. All bridges below therefore take F128
-# inputs as (low, high) `U64` pairs and write F128 results through an
-# `out: Hijacked[F128]` pointer — both forms are ABI-stable everywhere.
+# for `B128` parameters and returns. All bridges below therefore take B128
+# inputs as (low, high) `U64` pairs and write B128 results through an
+# `out: Hijacked[B128]` pointer — both forms are ABI-stable everywhere.
 # ============================================================================
 
-### Returns the sine of an `F128` value interpreted as radians.
+### Returns the sine of an `B128` value interpreted as radians.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_sin_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the cosine of an `F128` value interpreted as radians.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_sin_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the cosine of an `B128` value interpreted as radians.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_cos_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the tangent of an `F128` value interpreted as radians.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_cos_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the tangent of an `B128` value interpreted as radians.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_tan_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse sine of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_tan_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse sine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_asin_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse cosine of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_asin_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse cosine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_acos_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse tangent of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_acos_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse tangent of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_atan_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_atan_parts(low: U64, high: U64, out: Hijacked[B128])
 ### Returns the quadrant-aware angle of the point `(x, y)`.
 ### :param y_low: The low 64 bits of the y-coordinate.
 ### :param y_high: The high 64 bits of the y-coordinate.
 ### :param x_low: The low 64 bits of the x-coordinate.
 ### :param x_high: The high 64 bits of the x-coordinate.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_atan2_parts(y_low: U64, y_high: U64, x_low: U64, x_high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_atan2_parts(y_low: U64, y_high: U64, x_low: U64, x_high: U64, out: Hijacked[B128])
 
-### Returns the hyperbolic sine of an `F128` value.
+### Returns the hyperbolic sine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_sinh_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the hyperbolic cosine of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_sinh_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the hyperbolic cosine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_cosh_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the hyperbolic tangent of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_cosh_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the hyperbolic tangent of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_tanh_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse hyperbolic sine of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_tanh_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse hyperbolic sine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_asinh_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse hyperbolic cosine of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_asinh_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse hyperbolic cosine of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_acosh_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the inverse hyperbolic tangent of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_acosh_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the inverse hyperbolic tangent of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_atanh_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_atanh_parts(low: U64, high: U64, out: Hijacked[B128])
 
-### Returns `e` raised to an `F128` value.
+### Returns `e` raised to an `B128` value.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_exp_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns `2` raised to an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_exp_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns `2` raised to an `B128` value.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_exp2_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_exp2_parts(low: U64, high: U64, out: Hijacked[B128])
 ### Returns `exp(value) - 1` with high precision for small inputs.
 ### :param low: The low 64 bits of the exponent.
 ### :param high: The high 64 bits of the exponent.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_expm1_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the natural logarithm of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_expm1_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the natural logarithm of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_log_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the base-2 logarithm of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_log_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the base-2 logarithm of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_log2_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns the base-10 logarithm of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_log2_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns the base-10 logarithm of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_log10_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_log10_parts(low: U64, high: U64, out: Hijacked[B128])
 ### Returns `log(1 + value)` with high precision for small inputs.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_log1p_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_log1p_parts(low: U64, high: U64, out: Hijacked[B128])
 
-### Raises an `F128` base to an `F128` exponent.
+### Raises an `B128` base to an `B128` exponent.
 ### :param base_low: The low 64 bits of the base value.
 ### :param base_high: The high 64 bits of the base value.
 ### :param exp_low: The low 64 bits of the exponent value.
 ### :param exp_high: The high 64 bits of the exponent value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_pow_parts(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64, out: Hijacked[F128])
-### Returns the real cube root of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_pow_parts(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64, out: Hijacked[B128])
+### Returns the real cube root of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_cbrt_parts(low: U64, high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_cbrt_parts(low: U64, high: U64, out: Hijacked[B128])
 ### Returns the Euclidean length of the vector `(x, y)`.
 ### :param x_low: The low 64 bits of the x-coordinate.
 ### :param x_high: The high 64 bits of the x-coordinate.
 ### :param y_low: The low 64 bits of the y-coordinate.
 ### :param y_high: The high 64 bits of the y-coordinate.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y_high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y_high: U64, out: Hijacked[B128])
 ### Returns `value` with its sign copied from `sign`.
 ### :param value_low: The low 64 bits of the magnitude source.
 ### :param value_high: The high 64 bits of the magnitude source.
 ### :param sign_low: The low 64 bits of the sign source.
 ### :param sign_high: The high 64 bits of the sign source.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[B128])
 
 # ----------------------------------------------------------------------------
-# F128 core operations. F128 carries its bits as an LLVM i128 (never fp128),
+# B128 core operations. B128 carries its bits as an LLVM i128 (never fp128),
 # so arithmetic, comparison, conversion and rounding all route through these
 # bridges instead of native LLVM float instructions.
 # ----------------------------------------------------------------------------
 
-### Returns the sum `a + b` of two `F128` values.
+### Returns the sum `a + b` of two `B128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
-### Returns the difference `a - b` of two `F128` values.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[B128])
+### Returns the difference `a - b` of two `B128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
-### Returns the product `a * b` of two `F128` values.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[B128])
+### Returns the product `a * b` of two `B128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
-### Returns the quotient `a / b` of two `F128` values.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[B128])
+### Returns the quotient `a / b` of two `B128` values.
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
-### Returns the square root of an `F128` value.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[B128])
+### Returns the square root of an `B128` value.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
-### Rounds an `F128` value toward negative infinity.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_sqrt_parts(low: U64, high: U64, out: Hijacked[B128])
+### Rounds an `B128` value toward negative infinity.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_floor_parts(low: U64, high: U64, out: Hijacked[F128])
-### Rounds an `F128` value toward positive infinity.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_floor_parts(low: U64, high: U64, out: Hijacked[B128])
+### Rounds an `B128` value toward positive infinity.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_ceil_parts(low: U64, high: U64, out: Hijacked[F128])
-### Rounds an `F128` value to the nearest integer, ties away from zero.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_ceil_parts(low: U64, high: U64, out: Hijacked[B128])
+### Rounds an `B128` value to the nearest integer, ties away from zero.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_round_parts(low: U64, high: U64, out: Hijacked[F128])
-### Discards the fractional part of an `F128` value (rounds toward zero).
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_round_parts(low: U64, high: U64, out: Hijacked[B128])
+### Discards the fractional part of an `B128` value (rounds toward zero).
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f128_trunc_parts(low: U64, high: U64, out: Hijacked[F128])
-### Returns whether two `F128` values compare equal (IEEE: false for NaN).
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b128_trunc_parts(low: U64, high: U64, out: Hijacked[B128])
+### Returns whether two `B128` values compare equal (IEEE: false for NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when equal, `0` otherwise.
-routine C::rf_f128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+routine C::rf_b128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
 ### Returns whether `a < b` (IEEE ordered: false when either is NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when `a < b`, `0` otherwise.
-routine C::rf_f128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+routine C::rf_b128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
 ### Returns whether `a > b` (IEEE ordered: false when either is NaN).
 ### :param a_low: The low 64 bits of the left operand.
 ### :param a_high: The high 64 bits of the left operand.
 ### :param b_low: The low 64 bits of the right operand.
 ### :param b_high: The high 64 bits of the right operand.
 ### :returns: `1` when `a > b`, `0` otherwise.
-routine C::rf_f128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
-### Converts a signed 64-bit integer to `F128`.
+routine C::rf_b128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Converts a signed 64-bit integer to `B128`.
 ### :param x: The integer to convert.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_s64_to_f128_parts(x: S64, out: Hijacked[F128])
-### Converts an unsigned 64-bit integer to `F128`.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_s64_to_b128_parts(x: S64, out: Hijacked[B128])
+### Converts an unsigned 64-bit integer to `B128`.
 ### :param x: The integer to convert.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_u64_to_f128_parts(x: U64, out: Hijacked[F128])
-### Converts a signed 128-bit integer (as low/high words) to `F128`.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_u64_to_b128_parts(x: U64, out: Hijacked[B128])
+### Converts a signed 128-bit integer (as low/high words) to `B128`.
 ### :param low: The low 64 bits of the integer.
 ### :param high: The high 64 bits of the integer.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_s128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
-### Converts an unsigned 128-bit integer (as low/high words) to `F128`.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_s128_to_b128_parts(low: U64, high: U64, out: Hijacked[B128])
+### Converts an unsigned 128-bit integer (as low/high words) to `B128`.
 ### :param low: The low 64 bits of the integer.
 ### :param high: The high 64 bits of the integer.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_u128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
-### Widens an `F32` to `F128` exactly.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_u128_to_b128_parts(low: U64, high: U64, out: Hijacked[B128])
+### Widens an `B32` to `B128` exactly.
 ### :param x: The single-precision value to widen.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f32_to_f128_parts(x: F32, out: Hijacked[F128])
-### Widens an `F64` to `F128` exactly.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b32_to_b128_parts(x: B32, out: Hijacked[B128])
+### Widens an `B64` to `B128` exactly.
 ### :param x: The double-precision value to widen.
-### :param out: Storage receiving the resulting `F128` value.
-routine C::rf_f64_to_f128_parts(x: F64, out: Hijacked[F128])
-### Narrows an `F128` to the nearest `F32`.
+### :param out: Storage receiving the resulting `B128` value.
+routine C::rf_b64_to_b128_parts(x: B64, out: Hijacked[B128])
+### Narrows an `B128` to the nearest `B32`.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :returns: The nearest single-precision value.
-routine C::rf_f128_to_f32_parts(low: U64, high: U64) -> F32
-### Narrows an `F128` to the nearest `F64`.
+routine C::rf_b128_to_b32_parts(low: U64, high: U64) -> B32
+### Narrows an `B128` to the nearest `B64`.
 ### :param low: The low 64 bits of the input value.
 ### :param high: The high 64 bits of the input value.
 ### :returns: The nearest double-precision value.
-routine C::rf_f128_to_f64_parts(low: U64, high: U64) -> F64
+routine C::rf_b128_to_b64_parts(low: U64, high: U64) -> B64
 
 # ============================================================================
 # Moment - System Clock
@@ -861,24 +861,14 @@ routine C::rf_bigint_is_neg(handle: CPtr) -> S32
 # Integer parsing is pure RazorForge (in each type's .rf file)
 # ============================================================================
 
-### Parses a null-terminated UTF-8 string as `F16`.
+# B16/B32/B64 parsing is pure RazorForge (FloatConvert.rf — exact-rational,
+# correctly rounded straight to the target precision). Only B128 stays in C (LibBF).
+### Parses a null-terminated UTF-8 string as `B128`, writing the result through `out`.
 ### :param cstr: The text to parse.
-### :returns: The parsed `F16` value.
-routine C::rf_parse_F16(cstr: CStr) -> F16
-### Parses a null-terminated UTF-8 string as `F32`.
-### :param cstr: The text to parse.
-### :returns: The parsed `F32` value.
-routine C::rf_parse_F32(cstr: CStr) -> F32
-### Parses a null-terminated UTF-8 string as `F64`.
-### :param cstr: The text to parse.
-### :returns: The parsed `F64` value.
-routine C::rf_parse_F64(cstr: CStr) -> F64
-### Parses a null-terminated UTF-8 string as `F128`, writing the result through `out`.
-### :param cstr: The text to parse.
-### :param out: Storage receiving the parsed `F128` value.
-### :note: Out-param ABI — the C function `void rf_parse_F128(const char*, f128_t*)`
-###        avoids the Windows x64 sret/xmm0 mismatch that breaks an f128_t return value.
-routine C::rf_parse_F128(cstr: CStr, out: Hijacked[F128])
+### :param out: Storage receiving the parsed `B128` value.
+### :note: Out-param ABI — the C function `void rf_parse_B128(const char*, b128_t*)`
+###        avoids the Windows x64 sret/xmm0 mismatch that breaks an b128_t return value.
+routine C::rf_parse_B128(cstr: CStr, out: Hijacked[B128])
 
 # ============================================================================
 # Text Formatting (primitive values -> heap-allocated CStr pointer)
@@ -886,25 +876,15 @@ routine C::rf_parse_F128(cstr: CStr, out: Hijacked[F128])
 # Integer formatting is pure RazorForge (in each type's .rf file)
 # ============================================================================
 
-### Formats an `F16` value as a heap-allocated null-terminated UTF-8 string.
-### :param value: The value to format.
-### :returns: A pointer to the formatted string.
-routine C::rf_format_F16(value: F16) -> Address
-### Formats an `F32` value as a heap-allocated null-terminated UTF-8 string.
-### :param value: The value to format.
-### :returns: A pointer to the formatted string.
-routine C::rf_format_F32(value: F32) -> Address
-### Formats an `F64` value as a heap-allocated null-terminated UTF-8 string.
-### :param value: The value to format.
-### :returns: A pointer to the formatted string.
-routine C::rf_format_F64(value: F64) -> Address
-### Formats an `F128` value as a heap-allocated null-terminated UTF-8 string.
+# B16/B32/B64 formatting is pure RazorForge (FloatConvert.rf — exact-rational
+# %g layout). Only B128 stays in C (LibBF).
+### Formats an `B128` value as a heap-allocated null-terminated UTF-8 string.
 ### :param low: The low 64 bits of the value to format.
 ### :param high: The high 64 bits of the value to format.
 ### :returns: A pointer to the formatted string.
-### :note: Parts ABI — passing the 16-byte `f128_t` by value does not match
-###        the scalar `fp128` ABI emitted for `F128` parameters.
-routine C::rf_format_F128_parts(low: U64, high: U64) -> Address
+### :note: Parts ABI — passing the 16-byte `b128_t` by value does not match
+###        the scalar `fp128` ABI emitted for `B128` parameters.
+routine C::rf_format_B128_parts(low: U64, high: U64) -> Address
 
 # ============================================================================
 # File I/O
@@ -1205,12 +1185,12 @@ routine C::rf_real_new() -> CPtr
 routine C::rf_real_clear(handle: CPtr)
 ### Sets the handle to a signed 64-bit integer value.
 routine C::rf_real_set_i64(handle: CPtr, value: S64)
-### Sets the handle to an F64 value (exact).
-routine C::rf_real_set_f64(handle: CPtr, value: F64)
+### Sets the handle to an B64 value (exact).
+routine C::rf_real_set_b64(handle: CPtr, value: B64)
 ### Parses a decimal string into the handle (radix 10). Returns a libbf status.
-routine C::rf_real_set_str(handle: CPtr, str: CPtr, radix: S32) -> S32
-### Rounds the value to the nearest F64.
-routine C::rf_real_get_f64(handle: CPtr) -> F64
+routine C::rf_real_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
+### Rounds the value to the nearest B64.
+routine C::rf_real_get_b64(handle: CPtr) -> B64
 ### Formats the value as a freshly-allocated decimal C string (free with rf_invalidate).
 routine C::rf_real_to_str(handle: CPtr) -> CStr
 ### Stores a + b (exact) into result.

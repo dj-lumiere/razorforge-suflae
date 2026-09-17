@@ -19,8 +19,8 @@ public class AttributeTests
     {
         string source = """
                         @readonly
-                        routine Point.distance() -> F32
-                          return 0.0_f32
+                        routine Point.distance() -> B32
+                          return 0.0_b32
                         """;
 
         Program program = AssertParses(source: source);
@@ -73,8 +73,8 @@ public class AttributeTests
     {
         string source = """
                         @static
-                        routine Math.pi() -> F64
-                          return 3.14159265359_f64
+                        routine Math.pi() -> B64
+                          return 3.14159265359_b64
                         """;
 
         AssertParses(source: source);
@@ -281,8 +281,8 @@ public class AttributeTests
         // open is the default visibility (not a keyword), so just use @readonly + routine
         string source = """
                         @readonly
-                        routine Point.distance() -> F32
-                          return 0.0_f32
+                        routine Point.distance() -> B32
+                          return 0.0_b32
                         """;
 
         AssertParses(source: source);

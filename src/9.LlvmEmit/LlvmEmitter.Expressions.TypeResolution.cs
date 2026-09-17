@@ -345,7 +345,7 @@ public partial class LlvmEmitter
     {
         string? typeName = literal.LiteralType switch
         {
-            // Bare unsuffixed literals default to S64/F64 in RazorForge (same as SA rule).
+            // Bare unsuffixed literals default to S64/B64 in RazorForge (same as SA rule).
             // Stdlib bodies bypass SA so we must handle these token types here.
             TokenType.IntegerLiteral => "S64",
             // Explicit `dn` Decimal literal -> the @llvm("i128") BID Decimal (baked as an i128
@@ -363,10 +363,10 @@ public partial class LlvmEmitter
             TokenType.U64Literal => "U64",
             TokenType.U128Literal => "U128",
             TokenType.U256Literal => "U256",
-            TokenType.F16Literal => "F16",
-            TokenType.F32Literal => "F32",
-            TokenType.F64Literal => "F64",
-            TokenType.F128Literal => "F128",
+            TokenType.B16Literal => "B16",
+            TokenType.B32Literal => "B32",
+            TokenType.B64Literal => "B64",
+            TokenType.B128Literal => "B128",
             TokenType.D32Literal => "D32",
             TokenType.D64Literal => "D64",
             TokenType.D128Literal => "D128",

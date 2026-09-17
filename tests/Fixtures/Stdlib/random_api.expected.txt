@@ -1,5 +1,5 @@
 same-seed streams match: true
-1000 f64 draws all in [0,1): true
+1000 b64 draws all in [0,1): true
 heads out of 10000: 5010
 List pick in [0,6): true
 CircularList pick in [0,6): true

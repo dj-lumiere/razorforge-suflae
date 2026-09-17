@@ -321,7 +321,7 @@ public sealed class RoutineInfo
     /// Two constructors can share a signature across files (e.g. <c>U16(from: U8)</c> in both U8.rf and
     /// U16.rf) — benign when the bodies are identical (same hash), but a DIVERGENT one (same signature,
     /// different body) means one silently shadows the other under last-wins registration, the hazard
-    /// class that made <c>F64(from: F128)</c> resolve to a recursive-forwarder stub. Null for non-creators
+    /// class that made <c>B64(from: B128)</c> resolve to a recursive-forwarder stub. Null for non-creators
     /// / extern bodies. See <see cref="Builder.Declaration.TypeRegistry.RegisterRoutine"/>.
     /// </summary>
     public int? BodyHash { get; set; }

@@ -21,7 +21,7 @@ routine start()
   # Scalars
   show(SerialValue(42s32).to_json_text())
   show(SerialValue(true).to_json_text())
-  show(SerialValue(3.5f64).to_json_text())
+  show(SerialValue(3.5b64).to_json_text())
 
   # String escaping: quote, backslash, newline, tab, and a control char (U+0001).
   var messy = List[Character]()

@@ -393,7 +393,7 @@ public sealed partial class SemanticVerifier
     [
         "S8", "S16", "S32", "S64", "S128",
         "U8", "U16", "U32", "U64", "U128",
-        "F16", "F32", "F64", "F128",
+        "B16", "B32", "B64", "B128",
         "D32", "D64", "D128"
     ];
 

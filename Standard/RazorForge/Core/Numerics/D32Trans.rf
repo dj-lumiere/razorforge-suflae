@@ -4,30 +4,30 @@ module Core
 # D32Trans — decimal32 (Pmax=7) transcendentals + libm surface via the DoubleDouble (DD) engine
 # (~31 decimal digits >> 7). A D32 value is decoded into DD, run through DD's pure-RF method surface,
 # and rounded back to 7 digits — deterministic (no platform libm) with ~24 guard digits, matching the
-# decimal ladder D64->F128 / D128->F192 / Decimal->F320. (DD's own seeds may call an F64 libm routine,
+# decimal ladder D64->B128 / D128->F192 / Decimal->F320. (DD's own seeds may call an B64 libm routine,
 # but its DD-precision refinement converges to a platform-independent result.)
 #
 # The dec<->bin conversions are HAND-ROLLED on our tabled-BID parts (binary-coefficient encoding);
-# F64<->D32 (below) rounds through DD too, since raw F64's ~9 guard digits are not enough for 7.
+# B64<->D32 (below) rounds through DD too, since raw B64's ~9 guard digits are not enough for 7.
 # ============================================================================
 
 # ============================================================================
-# Hand-rolled radix conversions (our BID parts <-> F64). value = coeff * 10^exp.
+# Hand-rolled radix conversions (our BID parts <-> B64). value = coeff * 10^exp.
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-# 10^e as an F64 (hardware double) — two-level sqrt-decomposition table lookup.
+# 10^e as an B64 (hardware double) — two-level sqrt-decomposition table lookup.
 #
-# Engine width W = 53 (F64 significand). Decimal32 quantum exponent range is
+# Engine width W = 53 (B64 significand). Decimal32 quantum exponent range is
 # [-101, +101] (MAXE = 101). With S = ceil(sqrt(101)) = 11, any |e| <= 101
 # splits as e = sign * (S*hi + lo), 0 <= lo < S, 0 <= hi <= ceil(101/S) = 10.
 # Then 10^e = HIGH[hi] * LOW[lo] — ONE double multiply, zero division, zero
 # binary-exponentiation loop.
 #
-# Each table stores the nearest F64 (round-half-even) to the true 10^k, as its
-# raw 64-bit IEEE pattern (loaded via F64.from_bits). The NEGATIVE powers are
+# Each table stores the nearest B64 (round-half-even) to the true 10^k, as its
+# raw 64-bit IEEE pattern (loaded via B64.from_bits). The NEGATIVE powers are
 # stored directly (nearest double of 10^-k) — NOT computed by dividing 1/HIGH.
-# Entries with |k| <= 22 are exact in F64; the rest are the correctly-rounded
+# Entries with |k| <= 22 are exact in B64; the rest are the correctly-rounded
 # nearest double. Reconstruction error over e in [-101,101] is <= 1 ULP
 # (worst 2.14e-16 at e=-34), so the single multiply is essentially correctly
 # rounded — matching the old binary-exp path but branch-free and loop-free.
@@ -42,61 +42,61 @@ preset D32_POW10_LOW_POS: Array[U64, 11] = [0x3FF0000000000000_u64, 0x4024000000
 preset D32_POW10_HIGH_NEG: Array[U64, 11] = [0x3FF0000000000000_u64, 0x3DA5FD7FE1796495_u64, 0x3B5E392010175EE6_u64, 0x3914C4E977BA1F5C_u64, 0x36CC8B8218854567_u64, 0x34839DAE6F76D883_u64, 0x323AF5BF109550F2_u64, 0x2FF286D80EC190DC_u64, 0x2DA97683DF2F268D_u64, 0x2B617F7D4ED8C33E_u64, 0x29180C903F7379F2_u64]
 preset D32_POW10_LOW_NEG: Array[U64, 11] = [0x3FF0000000000000_u64, 0x3FB999999999999A_u64, 0x3F847AE147AE147B_u64, 0x3F50624DD2F1A9FC_u64, 0x3F1A36E2EB1C432D_u64, 0x3EE4F8B588E368F1_u64, 0x3EB0C6F7A0B5ED8D_u64, 0x3E7AD7F29ABCAF48_u64, 0x3E45798EE2308C3A_u64, 0x3E112E0BE826D695_u64, 0x3DDB7CDFD9D7BDBB_u64]
 
-### 10^e as an F64 via the two-level sqrt-split power-of-ten table (one multiply, no division).
-routine f64_pow10(e: S64) -> F64
+### 10^e as an B64 via the two-level sqrt-split power-of-ten table (one multiply, no division).
+routine b64_pow10(e: S64) -> B64
   var neg = LLVM::signed_lt(a: e, b: 0_s64)
   var a = if neg then LLVM::sub(a: 0_s64, b: e) else e
   var hi = LLVM::signed_div(a: a, b: 11_s64)
   var lo = LLVM::signed_rem(a: a, b: 11_s64)
   if neg
-    var hn = F64.from_bits(bits: D32_POW10_HIGH_NEG[hi])
-    var ln = F64.from_bits(bits: D32_POW10_LOW_NEG[lo])
-    return LLVM::float_mul[F64](a: hn, b: ln)
-  var hp = F64.from_bits(bits: D32_POW10_HIGH_POS[hi])
-  var lp = F64.from_bits(bits: D32_POW10_LOW_POS[lo])
-  return LLVM::float_mul[F64](a: hp, b: lp)
+    var hn = B64.from_bits(bits: D32_POW10_HIGH_NEG[hi])
+    var ln = B64.from_bits(bits: D32_POW10_LOW_NEG[lo])
+    return LLVM::float_mul[B64](a: hn, b: ln)
+  var hp = B64.from_bits(bits: D32_POW10_HIGH_POS[hi])
+  var lp = B64.from_bits(bits: D32_POW10_LOW_POS[lo])
+  return LLVM::float_mul[B64](a: hp, b: lp)
 
-### True if the F64 sign bit is set (handles -0).
-routine f64_signbit(v: F64) -> Bool
+### True if the B64 sign bit is set (handles -0).
+routine b64_signbit(v: B64) -> Bool
   return LLVM::int_ne(a: LLVM::bit_and(a: v.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
 
-### dec -> bin: D32 value as an F64. The idiomatic conversion `someD32.F64()`.
-routine F64(from: D32) -> F64
+### dec -> bin: D32 value as an B64. The idiomatic conversion `someD32.B64()`.
+routine B64(from: D32) -> B64
   var p = from.decode()
   if LLVM::int_eq(a: p.special, b: 1_u64)
     var ib = if p.sign then 0xFFF0000000000000_u64 else 0x7FF0000000000000_u64
-    return F64.from_bits(bits: ib)
+    return B64.from_bits(bits: ib)
   if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return F64.from_bits(bits: 0x7FF8000000000000_u64)
-  # value = coeff (exact, <=7 digits) * 10^exp; widen coeff to F64 then scale, apply sign
-  var cf = p.coeff.F64()
-  var v = LLVM::float_mul[F64](a: cf, b: f64_pow10(e: p.exp))
+    return B64.from_bits(bits: 0x7FF8000000000000_u64)
+  # value = coeff (exact, <=7 digits) * 10^exp; widen coeff to B64 then scale, apply sign
+  var cf = p.coeff.B64()
+  var v = LLVM::float_mul[B64](a: cf, b: b64_pow10(e: p.exp))
   if p.sign
-    return LLVM::float_neg[F64](v)
+    return LLVM::float_neg[B64](v)
   return v
 
-### bin -> dec: F64 value as a D32 (`someF64.D32()`) via the DoubleDouble engine — mirrors
-### `dd_to_d64` but rounds to D32's 7 digits. A single raw-F64 scale is NOT correctly rounded here:
-### f64_pow10 is only ~1 ULP-accurate for |e|>22, and with just ~9 guard digits over D32's 7 that
+### bin -> dec: B64 value as a D32 (`someF64.D32()`) via the DoubleDouble engine — mirrors
+### `dd_to_d64` but rounds to D32's 7 digits. A single raw-B64 scale is NOT correctly rounded here:
+### b64_pow10 is only ~1 ULP-accurate for |e|>22, and with just ~9 guard digits over D32's 7 that
 ### error crosses the 7th-digit rounding boundary for a large fraction of the domain (a full-domain
-### D32->F64->D32 audit failed on 40% of finite values, concentrated where the decimal exponent is
+### D32->B64->D32 audit failed on 40% of finite values, concentrated where the decimal exponent is
 ### extreme so there is no headroom to absorb the pow10 error). DD carries ~31 digits, so scaling |x|
 ### into a ~16-digit integer with dd_pow10 (the same table dd_to_d64 uses) and letting decfin32 do the
 ### final round-half-even 16->7 is correctly rounded across the whole D32 range. This replaces the old
-### detour through the full 34-digit D128 machinery (F64->F128->192-bit engine->decimal128->truncate),
+### detour through the full 34-digit D128 machinery (B64->B128->192-bit engine->decimal128->truncate),
 ### which was correctly rounded but cost ~26x its inverse; DD is correctly rounded at a fraction of that.
-routine D32(from: F64) -> D32
+routine D32(from: B64) -> D32
   if from.is_nan()
     return D32.quiet_nan()
   if from.is_infinite()
-    return D32.infinity(sign: f64_signbit(v: from))
-  if LLVM::float_eq[F64](a: from, b: 0.0_f64)
-    return d32_of_parts(p: D32Parts(sign: f64_signbit(v: from), special: 0_u64, exp: 0_s64, coeff: 0_u64))
-  var sign = f64_signbit(v: from)
+    return D32.infinity(sign: b64_signbit(v: from))
+  if LLVM::float_eq[B64](a: from, b: 0.0_b64)
+    return d32_of_parts(p: D32Parts(sign: b64_signbit(v: from), special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  var sign = b64_signbit(v: from)
   var ax = dd_of(x: from).abs()
   # est. decimal exponent from the BINARY exponent: floor(ilogb * log10(2)), log10(2) ~ 315653/2^20
   # (integer mul + shift, no libm log10). The +-1 error is absorbed by decfin32's renormalization.
-  var decexp = LLVM::signed_div(a: LLVM::mul(a: C::rf_f64_ilogb(value: from), b: 315653_s64), b: 1048576_s64)
+  var decexp = LLVM::signed_div(a: LLVM::mul(a: C::rf_b64_ilogb(value: from), b: 315653_s64), b: 1048576_s64)
   # scale so the coefficient lands as a ~16-digit integer (15 - decexp) in DD precision, round to U64,
   # then decfin32 rounds 16 -> 7 digits round-half-even (pref = 90 strips trailing zeros).
   var q = LLVM::sub(a: 15_s64, b: decexp)
@@ -105,33 +105,33 @@ routine D32(from: F64) -> D32
 
 ### dec -> DD: D32 value as a DD (coeff exact <=7 digits, scaled by 10^exp). The DD engine (~31
 ### digits) is D32's transcendental scratch — pure-RF (no platform libm), deterministic, with ~24
-### guard digits over decimal32's 7, matching the D64->F128 / D128->F192 / Decimal->F320 ladder.
+### guard digits over decimal32's 7, matching the D64->B128 / D128->F192 / Decimal->F320 ladder.
 routine d32_to_dd(x: D32) -> DD
   var p = x.decode()
   if LLVM::int_eq(a: p.special, b: 1_u64)
-    var inf = dd_of(x: 1.0_f64).div(you: dd_of(x: 0.0_f64))
+    var inf = dd_of(x: 1.0_b64).div(you: dd_of(x: 0.0_b64))
     return if p.sign then inf.neg() else inf
   if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return dd_of(x: 0.0_f64).div(you: dd_of(x: 0.0_f64))
+    return dd_of(x: 0.0_b64).div(you: dd_of(x: 0.0_b64))
   if LLVM::int_eq(a: p.coeff, b: 0_u64)
-    return if p.sign then dd_of(x: 0.0_f64).neg() else dd_of(x: 0.0_f64)
-  var mag = dd_of(x: p.coeff.F64()).mul(you: dd_pow10(e: p.exp))
+    return if p.sign then dd_of(x: 0.0_b64).neg() else dd_of(x: 0.0_b64)
+  var mag = dd_of(x: p.coeff.B64()).mul(you: dd_pow10(e: p.exp))
   return if p.sign then mag.neg() else mag
 
 ### bin -> dec: DD value as a D32, rounded to <=7 digits (decfin32 does the final round-half-even
 ### 16 -> 7). Decimal exponent estimated from the hi limb's BINARY exponent (integer mul+shift, no
 ### libm log10); the +-1 error is absorbed by decfin32.
 routine dd_to_d32(x: DD) -> D32
-  var f = x.to_f64()
+  var f = x.to_b64()
   if f.is_nan()
     return D32.quiet_nan()
   if f.is_infinite()
-    return D32.infinity(sign: LLVM::float_lt[F64](a: x.hi, b: 0.0_f64))
-  if LLVM::float_eq[F64](a: x.hi, b: 0.0_f64)
-    return d32_of_parts(p: D32Parts(sign: LLVM::float_lt[F64](a: LLVM::copysign[F64](value: 1.0_f64, sign: x.hi), b: 0.0_f64), special: 0_u64, exp: 0_s64, coeff: 0_u64))
-  var sign = LLVM::float_lt[F64](a: x.hi, b: 0.0_f64)
+    return D32.infinity(sign: LLVM::float_lt[B64](a: x.hi, b: 0.0_b64))
+  if LLVM::float_eq[B64](a: x.hi, b: 0.0_b64)
+    return d32_of_parts(p: D32Parts(sign: LLVM::float_lt[B64](a: LLVM::copysign[B64](value: 1.0_b64, sign: x.hi), b: 0.0_b64), special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  var sign = LLVM::float_lt[B64](a: x.hi, b: 0.0_b64)
   var ax = x.abs()
-  var decexp = LLVM::signed_div(a: LLVM::mul(a: C::rf_f64_ilogb(value: ax.hi), b: 315653_s64), b: 1048576_s64)
+  var decexp = LLVM::signed_div(a: LLVM::mul(a: C::rf_b64_ilogb(value: ax.hi), b: 315653_s64), b: 1048576_s64)
   var q = LLVM::sub(a: 15_s64, b: decexp)
   var coeff = dd_to_u64_round(u: ax.mul(you: dd_pow10(e: q)))
   return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: LLVM::sub(a: 0_s64, b: q), pref: 90_s64))
@@ -139,10 +139,10 @@ routine dd_to_d32(x: DD) -> D32
 # ============================================================================
 # Transcendentals — all delegate to the DD (double-double) engine surface: decode D32 -> DD,
 # evaluate, round DD -> D32. Pure-RF and deterministic (no platform libm), ~31-digit scratch for
-# decimal32's 7 — mirrors D64->F128 / D128->F192 / Decimal->F320.
+# decimal32's 7 — mirrors D64->B128 / D128->F192 / Decimal->F320.
 # ============================================================================
 
-### e^me via hardware libm (F64). Crashes on a non-finite result.
+### e^me via hardware libm (B64). Crashes on a non-finite result.
 ### :returns: The exponential of `me`.
 ### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D32.exp!() -> D32
@@ -306,7 +306,7 @@ routine D32.pow_unchecked(you: D32) -> D32
   if not (me.is_negative() and not me.is_zero())
     return r
   var yint = you.trunc()
-  if you.cmp(you: yint) isnot SAME
+  if you.cmp(you: yint) != SAME
     return D32.quiet_nan()
   var parity = yint - D32(from: 2_s64) * (yint / D32(from: 2_s64)).trunc()
   if parity.is_zero()
@@ -332,6 +332,31 @@ routine hypot!(x: D32, y: D32) -> D32
 ### :returns: The Euclidean length, possibly +inf.
 routine hypot_unchecked(x: D32, y: D32) -> D32
   return dd_to_d32(x: d32_to_dd(x: x).hypot(you: d32_to_dd(x: y)))
+
+### sqrt(x^2 + y^2 + z^2) (without spurious overflow) via DD. Crashes if non-finite.
+### :param x: The first leg.
+### :param y: The second leg.
+### :param z: The third leg.
+### :returns: The 3D Euclidean length.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+routine hypot!(x: D32, y: D32, z: D32) -> D32
+  var r = hypot_unchecked(x: x, y: y, z: z)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `hypot(x, y, z)` via DD, raw IEEE: may return +inf. Never crashes. Summed once at DD width.
+### :param x: The first leg.
+### :param y: The second leg.
+### :param z: The third leg.
+### :returns: The 3D Euclidean length, possibly +inf.
+routine hypot_unchecked(x: D32, y: D32, z: D32) -> D32
+  var a = d32_to_dd(x: x)
+  var b = d32_to_dd(x: y)
+  var c = d32_to_dd(x: z)
+  return dd_to_d32(x: a.mul(you: a).add(you: b.mul(you: b)).add(you: c.mul(you: c)).sqrt())
 
 ### Fused multiply-add me*b + c, single rounding, via libm. Crashes if non-finite.
 ### :param b: The multiplier.
@@ -384,7 +409,7 @@ routine D32.asin!() -> D32
 routine D32.asin_unchecked() -> D32
   # DD.asin = atan(me/sqrt(1-me^2)); for |me|>1 that sqrt clamps to 0 (wrong ±pi/2 instead of NaN),
   # so guard the domain here to preserve IEEE (asin NaN for |me|>1).
-  if me.abs().cmp(you: D32(from: 1_s64)) is ME_LARGE
+  if me.abs().cmp(you: D32(from: 1_s64)) == ME_LARGE
     return D32.quiet_nan()
   return dd_to_d32(x: d32_to_dd(x: me).asin())
 
@@ -403,7 +428,7 @@ routine D32.acos!() -> D32
 ### :returns: The arccosine of `me`, possibly NaN.
 routine D32.acos_unchecked() -> D32
   # acos = pi/2 - asin; same |me|>1 domain guard (DD.sqrt clamp would otherwise mask the NaN).
-  if me.abs().cmp(you: D32(from: 1_s64)) is ME_LARGE
+  if me.abs().cmp(you: D32(from: 1_s64)) == ME_LARGE
     return D32.quiet_nan()
   return dd_to_d32(x: d32_to_dd(x: me).acos())
 
@@ -477,7 +502,7 @@ routine D32.acosh!() -> D32
 routine D32.acosh_unchecked() -> D32
   # DD.acosh = log(me + sqrt(me^2-1)); for me<1 that sqrt clamps to 0 (finite garbage instead of
   # NaN), so guard the domain here to preserve IEEE (acosh NaN for me<1).
-  if me.cmp(you: D32(from: 1_s64)) is ME_SMALL
+  if me.cmp(you: D32(from: 1_s64)) == ME_SMALL
     return D32.quiet_nan()
   return dd_to_d32(x: d32_to_dd(x: me).acosh())
 
@@ -608,8 +633,8 @@ routine D32.total_order(you: D32) -> Bool
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
     return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
   var c = me.cmp(you: you)
-  if c isnot SAME
-    return c is ME_SMALL
+  if c != SAME
+    return c == ME_SMALL
   if pa.sign != pb.sign
     return pa.sign
   if pa.sign
@@ -762,9 +787,9 @@ routine D32.minimum(you: D32) -> D32
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_SMALL
+  if c == ME_SMALL
     return me
-  if c is ME_LARGE
+  if c == ME_LARGE
     return you
   if me.is_zero()
     return if me.signbit() then me else you
@@ -779,9 +804,9 @@ routine D32.maximum(you: D32) -> D32
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_LARGE
+  if c == ME_LARGE
     return me
-  if c is ME_SMALL
+  if c == ME_SMALL
     return you
   if me.is_zero()
     return if me.signbit() then you else me

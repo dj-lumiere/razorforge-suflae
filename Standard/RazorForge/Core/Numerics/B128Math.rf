@@ -1,14 +1,14 @@
 module Core
 
 # ============================================================================
-# F128 transcendentals — faithful ports of TLFloat's Quad math. The cores are
-# WIDTH-GENERIC member routines on UnpackedFloat[M, L, W]. EVERY F128 transcendental
+# B128 transcendentals — faithful ports of TLFloat's Quad math. The cores are
+# WIDTH-GENERIC member routines on UnpackedFloat[M, L, W]. EVERY B128 transcendental
 # now computes on the UNIFORM W=192 engine (UnpackedFloat[U192, U384, 192]): a 192-bit
-# mantissa carries 79 guard bits over F128's 113-bit significand, so all of them are
-# faithfully ~1 ULP. (F128 DIRECT arithmetic add/sub/mul/div stays on the W=128 packed
+# mantissa carries 79 guard bits over B128's 113-bit significand, so all of them are
+# faithfully ~1 ULP. (B128 DIRECT arithmetic add/sub/mul/div stays on the W=128 packed
 # core; only the transcendentals route through W=192.) Constants/coefficients come from
-# F128Const.rf (W-dispatched; every table has a W==192 branch). Each F128 method casts
-# in via me.to_uf192() and out via .to_f128().
+# B128Const.rf (W-dispatched; every table has a W==192 branch). Each B128 method casts
+# in via me.to_uf192() and out via .to_b128().
 # ============================================================================
 
 ### exp on the unpacked engine (TLFloat exp_, N=20, M=1).
@@ -169,18 +169,18 @@ routine UnpackedFloat[M, L, W].cbrt() -> UnpackedFloat[M, L, W]
   if d.sign()
     q = q.neg()
   d = d.abs()
-  # Seed x ~= d^(-1/3) from a HARDWARE f64 rcbrt (~52 correct bits), replacing the old degree-5
-  # Horner polynomial. Take d's top 53 mantissa bits (leading at W-2) as an exact-in-f64 integer
-  # scaled by 2^(d.exp-51), 1/cbrt in f64, then read the ~52-bit result back as an unpacked value.
+  # Seed x ~= d^(-1/3) from a HARDWARE b64 rcbrt (~52 correct bits), replacing the old degree-5
+  # Horner polynomial. Take d's top 53 mantissa bits (leading at W-2) as an exact-in-b64 integer
+  # scaled by 2^(d.exp-51), 1/cbrt in b64, then read the ~52-bit result back as an unpacked value.
   var topbits = LLVM::int_truncate[M, U64](LLVM::shift_right_unsigned(d.mant, M.to_width(s: LLVM::sub(a: wb, b: 54_s64))))
-  var df = F64(from: topbits).scalbn(n: LLVM::sub(a: d.exp, b: 51_s64))
-  var xf = F64(from: 1_u64).truediv_unchecked(you: C::rf_f64_cbrt(value: df))
-  var xint = LLVM::float_to_unsigned[F64, U64](xf.scalbn(n: 53_s64))
+  var df = B64(from: topbits).scalbn(n: LLVM::sub(a: d.exp, b: 51_s64))
+  var xf = B64(from: 1_u64).truediv_unchecked(you: C::rf_b64_cbrt(value: df))
+  var xint = LLVM::float_to_unsigned[B64, U64](xf.scalbn(n: 53_s64))
   var x = UnpackedFloat[M, L, W].from_u64(v: xint).ldexp(e: -53_s64)
   var one_third_neg = one_third.neg()
   # Newton x <- x - (d*x^4 - x)/3 drives x to d^(-1/3), doubling the correct-bit count each step.
-  # From the ~52-bit f64 seed, ceil(log2(W/52)) steps reach W bits: W=128/192->2, 256/384->3, 512->4.
-  # (Was a fixed 3 on a ~degree-5-poly seed; the f64 seed trims F128 to 2 and the Horner seed to nil.)
+  # From the ~52-bit b64 seed, ceil(log2(W/52)) steps reach W bits: W=128/192->2, 256/384->3, 512->4.
+  # (Was a fixed 3 on a ~degree-5-poly seed; the b64 seed trims B128 to 2 and the Horner seed to nil.)
   var iters = LLVM::sub(a: LLVM::sub(a: 63_s64, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros[U64](W))), b: 5_s64)
   if LLVM::signed_lt(a: iters, b: 2_s64)
     iters = 2_s64
@@ -207,7 +207,7 @@ routine UnpackedFloat[M, L, W].atan2(x0: UnpackedFloat[M, L, W]) -> UnpackedFloa
   return me.atan2_p(x0: x0, deg: deg, depth: depth)
 
 ### Degree/depth-parameterized atan2. `deg` = atan-series Horner degree, `depth` = half-angle
-### reductions; callers below F128's 113 bits (D64) size both down to their target. atan_coef is
+### reductions; callers below B128's 113 bits (D64) size both down to their target. atan_coef is
 ### W-dispatched (a valid quad table at W=128), so reducing `deg` just uses fewer correct terms.
 routine UnpackedFloat[M, L, W].atan2_p(x0: UnpackedFloat[M, L, W], deg: S64, depth: S64) -> UnpackedFloat[M, L, W]
   var y = me
@@ -335,7 +335,7 @@ routine UnpackedFloat[M, L, W].sinh_n(en: S64) -> UnpackedFloat[M, L, W]
     d = d.neg()
   return d
 
-### sinh on the unpacked engine (expm1_ N=20) at the full F128/Decimal term count.
+### sinh on the unpacked engine (expm1_ N=20) at the full B128/Decimal term count.
 routine UnpackedFloat[M, L, W].sinh() -> UnpackedFloat[M, L, W]
   return me.sinh_n(en: 20_s64)
 
@@ -355,7 +355,7 @@ routine UnpackedFloat[M, L, W].cosh_n(en: S64) -> UnpackedFloat[M, L, W]
   var one = UnpackedFloat[M, L, W].from_s64(src: 1_s64)
   return d.add(you: one.div(you: d)).ldexp(e: -1_s64)
 
-### cosh on the unpacked engine (exp_ N=20) at the full F128/Decimal term count.
+### cosh on the unpacked engine (exp_ N=20) at the full B128/Decimal term count.
 routine UnpackedFloat[M, L, W].cosh() -> UnpackedFloat[M, L, W]
   return me.cosh_n(en: 20_s64)
 
@@ -378,7 +378,7 @@ routine UnpackedFloat[M, L, W].tanh_n(en: S64) -> UnpackedFloat[M, L, W]
     d = d.neg()
   return d
 
-### tanh on the unpacked engine (expm1_ N=20) at the full F128/Decimal term count.
+### tanh on the unpacked engine (expm1_ N=20) at the full B128/Decimal term count.
 routine UnpackedFloat[M, L, W].tanh() -> UnpackedFloat[M, L, W]
   return me.tanh_n(en: 20_s64)
 
@@ -409,7 +409,7 @@ routine UnpackedFloat[M, L, W].atanh_n(ln: S64) -> UnpackedFloat[M, L, W]
     d = d.neg()
   return d
 
-### atanh on the unpacked engine (log1p_ N=21, M=0) at the full F128/Decimal term count.
+### atanh on the unpacked engine (log1p_ N=21, M=0) at the full B128/Decimal term count.
 routine UnpackedFloat[M, L, W].atanh() -> UnpackedFloat[M, L, W]
   return me.atanh_n(ln: 21_s64)
 
@@ -425,7 +425,7 @@ routine UnpackedFloat[M, L, W].asinh() -> UnpackedFloat[M, L, W]
   # Pick ONE transcendental (lazy conditional): |x|>1 -> log, else log1p. The old
   # form always evaluated log1p then overwrote it with log for |x|>1 (double work).
   # m=0 (no half-argument sqrt-reduction): the frexp range bounds |x|<=0.1716, so
-  # n=24 gives ~2^-130 (> F128's 113-bit / D128's 34-digit target) with NO reduction
+  # n=24 gives ~2^-130 (> B128's 113-bit / D128's 34-digit target) with NO reduction
   # sqrt. The old m=1 paid a SECOND wide-engine sqrt (~1126 ns) on top of the inherent
   # sqrt(x^2+1) for precision nothing downstream uses. atanh already runs m=0 here.
   var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else d.sub(you: one).add(you: y).log1p(n: 24_s64, m: 0_s64)
@@ -452,16 +452,16 @@ routine UnpackedFloat[M, L, W].acosh() -> UnpackedFloat[M, L, W]
   if me.lt(you: two)
     var w = tm1.add(you: tm1.mul(you: me.add(you: one)).sqrt())
     return w.log1p(n: 24_s64, m: 0_s64)
-  # m=0: drop the second (reduction) sqrt; n=24 (~2^-130) covers the F128/D128 target.
+  # m=0: drop the second (reduction) sqrt; n=24 (~2^-130) covers the B128/D128 target.
   var s = me.add(you: one).mul(you: tm1).sqrt().add(you: me)
   return s.log(n: 24_s64, m: 0_s64, t: -10_s64)
 
 # ============================================================================
-# F128 method wrappers
+# B128 method wrappers
 # ============================================================================
 
 ### Returns `e^me`.
-routine F128.exp!() -> F128
+routine B128.exp!() -> B128
   var rr = me.exp_unchecked()
   if rr.is_finite()
     return rr
@@ -470,21 +470,21 @@ routine F128.exp!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `e^me` with raw IEEE propagation (NaN -> qNaN, +inf -> +inf, -inf -> +0). No crash.
-routine F128.exp_unchecked() -> F128
+routine B128.exp_unchecked() -> B128
   return me.exp_unchecked_n(n: 20_s64)
 
 ### `e^me` raw IEEE, with the exp-series explicit atanh/exp-series term count `n`.
-routine F128.exp_unchecked_n(n: S64) -> F128
+routine B128.exp_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
-      return F128.from_bits(bits: 0_u128)
+      return B128.from_bits(bits: 0_u128)
     return me
-  return me.to_uf192().exp(n: n).to_f128()
+  return me.to_uf192().exp(n: n).to_b128()
 
 ### Returns `ln(me)`.
-routine F128.log!() -> F128
+routine B128.log!() -> B128
   var rr = me.log_unchecked()
   if rr.is_finite()
     return rr
@@ -493,7 +493,7 @@ routine F128.log!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `ln(me)` with raw IEEE (NaN/0 -> -inf, x<0 -> qNaN, +inf -> +inf). No crash.
-routine F128.log_unchecked() -> F128
+routine B128.log_unchecked() -> B128
   return me.log_unchecked_n(n: 23_s64)
 
 ### `ln(me)` raw IEEE, with the atanh-series term count sized to a TARGET precision (bits) rather
@@ -501,19 +501,19 @@ routine F128.log_unchecked() -> F128
 ### actually needs. After the [sqrt(1/2), sqrt(2)) reduction |x| <= ~0.172, so the series yields
 ### ~6 bits per term; n = (prec + guard) / 6. Lower-precision callers (e.g. D64 at 54 bits) get a
 ### proportionally cheaper log. PROTOTYPE for precision-targeted iteration counts.
-routine F128.log_unchecked_n(n: S64) -> F128
+routine B128.log_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
-    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
   if me.is_negative()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).to_f128()
+  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).to_b128()
 
 ### Returns `e^me - 1`.
-routine F128.expm1!() -> F128
+routine B128.expm1!() -> B128
   var rr = me.expm1_unchecked()
   if rr.is_finite()
     return rr
@@ -522,21 +522,21 @@ routine F128.expm1!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `e^me - 1` with raw IEEE (NaN -> qNaN, -inf -> -1, +inf -> +inf). No crash.
-routine F128.expm1_unchecked() -> F128
+routine B128.expm1_unchecked() -> B128
   return me.expm1_unchecked_n(n: 21_s64)
 
 ### `e^me - 1` raw IEEE, explicit atanh/exp-series term count `n`.
-routine F128.expm1_unchecked_n(n: S64) -> F128
+routine B128.expm1_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
-      return UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).to_f128()
+      return UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).to_b128()
     return me
-  return me.to_uf192().expm1(n: n).to_f128()
+  return me.to_uf192().expm1(n: n).to_b128()
 
 ### Returns `ln(1 + me)`.
-routine F128.log1p!() -> F128
+routine B128.log1p!() -> B128
   var rr = me.log1p_unchecked()
   if rr.is_finite()
     return rr
@@ -545,26 +545,26 @@ routine F128.log1p!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `ln(1+me)` with raw IEEE (NaN -> qNaN, me=-1 -> -inf, me<-1 -> qNaN, +inf -> +inf). No crash.
-routine F128.log1p_unchecked() -> F128
+routine B128.log1p_unchecked() -> B128
   return me.log1p_unchecked_n(n: 21_s64)
 
 ### `ln(1+me)` raw IEEE, explicit atanh/exp-series term count `n`.
-routine F128.log1p_unchecked_n(n: S64) -> F128
+routine B128.log1p_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
     return me
-  var negone = UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).to_f128()
+  var negone = UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).to_b128()
   if me == negone
-    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
   if me < negone
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf192().log1p(n: n, m: 0_s64).to_f128()
+  return me.to_uf192().log1p(n: n, m: 0_s64).to_b128()
 
 ### Returns `log2(me)`.
-routine F128.log2!() -> F128
+routine B128.log2!() -> B128
   var rr = me.log2_unchecked()
   if rr.is_finite()
     return rr
@@ -573,23 +573,23 @@ routine F128.log2!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `log2(me)` with raw IEEE (computed as ln(me) * (1/ln2)). No crash.
-routine F128.log2_unchecked() -> F128
+routine B128.log2_unchecked() -> B128
   return me.log2_unchecked_n(n: 23_s64)
 
 ### `log2(me)` raw IEEE, with the inner log atanh-series term count `n`.
-routine F128.log2_unchecked_n(n: S64) -> F128
+routine B128.log2_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
-    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
   if me.is_negative()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U192, U384, 192].recip_ln2()).to_f128()
+  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U192, U384, 192].recip_ln2()).to_b128()
 
 ### Returns `log10(me)`.
-routine F128.log10!() -> F128
+routine B128.log10!() -> B128
   var rr = me.log10_unchecked()
   if rr.is_finite()
     return rr
@@ -598,29 +598,29 @@ routine F128.log10!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `log10(me)` with raw IEEE (computed as ln(me) * (1/ln10)). No crash.
-routine F128.log10_unchecked() -> F128
+routine B128.log10_unchecked() -> B128
   return me.log10_unchecked_n(n: 23_s64)
 
 ### `log10(me)` raw IEEE, with the inner log atanh-series term count `n`.
-routine F128.log10_unchecked_n(n: S64) -> F128
+routine B128.log10_unchecked_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero()
-    return F128.from_bits(bits: f128_inf(sign: 1_u64))
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
   if me.is_negative()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if me.is_infinite()
     return me
-  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U192, U384, 192].recip_ln10()).to_f128()
+  return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[U192, U384, 192].recip_ln10()).to_b128()
 
 ### Returns the cube root `cbrt(me)`.
-routine F128.cbrt() -> F128
+routine B128.cbrt() -> B128
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return me
-  return me.to_uf192().cbrt().to_f128()
+  return me.to_uf192().cbrt().to_b128()
 
 ### Returns `2^me` (computed on the W=192 engine).
-routine F128.exp2!() -> F128
+routine B128.exp2!() -> B128
   var rr = me.exp2_unchecked()
   if rr.is_finite()
     return rr
@@ -629,17 +629,17 @@ routine F128.exp2!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `2^me` with raw IEEE (W=192: e^(me*ln2)). No crash.
-routine F128.exp2_unchecked() -> F128
+routine B128.exp2_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
-      return F128.from_bits(bits: 0_u128)
+      return B128.from_bits(bits: 0_u128)
     return me
-  return me.to_uf192().mul(you: UnpackedFloat[U192, U384, 192].ln2()).exp(n: 20_s64).to_f128()
+  return me.to_uf192().mul(you: UnpackedFloat[U192, U384, 192].ln2()).exp(n: 20_s64).to_b128()
 
 ### Returns `10^me` (computed on the W=192 engine).
-routine F128.exp10!() -> F128
+routine B128.exp10!() -> B128
   var rr = me.exp10_unchecked()
   if rr.is_finite()
     return rr
@@ -648,17 +648,17 @@ routine F128.exp10!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `10^me` with raw IEEE (W=192: e^(me*ln10)). No crash.
-routine F128.exp10_unchecked() -> F128
+routine B128.exp10_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
-      return F128.from_bits(bits: 0_u128)
+      return B128.from_bits(bits: 0_u128)
     return me
-  return me.to_uf192().mul(you: UnpackedFloat[U192, U384, 192].ln10()).exp(n: 20_s64).to_f128()
+  return me.to_uf192().mul(you: UnpackedFloat[U192, U384, 192].ln10()).exp(n: 20_s64).to_b128()
 
 ### Returns `me ^ you` (computed on the W=192 engine).
-routine F128.pow!(you: F128) -> F128
+routine B128.pow!(you: B128) -> B128
   var rr = me.pow_unchecked(you: you)
   if rr.is_finite()
     return rr
@@ -668,37 +668,37 @@ routine F128.pow!(you: F128) -> F128
 
 ### `me^you` with raw IEEE (full C99 pow special-case ladder). No crash.
 ### Core path is W=192 `exp(you * ln|me|)`; the sign of an odd-integer exponent is reapplied.
-routine F128.pow_unchecked(you: F128) -> F128
+routine B128.pow_unchecked(you: B128) -> B128
   return me.pow_unchecked_p(you: you, logn: 23_s64, expn: 20_s64, fast: false)
 
 ### Precision-parameterized pow. `fast: true` runs the general `exp(you * ln|me|)` core at
-### F128 width (113-bit significand, ~59 guard bits over D64's 54-bit target) instead of W=192;
-### `fast: false` keeps the W=192 path for F128's own faithful ~1 ULP 113-bit result. The
+### B128 width (113-bit significand, ~59 guard bits over D64's 54-bit target) instead of W=192;
+### `fast: false` keeps the W=192 path for B128's own faithful ~1 ULP 113-bit result. The
 ### C99 special-case ladder is precision-independent and shared. `logn`/`expn` set the series
 ### degrees of the general path.
-routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F128
-  var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_f128()
+routine B128.pow_unchecked_p(you: B128, logn: S64, expn: S64, fast: Bool) -> B128
+  var one = UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).to_b128()
   var negone = one.neg()
   var yo = you.to_uf192()
   # Integer/odd-integer exponent classification drives sign rules and domain checks below.
   var yisint = yo.isint()
   var yisoddint = yisint and not yo.iseven()
-  var poszero = F128.from_bits(bits: 0_u128)
-  var negzero = F128.from_bits(bits: LLVM::shift_left(value: 1_u128, bits: 127_u128))
-  var posinf = F128.from_bits(bits: f128_inf(sign: 0_u64))
-  var neginf = F128.from_bits(bits: f128_inf(sign: 1_u64))
+  var poszero = B128.from_bits(bits: 0_u128)
+  var negzero = B128.from_bits(bits: LLVM::shift_left(value: 1_u128, bits: 127_u128))
+  var posinf = B128.from_bits(bits: b128_inf(sign: 0_u64))
+  var neginf = B128.from_bits(bits: b128_inf(sign: 1_u64))
   var xs = 0_u64
   if me.is_negative()
     xs = 1_u64
   # Negative base raised to a non-integer power has no real result -> qNaN.
   if me.is_negative() and me.is_finite() and not me.is_zero() and you.is_finite() and not yisint
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if me == one or you.is_zero()
     return one
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if you.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
   if not you.is_negative() and not you.is_zero() and me.is_zero() and yisoddint
     return me
   if me.is_zero() and not you.is_negative() and not you.is_zero() and not yisoddint
@@ -728,30 +728,30 @@ routine F128.pow_unchecked_p(you: F128, logn: S64, expn: S64, fast: Bool) -> F12
   if me.is_infinite() and not me.is_negative() and not you.is_negative() and not you.is_zero()
     return posinf
   if me.is_zero() and yisoddint and you.is_negative()
-    return F128.from_bits(bits: f128_inf(sign: xs))
+    return B128.from_bits(bits: b128_inf(sign: xs))
   if me.is_zero() and you.is_negative() and not you.is_zero() and not yisoddint
     return posinf
-  # General case: exp(you * ln|me|). Fast path stays at F128 width; default path is W=192.
+  # General case: exp(you * ln|me|). Fast path stays at B128 width; default path is W=192.
   if fast
     var zu = me.abs().to_uf().log(n: logn, m: 0_s64, t: 0_s64).mul(you: you.to_uf()).exp(n: expn)
     # Negative base with an odd-integer exponent keeps a negative result.
     if me.is_negative() and yisoddint
       zu = zu.neg()
-    return zu.to_f128()
+    return zu.to_b128()
   var z = me.abs().to_uf192().log(n: logn, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: expn)
   # Negative base with an odd-integer exponent keeps a negative result.
   if me.is_negative() and yisoddint
     z = z.neg()
-  return z.to_f128()
+  return z.to_b128()
 
 ### Returns `atan(me)`.
-routine F128.atan() -> F128
+routine B128.atan() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf192().atan().to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf192().atan().to_b128()
 
 ### Returns `asin(me)`.
-routine F128.asin!() -> F128
+routine B128.asin!() -> B128
   var rr = me.asin_unchecked()
   if rr.is_finite()
     return rr
@@ -760,13 +760,13 @@ routine F128.asin!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `asin(me)` with raw IEEE (|me|>1 -> qNaN). No crash.
-routine F128.asin_unchecked() -> F128
+routine B128.asin_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf192().asin().to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf192().asin().to_b128()
 
 ### Returns `acos(me)`.
-routine F128.acos!() -> F128
+routine B128.acos!() -> B128
   var rr = me.acos_unchecked()
   if rr.is_finite()
     return rr
@@ -775,19 +775,19 @@ routine F128.acos!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `acos(me)` with raw IEEE (|me|>1 -> qNaN). No crash.
-routine F128.acos_unchecked() -> F128
+routine B128.acos_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf192().acos().to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf192().acos().to_b128()
 
 ### Returns `atan2(y, x)`.
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
-routine atan2(y: F128, x: F128) -> F128
+routine atan2(y: B128, x: B128) -> B128
   if y.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: y.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: y.to_bits()))
   if x.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: x.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: x.to_bits()))
   var yu = y.to_uf192()
   var xu = x.to_uf192()
   if y.is_infinite() or x.is_infinite()
@@ -799,31 +799,31 @@ routine atan2(y: F128, x: F128) -> F128
     var xinf = if x.is_negative() then negone else one
     var xfin = UnpackedFloat[U192, U384, 192].zero(sign: x.is_negative())
     xu = if x.is_infinite() then xinf else xfin
-  return yu.atan2(x0: xu).to_f128()
+  return yu.atan2(x0: xu).to_b128()
 
 ### Degree/depth-reduced inverse-trig for sub-113-bit targets (D64). atan/asin/acos all funnel
-### through atan2; these thread reduced `deg`/`depth` to the F128-width core. Already F128 width
+### through atan2; these thread reduced `deg`/`depth` to the B128-width core. Already B128 width
 ### (not the wider Decimal engine), so the win is purely fewer Horner terms + fewer half-angle sqrt reductions.
-routine F128.atan_fast(deg: S64, depth: S64) -> F128
+routine B128.atan_fast(deg: S64, depth: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf().atan_p(deg: deg, depth: depth).to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf().atan_p(deg: deg, depth: depth).to_b128()
 
-routine F128.asin_fast(deg: S64, depth: S64) -> F128
+routine B128.asin_fast(deg: S64, depth: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf().asin_p(deg: deg, depth: depth).to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf().asin_p(deg: deg, depth: depth).to_b128()
 
-routine F128.acos_fast(deg: S64, depth: S64) -> F128
+routine B128.acos_fast(deg: S64, depth: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf().acos_p(deg: deg, depth: depth).to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf().acos_p(deg: deg, depth: depth).to_b128()
 
-routine F128.atan2_fast(you: F128, deg: S64, depth: S64) -> F128
+routine B128.atan2_fast(you: B128, deg: S64, depth: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if you.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: you.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: you.to_bits()))
   var y = me.to_uf()
   var x = you.to_uf()
   if me.is_infinite() or you.is_infinite()
@@ -835,10 +835,10 @@ routine F128.atan2_fast(you: F128, deg: S64, depth: S64) -> F128
     var xinf = if you.is_negative() then negone else one
     var xfin = UnpackedFloat[U128, U256, 128].zero(sign: you.is_negative())
     x = if you.is_infinite() then xinf else xfin
-  return y.atan2_p(x0: x, deg: deg, depth: depth).to_f128()
+  return y.atan2_p(x0: x, deg: deg, depth: depth).to_b128()
 
 ### Returns `sinh(me)`.
-routine F128.sinh!() -> F128
+routine B128.sinh!() -> B128
   var rr = me.sinh_unchecked()
   if rr.is_finite()
     return rr
@@ -847,15 +847,15 @@ routine F128.sinh!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
-routine F128.sinh_unchecked() -> F128
-  return me.to_uf192().sinh().to_f128()
+routine B128.sinh_unchecked() -> B128
+  return me.to_uf192().sinh().to_b128()
 
 ### `sinh(me)` raw IEEE, with the inner expm1-series term count `n`.
-routine F128.sinh_unchecked_n(n: S64) -> F128
-  return me.to_uf192().sinh_n(en: n).to_f128()
+routine B128.sinh_unchecked_n(n: S64) -> B128
+  return me.to_uf192().sinh_n(en: n).to_b128()
 
 ### Returns `cosh(me)`.
-routine F128.cosh!() -> F128
+routine B128.cosh!() -> B128
   var rr = me.cosh_unchecked()
   if rr.is_finite()
     return rr
@@ -864,23 +864,23 @@ routine F128.cosh!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `cosh(me)` with raw IEEE (large |me| -> +inf). No crash.
-routine F128.cosh_unchecked() -> F128
-  return me.to_uf192().cosh().to_f128()
+routine B128.cosh_unchecked() -> B128
+  return me.to_uf192().cosh().to_b128()
 
 ### `cosh(me)` raw IEEE, with the inner exp-series term count `n`.
-routine F128.cosh_unchecked_n(n: S64) -> F128
-  return me.to_uf192().cosh_n(en: n).to_f128()
+routine B128.cosh_unchecked_n(n: S64) -> B128
+  return me.to_uf192().cosh_n(en: n).to_b128()
 
 ### Returns `tanh(me)`.
-routine F128.tanh() -> F128
-  return me.to_uf192().tanh().to_f128()
+routine B128.tanh() -> B128
+  return me.to_uf192().tanh().to_b128()
 
 ### `tanh(me)` with the inner expm1-series term count `n`.
-routine F128.tanh_n(n: S64) -> F128
-  return me.to_uf192().tanh_n(en: n).to_f128()
+routine B128.tanh_n(n: S64) -> B128
+  return me.to_uf192().tanh_n(en: n).to_b128()
 
 ### Returns `atanh(me)`.
-routine F128.atanh!() -> F128
+routine B128.atanh!() -> B128
   var rr = me.atanh_unchecked()
   if rr.is_finite()
     return rr
@@ -889,26 +889,26 @@ routine F128.atanh!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
-routine F128.atanh_unchecked() -> F128
-  return me.to_uf192().atanh().to_f128()
+routine B128.atanh_unchecked() -> B128
+  return me.to_uf192().atanh().to_b128()
 
 ### `atanh(me)` raw IEEE, with the inner log1p-series term count `n`.
-routine F128.atanh_unchecked_n(n: S64) -> F128
-  return me.to_uf192().atanh_n(ln: n).to_f128()
+routine B128.atanh_unchecked_n(n: S64) -> B128
+  return me.to_uf192().atanh_n(ln: n).to_b128()
 
 ### Returns `asinh(me)` (computed on the W=192 engine).
-routine F128.asinh() -> F128
+routine B128.asinh() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   # asinh is odd; asinh(+-0) = +-0. The W=192 log1p path routes through
   # sqrt(x^2+1) whose roundoff leaves a tiny nonzero at x=0, so guard the
   # exact-zero (and signed-zero) result here.
   if me.is_zero()
     return me
-  return me.to_uf192().asinh().to_f128()
+  return me.to_uf192().asinh().to_b128()
 
 ### Returns `acosh(me)` (computed on the W=192 engine).
-routine F128.acosh!() -> F128
+routine B128.acosh!() -> B128
   var rr = me.acosh_unchecked()
   if rr.is_finite()
     return rr
@@ -917,10 +917,10 @@ routine F128.acosh!() -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `acosh(me)` with raw IEEE (me<1 -> qNaN) computed on the W=192 engine. No crash.
-routine F128.acosh_unchecked() -> F128
+routine B128.acosh_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
-  return me.to_uf192().acosh().to_f128()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  return me.to_uf192().acosh().to_b128()
 
 # ============================================================================
 # Forward trig — Payne-Hanek argument reduction (TLFloat ph) over the rpitab
@@ -1080,33 +1080,33 @@ routine UnpackedFloat[M, L, W].cos_n(cn: S64) -> UnpackedFloat[M, L, W]
     return d.neg()
   return d
 
-### cos on the unpacked engine (TLFloat cos_, N=14) at the full F128/Decimal term count.
+### cos on the unpacked engine (TLFloat cos_, N=14) at the full B128/Decimal term count.
 routine UnpackedFloat[M, L, W].cos() -> UnpackedFloat[M, L, W]
   return me.cos_n(cn: 14_s64)
 
 ### Returns `sin(me)`.
-routine F128.sin() -> F128
+routine B128.sin() -> B128
   return me.sin_n(n: 14_s64)
 
 ### `sin(me)` with the series explicit atanh/exp-series term count `n`.
-routine F128.sin_n(n: S64) -> F128
+routine B128.sin_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
-  return me.to_uf192().sin(n: n).to_f128()
+    return B128.from_bits(bits: b128_qnan())
+  return me.to_uf192().sin(n: n).to_b128()
 
 ### Returns `cos(me)`.
-routine F128.cos() -> F128
+routine B128.cos() -> B128
   return me.cos_n(n: 14_s64)
 
 ### `cos(me)` with the cos-series explicit term count `n`.
-routine F128.cos_n(n: S64) -> F128
+routine B128.cos_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
-  return me.to_uf192().cos_n(cn: n).to_f128()
+    return B128.from_bits(bits: b128_qnan())
+  return me.to_uf192().cos_n(cn: n).to_b128()
 
 ### tan numerator/denominator pair (TLFloat tan_, N=16, M=2); tan = first/second.
 ### `td0` is the tan-poly degree; a lower value suffices for narrower targets since the
@@ -1151,7 +1151,7 @@ routine UnpackedFloat[M, L, W].tanxy_n(td0: S64) -> UFPair[M, L, W]
     y = tmp.neg()
   return UFPair[M, L, W](item0: x, item1: y)
 
-### tan numerator/denominator pair at the full F128/Decimal degree.
+### tan numerator/denominator pair at the full B128/Decimal degree.
 routine UnpackedFloat[M, L, W].tanxy() -> UFPair[M, L, W]
   return me.tanxy_n(td0: 15_s64)
 
@@ -1165,19 +1165,19 @@ routine UnpackedFloat[M, L, W].tan() -> UnpackedFloat[M, L, W]
   return me.tan_n(td0: 15_s64)
 
 ### Returns `tan(me)`.
-routine F128.tan() -> F128
+routine B128.tan() -> B128
   return me.tan_n(n: 15_s64)
 
 ### `tan(me)` with the tan-series explicit degree `n`.
-routine F128.tan_n(n: S64) -> F128
+routine B128.tan_n(n: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
-  return me.to_uf192().tan_n(td0: n).to_f128()
+    return B128.from_bits(bits: b128_qnan())
+  return me.to_uf192().tan_n(td0: n).to_b128()
 
 ### Returns the fused multiply-add `me*b + c` with a single rounding (computed at W=192).
-routine F128.fma!(b: F128, c: F128) -> F128
+routine B128.fma!(b: B128, c: B128) -> B128
   var rr = me.fma_unchecked(b: b, c: c)
   if rr.is_finite()
     return rr
@@ -1186,13 +1186,13 @@ routine F128.fma!(b: F128, c: F128) -> F128
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### `me*b + c` (single rounding, computed at W=192) with raw IEEE propagation. No crash.
-routine F128.fma_unchecked(b: F128, c: F128) -> F128
-  return me.to_uf192().fma(b: b.to_uf192(), c: c.to_uf192()).to_f128()
+routine B128.fma_unchecked(b: B128, c: B128) -> B128
+  return me.to_uf192().fma(b: b.to_uf192(), c: c.to_uf192()).to_b128()
 
 ### Returns `sqrt(x^2 + y^2)` without spurious overflow (TLFloat hypot).
 ### :param x: One leg.
 ### :param y: The other leg.
-routine hypot!(x: F128, y: F128) -> F128
+routine hypot!(x: B128, y: B128) -> B128
   var rr = hypot_unchecked(x: x, y: y)
   if rr.is_finite()
     return rr
@@ -1203,14 +1203,41 @@ routine hypot!(x: F128, y: F128) -> F128
 ### `sqrt(x^2 + y^2)` with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
 ### :param x: One leg.
 ### :param y: The other leg.
-routine hypot_unchecked(x: F128, y: F128) -> F128
+routine hypot_unchecked(x: B128, y: B128) -> B128
   var xx = x.to_uf192()
   var yy = y.to_uf192()
   if xx.isinf() or yy.isinf()
-    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
   if xx.isnan() or yy.isnan()
-    return F128.from_bits(bits: f128_qnan())
-  return xx.mul(you: xx).add(you: yy.mul(you: yy)).sqrt().to_f128()
+    return B128.from_bits(bits: b128_qnan())
+  return xx.mul(you: xx).add(you: yy.mul(you: yy)).sqrt().to_b128()
+
+### Returns `sqrt(x^2 + y^2 + z^2)` without spurious overflow. Checked: crashes on non-finite.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot!(x: B128, y: B128, z: B128) -> B128
+  var rr = hypot_unchecked(x: x, y: y, z: z)
+  if rr.is_finite()
+    return rr
+  if rr.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `sqrt(x^2 + y^2 + z^2)` with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash. Summed once
+### at W=192, so no intermediate double rounding.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
+  var xx = x.to_uf192()
+  var yy = y.to_uf192()
+  var zz = z.to_uf192()
+  if xx.isinf() or yy.isinf() or zz.isinf()
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
+  if xx.isnan() or yy.isnan() or zz.isnan()
+    return B128.from_bits(bits: b128_qnan())
+  return xx.mul(you: xx).add(you: yy.mul(you: yy)).add(you: zz.mul(you: zz)).sqrt().to_b128()
 
 # ============================================================================
 # sinpi / cospi / tanpi (TLFloat; no rpitab — reduce via round(2a) then sin/cos polynomials)
@@ -1260,11 +1287,11 @@ routine UnpackedFloat[M, L, W].cospi_poly() -> UnpackedFloat[M, L, W]
   return d
 
 ### Returns `sin(pi*me)`.
-routine F128.sinpi() -> F128
+routine B128.sinpi() -> B128
   if me.is_nan() or me.is_zero()
     return me
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   # Reduce on the doubled argument: y = (2a - round(2a))/2 in [-1/4, 1/4]; lx is the low
   # bits of round(2a)*2, selecting which polynomial (sin/cos) and the result sign.
   var a = me.to_uf()
@@ -1274,41 +1301,41 @@ routine F128.sinpi() -> F128
   var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
   # Exact zeros at integer arguments (sin(pi*integer) = 0), preserving the signed zero.
   if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[U128, U256, 128].zero(sign: x.sign()).to_f128()
+    return UnpackedFloat[U128, U256, 128].zero(sign: x.sign()).to_b128()
   # Quadrant selects cospi vs sinpi polynomial; a further bit flips the sign.
   var z = y.cospi_poly()
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
     z = y.sinpi_poly()
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 7_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
-  return z.to_f128()
+  return z.to_b128()
 
 ### Returns `cos(pi*me)`.
-routine F128.cospi() -> F128
+routine B128.cospi() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   var a = me.to_uf()
   var x = a.ldexp(e: 1_s64)
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
   var lx = x.ldexp(e: 1_s64).intlsb()
   var lx3and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64)
   if lx3and2 == 0_s64 and y.iszero()
-    return UnpackedFloat[U128, U256, 128].zero(sign: false).to_f128()
+    return UnpackedFloat[U128, U256, 128].zero(sign: false).to_b128()
   var z = y.sinpi_poly()
   if LLVM::int_ne(a: lx3and2, b: 0_s64)
     z = y.cospi_poly()
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
-  return z.to_f128()
+  return z.to_b128()
 
 ### Returns `tan(pi*me)`.
-routine F128.tanpi() -> F128
+routine B128.tanpi() -> B128
   if me.is_nan() or me.is_zero()
     return me
   if me.is_infinite()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   var a = me.to_uf()
   var x = a.ldexp(e: 1_s64)
   var y = x.sub(you: x.round()).ldexp(e: -1_s64)
@@ -1316,7 +1343,7 @@ routine F128.tanpi() -> F128
   var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
   var lx4 = LLVM::bit_and(a: lx, b: 4_s64)
   if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[U128, U256, 128].zero(sign: LLVM::int_ne(a: lx4, b: 0_s64)).to_f128()
+    return UnpackedFloat[U128, U256, 128].zero(sign: LLVM::int_ne(a: lx4, b: 0_s64)).to_b128()
   var pr = UnpackedFloat[U128, U256, 128].pi().mul(you: y).tanxy()
   var lx1and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 2_s64)
   var z = pr.item0.div(you: pr.item1)
@@ -1326,7 +1353,7 @@ routine F128.tanpi() -> F128
     z = UnpackedFloat[U128, U256, 128].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: LLVM::int_eq(a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
   if LLVM::int_ne(a: lx1and2, b: 0_s64)
     z = z.neg()
-  return z.to_f128()
+  return z.to_b128()
 
 # ============================================================================
 # erf / erfc — continued-fraction expansions (TLFloat erf_/erfc_, N=120) on the
@@ -1377,69 +1404,69 @@ routine UnpackedFloat[M, L, W].erfc_cf(levels: S64) -> UnpackedFloat[M, L, W]
   return me.mul_finite(you: UnpackedFloat[M, L, W].rsqrt_pi()).mul_finite(you: zz.neg().exp(n: 22_s64)).mul_finite(you: d.div(you: n))
 
 ### Returns the error function `erf(me)`.
-routine F128.erf() -> F128
+routine B128.erf() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     var s = if me.is_negative() then -1_s64 else 1_s64
-    return UnpackedFloat[U192, U384, 192].from_s64(src: s).to_f128()
+    return UnpackedFloat[U192, U384, 192].from_s64(src: s).to_b128()
   var thr = UnpackedFloat[U192, U384, 192].from_s64(src: 31_s64).div(you: UnpackedFloat[U192, U384, 192].from_s64(src: 10_s64))
   var a = me.to_uf192()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
+    return UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_b128()
   if a.lt(you: thr)
-    # 72 levels is bit-exact for F128 across the whole erf branch |z|<3.1 (verified: lv=60 already
+    # 72 levels is bit-exact for B128 across the whole erf branch |z|<3.1 (verified: lv=60 already
     # bit-identical to 120 at z=3.09); the tail branch keeps 120 for the W=192 79-guard-bit margin.
-    return a.erf_cf(levels: 72_s64).to_f128()
-  return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_f128()
+    return a.erf_cf(levels: 72_s64).to_b128()
+  return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_b128()
 
 ### Returns the complementary error function `erfc(me)`.
-routine F128.erfc() -> F128
+routine B128.erfc() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     var s = if me.is_negative() then 2_s64 else 0_s64
-    return UnpackedFloat[U192, U384, 192].from_s64(src: s).to_f128()
+    return UnpackedFloat[U192, U384, 192].from_s64(src: s).to_b128()
   var thr = UnpackedFloat[U192, U384, 192].from_s64(src: 31_s64).div(you: UnpackedFloat[U192, U384, 192].from_s64(src: 10_s64))
   var a = me.to_uf192()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U192, U384, 192].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_f128()
+    return UnpackedFloat[U192, U384, 192].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_b128()
   if a.lt(you: thr)
-    return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_f128()
-  return a.erfc_cf(levels: 120_s64).to_f128()
+    return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_b128()
+  return a.erfc_cf(levels: 120_s64).to_b128()
 
 ### Precision-reduced erf for sub-113-bit targets (D64 ~54 bits): identical branch structure to
-### `erf()` but the continued fraction runs at F128 width (113-bit) instead of the full W=192 engine, with
+### `erf()` but the continued fraction runs at B128 width (113-bit) instead of the full W=192 engine, with
 ### caller-sized `levels_mid` (|z|<3.1 erf branch) and `levels_tail` (|z|>=3.1 erfc branch).
-routine F128.erf_fast(levels_mid: S64, levels_tail: S64) -> F128
+routine B128.erf_fast(levels_mid: S64, levels_tail: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     var s = if me.is_negative() then -1_s64 else 1_s64
-    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_b128()
   var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
   var a = me.to_uf()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U128, U256, 128].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+    return UnpackedFloat[U128, U256, 128].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_b128()
   if a.lt(you: thr)
-    return a.erf_cf(levels: levels_mid).to_f128()
-  return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_f128()
+    return a.erf_cf(levels: levels_mid).to_b128()
+  return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: levels_tail)).to_b128()
 
-### Precision-reduced erfc for sub-113-bit targets (D64): F128-width continued fraction with
+### Precision-reduced erfc for sub-113-bit targets (D64): B128-width continued fraction with
 ### caller-sized `levels_mid`/`levels_tail`. Mirrors `erfc()`'s branch structure.
-routine F128.erfc_fast(levels_mid: S64, levels_tail: S64) -> F128
+routine B128.erfc_fast(levels_mid: S64, levels_tail: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     var s = if me.is_negative() then 2_s64 else 0_s64
-    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_f128()
+    return UnpackedFloat[U128, U256, 128].from_s64(src: s).to_b128()
   var thr = UnpackedFloat[U128, U256, 128].from_s64(src: 31_s64).div(you: UnpackedFloat[U128, U256, 128].from_s64(src: 10_s64))
   var a = me.to_uf()
   if a.lt(you: thr.neg())
-    return UnpackedFloat[U128, U256, 128].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: levels_tail)).to_f128()
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: levels_tail)).to_b128()
   if a.lt(you: thr)
-    return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: levels_mid)).to_f128()
-  return a.erfc_cf(levels: levels_tail).to_f128()
+    return UnpackedFloat[U128, U256, 128].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: levels_mid)).to_b128()
+  return a.erfc_cf(levels: levels_tail).to_b128()
 
 # ============================================================================
 # tgamma / lgamma (TLFloat) — wide-engine Stirling series + reflection.
@@ -1524,40 +1551,40 @@ routine UnpackedFloat[M, L, W].lgamma_core_p(sdeg: S64, logn: S64, sinn: S64) ->
 
 ### Degree-reduced tgamma for narrower targets (D64): W=192 width (valid gamma_coef) with
 ### caller-sized Stirling/log/sin/exp degrees. See `lgamma_core_p`.
-routine F128.tgamma_unchecked_p(sdeg: S64, logn: S64, sinn: S64, expn: S64) -> F128
+routine B128.tgamma_unchecked_p(sdeg: S64, logn: S64, sinn: S64, expn: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     if me.is_negative()
-      return F128.from_bits(bits: f128_qnan())
+      return B128.from_bits(bits: b128_qnan())
     return me
   var zu = me.to_uf192()
   if me.is_zero()
     var sg = 0_u64
     if me.is_negative()
       sg = 1_u64
-    return F128.from_bits(bits: f128_inf(sign: sg))
+    return B128.from_bits(bits: b128_inf(sign: sg))
   if me.is_negative() and zu.isint()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   var p = zu.lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
   var r = p.item1.exp(n: expn)
   if p.item0
     r = r.neg()
-  return r.to_f128()
+  return r.to_b128()
 
 ### Degree-reduced lgamma for narrower targets (D64). See `lgamma_core_p`.
-routine F128.lgamma_p(sdeg: S64, logn: S64, sinn: S64) -> F128
+routine B128.lgamma_p(sdeg: S64, logn: S64, sinn: S64) -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero() or me.is_infinite()
-    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
   if me.is_negative() and me.to_uf192().isint()
-    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
   var p = me.to_uf192().lgamma_core_p(sdeg: sdeg, logn: logn, sinn: sinn)
-  return p.item1.to_f128()
+  return p.item1.to_b128()
 
 ### Returns the gamma function `tgamma(me)`.
-routine F128.tgamma!() -> F128
+routine B128.tgamma!() -> B128
   var rr = me.tgamma_unchecked()
   if rr.is_finite()
     return rr
@@ -1567,35 +1594,35 @@ routine F128.tgamma!() -> F128
 
 ### `tgamma(me)` with raw IEEE (poles at 0/negative integers -> inf/qNaN). No crash.
 ### Core path is `exp(lgamma_core)` with the lgamma sign reapplied.
-routine F128.tgamma_unchecked() -> F128
+routine B128.tgamma_unchecked() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     # tgamma(+inf) = +inf; tgamma(-inf) = NaN (C99 F.10.4.4).
     if me.is_negative()
-      return F128.from_bits(bits: f128_qnan())
+      return B128.from_bits(bits: b128_qnan())
     return me
   var zu = me.to_uf192()
   if me.is_zero()
     var sg = 0_u64
     if me.is_negative()
       sg = 1_u64
-    return F128.from_bits(bits: f128_inf(sign: sg))
+    return B128.from_bits(bits: b128_inf(sign: sg))
   if me.is_negative() and zu.isint()
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   var p = zu.lgamma_core()
   var r = p.item1.exp(n: 20_s64)
   if p.item0
     r = r.neg()
-  return r.to_f128()
+  return r.to_b128()
 
 ### Returns the log-gamma function `lgamma(me)` (= ln|gamma(me)|).
-routine F128.lgamma() -> F128
+routine B128.lgamma() -> B128
   if me.is_nan()
-    return F128.from_bits(bits: f128_quiet(bits: me.to_bits()))
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_zero() or me.is_infinite()
-    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
   if me.is_negative() and me.to_uf192().isint()
-    return F128.from_bits(bits: f128_inf(sign: 0_u64))
+    return B128.from_bits(bits: b128_inf(sign: 0_u64))
   var p = me.to_uf192().lgamma_core()
-  return p.item1.to_f128()
+  return p.item1.to_b128()

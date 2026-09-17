@@ -5,7 +5,7 @@ import IO/Console
 # Merged D64 softfloat checks (was tcheck_d64_{sin,cos,exp}; consolidated post-fix).
 # Extended to cover the composite transcendentals (cos/tan/hyperbolic/log2/log10)
 # whose internal exp/log/expm1/log1p iteration counts are sized to D64's 54-bit
-# target rather than F128's full 113-bit. Expected values are the correctly-rounded
+# target rather than B128's full 113-bit. Expected values are the correctly-rounded
 # D64 results (captured from the full-count build); reduced counts must reproduce them.
 routine start()
   show((1.0_d64).sin().represent())
@@ -22,7 +22,7 @@ routine start()
   show((2.5_d64).acosh_unchecked().represent())
   show((0.25_d64).exp2_unchecked().represent())
   show((0.25_d64).exp10_unchecked().represent())
-  # erf/erfc run the continued fraction at F128 width with reduced levels (lm=50/lt=64); these
+  # erf/erfc run the continued fraction at B128 width with reduced levels (lm=50/lt=64); these
   # cover the mid branch (|z|<3.1) and the tail branch (|z|>=3.1) and must match the octuple result.
   show((1.0_d64).erf().represent())
   show((0.5_d64).erf().represent())

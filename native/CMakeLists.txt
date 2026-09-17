@@ -40,7 +40,7 @@ include(cmake/libtommath.cmake)
 # (TLFloat retired 2026-06-19: F128 arithmetic/libm/conversions are pure-RF software
 #  (SoftFloat/F128*.rf); F128 literals parse in managed C# (NumericLiteralParser.EncodeF128).
 #  Algorithm credit retained in docs/licenses. LibBF remains for arbitrary Real + the F128
-#  string fallback. See native/runtime/f128_functions.c.)
+#  string fallback. See native/runtime/b128_functions.c.)
 
 # ============================================================================
 # Third-party libraries — Modules (loaded on demand)
@@ -126,8 +126,7 @@ add_library(razorforge_runtime SHARED
     runtime/bignum_functions.c
     runtime/rf_divide.c
     runtime/real_functions.c
-    runtime/f16_functions.c
-    runtime/f128_functions.c
+    runtime/b128_functions.c
     runtime/text_functions.c
     runtime/csharp_interop.c
     runtime/file_functions.c
@@ -260,8 +259,7 @@ add_library(razorforge_math STATIC
     runtime/bignum_functions.c
     runtime/rf_divide.c
     runtime/real_functions.c
-    runtime/f16_functions.c
-    runtime/f128_functions.c
+    runtime/b128_functions.c
 )
 
 target_include_directories(razorforge_math PUBLIC include)

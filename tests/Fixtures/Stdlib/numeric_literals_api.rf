@@ -23,9 +23,9 @@ routine start()
   show(f"255 == 0b1111_1111: {255_u32 == 0b1111_1111_u32}")
 
   # Float literals
-  show(f"float: {3.14_f64}")
-  show(f"scientific: {1.5e3_f64}")
-  show(f"neg scientific: {2.5e-2_f64}")
+  show(f"float: {3.14_b64}")
+  show(f"scientific: {1.5e3_b64}")
+  show(f"neg scientific: {2.5e-2_b64}")
 
   # Bool
   show(f"true: {true}")

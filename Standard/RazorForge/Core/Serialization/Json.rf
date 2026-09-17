@@ -11,7 +11,7 @@ import Collections
 ###   - `None`            -> `null`
 ###   - `Bool`            -> `true` / `false`
 ###   - integers          -> decimal digits
-###   - `F32` / `F64`     -> decimal (non-finite floats are out of scope)
+###   - `B32` / `B64`     -> decimal (non-finite floats are out of scope)
 ###   - `Text`            -> a JSON string with quote, backslash and control chars escaped
 ###   - `Moment`          -> a JSON string of its `represent()`
 ###   - `Bytes`           -> a JSON array of byte VALUES (`[10, 20]`), since JSON has no byte type
@@ -90,9 +90,9 @@ routine SerialValue.to_json_text() -> Text
       return v.represent()
     is U64 v =>
       return v.represent()
-    is F32 v =>
+    is B32 v =>
       return v.represent()
-    is F64 v =>
+    is B64 v =>
       return v.represent()
     is Moment v =>
       return json_string(t: v.represent())

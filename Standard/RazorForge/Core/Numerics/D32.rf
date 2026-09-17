@@ -34,7 +34,7 @@ routine d32parts_to_d128(p: D32Parts) -> D128Parts
 
 ### Narrow a D128Parts to D32. The D128 coefficient can carry up to 34 significant digits (and
 ### exceed U64); a plain `int_truncate[U128, U64]` would keep the low bits — garbage — for any value
-### wider than ~19 digits (e.g. an F64-derived `0.8414709999999999689990204387868289`). So first round
+### wider than ~19 digits (e.g. an B64-derived `0.8414709999999999689990204387868289`). So first round
 ### the coefficient down to D32's 7 digits (round-half-even) in U128 — where it still fits — adjusting
 ### the exponent; the result then fits U64 and `decfin32` applies the final cohort normalization and
 ### over/underflow clamping. Specials (inf/NaN) carry through unchanged.
@@ -474,7 +474,7 @@ routine d32_div(a: D32, b: D32) -> D32
   return d32_of_parts(p: decfin32(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ---- wired operators + represent ----
-# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
@@ -590,7 +590,7 @@ routine D32.diagnose() -> Text
 # The construction/conversion web, presets, byte/hash views, and the decimal-text
 # parser. Storage, arithmetic, comparison, libm, and formatting are the software BID
 # engine above (`@llvm("i32") record D32 obeys Numeric, Ordered`). The matched
-# `D32.create(from: F64)` / `F64.create(from: D32)` live with the engine. Pure RF.
+# `D32.create(from: B64)` / `B64.create(from: D32)` live with the engine. Pure RF.
 # ============================================================================
 
 # ============================================================================
@@ -658,20 +658,20 @@ routine D32(from: U256) -> D32
   return D32(from: D128(from: from))
 
 # ============================================================================
-# Creators — binary floats (matched width is F64, provided by the engine)
+# Creators — binary floats (matched width is B64, provided by the engine)
 # ============================================================================
 
-### Converts an F16 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32(from: F16) -> D32
-  return D32(from: F64(from))
+### Converts an B16 to D32 (via B64, correctly rounded binary -> decimal).
+routine D32(from: B16) -> D32
+  return D32(from: B64(from))
 
-### Converts an F32 to D32 (via F64, correctly rounded binary -> decimal).
-routine D32(from: F32) -> D32
-  return D32(from: F64(from))
+### Converts an B32 to D32 (via B64, correctly rounded binary -> decimal).
+routine D32(from: B32) -> D32
+  return D32(from: B64(from))
 
-### Converts an F128 to D32 (narrow to F64 first, then F64 -> D32 via the engine).
-routine D32(from: F128) -> D32
-  return D32(from: from.F64())
+### Converts an B128 to D32 (narrow to B64 first, then B64 -> D32 via the engine).
+routine D32(from: B128) -> D32
+  return D32(from: from.B64())
 
 # ============================================================================
 # Creators — decimal <-> decimal

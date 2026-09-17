@@ -901,7 +901,7 @@ public class PatternMatchingTests
     public void Parse_WhenTypePatternWithBlockAndBecomes()
     {
         string source = """
-                        routine handle(shape: Shape) -> F64
+                        routine handle(shape: Shape) -> B64
                           return when shape
                             is Circle (center, radius) =>
                               var area = 3.14159 * radius * radius

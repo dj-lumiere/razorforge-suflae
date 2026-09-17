@@ -188,7 +188,7 @@ public partial class LlvmEmitter
     {
         switch (literal.Value)
         {
-            // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_f32").
+            // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_b32").
             // Check LiteralType first to handle them as numbers, not string constants.
             case string s when IsIntegerLiteralType(type: literal.LiteralType):
                 return StripNumericSuffix(text: s);
@@ -245,8 +245,8 @@ public partial class LlvmEmitter
     /// </summary>
     private static bool IsFloatLiteralType(TokenType type)
     {
-        return type is TokenType.F16Literal or TokenType.F32Literal or TokenType.F64Literal
-            or TokenType.F128Literal;
+        return type is TokenType.B16Literal or TokenType.B32Literal or TokenType.B64Literal
+            or TokenType.B128Literal;
     }
 
     /// <summary>
@@ -379,7 +379,7 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Strips the type suffix from a numeric literal string (e.g., "1_s32" "1", "3_14_f64" "3_14")
+    /// Strips the type suffix from a numeric literal string (e.g., "1_s32" "1", "3_14_b64" "3_14")
     /// and removes digit separator underscores.
     /// </summary>
     /// <summary>
@@ -483,7 +483,7 @@ public partial class LlvmEmitter
     private static readonly string[] NumericSuffixes =
     [
         "addr", "s256", "u256", "s128", "u128", "s64", "u64", "s32", "u32",
-        "s16", "u16", "s8", "u8", "f128", "f64", "f32", "f16",
+        "s16", "u16", "s8", "u8", "b128", "b64", "b32", "b16",
         "d128", "d64", "d32"
     ];
 
@@ -530,14 +530,14 @@ public partial class LlvmEmitter
             return EmitSpecialFloatLiteral(name: numericValue, literalType: literalType);
         }
 
-        // F128: use native parser for full 128-bit precision. F128 is an i128
+        // B128: use native parser for full 128-bit precision. B128 is an i128
         // bit carrier in LLVM (never fp128), so the literal is emitted as an
         // i128 integer constant holding the IEEE binary128 bit pattern
         // (LLVM hex integer syntax: u0x<Hi16hex><Lo16hex>).
-        if (literalType == TokenType.F128Literal)
+        if (literalType == TokenType.B128Literal)
         {
-            NumericLiteralParser.F128 f128 = NumericLiteralParser.ParseF128(str: numericValue);
-            return $"u0x{f128.Hi:X16}{f128.Lo:X16}";
+            NumericLiteralParser.B128 b128 = NumericLiteralParser.ParseB128(str: numericValue);
+            return $"u0x{b128.Hi:X16}{b128.Lo:X16}";
         }
 
         // Try hex float format first (0x1.ABCDp5)
@@ -559,9 +559,9 @@ public partial class LlvmEmitter
 
     private static string EmitSpecialFloatLiteral(string name, TokenType literalType)
     {
-        // F128 quiet-NaN: exp=all-ones, MSB of mantissa set; F128 inf: exp=all-ones, mantissa=0.
-        // Emitted as an i128 bit-pattern constant (F128 is never LLVM fp128).
-        if (literalType == TokenType.F128Literal)
+        // B128 quiet-NaN: exp=all-ones, MSB of mantissa set; B128 inf: exp=all-ones, mantissa=0.
+        // Emitted as an i128 bit-pattern constant (B128 is never LLVM fp128).
+        if (literalType == TokenType.B128Literal)
         {
             ulong hi = name == "nan"
                 ? 0x7FFF800000000000UL
@@ -580,19 +580,19 @@ public partial class LlvmEmitter
     /// </summary>
     private static string EmitDoubleAsLlvmHex(double d, TokenType literalType)
     {
-        if (literalType == TokenType.F16Literal)
+        if (literalType == TokenType.B16Literal)
         {
             // half constants use LLVM's 16-bit hex form `0xH<4 hex digits>` — NOT the 64-bit
             // double form (`0x...16 hex...`) the float/double branches below emit. Without this,
-            // every F16 literal (incl. inf/nan, which also route here) emits invalid IR that
+            // every B16 literal (incl. inf/nan, which also route here) emits invalid IR that
             // llvm-as rejects. Round the value to IEEE binary16 and emit its bit pattern.
             ushort halfBits = BitConverter.HalfToUInt16Bits(value: (Half)d);
             return $"0xH{halfBits:X4}";
         }
 
-        if (literalType == TokenType.F32Literal)
+        if (literalType == TokenType.B32Literal)
         {
-            // F32: promote to double for LLVM's float hex format
+            // B32: promote to double for LLVM's float hex format
             float f = (float)d;
             long bits = BitConverter.DoubleToInt64Bits(value: f);
             return $"0x{bits:X16}";
@@ -709,7 +709,7 @@ public partial class LlvmEmitter
                                            .ToString();
             case TokenType.D128Literal:
             {
-                // D128 is now @llvm("i128") BID; emit a single i128 constant (like F128).
+                // D128 is now @llvm("i128") BID; emit a single i128 constant (like B128).
                 NumericLiteralParser.D128 d128 =
                     NumericLiteralParser.EncodeD128Bid(str: numericValue);
                 return $"u0x{d128.Hi:X16}{d128.Lo:X16}";

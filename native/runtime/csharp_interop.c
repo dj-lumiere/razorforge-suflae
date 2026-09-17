@@ -1,11 +1,11 @@
-﻿/*
+/*
  * RazorForge Runtime - C# Interop Functions
  *
  * These functions are called by the C# compiler during semantic analysis
  * to parse numeric literals that don't have direct C# equivalents.
  *
  * Types handled:
- * - f128: IEEE binary128 floating point (via LibBF)
+ * - b128: IEEE binary128 floating point (via LibBF)
  * - Integer: Arbitrary precision integer (via LibBF)
  *
  * (Decimal literal parsing now lives in the managed BID encoders in
@@ -19,21 +19,21 @@
 #include "../include/razorforge_math.h"
 
 // ============================================================================
-// f128 string parsing (via LibBF)
+// b128 string parsing (via LibBF)
 // ============================================================================
 
 #ifdef HAVE_LIBBF
 #include "libbf.h"
 
-#define F128_PREC 113  // IEEE binary128 mantissa precision
+#define B128_PREC 113  // IEEE binary128 mantissa precision
 
-// LibBF context and functions (defined in f128_functions.c)
+// LibBF context and functions (defined in b128_functions.c)
 extern bf_context_t bf_ctx;
 extern int bf_ctx_initialized;
 extern void ensure_bf_ctx(void);
-extern f128_t bf_to_f128(const bf_t *a);
+extern b128_t bf_to_b128(const bf_t *a);
 
-f128_t rf_f128_from_string(const char* str)
+b128_t rf_b128_from_string(const char* str)
 {
     ensure_bf_ctx();
 
@@ -42,25 +42,25 @@ f128_t rf_f128_from_string(const char* str)
 
     // Parse the string using LibBF's arbitrary precision parser
     const char* next;
-    int ret = bf_atof(&bf_val, str, &next, 10, F128_PREC, BF_RNDN);
+    int ret = bf_atof(&bf_val, str, &next, 10, B128_PREC, BF_RNDN);
 
     if (ret != 0 && ret != BF_ST_INEXACT) {
         // Parse error - return NaN
         bf_delete(&bf_val);
-        return rf_f128_nan();
+        return rf_b128_nan();
     }
 
-    f128_t result = bf_to_f128(&bf_val);
+    b128_t result = bf_to_b128(&bf_val);
     bf_delete(&bf_val);
     return result;
 }
 
-// Out-param ABI wrapper for RF's `C::rf_parse_F128(cstr, out: Hijacked[F128])`. RF passes a
-// pointer to storage instead of taking an f128_t by value, sidestepping the Windows x64
-// sret/xmm0 mismatch that corrupts a direct f128_t return across the RF<->C boundary.
-void rf_parse_F128(const char* str, f128_t* out)
+// Out-param ABI wrapper for RF's `C::rf_parse_B128(cstr, out: Hijacked[B128])`. RF passes a
+// pointer to storage instead of taking an b128_t by value, sidestepping the Windows x64
+// sret/xmm0 mismatch that corrupts a direct b128_t return across the RF<->C boundary.
+void rf_parse_B128(const char* str, b128_t* out)
 {
-    *out = rf_f128_from_string(str);
+    *out = rf_b128_from_string(str);
 }
 
 // ============================================================================

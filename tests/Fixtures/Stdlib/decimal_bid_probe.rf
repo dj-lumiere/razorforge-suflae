@@ -18,8 +18,8 @@ routine start()
   show(D128(123.9_d128).S64!())
   show(D64(255.0_d64).U8!())
   # float <-> decimal
-  show(D128(3.25_f64))
-  show(D128(2.5_d128).F64())
+  show(D128(3.25_b64))
+  show(D128(2.5_d128).B64())
   # decimal -> decimal
   show(D64(D128(9.75_d128)))
   show(D128(D32(1.25_d32)))

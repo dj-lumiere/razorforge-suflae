@@ -7,7 +7,7 @@ module Core
 # through the (already 34-digit-correct) engine transcendental, and rounded
 # back to 34 digits: the W=192 error lands near digit ~57, far below the
 # 34-digit boundary. W=192's target is exactly 113 bits — D128's target — so
-# it is the tightest correct scratch (F128's transcendentals use the same
+# it is the tightest correct scratch (B128's transcendentals use the same
 # engine and land faithful to ~114 bits).
 #
 # There is no packed 192-bit float type, so the intermediate carrier here is
@@ -23,7 +23,7 @@ module Core
 
 ### Builds the W=192 engine value of a U128 integer with the given sign (exact;
 ### coeff <= 126 bits fits the 190-bit significand). MSB lands at bit 190 (W-2).
-### Mirrors F128.to_uf192's normalized-build convention.
+### Mirrors B128.to_uf192's normalized-build convention.
 routine uf192_from_u128(c: U128, sign: Bool) -> UnpackedFloat[U192, U384, 192]
   if LLVM::int_eq(a: c, b: 0_u128)
     return UnpackedFloat[U192, U384, 192].zero(sign: sign)
@@ -146,7 +146,7 @@ routine uf192_pow10(e: S64) -> UnpackedFloat[U192, U384, 192]
   var lo = LLVM::unsigned_rem(a: au, b: 79_u64)
   # Saturate the high index to the table edge (idx 0..79; the MANT array is 3*80 = 240 wide). An |e|
   # beyond the D128 span — only reachable from an out-of-range / non-canonical input — would otherwise
-  # index past the table; clamping mirrors f64_pow10/dd_pow10 and lets decfinB fold the resulting
+  # index past the table; clamping mirrors b64_pow10/dd_pow10 and lets decfinB fold the resulting
   # huge/tiny value to inf/0 instead of an out-of-bounds crash.
   if LLVM::unsigned_gt(a: hi, b: 79_u64)
     hi = 79_u64
@@ -344,7 +344,7 @@ routine D128.cbrt() -> D128
   return uf192_to_d128(x: d128_to_uf192(x: me).cbrt())
 
 ### Raw me^you via the W=192 core; may return ±inf or NaN; never crashes.
-### Runs the full C99/IEEE pow special-case ladder on the engine value (mirrors F128.pow),
+### Runs the full C99/IEEE pow special-case ladder on the engine value (mirrors B128.pow),
 ### with the finite core exp(you * ln|me|) at W=192. :param you: The exponent.
 routine D128.pow_unchecked(you: D128) -> D128
   var mu = d128_to_uf192(x: me)
@@ -424,6 +424,30 @@ routine hypot_unchecked(x: D128, y: D128) -> D128
   var a = d128_to_uf192(x: x).abs()
   var b = d128_to_uf192(x: y).abs()
   return uf192_to_d128(x: a.mul(you: a).add(you: b.mul(you: b)).sqrt())
+
+### sqrt(x² + y² + z²) without intermediate overflow\underflow. Crashes: NumericDomainError on NaN,
+### NumericOverflowError on ±inf.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot!(x: D128, y: D128, z: D128) -> D128
+  var r = hypot_unchecked(x: x, y: y, z: z)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Raw sqrt(x² + y² + z²) via the W=192 core; may return ±inf or NaN; never crashes. Summed once,
+### so no intermediate double rounding.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot_unchecked(x: D128, y: D128, z: D128) -> D128
+  var a = d128_to_uf192(x: x).abs()
+  var b = d128_to_uf192(x: y).abs()
+  var c = d128_to_uf192(x: z).abs()
+  return uf192_to_d128(x: a.mul(you: a).add(you: b.mul(you: b)).add(you: c.mul(you: c)).sqrt())
 
 ### Fused multiply-add me*b + c with a single W=192 rounding. Crashes: NumericDomainError on NaN,
 ### NumericOverflowError on ±inf.
@@ -558,7 +582,7 @@ routine D128.atanh_unchecked() -> D128
 
 # ============================================================================
 # Special functions via generic W=192 engine cores (the W-dispatched tables
-# self-size at W=192 with the 113-bit-target counts). Mirrors F128.erf/tgamma
+# self-size at W=192 with the 113-bit-target counts). Mirrors B128.erf/tgamma
 # on the same engine.
 # ============================================================================
 
@@ -599,11 +623,11 @@ routine uf192_lgamma(x: UnpackedFloat[U192, U384, 192]) -> UnpackedFloat[U192, U
 
 # ============================================================================
 # W=192 erf/erfc with caller-sized CF levels (D128's 113-bit target). Same engine and branch
-# structure as F128.erf/erfc; D128's 72/120 mid/tail counts match F128's own W=192 path.
+# structure as B128.erf/erfc; D128's 72/120 mid/tail counts match B128's own W=192 path.
 # (Gamma was assessed too: at 113 bits its internal log/exp need near-full degrees — no slack.)
 # ============================================================================
 
-### erf at W=192 with caller-sized CF levels (D128). Mirrors F128.erf's branch structure.
+### erf at W=192 with caller-sized CF levels (D128). Mirrors B128.erf's branch structure.
 ### erf(-inf) = -1, erf(+inf) = 1. Threshold ±3.1 picks the erf vs 1-erfc continued fraction.
 routine uf192_erf_fast(x: UnpackedFloat[U192, U384, 192], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[U192, U384, 192]
   if x.isnan()
@@ -619,7 +643,7 @@ routine uf192_erf_fast(x: UnpackedFloat[U192, U384, 192], levels_mid: S64, level
     return x.erf_cf(levels: levels_mid)
   return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: x.erfc_cf(levels: levels_tail))
 
-### erfc at W=192 with caller-sized CF levels (D128). Mirrors F128.erfc's branch structure.
+### erfc at W=192 with caller-sized CF levels (D128). Mirrors B128.erfc's branch structure.
 ### erfc(-inf) = 2, erfc(+inf) = 0. Threshold ±3.1 selects erf vs erfc continued fraction.
 routine uf192_erfc_fast(x: UnpackedFloat[U192, U384, 192], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[U192, U384, 192]
   if x.isnan()
@@ -758,8 +782,8 @@ routine D128.total_order(you: D128) -> Bool
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
     return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
   var c = me.cmp(you: you)
-  if c isnot SAME
-    return c is ME_SMALL
+  if c != SAME
+    return c == ME_SMALL
   if pa.sign != pb.sign
     return pa.sign
   if pa.sign
@@ -907,9 +931,9 @@ routine D128.minimum(you: D128) -> D128
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_SMALL
+  if c == ME_SMALL
     return me
-  if c is ME_LARGE
+  if c == ME_LARGE
     return you
   if me.is_zero()
     return if me.signbit() then me else you
@@ -924,9 +948,9 @@ routine D128.maximum(you: D128) -> D128
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_LARGE
+  if c == ME_LARGE
     return me
-  if c is ME_SMALL
+  if c == ME_SMALL
     return you
   if me.is_zero()
     return if me.signbit() then you else me

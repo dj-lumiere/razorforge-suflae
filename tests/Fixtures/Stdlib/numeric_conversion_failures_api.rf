@@ -11,11 +11,11 @@ routine start()
   show(f"S64->S32 of 12345: {S32(from: 12345_s64)}")
 
   # Float -> int truncation
-  show(f"F64->S64 of 3.7: {S64(from: 3.7_f64)}")
-  show(f"F64->S64 of -3.7: {S64(from: -3.7_f64)}")
+  show(f"B64->S64 of 3.7: {S64(from: 3.7_b64)}")
+  show(f"B64->S64 of -3.7: {S64(from: -3.7_b64)}")
 
   # Int -> float
-  show(f"S64->F64 of 42: {F64(from: 42_s64)}")
+  show(f"S64->B64 of 42: {B64(from: 42_s64)}")
 
   # Unsigned <-> signed in valid range
   show(f"U64->S64 of 42: {S64(from: 42_u64)}")

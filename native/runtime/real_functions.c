@@ -46,11 +46,11 @@ void rf_real_clear(void *handle) {
 
 /* --- setters / getters --- */
 void rf_real_set_i64(void *handle, int64_t value) { bf_set_si((bf_t *)handle, value); }
-void rf_real_set_f64(void *handle, double value)   { bf_set_float64((bf_t *)handle, value); }
+void rf_real_set_b64(void *handle, double value)   { bf_set_float64((bf_t *)handle, value); }
 int  rf_real_set_str(void *handle, const char *str, int radix) {
     return bf_atof((bf_t *)handle, str, NULL, radix, RF_REAL_PREC, RF_REAL_RND);
 }
-double rf_real_get_f64(void *handle) {
+double rf_real_get_b64(void *handle) {
     double d;
     bf_get_float64((bf_t *)handle, &d, BF_RNDN);
     return d;

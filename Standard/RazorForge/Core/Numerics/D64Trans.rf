@@ -2,7 +2,7 @@ module Core
 
 # ============================================================================
 # D64Trans — decimal64 (Pmax=16) transcendentals + libm surface via the
-# DoubleDouble engine (DD, two-F64 unevaluated pair, ~106-bit significand ~31
+# DoubleDouble engine (DD, two-B64 unevaluated pair, ~106-bit significand ~31
 # decimal digits >> 16). DD is the D64 (~54-bit) scratch engine: far cheaper than
 # the 128-bit UnpackedFloat soft-float when only ~16 digits are needed. DD carries
 # the FULL method surface incl. erf/erfc/tgamma/lgamma, so every transcendental
@@ -11,8 +11,8 @@ module Core
 
 # ============================================================================
 # Radix adapters (dec <-> DD). A D64 value is coeff * 10^exp; DD holds hi+lo on
-# hardware f64. Conversion is exact for the coefficient (a <=16-digit integer split
-# into two <=8-digit halves, each < 2^53 so f64-exact) and faithful for the 10^exp
+# hardware b64. Conversion is exact for the coefficient (a <=16-digit integer split
+# into two <=8-digit halves, each < 2^53 so b64-exact) and faithful for the 10^exp
 # scale (a two-level sqrt-split power-of-ten table, ~1 ULP of DD).
 # ============================================================================
 
@@ -20,7 +20,7 @@ module Core
 # Power-of-ten DD tables (sqrt-split, S=20). Four small tables of DD (hi,lo) pairs stored as their
 # raw IEEE bit patterns (exact, no literal-parse rounding): HP=10^(20*hi) hi=0..20; LP=10^lo lo=0..19;
 # HN=10^-(20*hi); LN=10^-lo. dd_pow10(e) = HP[|e|/20]*LP[|e|%20] (or HN/LN for e<0) — one DD multiply,
-# zero division. Generated at ~120-digit precision, round-half-even; entries beyond f64's range are
+# zero division. Generated at ~120-digit precision, round-half-even; entries beyond b64's range are
 # stored as +inf (10^320+) or 0 (10^-340-), matching the old binary-exp overflow/underflow boundary.
 # ============================================================================
 secret preset DD_POW10_HP_HI: Array[U64, 21] = [4607182418800017408_u64, 4906019910204099648_u64, 5205425776111082661_u64, 5504500338876674884_u64, 5803729174622436191_u64, 6103021453049119613_u64, 6402087712267973674_u64, 6701579930952233849_u64, 7000496887210966211_u64, 7300010448078009108_u64, 7598952565167317594_u64, 7898280303113987046_u64, 8197450949396715491_u64, 8496608035942484721_u64, 8795988553143856240_u64, 9094988921128908188_u64, 9218868437227405312_u64, 9218868437227405312_u64, 9218868437227405312_u64, 9218868437227405312_u64, 9218868437227405312_u64]
@@ -37,7 +37,7 @@ secret preset DD_POW10_LN_LO: Array[U64, 20] = [0_u64, 13572047837043726746_u64,
 ### loop). Both signs store their powers directly (NO 1/positive division). Each table entry is a DD
 ### (hi,lo) pair reconstructed from its stored IEEE bit patterns (exact); non-exact/large/negative
 ### entries were rounded round-half-even at ~120-digit precision, far beyond DD's ~31 digits. The
-### magnitude boundary matches the old binary-exp path: powers past f64's range saturate to +inf
+### magnitude boundary matches the old binary-exp path: powers past b64's range saturate to +inf
 ### (10^320..10^400) or underflow to 0 (10^-340..10^-398). |e|>398 clamps to the table's inf/0 edge.
 routine dd_pow10(e: S64) -> DD
   var neg = LLVM::signed_lt(a: e, b: 0_s64)
@@ -49,33 +49,33 @@ routine dd_pow10(e: S64) -> DD
   var hu = LLVM::reinterpret_bits[S64, U64](hi_i)
   var lu = LLVM::reinterpret_bits[S64, U64](lo_i)
   if neg
-    var hin = DD(hi: F64.from_bits(bits: DD_POW10_HN_HI[hu]), lo: F64.from_bits(bits: DD_POW10_HN_LO[hu]))
-    var lon = DD(hi: F64.from_bits(bits: DD_POW10_LN_HI[lu]), lo: F64.from_bits(bits: DD_POW10_LN_LO[lu]))
+    var hin = DD(hi: B64.from_bits(bits: DD_POW10_HN_HI[hu]), lo: B64.from_bits(bits: DD_POW10_HN_LO[hu]))
+    var lon = DD(hi: B64.from_bits(bits: DD_POW10_LN_HI[lu]), lo: B64.from_bits(bits: DD_POW10_LN_LO[lu]))
     return hin.mul(you: lon)
-  var hip = DD(hi: F64.from_bits(bits: DD_POW10_HP_HI[hu]), lo: F64.from_bits(bits: DD_POW10_HP_LO[hu]))
-  var lop = DD(hi: F64.from_bits(bits: DD_POW10_LP_HI[lu]), lo: F64.from_bits(bits: DD_POW10_LP_LO[lu]))
+  var hip = DD(hi: B64.from_bits(bits: DD_POW10_HP_HI[hu]), lo: B64.from_bits(bits: DD_POW10_HP_LO[hu]))
+  var lop = DD(hi: B64.from_bits(bits: DD_POW10_LP_HI[lu]), lo: B64.from_bits(bits: DD_POW10_LP_LO[lu]))
   return hip.mul(you: lop)
 
 ### A U64 coefficient (<=16 digits) as an exact DD. Split into the top 8 and bottom 8
-### decimal digits; each half is < 10^8 < 2^53 so converts to f64 exactly, then
+### decimal digits; each half is < 10^8 < 2^53 so converts to b64 exactly, then
 ### reassembled as chi*10^8 + clo (DD add is error-free for these exact terms).
 routine u64_coeff_to_dd(c: U64) -> DD
   var chi = LLVM::unsigned_div(a: c, b: 100000000_u64)
   var clo = LLVM::unsigned_rem(a: c, b: 100000000_u64)
-  var hi = dd_of(x: LLVM::unsigned_to_float[U64, F64](chi)).mul(you: dd_pow10(e: 8_s64))
-  return hi.add(you: dd_of(x: LLVM::unsigned_to_float[U64, F64](clo)))
+  var hi = dd_of(x: LLVM::unsigned_to_float[U64, B64](chi)).mul(you: dd_pow10(e: 8_s64))
+  return hi.add(you: dd_of(x: LLVM::unsigned_to_float[U64, B64](clo)))
 
 ### Rounds a positive DD ~integer (< 10^18, comfortably within U64) to a U64, round-half-even.
 ### Adds 0.5 and floors; on an exact half the floor lands even-or-odd per the fractional part,
 ### which for a 16-17 digit decimal coefficient is well below DD's ~31-digit resolution.
 routine dd_to_u64_round(u: DD) -> U64
-  var r = u.add(you: dd_of(x: 0.5_f64)).floor()
+  var r = u.add(you: dd_of(x: 0.5_b64)).floor()
   # split the integer DD into top (r/1e9) and bottom (r%1e9) halves; each < 10^9 < 2^53.
   var scale = dd_pow10(e: 9_s64)
   var qhi = r.div(you: scale).floor()
   var lo = r.sub(you: qhi.mul(you: scale))
-  var hi_u = LLVM::float_to_unsigned[F64, U64](qhi.to_f64())
-  var lo_u = LLVM::float_to_unsigned[F64, U64](lo.to_f64())
+  var hi_u = LLVM::float_to_unsigned[B64, U64](qhi.to_b64())
+  var lo_u = LLVM::float_to_unsigned[B64, U64](lo.to_b64())
   return LLVM::add(a: LLVM::mul(a: hi_u, b: 1000000000_u64), b: lo_u)
 
 ### dec -> DD: D64 value as a DD (coeff exact, scaled by 10^exp). Specials return
@@ -83,29 +83,29 @@ routine dd_to_u64_round(u: DD) -> U64
 routine d64_to_dd(x: D64) -> DD
   var p = x.decode()
   if LLVM::int_eq(a: p.special, b: 1_u64)
-    var inf = dd_of(x: 1.0_f64).div(you: dd_of(x: 0.0_f64))
+    var inf = dd_of(x: 1.0_b64).div(you: dd_of(x: 0.0_b64))
     return if p.sign then inf.neg() else inf
   if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return dd_of(x: 0.0_f64).div(you: dd_of(x: 0.0_f64))
+    return dd_of(x: 0.0_b64).div(you: dd_of(x: 0.0_b64))
   if LLVM::int_eq(a: p.coeff, b: 0_u64)
-    return if p.sign then dd_of(x: 0.0_f64).neg() else dd_of(x: 0.0_f64)
+    return if p.sign then dd_of(x: 0.0_b64).neg() else dd_of(x: 0.0_b64)
   var mag = u64_coeff_to_dd(c: p.coeff).mul(you: dd_pow10(e: p.exp))
   return if p.sign then mag.neg() else mag
 
-### bin -> dec: DD value as a D64, rounded to <=16 digits. Non-finite DD (via to_f64
+### bin -> dec: DD value as a D64, rounded to <=16 digits. Non-finite DD (via to_b64
 ### classification on the hi limb) maps to inf/NaN; zero and signed zero preserved.
 routine dd_to_d64(x: DD) -> D64
-  var f = x.to_f64()
+  var f = x.to_b64()
   if f.is_nan()
     return D64.quiet_nan()
   if f.is_infinite()
-    return D64.infinity(sign: LLVM::float_lt[F64](a: x.hi, b: 0.0_f64))
-  if LLVM::float_eq[F64](a: x.hi, b: 0.0_f64)
-    return d64_of_parts(p: D64Parts(sign: LLVM::float_lt[F64](a: LLVM::copysign[F64](value: 1.0_f64, sign: x.hi), b: 0.0_f64), special: 0_u64, exp: 0_s64, coeff: 0_u64))
-  var sign = LLVM::float_lt[F64](a: x.hi, b: 0.0_f64)
+    return D64.infinity(sign: LLVM::float_lt[B64](a: x.hi, b: 0.0_b64))
+  if LLVM::float_eq[B64](a: x.hi, b: 0.0_b64)
+    return d64_of_parts(p: D64Parts(sign: LLVM::float_lt[B64](a: LLVM::copysign[B64](value: 1.0_b64, sign: x.hi), b: 0.0_b64), special: 0_u64, exp: 0_s64, coeff: 0_u64))
+  var sign = LLVM::float_lt[B64](a: x.hi, b: 0.0_b64)
   var ax = x.abs()
   # est. decimal exponent from log10 of the hi limb (faithful; the scale below corrects).
-  var decexp = LLVM::float_to_signed[F64, S64](LLVM::floor[F64](value: LLVM::log10[F64](value: ax.hi)))
+  var decexp = LLVM::float_to_signed[B64, S64](LLVM::floor[B64](value: LLVM::log10[B64](value: ax.hi)))
   # scale so the coefficient lands as a ~16-digit integer (15 - decexp), then round to U64.
   var q = LLVM::sub(a: 15_s64, b: decexp)
   var coeff = dd_to_u64_round(u: ax.mul(you: dd_pow10(e: q)))
@@ -114,12 +114,12 @@ routine dd_to_d64(x: DD) -> D64
   return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](coeff), exp: LLVM::sub(a: 0_s64, b: q), pref: 369_s64))
 
 # ============================================================================
-# Binary <-> decimal bridge (dec <-> bin128). Engine = UnpackedFloat[U128, U256, 128] (= F128).
-# Used BOTH for the correctly-rounded D64 <-> F32/F64/F128 conversions AND (below) for every D64
-# transcendental: F128's ~34-digit significand and ±4932 binary exponent fully cover decimal64's 16
-# digits and its ±385 decimal range, so an out-of-F64-range D64 (e.g. log(1e380) = 875.06…) converts
+# Binary <-> decimal bridge (dec <-> bin128). Engine = UnpackedFloat[U128, U256, 128] (= B128).
+# Used BOTH for the correctly-rounded D64 <-> B32/B64/B128 conversions AND (below) for every D64
+# transcendental: B128's ~34-digit significand and ±4932 binary exponent fully cover decimal64's 16
+# digits and its ±385 decimal range, so an out-of-B64-range D64 (e.g. log(1e380) = 875.06…) converts
 # and evaluates correctly — where the old DD (double-double) engine overflowed to inf because DD
-# shares F64's ±308 range. Width constants mirror uf256_from_u128 with W=128.
+# shares B64's ±308 range. Width constants mirror uf256_from_u128 with W=128.
 # ============================================================================
 
 ### Builds the engine value of a U64 integer with the given sign (exact; <=64 bits
@@ -152,9 +152,9 @@ routine uf128_to_u128_round(u: UnpackedFloat[U128, U256, 128]) -> U128
 # ============================================================================
 # Tabled 10^e for the W=128 engine (sqrt-split S=20 over decimal64's |e| <= 398), mirroring
 # uf192_pow10: a = |e|, hi = a/20, lo = a%20, result = HIGH[hi] * LOW[lo] — ONE engine multiply,
-# no binary-exponentiation loop (which made the D64<->F128 path slower than the wider D128<->F192).
+# no binary-exponentiation loop (which made the D64<->B128 path slower than the wider D128<->F192).
 # Each entry is the round-half-even nearest W=128 significand (mant, exp) to the true power; the split
-# product is faithful to ~37 digits (>> decimal64's 16 and F128's 34). Mantissa stored as 2*U64 words
+# product is faithful to ~37 digits (>> decimal64's 16 and B128's 34). Mantissa stored as 2*U64 words
 # (from_words2), value = mant * 2^(exp-125) (the uf128_from_u64 convention).
 # ============================================================================
 secret preset D64_UF128_HP_MANT: Array[U64, 42] = [4611686018427387904_u64, 0_u64, 6250000000000000000_u64, 0_u64, 8470329472543003390_u64, 12603276845132021760_u64, 5739718509874450722_u64, 9289713412047778504_u64, 7778769097326427133_u64, 17156948968161014915_u64, 5271098971615261612_u64, 3215028157257076267_u64, 7143671195514218638_u64, 15654777281305018588_u64, 4840739893561647841_u64, 415758097150301401_u64, 6560425886295985109_u64, 3151899844795609093_u64, 8891034997940309933_u64, 14219740130479152803_u64, 6024799662757210294_u64, 6490949671768469742_u64, 8165126103939127325_u64, 1666990685448301327_u64, 5532904662818065330_u64, 15448814367777519509_u64, 7498484069478154774_u64, 1627412126247261891_u64, 5081170449047600985_u64, 7891894506924142836_u64, 6886270049533193878_u64, 8080448606015761250_u64, 4666318092516094394_u64, 17532665913041105696_u64, 6324040266767955765_u64, 8486988135404879962_u64, 8570672745144533314_u64, 1597006029316303733_u64, 5807713756217503183_u64, 5228729589052947329_u64, 7870919839581207794_u64, 14354038259273560291_u64]
@@ -193,22 +193,22 @@ routine uf128_pow10(e: S64) -> UnpackedFloat[U128, U256, 128]
     return pow10_hn128(idx: hi).mul(you: pow10_ln128(idx: lo))
   return pow10_hp128(idx: hi).mul(you: pow10_lp128(idx: lo))
 
-### dec -> bin: D64 value as an F128 (coeff exact, scaled by 10^exp).
-routine d64_to_f128(x: D64) -> F128
+### dec -> bin: D64 value as an B128 (coeff exact, scaled by 10^exp).
+routine d64_to_b128(x: D64) -> B128
   var p = x.decode()
   var s = if p.sign then 1_u64 else 0_u64
   if LLVM::int_eq(a: p.special, b: 1_u64)
-    return F128.from_bits(bits: f128_inf(sign: s))
+    return B128.from_bits(bits: b128_inf(sign: s))
   if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return F128.from_bits(bits: f128_qnan())
+    return B128.from_bits(bits: b128_qnan())
   if LLVM::int_eq(a: p.coeff, b: 0_u64)
     # signed zero: sign bit (s) at bit 127, all else 0
-    return F128.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](s), bits: U128.to_width(s: 127_s64)))
+    return B128.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](s), bits: U128.to_width(s: 127_s64)))
   # coeff (exact, <=16 digits fits the 113-bit significand) scaled by 10^exp — ONE tabled engine mul
-  return uf128_from_u64(c: p.coeff, sign: p.sign).mul(you: uf128_pow10(e: p.exp)).to_f128()
+  return uf128_from_u64(c: p.coeff, sign: p.sign).mul(you: uf128_pow10(e: p.exp)).to_b128()
 
-### bin -> dec: F128 value as a D64, correctly rounded to <=16 digits.
-routine f128_to_d64(x: F128) -> D64
+### bin -> dec: B128 value as a D64, correctly rounded to <=16 digits.
+routine b128_to_d64(x: B128) -> D64
   if x.is_nan()
     return D64.quiet_nan()
   if x.is_infinite()
@@ -228,8 +228,8 @@ routine f128_to_d64(x: F128) -> D64
   return d64_of_parts(p: decfin64(sign: sign, coeff: coeff, exp: LLVM::sub(a: 0_s64, b: q), pref: 369_s64))
 
 # ============================================================================
-# Transcendentals — all delegate to the F128 (W=128) engine surface (erf/gamma included): decode
-# D64 -> F128, evaluate, round F128 -> D64. F128 covers decimal64's full ±385 range (DD did not),
+# Transcendentals — all delegate to the B128 (W=128) engine surface (erf/gamma included): decode
+# D64 -> B128, evaluate, round B128 -> D64. B128 covers decimal64's full ±385 range (DD did not),
 # so extreme-magnitude inputs (e.g. log of a >1e308 D64) are correct instead of overflowing to inf.
 # ============================================================================
 
@@ -247,10 +247,10 @@ routine D64.exp!() -> D64
 ### e^me, raw IEEE: may return ±inf (overflow) or NaN. Never crashes.
 ### :returns: The exponential of `me`, possibly non-finite.
 routine D64.exp_unchecked() -> D64
-  # D64 (16 digits ~54 bits) needs far fewer exp-series terms than F128's 113-bit target: n=13 is
-  # bit-exact to F128's n=20 across the D64 finite domain (n>=11 safe; +2-term margin). Uses F128's
+  # D64 (16 digits ~54 bits) needs far fewer exp-series terms than B128's 113-bit target: n=13 is
+  # bit-exact to B128's n=20 across the D64 finite domain (n>=11 safe; +2-term margin). Uses B128's
   # `exp_unchecked_n` so inf/NaN specials stay correct (a raw engine call drops them).
-  return f128_to_d64(x: d64_to_f128(x: me).exp_unchecked_n(n: 13_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).exp_unchecked_n(n: 13_s64))
 
 ### e^me - 1 (accurate near 0) via DD. Crashes on a non-finite result.
 ### :returns: `exp(me) - 1`.
@@ -266,7 +266,7 @@ routine D64.expm1!() -> D64
 ### `exp(me) - 1`, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: `exp(me) - 1`, possibly non-finite.
 routine D64.expm1_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).expm1_unchecked_n(n: 15_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).expm1_unchecked_n(n: 15_s64))
 
 ### 2^me via DD. Crashes on a non-finite result.
 ### :returns: Two raised to the power `me`.
@@ -282,7 +282,7 @@ routine D64.exp2!() -> D64
 ### 2^me, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: Two raised to the power `me`, possibly non-finite.
 routine D64.exp2_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp2_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).exp2_unchecked())
 
 ### 10^me via DD. Crashes on a non-finite result.
 ### :returns: Ten raised to the power `me`.
@@ -298,7 +298,7 @@ routine D64.exp10!() -> D64
 ### 10^me, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: Ten raised to the power `me`, possibly non-finite.
 routine D64.exp10_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).exp10_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).exp10_unchecked())
 
 ### Natural log ln(me) via DD. Crashes on a non-finite result (e.g. me<=0).
 ### :returns: The natural logarithm of `me`.
@@ -314,7 +314,7 @@ routine D64.log!() -> D64
 ### ln(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The natural logarithm of `me`, possibly non-finite.
 routine D64.log_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log_unchecked_n(n: 16_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).log_unchecked_n(n: 16_s64))
 
 ### ln(1+me) (accurate near 0) via DD. Crashes on a non-finite result (me<=-1).
 ### :returns: `ln(1 + me)`.
@@ -330,7 +330,7 @@ routine D64.log1p!() -> D64
 ### `ln(1 + me)`, raw IEEE: NaN for me<-1, -inf for me=-1. Never crashes.
 ### :returns: `ln(1 + me)`, possibly non-finite.
 routine D64.log1p_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log1p_unchecked_n(n: 15_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).log1p_unchecked_n(n: 15_s64))
 
 ### Base-2 log log2(me) via DD. Crashes on a non-finite result (me<=0).
 ### :returns: The base-2 logarithm of `me`.
@@ -346,7 +346,7 @@ routine D64.log2!() -> D64
 ### log2(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-2 logarithm of `me`, possibly non-finite.
 routine D64.log2_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log2_unchecked_n(n: 16_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).log2_unchecked_n(n: 16_s64))
 
 ### Base-10 log log10(me) via DD. Crashes on a non-finite result (me<=0).
 ### :returns: The base-10 logarithm of `me`.
@@ -362,7 +362,7 @@ routine D64.log10!() -> D64
 ### log10(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The base-10 logarithm of `me`, possibly non-finite.
 routine D64.log10_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).log10_unchecked_n(n: 16_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).log10_unchecked_n(n: 16_s64))
 
 ### Square root sqrt(me) via DD. Crashes on a non-finite result (me<0).
 ### :returns: The square root of `me`.
@@ -379,16 +379,16 @@ routine D64.sqrt!() -> D64
 ### :returns: The square root of `me`, possibly NaN.
 routine D64.sqrt_unchecked() -> D64
   # sqrt(neg) = NaN (IEEE), sqrt(+/-0) = +0: guard the strictly-negative case explicitly, then
-  # delegate the magnitude sqrt to the F128 (W=192) engine — which carries D64's full exponent
-  # range, unlike a DoubleDouble path (F64 exponent) that would overflow large D64 operands.
+  # delegate the magnitude sqrt to the B128 (W=192) engine — which carries D64's full exponent
+  # range, unlike a DoubleDouble path (B64 exponent) that would overflow large D64 operands.
   if me.is_negative() and not me.is_zero()
     return D64.quiet_nan()
-  return f128_to_d64(x: d64_to_f128(x: me).sqrt_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).sqrt_unchecked())
 
 ### Cube root cbrt(me) via DD (defined for all reals). Never crashes.
 ### :returns: The cube root of `me`.
 routine D64.cbrt() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cbrt())
+  return b128_to_d64(x: d64_to_b128(x: me).cbrt())
 
 ### me^you (general power) via DD, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :param you: The exponent.
@@ -397,11 +397,11 @@ routine D64.pow_unchecked(you: D64) -> D64
   # DD.pow computes exp(you * ln|me|) — the general POSITIVE-base power. A negative base is
   # only real for an integer exponent: restore the magnitude via |me|^you and set the sign
   # from the exponent's parity (odd -> negative); a non-integer exponent is a domain NaN.
-  var r = f128_to_d64(x: d64_to_f128(x: me.abs()).pow_unchecked(you: d64_to_f128(x: you)))
+  var r = b128_to_d64(x: d64_to_b128(x: me.abs()).pow_unchecked(you: d64_to_b128(x: you)))
   if not (me.is_negative() and not me.is_zero())
     return r
   var yint = you.trunc()
-  if you.cmp(you: yint) isnot SAME
+  if you.cmp(you: yint) != SAME
     return D64.quiet_nan()
   # parity: yint - 2*trunc(yint/2) is 0 (even) or ±1 (odd)
   var parity = yint - D64(from: 2_s64) * (yint / D64(from: 2_s64)).trunc()
@@ -427,7 +427,29 @@ routine hypot!(x: D64, y: D64) -> D64
 ### :param y: The second leg.
 ### :returns: The Euclidean length, possibly +inf.
 routine hypot_unchecked(x: D64, y: D64) -> D64
-  return f128_to_d64(x: hypot_unchecked(x: d64_to_f128(x: x), y: d64_to_f128(x: y)))
+  return b128_to_d64(x: hypot_unchecked(x: d64_to_b128(x: x), y: d64_to_b128(x: y)))
+
+### sqrt(x^2 + y^2 + z^2) (without spurious overflow) via B128. Crashes if non-finite.
+### :param x: The first leg.
+### :param y: The second leg.
+### :param z: The third leg.
+### :returns: The 3D Euclidean length.
+### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
+routine hypot!(x: D64, y: D64, z: D64) -> D64
+  var r = hypot_unchecked(x: x, y: y, z: z)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### `hypot(x, y, z)`, raw IEEE: may return +inf. Never crashes. Summed once at B128 width.
+### :param x: The first leg.
+### :param y: The second leg.
+### :param z: The third leg.
+### :returns: The 3D Euclidean length, possibly +inf.
+routine hypot_unchecked(x: D64, y: D64, z: D64) -> D64
+  return b128_to_d64(x: hypot_unchecked(x: d64_to_b128(x: x), y: d64_to_b128(x: y), z: d64_to_b128(x: z)))
 
 ### Fused multiply-add me*b + c, single rounding, via DD. Crashes if non-finite.
 ### :param b: The multiplier.
@@ -447,22 +469,22 @@ routine D64.fma!(b: D64, c: D64) -> D64
 ### :param c: The addend.
 ### :returns: `me * b + c`, possibly non-finite.
 routine D64.fma_unchecked(b: D64, c: D64) -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).fma_unchecked(b: d64_to_f128(x: b), c: d64_to_f128(x: c)))
+  return b128_to_d64(x: d64_to_b128(x: me).fma_unchecked(b: d64_to_b128(x: b), c: d64_to_b128(x: c)))
 
 ### Sine sin(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The sine of `me`.
 routine D64.sin() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sin_n(n: 10_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).sin_n(n: 10_s64))
 
 ### Cosine cos(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The cosine of `me`.
 routine D64.cos() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cos_n(n: 10_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).cos_n(n: 10_s64))
 
 ### Tangent tan(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The tangent of `me`.
 routine D64.tan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tan_n(n: 11_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).tan_n(n: 11_s64))
 
 ### Arcsine asin(me) via DD. Crashes if non-finite (|me|>1).
 ### :returns: The arcsine of `me` in radians.
@@ -480,9 +502,9 @@ routine D64.asin!() -> D64
 routine D64.asin_unchecked() -> D64
   # DD.asin = atan(me/sqrt(1-me^2)); for |me|>1 that sqrt clamps to 0 (wrong ±pi/2 instead of
   # NaN), so guard the domain here to preserve IEEE (asin NaN for |me|>1).
-  if me.abs().cmp(you: D64(from: 1_s64)) is ME_LARGE
+  if me.abs().cmp(you: D64(from: 1_s64)) == ME_LARGE
     return D64.quiet_nan()
-  return f128_to_d64(x: d64_to_f128(x: me).asin_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).asin_unchecked())
 
 ### Arccosine acos(me) via DD. Crashes if non-finite (|me|>1).
 ### :returns: The arccosine of `me` in radians.
@@ -499,21 +521,21 @@ routine D64.acos!() -> D64
 ### :returns: The arccosine of `me`, possibly NaN.
 routine D64.acos_unchecked() -> D64
   # acos = pi/2 - asin; same |me|>1 domain guard (DD.sqrt clamp would otherwise mask the NaN).
-  if me.abs().cmp(you: D64(from: 1_s64)) is ME_LARGE
+  if me.abs().cmp(you: D64(from: 1_s64)) == ME_LARGE
     return D64.quiet_nan()
-  return f128_to_d64(x: d64_to_f128(x: me).acos_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).acos_unchecked())
 
 ### Arctangent atan(me) via DD (defined for all reals). Never crashes.
 ### :returns: The arctangent of `me` in radians.
 routine D64.atan() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atan())
+  return b128_to_d64(x: d64_to_b128(x: me).atan())
 
 ### Two-argument arctangent atan2(y, x), quadrant-aware, via DD. Never crashes.
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
 ### :returns: The angle of (x, y) in radians, in (-pi, pi].
 routine atan2(y: D64, x: D64) -> D64
-  return f128_to_d64(x: atan2(y: d64_to_f128(x: y), x: d64_to_f128(x: x)))
+  return b128_to_d64(x: atan2(y: d64_to_b128(x: y), x: d64_to_b128(x: x)))
 
 ### Hyperbolic sine sinh(me) via DD. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic sine of `me`.
@@ -529,7 +551,7 @@ routine D64.sinh!() -> D64
 ### sinh(me), raw IEEE: ±inf on overflow. Never crashes.
 ### :returns: The hyperbolic sine of `me`, possibly ±inf.
 routine D64.sinh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).sinh_unchecked_n(n: 13_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).sinh_unchecked_n(n: 13_s64))
 
 ### Hyperbolic cosine cosh(me) via DD. Crashes if non-finite (overflow for large |me|).
 ### :returns: The hyperbolic cosine of `me`.
@@ -545,17 +567,17 @@ routine D64.cosh!() -> D64
 ### cosh(me), raw IEEE: +inf on overflow. Never crashes.
 ### :returns: The hyperbolic cosine of `me`, possibly +inf.
 routine D64.cosh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).cosh_unchecked_n(n: 13_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).cosh_unchecked_n(n: 13_s64))
 
 ### Hyperbolic tangent tanh(me) via DD (defined for all reals). Never crashes.
 ### :returns: The hyperbolic tangent of `me`.
 routine D64.tanh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tanh_n(n: 13_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).tanh_n(n: 13_s64))
 
 ### Inverse hyperbolic sine asinh(me) via DD (defined for all reals). Never crashes.
 ### :returns: The inverse hyperbolic sine of `me`.
 routine D64.asinh() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).asinh())
+  return b128_to_d64(x: d64_to_b128(x: me).asinh())
 
 ### Inverse hyperbolic cosine acosh(me) via DD. Crashes if non-finite (me<1).
 ### :returns: The inverse hyperbolic cosine of `me`.
@@ -573,9 +595,9 @@ routine D64.acosh!() -> D64
 routine D64.acosh_unchecked() -> D64
   # DD.acosh = log(me + sqrt(me^2-1)); for me<1 that sqrt clamps to 0 (finite garbage instead
   # of NaN), so guard the domain here to preserve IEEE (acosh NaN for me<1).
-  if me.cmp(you: D64(from: 1_s64)) is ME_SMALL
+  if me.cmp(you: D64(from: 1_s64)) == ME_SMALL
     return D64.quiet_nan()
-  return f128_to_d64(x: d64_to_f128(x: me).acosh_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).acosh_unchecked())
 
 ### Inverse hyperbolic tangent atanh(me) via DD. Crashes if non-finite (|me|>=1).
 ### :returns: The inverse hyperbolic tangent of `me`.
@@ -591,17 +613,17 @@ routine D64.atanh!() -> D64
 ### atanh(me), raw IEEE: NaN for |me|>1, ±inf for |me|=1. Never crashes.
 ### :returns: The inverse hyperbolic tangent of `me`, possibly non-finite.
 routine D64.atanh_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).atanh_unchecked_n(n: 14_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).atanh_unchecked_n(n: 14_s64))
 
 ### Error function erf(me) via DD. Never crashes (saturates to ±1).
 ### :returns: The error function of `me`.
 routine D64.erf() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erf_fast(levels_mid: 44_s64, levels_tail: 76_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).erf_fast(levels_mid: 44_s64, levels_tail: 76_s64))
 
 ### Complementary error function erfc(me) = 1 - erf(me) via DD. Never crashes.
 ### :returns: The complementary error function of `me`.
 routine D64.erfc() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).erfc_fast(levels_mid: 48_s64, levels_tail: 90_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).erfc_fast(levels_mid: 48_s64, levels_tail: 90_s64))
 
 ### Gamma function tgamma(me) via DD. Crashes if non-finite (poles at 0 and neg ints).
 ### :returns: The gamma function of `me`.
@@ -617,12 +639,12 @@ routine D64.tgamma!() -> D64
 ### tgamma(me), raw IEEE: ±inf at poles, NaN for neg-int poles, overflow. Never crashes.
 ### :returns: The gamma function of `me`, possibly non-finite.
 routine D64.tgamma_unchecked() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).tgamma_unchecked())
+  return b128_to_d64(x: d64_to_b128(x: me).tgamma_unchecked())
 
 ### Log-gamma lgamma(me) = ln(|gamma(me)|) via DD. Never crashes (+inf at poles).
 ### :returns: The natural log of the absolute gamma of `me`.
 routine D64.lgamma() -> D64
-  return f128_to_d64(x: d64_to_f128(x: me).lgamma())
+  return b128_to_d64(x: d64_to_b128(x: me).lgamma())
 
 # ============================================================================
 # libm manipulation / classification — decimal-native on D64Parts (coeff U64).
@@ -704,8 +726,8 @@ routine D64.total_order(you: D64) -> Bool
   if LLVM::unsigned_ge(a: pa.special, b: 2_u64) or LLVM::unsigned_ge(a: pb.special, b: 2_u64)
     return decimal_order_band(sign: pa.sign, special: pa.special) <= decimal_order_band(sign: pb.sign, special: pb.special)
   var c = me.cmp(you: you)
-  if c isnot SAME
-    return c is ME_SMALL
+  if c != SAME
+    return c == ME_SMALL
   if pa.sign != pb.sign
     return pa.sign
   if pa.sign
@@ -858,9 +880,9 @@ routine D64.minimum(you: D64) -> D64
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_SMALL
+  if c == ME_SMALL
     return me
-  if c is ME_LARGE
+  if c == ME_LARGE
     return you
   if me.is_zero()
     return if me.signbit() then me else you
@@ -875,9 +897,9 @@ routine D64.maximum(you: D64) -> D64
   if you.is_nan()
     return you
   var c = me.cmp(you: you)
-  if c is ME_LARGE
+  if c == ME_LARGE
     return me
-  if c is ME_SMALL
+  if c == ME_SMALL
     return you
   if me.is_zero()
     return if me.signbit() then you else me

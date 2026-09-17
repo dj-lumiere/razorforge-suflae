@@ -10,9 +10,9 @@ module Simd
 ### product. Use `dot` for the inner product.
 ###
 ### **Element type:** `T` must obey `Numeric`. In practice `Vector[T, N]` is
-### intended for the primitive IEEE float lanes `F16` / `F32` / `F64`, whose
+### intended for the primitive IEEE float lanes `B16` / `B32` / `B64`, whose
 ### `+ - * /` map to LLVM `fadd` / `fsub` / `fmul` / `fdiv` on `<N x T>`. Software
-### floats (`F128`) and non-float `Numeric` types are not valid SIMD lanes.
+### floats (`B128`) and non-float `Numeric` types are not valid SIMD lanes.
 ###
 ### :typeparam T: The element (lane) type; a primitive float.
 ### :typeparam N: The compile-time lane count, supplied as a `U64` literal.

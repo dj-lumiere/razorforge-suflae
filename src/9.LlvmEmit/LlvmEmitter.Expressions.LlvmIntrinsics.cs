@@ -453,7 +453,7 @@ public partial class LlvmEmitter
 
         // Struct types in our IR are named %"Record.X" or %"Entity.X" or anonymous %Record.X.
         // Also handle non-pointer scalar value types that can't bitcast to ptr — e.g.
-        // `fp128` (used by F128's @llvm("fp128") layout). Integer→ptr is already rewritten
+        // `fp128` (used by B128's @llvm("fp128") layout). Integer→ptr is already rewritten
         // to inttoptr upstream by FixIntPtrBitcast; ptr→ptr is a no-op and need not match.
         bool isStruct = fromType.StartsWith(value: '%');
         bool isFloat = fromType is "fp128" or "double" or "float" or "half" or "bfloat"
@@ -463,7 +463,7 @@ public partial class LlvmEmitter
         // is intercepted at the call site), but the materialized definition must still compile —
         // spill the aggregate to a fresh alloca and use its pointer, same as the struct case.
         bool isArray = fromType.StartsWith(value: '[');
-        // SIMD vector backends (`<N x T>`, e.g. Simd.Vector[F32, 4]'s @llvm("<{N} x {T}>") layout) likewise
+        // SIMD vector backends (`<N x T>`, e.g. Simd.Vector[B32, 4]'s @llvm("<{N} x {T}>") layout) likewise
         // cannot bitcast to ptr — same dead-but-must-compile universal get_address/hijack body. Spill too.
         bool isVector = fromType.StartsWith(value: '<');
         if (!isStruct && !isFloat && !isArray && !isVector)

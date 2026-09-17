@@ -1,10 +1,10 @@
 module Tests/Stdlib/NumericComplexApi
 import IO/Console
 
-# Exercises C32, C64, C128 — real+imag pairs.
+# Exercises C64, C128, C256 — real+imag pairs.
 routine start()
-  var c32: C32 = C32(real: 1.0_f32, imag: 2.0_f32)
-  var c64: C64 = C64(real: 3.0_f64, imag: 4.0_f64)
+  var c32: C64 = C64(real: 1.0_b32, imag: 2.0_b32)
+  var c64: C128 = C128(real: 3.0_b64, imag: 4.0_b64)
 
   show(f"c32: {c32}")
   show(f"c64: {c64}")
@@ -18,8 +18,16 @@ routine start()
   show(f"c64 * c64: {c64 * c64}")
 
   # Equality
-  var c64b: C64 = C64(real: 3.0_f64, imag: 4.0_f64)
+  var c64b: C128 = C128(real: 3.0_b64, imag: 4.0_b64)
   show(f"c64 == c64b: {c64 == c64b}")
+
+  # Real <-> complex promotion (`+`/`-` only, matching component width)
+  var r32: B32 = 10.0_b32
+  var r64: B64 = 10.0_b64
+  show(f"r32 + c32: {r32 + c32}")
+  show(f"c32 + r32: {c32 + r32}")
+  show(f"r64 + c64: {r64 + c64}")
+  show(f"c64 - r64: {c64 - r64}")
 
   show("DONE")
   return

@@ -104,8 +104,8 @@ public class OperatorProtocolTests
                           routine Me.$sub(you: Me) -> Me
 
                         record Complex obeys Addable, Subtractable
-                          real: F64
-                          imag: F64
+                          real: B64
+                          imag: B64
 
                         @readonly
                         routine Complex.$add(you: Complex) -> Complex
@@ -355,7 +355,7 @@ public class OperatorProtocolTests
                           y: S32
 
                         @readonly
-                        routine Point.magnitude() -> F64
+                        routine Point.magnitude() -> B64
                           return 0.0
                         """;
 

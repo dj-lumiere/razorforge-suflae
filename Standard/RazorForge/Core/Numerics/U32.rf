@@ -118,37 +118,37 @@ routine U32!(from: U256) -> U32
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, U32](from)
 
-### Converts an `F16` to `U32` by widening to `F32` first, then truncating.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `U32` by widening to `B32` first, then truncating.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 4294967295.
-routine U32!(from: F16) -> U32
-  return from.F32().U32!()
+routine U32!(from: B16) -> U32
+  return from.B32().U32!()
 
-### Converts an `F32` to `U32`, truncating toward zero.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `U32`, truncating toward zero.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
-routine U32!(from: F32) -> U32
-  if from.is_nan() or not (0.0_f32 <= from <= 4294967295.0_f32)
+routine U32!(from: B32) -> U32
+  if from.is_nan() or not (0.0_b32 <= from <= 4294967295.0_b32)
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F32, U32](from)
+  return LLVM::float_to_unsigned[B32, U32](from)
 
-### Converts an `F64` to `U32`, truncating toward zero.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `U32`, truncating toward zero.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
-routine U32!(from: F64) -> U32
-  if from.is_nan() or not (0.0_f64 <= from <= 4294967295.0_f64)
+routine U32!(from: B64) -> U32
+  if from.is_nan() or not (0.0_b64 <= from <= 4294967295.0_b64)
     throw IntegerOverflowError()
-  return LLVM::float_to_unsigned[F64, U32](from)
+  return LLVM::float_to_unsigned[B64, U32](from)
 
-### Converts an `F128` to `U32` by narrowing to `F64` first, then truncating.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `U32` by narrowing to `B64` first, then truncating.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
-routine U32!(from: F128) -> U32
-  return from.F64!().U32!()
+routine U32!(from: B128) -> U32
+  return from.B64!().U32!()
 
 ### Converts a `D32` to `U32` via `S64` conversion.
 ### :param from: The `D32` value to convert.

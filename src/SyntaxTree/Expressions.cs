@@ -89,7 +89,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
 /// Supports the full range of RazorForge/Suflae literal types:
 /// <list type="bullet">
 /// <item>Integers: S8, S16, S32, S64, S128, U8, U16, U32, U64, U128, Address</item>
-/// <item>Floats: F16, F32, F64, F128</item>
+/// <item>Floats: B16, B32, B64, B128</item>
 /// <item>Decimals: D32, D64, D128</item>
 /// <item>Text and characters: Character, Byte, Text, Bytes</item>
 /// <item>Booleans: true, false</item>
@@ -906,7 +906,7 @@ public record Parameter(
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">
-/// <item>Primitive types: s32, f64, bool, letter</item>
+/// <item>Primitive types: s32, b64, bool, letter</item>
 /// <item>Entity types: Text, MyClass, Point</item>
 /// <item>Generic types: List[s32], Dictionary[Text, s32]</item>
 /// <item>Nested generics: List[Dictionary[Text, s32]]</item>
@@ -1007,7 +1007,7 @@ public record TypeConversionExpression(
 /// Generic memberRoutine calls enable type-safe slice operations:
 /// <list type="bullet">
 /// <item>buffer.read!&lt;s32&gt;(0) - read s32 at offset 0</item>
-/// <item>buffer.write!&lt;f64&gt;(8, 3.14) - write f64 at offset 8</item>
+/// <item>buffer.write!&lt;b64&gt;(8, 3.14) - write b64 at offset 8</item>
 /// <item>Type arguments specify the data type for the operation</item>
 /// </list>
 /// </remarks>

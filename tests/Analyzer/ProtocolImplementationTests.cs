@@ -24,8 +24,8 @@ public class ProtocolImplementationTests
                           routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.display() -> Text
@@ -48,8 +48,8 @@ public class ProtocolImplementationTests
                           routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -67,8 +67,8 @@ public class ProtocolImplementationTests
                           routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.display() -> S32
@@ -95,8 +95,8 @@ public class ProtocolImplementationTests
                           routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         routine Point.display() -> Text
                           return "point"
@@ -118,8 +118,8 @@ public class ProtocolImplementationTests
                           routine Me.display() -> Text
 
                         entity Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         routine Point.display() -> Text
                           return "point"
@@ -233,8 +233,8 @@ public class ProtocolImplementationTests
                           routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.$add(other: Point) -> Point
@@ -256,8 +256,8 @@ public class ProtocolImplementationTests
                           routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.$add(other: S32) -> Point
@@ -315,8 +315,8 @@ public class ProtocolImplementationTests
                           routine Me.debug_display() -> Text
 
                         record Point obeys DebugDisplayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.display() -> Text
@@ -346,8 +346,8 @@ public class ProtocolImplementationTests
                           routine Me.debug_display() -> Text
 
                         record Point obeys DebugDisplayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.debug_display() -> Text
@@ -370,8 +370,8 @@ public class ProtocolImplementationTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @generated
                         @readonly
@@ -391,8 +391,8 @@ public class ProtocolImplementationTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @innate
                         @readonly
@@ -420,8 +420,8 @@ public class ProtocolImplementationTests
                           routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
@@ -522,8 +522,8 @@ public class ProtocolImplementationTests
                           routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool
@@ -554,8 +554,8 @@ public class ProtocolImplementationTests
                           routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.$eq(you: Point) -> Bool

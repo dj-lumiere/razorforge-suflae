@@ -30,17 +30,14 @@ public partial class Parser
                 TokenType.U256Literal,
                 TokenType.AddressLiteral,
                 TokenType.DecimalLiteral,
-                TokenType.F16Literal,
-                TokenType.F32Literal,
-                TokenType.F64Literal,
-                TokenType.F128Literal,
+                TokenType.B16Literal,
+                TokenType.B32Literal,
+                TokenType.B64Literal,
+                TokenType.B128Literal,
                 TokenType.D32Literal,
                 TokenType.D64Literal,
                 TokenType.D128Literal,
-                TokenType.J32Literal,
-                TokenType.J64Literal,
-                TokenType.J128Literal,
-                TokenType.JnLiteral))
+                TokenType.ImaginaryLiteral))
         {
             Token token = PeekToken(offset: -1);
             result = new LiteralExpression(Value: token.Text,

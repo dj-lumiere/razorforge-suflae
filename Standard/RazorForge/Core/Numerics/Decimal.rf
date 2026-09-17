@@ -164,20 +164,20 @@ routine Decimal(from: U128) -> Decimal
 routine Decimal(from: U256) -> Decimal
   return dec_of_d128(x: D128(from: from))
 
-### F16 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
-routine Decimal(from: F16) -> Decimal
+### B16 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
+routine Decimal(from: B16) -> Decimal
   return dec_of_d128_finite(d: D128(from: from))
 
-### F32 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
-routine Decimal(from: F32) -> Decimal
+### B32 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
+routine Decimal(from: B32) -> Decimal
   return dec_of_d128_finite(d: D128(from: from))
 
-### F64 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
-routine Decimal(from: F64) -> Decimal
+### B64 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
+routine Decimal(from: B64) -> Decimal
   return dec_of_d128_finite(d: D128(from: from))
 
-### F128 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
-routine Decimal(from: F128) -> Decimal
+### B128 -> Decimal (correctly rounded via D128; crashes if the value is non-finite).
+routine Decimal(from: B128) -> Decimal
   return dec_of_d128_finite(d: D128(from: from))
 
 ### D32 -> Decimal (exact widen; crashes if the value is non-finite).

@@ -538,7 +538,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // ProcessConcreteType never emits because they aren't owned by the receiver's
         // generic definition.
         // A resolved routine reached from an emitted body — either a plain CallExpression or a
-        // GenericMemberRoutineCallExpression (`hijacked_from[${m.type}]` folded to `hijacked_from[F32]`
+        // GenericMemberRoutineCallExpression (`hijacked_from[${m.type}]` folded to `hijacked_from[B32]`
         // via the `$Col` expand substitution: its concrete instance is discovered HERE, during
         // the expand unroll, so it post-dates RoutineReachabilityPass and would otherwise be
         // "declared but never defined"). Both node kinds carry a settable ResolvedRoutine.
@@ -574,7 +574,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// An `obj[i]` access is still an IndexExpression in an emitted body (OperatorLoweringPass on
     /// instantiated bodies only rewrites it to a `getitem`/`setitem` CallExpression LATER, in
     /// GenericClosurePass, which runs AFTER this liveness pass). Its concrete callee — e.g.
-    /// `Array[F32, 4].getitem`/`.setitem` reached only through a SoA container's monomorphized
+    /// `Array[B32, 4].getitem`/`.setitem` reached only through a SoA container's monomorphized
     /// memberRoutine `me.${m.name}[index]` — was never seen by RoutineReachabilityPass and is left
     /// "declared but never defined" at codegen. Marks both index accessors live here, mirroring the
     /// CallExpression callee handling and the IndexExpression discovery at
@@ -1418,7 +1418,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 // NOTE: `setitem` is NOT excluded (unlike the call-driven `getitem`). An index assignment
                 // `a[i] = x` is lowered to a `setitem` CALL by CODEGEN at emission, not to an AST call the
                 // demand walk can follow, so setitem is never reached call-driven and must be force-seeded per
-                // reached owner or it links undefined (Array[S64,4]/Vector[F32,4]/BitArray/SplitArray/List).
+                // reached owner or it links undefined (Array[S64,4]/Vector[B32,4]/BitArray/SplitArray/List).
                 // The OPERATOR family is call-driven too. Skip every call-driven operator kind; the genuinely
                 // non-discoverable framework hook (cyclic_visit / CycleTrace) and the denylist names above stay.
                 if (WiredRoutineCatalog.TryGet(name: wiredName, entry: out WiredEntry seedEntry) &&

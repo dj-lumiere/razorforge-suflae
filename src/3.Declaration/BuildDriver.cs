@@ -649,11 +649,10 @@ public sealed class BuildDriver
     {
         // (module, specificSymbols|null). `Numerics` is brought in as the SPECIFIC symbol `Integer`
         // ONLY — Suflae's bare numeric vocabulary is Integer/Decimal (Decimal is in Core), so bare
-        // `6` defaults to Integer and bare `Integer` resolves, WITHOUT opening the whole Numerics
-        // module. The fixed-width / complex / quaternion zoo (and Real/Complex) stay behind an
-        // explicit whole-module `import Numerics` — which the prelude skips injecting when present,
-        // so a whole-module import is the distinguishable "unlock" signal for the number gate
-        // (see TypeResolver.EnforceSuflaeNumberGate). I/O stays whole-module for `show(...)`.
+        // `6` defaults to Integer and bare `Integer` resolves. The fixed-width scalar/complex zoo
+        // (S/U/B/D/C, Q) lives in the Core auto-prelude and is directly usable in SF (the old SF
+        // import-gate on these was removed). Only the arbitrary-precision `Real`/`Complex` still need
+        // an explicit whole-module `import Numerics`. I/O stays whole-module for `show(...)`.
         (string Module, string[]? Symbols)[] preludeModules =
             [("Numerics", ["Integer"]), ("IO/Console", null), ("IO/File", null)];
         int insertAt = 1; // Module declaration is guaranteed at index 0 by now.

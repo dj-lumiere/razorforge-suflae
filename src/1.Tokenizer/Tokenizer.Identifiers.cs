@@ -166,14 +166,14 @@ public partial class Tokenizer
 
     private static readonly Dictionary<string, TokenType> _specialFloatLiterals = new()
     {
-        [key: "inf_f16"] = TokenType.F16Literal,
-        [key: "nan_f16"] = TokenType.F16Literal,
-        [key: "inf_f32"] = TokenType.F32Literal,
-        [key: "nan_f32"] = TokenType.F32Literal,
-        [key: "inf_f64"] = TokenType.F64Literal,
-        [key: "nan_f64"] = TokenType.F64Literal,
-        [key: "inf_f128"] = TokenType.F128Literal,
-        [key: "nan_f128"] = TokenType.F128Literal,
+        [key: "inf_b16"] = TokenType.B16Literal,
+        [key: "nan_b16"] = TokenType.B16Literal,
+        [key: "inf_b32"] = TokenType.B32Literal,
+        [key: "nan_b32"] = TokenType.B32Literal,
+        [key: "inf_b64"] = TokenType.B64Literal,
+        [key: "nan_b64"] = TokenType.B64Literal,
+        [key: "inf_b128"] = TokenType.B128Literal,
+        [key: "nan_b128"] = TokenType.B128Literal,
         [key: "inf_d32"] = TokenType.D32Literal,
         [key: "nan_d32"] = TokenType.D32Literal,
         [key: "inf_d64"] = TokenType.D64Literal,

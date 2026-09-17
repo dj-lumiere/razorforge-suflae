@@ -2,7 +2,7 @@ module Core
 
 # CREDITS: UnpackedFloat[M, L, W] is a port and extension of TLFloat's UnpackedFloat
 # (© Naoki Shibata and contributors, Boost Software License 1.0). This generic engine
-# backs the W=128/192/320 engines (F128 + the D64/D128/Decimal transcendental bridges).
+# backs the W=128/192/320 engines (B128 + the D64/D128/Decimal transcendental bridges).
 # See THIRD-PARTY-NOTICES.md.
 
 # ============================================================================
@@ -517,11 +517,11 @@ common routine T.from_bool(cond: Bool) -> T
 routine T.clear_low(n: S64) -> T
   return LLVM::bit_and[T](a: me, b: LLVM::bit_xor[T](a: T.low_mask(n: n), b: LLVM::sub[T](a: 0, b: 1)))
 
-### Integer floor square root of `v` over the wide type `L` — f64-seeded Newton using the
+### Integer floor square root of `v` over the wide type `L` — b64-seeded Newton using the
 ### FloorDivisible `//` (Knuth divide), then an exact ±1 correction. The engine-generic form of
-### `f128_isqrt256`: it stays in raw wide integers (no per-step UnpackedFloat pack/classify), so a
+### `b128_isqrt256`: it stays in raw wide integers (no per-step UnpackedFloat pack/classify), so a
 ### handful of fast Knuth divides beat BOTH the O(W²) restoring-bitwise isqrt (~700ns at W=128) AND
-### the reciprocal float `sqrt_newton` (~330ns) at the F128 width. Common routine on the engine type
+### the reciprocal float `sqrt_newton` (~330ns) at the B128 width. Common routine on the engine type
 ### (like `clz_wide`) so the W-parametrized instance is reachability-seeded.
 common routine UnpackedFloat[M, L, W].isqrt_newton_wide(v: L) -> L
   var zero = L.to_width(s: 0_s64)
@@ -529,8 +529,8 @@ common routine UnpackedFloat[M, L, W].isqrt_newton_wide(v: L) -> L
     return zero
   var one = L.to_width(s: 1_s64)
   var twoW = LLVM::mul(a: 2_s64, b: LLVM::reinterpret_bits[U64, S64](W))
-  # Seed x ~= sqrt(v) from hardware f64: take the top <=52 bits of v (even shift, so the f64 sqrt
-  # scales back by an integer power of two), f64-sqrt, then shift the ~26-bit integer result up by sh/2.
+  # Seed x ~= sqrt(v) from hardware b64: take the top <=52 bits of v (even shift, so the b64 sqrt
+  # scales back by an integer power of two), b64-sqrt, then shift the ~26-bit integer result up by sh/2.
   var bl = LLVM::sub(a: twoW, b: UnpackedFloat[M, L, W].clz_wide(v: v))
   var sh = 0_s64
   if LLVM::signed_gt(a: bl, b: 52_s64)
@@ -538,7 +538,7 @@ common routine UnpackedFloat[M, L, W].isqrt_newton_wide(v: L) -> L
     if LLVM::int_ne(a: LLVM::signed_rem(a: sh, b: 2_s64), b: 0_s64)
       sh = LLVM::sub(a: sh, b: 1_s64)
   var vtop = LLVM::int_truncate[L, U64](LLVM::shift_right_unsigned(v, L.to_width(s: sh)))
-  var seed = LLVM::float_to_unsigned[F64, U64](F64(from: vtop).sqrt_unchecked())
+  var seed = LLVM::float_to_unsigned[B64, U64](B64(from: vtop).sqrt_unchecked())
   var x = LLVM::shift_left(value: LLVM::zero_extend[U64, L](seed), bits: L.to_width(s: LLVM::signed_div(a: sh, b: 2_s64)))
   if LLVM::int_eq[L](a: x, b: zero)
     x = one
@@ -670,7 +670,7 @@ routine UnpackedFloat[M, L, W].fma_finite(b: UnpackedFloat[M, L, W], c: Unpacked
 # Square root (faithful port of TLFloat sqrt_)
 # ============================================================================
 
-### Newton iteration count for `sqrt_newton`, hand-tuned per engine width. The f64 seed gives ~52
+### Newton iteration count for `sqrt_newton`, hand-tuned per engine width. The b64 seed gives ~52
 ### correct bits and each Newton step doubles them, so the `floor(log2 W)-4` fallback reaches the
 ### ~2W-bit target; the explicit per-width entries let a tier be dialed in empirically (raise for
 ### accuracy, lower for speed) without touching the formula. W is a buildtime constant, so this
@@ -689,9 +689,9 @@ secret common routine UnpackedFloat[M, L, W].sqrt_newton_iters() -> S64
 ### Faithful reciprocal-sqrt via Newton (multiply-only) — the wide-engine path (W>=256; W=128 uses the
 ### integer-domain `isqrt_newton_wide` in `sqrt()`, which is faster at that width). Multiply-only
 ### Newton avoids the wide divide that gets costly as W grows; converges quadratically. me must be > 0,
-### finite, normal. Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) from a HARDWARE f64
+### finite, normal. Normalize me = v * 2^(2k) with v in [1,4); seed 1/sqrt(v) from a HARDWARE b64
 ### rsqrt (~52 correct bits, not the old ~2-bit constant), iterate y <- y*(3 - v*y^2)/2; return
-### (v*y) * 2^k. The f64 seed roughly halves the iteration count vs the old 2-bit seed at every
+### (v*y) * 2^k. The b64 seed roughly halves the iteration count vs the old 2-bit seed at every
 ### Newton width — every sqrt caller (log/asin/acos/hypot/erf on the W=192/W=320 engines) inherits it.
 ### Iteration count comes from `sqrt_newton_iters()` (per-width tunable).
 routine UnpackedFloat[M, L, W].sqrt_newton() -> UnpackedFloat[M, L, W]
@@ -700,13 +700,13 @@ routine UnpackedFloat[M, L, W].sqrt_newton() -> UnpackedFloat[M, L, W]
   var twok = LLVM::bit_and(a: e1, b: -2_s64)
   var k = LLVM::signed_div(a: twok, b: 2_s64)
   var v = me.ldexp(e: LLVM::sub(a: 0_s64, b: twok))
-  # Seed y ~= 1/sqrt(v) from hardware f64. v in [1,4): take its top 53 mantissa bits (leading at W-2,
-  # so shift down by W-54) as an exact-in-f64 integer scaled by 2^(v.exp-51), rsqrt in f64, then read
-  # the ~52-bit f64 result back as an unpacked value (y*2^53 is an integer < 2^54 -> from_u64, /2^53).
+  # Seed y ~= 1/sqrt(v) from hardware b64. v in [1,4): take its top 53 mantissa bits (leading at W-2,
+  # so shift down by W-54) as an exact-in-b64 integer scaled by 2^(v.exp-51), rsqrt in b64, then read
+  # the ~52-bit b64 result back as an unpacked value (y*2^53 is an integer < 2^54 -> from_u64, /2^53).
   var topbits = LLVM::int_truncate[M, U64](LLVM::shift_right_unsigned(v.mant, M.to_width(s: LLVM::sub(a: wb, b: 54_s64))))
-  var vf = F64(from: topbits).scalbn(n: LLVM::sub(a: v.exp, b: 51_s64))
-  var yf = F64(from: 1_u64).truediv_unchecked(you: vf.sqrt_unchecked())
-  var yint = LLVM::float_to_unsigned[F64, U64](yf.scalbn(n: 53_s64))
+  var vf = B64(from: topbits).scalbn(n: LLVM::sub(a: v.exp, b: 51_s64))
+  var yf = B64(from: 1_u64).truediv_unchecked(you: vf.sqrt_unchecked())
+  var yint = LLVM::float_to_unsigned[B64, U64](yf.scalbn(n: 53_s64))
   var y = UnpackedFloat[M, L, W].from_u64(v: yint).ldexp(e: -53_s64)
   var three = UnpackedFloat[M, L, W].from_s64(src: 3_s64)
   var iters = UnpackedFloat[M, L, W].sqrt_newton_iters()
@@ -730,11 +730,11 @@ routine UnpackedFloat[M, L, W].sqrt() -> UnpackedFloat[M, L, W]
   if me.isinf()
     return me
   # Crossover is between W=128 and W=256: at W=128 the INTEGER-domain isqrt (`isqrt_newton_wide`:
-  # f64-seeded, Knuth-`//` Newton, exact — the generic form of `f128_isqrt256`) beats the reciprocal
-  # float Newton (`sqrt_newton`: fixed f64-seed setup + wide muls, each packing/classifying an
+  # b64-seeded, Knuth-`//` Newton, exact — the generic form of `b128_isqrt256`) beats the reciprocal
+  # float Newton (`sqrt_newton`: fixed b64-seed setup + wide muls, each packing/classifying an
   # UnpackedFloat), because the integer path stays in raw wide ints with a few fast Knuth divides and
   # no per-step float ceremony. W>=256 routes to `sqrt_newton`, where the divide cost grows and the
-  # multiply-only reciprocal path wins. (F128Math's asin/acos etc. run on the W=128 engine, so this
+  # multiply-only reciprocal path wins. (B128Math's asin/acos etc. run on the W=128 engine, so this
   # keeps their sqrt on the fast exact integer path too.)
   if LLVM::unsigned_ge[U64](a: W, b: 256_u64)
     return me.sqrt_newton()

@@ -7,7 +7,7 @@ namespace Builder.Tokenizer;
 /// </summary>
 /// <remarks>
 /// Key language-conditional: unsuffixed defaults differ between RF and SF.
-/// RF: integer -> S64Literal, float -> F64Literal
+/// RF: integer -> S64Literal, float -> B64Literal
 /// SF: integer -> Integer, float -> Decimal
 /// </remarks>
 public partial class Tokenizer
@@ -31,7 +31,7 @@ public partial class Tokenizer
             isFloat = true;
         }
 
-        // Skip underscore before suffix after scientific notation (e.g., 3.4e10_f64)
+        // Skip underscore before suffix after scientific notation (e.g., 3.4e10_b64)
         if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
         {
             Advance();
@@ -174,7 +174,7 @@ public partial class Tokenizer
             }
         }
 
-        // Skip underscore before suffix (e.g., 0x1.0p5_f64)
+        // Skip underscore before suffix (e.g., 0x1.0p5_b64)
         if (Peek() == '_' && char.IsLetter(c: Peek(offset: 1)))
         {
             Advance();

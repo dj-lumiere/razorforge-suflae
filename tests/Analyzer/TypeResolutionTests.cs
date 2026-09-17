@@ -23,8 +23,8 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -177,12 +177,12 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
-                        routine Point.distance() -> F32
-                          return 0.0_f32
+                        routine Point.distance() -> B32
+                          return 0.0_b32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -279,10 +279,10 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: F32
+                          x: B32
 
                         record Point
-                          y: F32
+                          y: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -296,8 +296,8 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: F32
-                          x: F32
+                          x: B32
+                          x: B32
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -410,8 +410,8 @@ public class TypeResolutionTests
                           routine Me.display() -> Text
 
                         record Point obeys Displayable
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
                         routine Point.display() -> Text
@@ -723,11 +723,11 @@ public class TypeResolutionTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
 
                         @readonly
-                        routine Point.foo() -> Maybe[F32]
+                        routine Point.foo() -> Maybe[B32]
                           pass
                           return
                         """;
@@ -798,7 +798,7 @@ public class TypeResolutionTests
 
                         record Compass[D]
                         needs D is Direction
-                          strength: F32
+                          strength: B32
 
                         routine test(c: Compass[Direction])
                           return

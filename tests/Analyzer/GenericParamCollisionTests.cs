@@ -35,10 +35,10 @@ public class GenericParamCollisionTests
 
     /// <summary>
     /// The full goal: user `record T`/`N`/`M` (colliding with `Array[T,N]`, `UnpackedFloat[M,L,W]`) plus a
-    /// user generic routine `identity[T]` plus F128 (heavy generic instantiation) all coexist in one file.
+    /// user generic routine `identity[T]` plus B128 (heavy generic instantiation) all coexist in one file.
     /// </summary>
     [Fact]
-    public void UserRecordsTNM_CoexistWith_Generics_And_Identity_And_F128()
+    public void UserRecordsTNM_CoexistWith_Generics_And_Identity_And_B128()
     {
         AssertAnalyzes(source: """
                                record T
@@ -55,7 +55,7 @@ public class GenericParamCollisionTests
                                  var xs = List[S32]()
                                  xs.add_last(10_s32)
                                  var id = identity(7_s32)
-                                 var f = 3.0_f128.sqrt()
+                                 var f = 3.0_b128.sqrt()
                                  var t = T(a: 1_s32)
                                  var n = N(a: 2_s32)
                                  var m = M(a: 3_s32)

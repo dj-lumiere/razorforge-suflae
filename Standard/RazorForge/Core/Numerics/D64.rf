@@ -461,7 +461,7 @@ routine d64_div(a: D64, b: D64) -> D64
   return d64_of_parts(p: decfin64(sign: sign, coeff: q, exp: exp, pref: pref))
 
 # ---- wired operators + represent ----
-# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors F64/Decimal):
+# Checked arithmetic crashes with a specific cause on a non-finite result (mirrors B64/Decimal):
 # ±inf -> NumericOverflowError, NaN -> NumericDomainError, x/0 -> DivisionByZeroError. `@crash_only`
 # keeps the callers non-failable. Use the `*_unchecked` operators for raw IEEE 754 propagation.
 
@@ -644,24 +644,24 @@ routine D64(from: U256) -> D64
   return D64(from: D128(from: from))
 
 # ============================================================================
-# Creators — binary floats (matched width is F128)
+# Creators — binary floats (matched width is B128)
 # ============================================================================
 
-### Converts an F16 to D64 (via F64, then F128 -> D64, correctly rounded).
-routine D64(from: F16) -> D64
-  return D64(from: F64(from))
+### Converts an B16 to D64 (via B64, then B128 -> D64, correctly rounded).
+routine D64(from: B16) -> D64
+  return D64(from: B64(from))
 
-### Converts an F32 to D64 (via F64, then F128 -> D64, correctly rounded).
-routine D64(from: F32) -> D64
-  return D64(from: F64(from))
+### Converts an B32 to D64 (via B64, then B128 -> D64, correctly rounded).
+routine D64(from: B32) -> D64
+  return D64(from: B64(from))
 
-### Converts an F64 to D64 (widened to F128 for correctly-rounded decimal conversion).
-routine D64(from: F64) -> D64
-  return f128_to_d64(x: F128(from: from))
+### Converts an B64 to D64 (widened to B128 for correctly-rounded decimal conversion).
+routine D64(from: B64) -> D64
+  return b128_to_d64(x: B128(from: from))
 
-### Converts an F128 to D64 (correctly-rounded binary -> decimal).
-routine D64(from: F128) -> D64
-  return f128_to_d64(x: from)
+### Converts an B128 to D64 (correctly-rounded binary -> decimal).
+routine D64(from: B128) -> D64
+  return b128_to_d64(x: from)
 
 # ============================================================================
 # Creators — decimal <-> decimal

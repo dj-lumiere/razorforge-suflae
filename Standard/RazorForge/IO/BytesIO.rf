@@ -429,7 +429,7 @@ routine Integer.to_digit_bytes!() -> Bytes
 # When implemented they live in this same file (IO/BytesIO) so all Bytes-direct
 # numeric I/O is discoverable under one module.
 #
-# Bytes-direct fast paths for F16/F32/F64/F128, D32/D64/D128, C32/C64/C128,
+# Bytes-direct fast paths for B16/B32/B64/B128, D32/D64/D128, C64/C128/C256,
 # `Decimal`, and `Complex` are NOT implemented yet. The integer surface above
 # covers the CP-critical 95% case; floats/decimals appear far less often in
 # input-heavy problems, and their parsers (sign, integer part, fractional
@@ -439,13 +439,13 @@ routine Integer.to_digit_bytes!() -> Bytes
 # actually be fast.
 #
 # **Recommended interim:** for float input, convert the Bytes slice to Text
-# (via `CStr` then `Text(from: CStr)`) and call `F64.create(from_text:)`.
+# (via `CStr` then `Text(from: CStr)`) and call `B64.create(from_text:)`.
 # It's the slow path we wanted to avoid, but it's correct and lets v0.0.1a
 # ship with the integer fast path users actually need.
 #
 # **API shape to fill in:**
-#   routine F64.from_digit_bytes(bytes: Bytes) -> F64
-#   routine F64.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[F64, U64]
-#   routine F64.to_digit_bytes() -> Bytes
+#   routine B64.from_digit_bytes(bytes: Bytes) -> B64
+#   routine B64.from_digit_bytes_at(bytes: Bytes, start: U64) -> Tuple[B64, U64]
+#   routine B64.to_digit_bytes() -> Bytes
 #   (and identical signatures for every other floating-point + complex type)
 # ============================================================================

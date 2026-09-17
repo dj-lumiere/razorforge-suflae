@@ -52,7 +52,7 @@ routine cyclic_mark_scanning(addr: Address)
   var already = false
   danger
     var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-    if c.cyclic_state() is SCANNING
+    if c.cyclic_state() == SCANNING
       already = true
     else
       c.cyclic_set_state(c: RoamState.SCANNING)
@@ -70,7 +70,7 @@ routine cyclic_mark_scanning(addr: Address)
       danger
         var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
         kc.cyclic_dec()
-        if not (kc.cyclic_state() is SCANNING)
+        if not (kc.cyclic_state() == SCANNING)
           kc.cyclic_set_state(c: RoamState.SCANNING)
           descend = true
       if descend
@@ -94,7 +94,7 @@ routine cyclic_scan(addr: Address)
     var garbage = false
     danger
       var c = Hijacked[RoamController[RoamErased]](a).as_entity()
-      if c.cyclic_state() is SCANNING
+      if c.cyclic_state() == SCANNING
         if c.cyclic_count() > 0_u64
           live = true
         else
@@ -132,7 +132,7 @@ routine cyclic_scan_live(addr: Address)
       danger
         var kc = Hijacked[RoamController[RoamErased]](kid).as_entity()
         kc.cyclic_inc()
-        if not (kc.cyclic_state() is LIVE)
+        if not (kc.cyclic_state() == LIVE)
           kc.cyclic_set_state(c: RoamState.LIVE)
           descend = true
       if descend
@@ -157,7 +157,7 @@ routine cyclic_collect_garbage(addr: Address)
     var take = false
     danger
       var c = Hijacked[RoamController[RoamErased]](a).as_entity()
-      if (c.cyclic_state() is GARBAGE) and (not c.cyclic_buffered())
+      if (c.cyclic_state() == GARBAGE) and (not c.cyclic_buffered())
         c.cyclic_set_state(c: RoamState.LIVE)
         take = true
     if take
@@ -206,7 +206,7 @@ routine cyclic_collect() -> U64
     danger
       addr = C::rf_cyclic_roots_at(i: i)
       var c = Hijacked[RoamController[RoamErased]](addr).as_entity()
-      if c.cyclic_state() is SUSPECTED
+      if c.cyclic_state() == SUSPECTED
         suspected = true
       else
         c.cyclic_set_buffered(b: false)

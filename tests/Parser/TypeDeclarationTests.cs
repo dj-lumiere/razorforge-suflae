@@ -19,8 +19,8 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Point
-                          x: F32
-                          y: F32
+                          x: B32
+                          y: B32
                         """;
 
         Program program = AssertParses(source: source);
@@ -539,7 +539,7 @@ public class TypeDeclarationTests
     {
         string source = """
                         record Percentage
-                          posted value: F64
+                          posted value: B64
                         """;
 
         Program program = AssertParses(source: source);

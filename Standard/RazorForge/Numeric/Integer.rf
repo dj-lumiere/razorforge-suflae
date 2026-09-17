@@ -28,7 +28,7 @@ record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Order
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
 routine Integer() -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
   return int
 
 ### Creates an `Integer` from a signed 64-bit source value.
@@ -37,8 +37,8 @@ routine Integer() -> Integer
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: S64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_set_i64(handle: int.handle, value: value)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_set_i64(handle: int.handle, value: value)
   return int
 
 ### Creates an `Integer` from an unsigned 64-bit source value.
@@ -47,8 +47,8 @@ routine Integer(value: S64) -> Integer
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: U64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_set_u64(handle: int.handle, value: value)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_set_u64(handle: int.handle, value: value)
   return int
 
 # ============================================================================
@@ -62,12 +62,12 @@ routine Integer(value: U64) -> Integer
 # construct via the real handle/ctrl fields, so they avoid the `Integer(value:)` call form
 # (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_set_i64(handle: int.handle, value: v)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_set_i64(handle: int.handle, value: v)
   return int
 routine integer_of_u64(v: U64) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_set_u64(handle: int.handle, value: v)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_set_u64(handle: int.handle, value: v)
   return int
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
@@ -77,19 +77,19 @@ routine integer_of_u64(v: U64) -> Integer
 ### :param from: The signed source value.
 ### :returns: The equal `Integer` value.
 routine Integer(from: S8) -> Integer
-  return integer_of_s64(v: sign_extend[S8, S64](from))
+  return integer_of_s64(v: LLVM::sign_extend[S8, S64](from))
 routine Integer(from: S16) -> Integer
-  return integer_of_s64(v: sign_extend[S16, S64](from))
+  return integer_of_s64(v: LLVM::sign_extend[S16, S64](from))
 routine Integer(from: S32) -> Integer
-  return integer_of_s64(v: sign_extend[S32, S64](from))
+  return integer_of_s64(v: LLVM::sign_extend[S32, S64](from))
 routine Integer(from: S128) -> Integer
-  var neg = signed_lt[S128](a: from, b: 0_s128)
-  var mag = if neg then reinterpret_bits[S128, U128](sub[S128](a: 0_s128, b: from)) else reinterpret_bits[S128, U128](from)
+  var neg = LLVM::signed_lt[S128](a: from, b: 0_s128)
+  var mag = if neg then LLVM::reinterpret_bits[S128, U128](LLVM::sub[S128](a: 0_s128, b: from)) else LLVM::reinterpret_bits[S128, U128](from)
   var r = Integer(from: mag)
   return if neg then r.neg() else r
 routine Integer(from: S256) -> Integer
-  var neg = signed_lt[S256](a: from, b: 0_s256)
-  var mag = if neg then reinterpret_bits[S256, U256](sub[S256](a: 0_s256, b: from)) else reinterpret_bits[S256, U256](from)
+  var neg = LLVM::signed_lt[S256](a: from, b: 0_s256)
+  var mag = if neg then LLVM::reinterpret_bits[S256, U256](LLVM::sub[S256](a: 0_s256, b: from)) else LLVM::reinterpret_bits[S256, U256](from)
   var r = Integer(from: mag)
   return if neg then r.neg() else r
 
@@ -97,20 +97,20 @@ routine Integer(from: S256) -> Integer
 ### :param from: The unsigned source value.
 ### :returns: The equal `Integer` value.
 routine Integer(from: U8) -> Integer
-  return integer_of_u64(v: zero_extend[U8, U64](from))
+  return integer_of_u64(v: LLVM::zero_extend[U8, U64](from))
 routine Integer(from: U16) -> Integer
-  return integer_of_u64(v: zero_extend[U16, U64](from))
+  return integer_of_u64(v: LLVM::zero_extend[U16, U64](from))
 routine Integer(from: U32) -> Integer
-  return integer_of_u64(v: zero_extend[U32, U64](from))
+  return integer_of_u64(v: LLVM::zero_extend[U32, U64](from))
 routine Integer(from: U128) -> Integer
   # value = hi * 2^64 + lo, from the two 64-bit limbs.
-  var hi = integer_of_u64(v: int_truncate[U128, U64](from >>> 64u32))
-  var lo = integer_of_u64(v: int_truncate[U128, U64](from))
+  var hi = integer_of_u64(v: LLVM::int_truncate[U128, U64](from >>> 64u32))
+  var lo = integer_of_u64(v: LLVM::int_truncate[U128, U64](from))
   return hi.shl(bits: 64_s32).add(other: lo)
 routine Integer(from: U256) -> Integer
   # value = hi * 2^128 + lo, reusing the U128 widening for each 128-bit half.
-  var hi = Integer(from: int_truncate[U256, U128](from >>> 128u32))
-  var lo = Integer(from: int_truncate[U256, U128](from))
+  var hi = Integer(from: LLVM::int_truncate[U256, U128](from >>> 128u32))
+  var lo = Integer(from: LLVM::int_truncate[U256, U128](from))
   return hi.shl(bits: 128_s32).add(other: lo)
 
 ### Parses an integer from text using the requested radix.
@@ -120,8 +120,8 @@ routine Integer(from: U256) -> Integer
 ### :returns: The resulting `Integer` value.
 ### :throws: {ValueError} if `text` is not a valid integer in `radix`.
 routine Integer!(text: Text, radix: S32 = 10) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
   return int
@@ -132,8 +132,8 @@ routine Integer!(text: Text, radix: S32 = 10) -> Integer
 ### :param text: The decimal digit string (no suffix, no separators).
 ### :returns: The resulting `Integer` value.
 common routine Integer.from_literal(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  discard rf_bigint_set_str(int.handle, text.to_cstr(), 10)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  discard C::rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   return int
 
 ### Returns a copy of this value with the underlying refcount bumped.
@@ -155,7 +155,7 @@ dangerous routine Integer.destroy()
     return
   var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
-    rf_bigint_clear(me.handle)
+    C::rf_bigint_clear(me.handle)
     me.ctrl.invalidate()
   return
 
@@ -169,8 +169,8 @@ dangerous routine Integer.destroy()
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.add(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_add(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_add(result.handle, me.handle, other.handle)
   return result
 
 ### Subtracts `other` from this value using exact integer arithmetic.
@@ -178,8 +178,8 @@ routine Integer.add(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sub(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_sub(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
 
 ### Multiplies this value by `other` using exact integer arithmetic.
@@ -187,8 +187,8 @@ routine Integer.sub(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.mul(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_mul(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
 
 ### Divides this value by `other` and returns the Euclidean quotient.
@@ -199,9 +199,9 @@ routine Integer.mul(other: Integer) -> Integer
 routine Integer.floordiv!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var remainder = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
+  var quotient = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var remainder = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
   return quotient
 
 ### Divides this value by `other` and returns the Euclidean remainder.
@@ -211,16 +211,16 @@ routine Integer.floordiv!(other: Integer) -> Integer
 routine Integer.mod!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_mod(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_mod(result.handle, me.handle, other.handle)
   return result
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.neg() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_neg(result: result.handle, a: me.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_neg(result: result.handle, a: me.handle)
   return result
 
 # ============================================================================
@@ -232,14 +232,14 @@ routine Integer.neg() -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.eq(you: Integer) -> Bool
-  return rf_bigint_cmp(a: me.handle, b: you.handle) == 0
+  return C::rf_bigint_cmp(a: me.handle, b: you.handle) == 0
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Integer.cmp(you: Integer) -> ComparisonSign
-  var comparison_value = rf_bigint_cmp(a: me.handle, b: you.handle)
+  var comparison_value = C::rf_bigint_cmp(a: me.handle, b: you.handle)
   if comparison_value < 0
     return ME_SMALL
   elseif comparison_value > 0
@@ -256,8 +256,8 @@ routine Integer.cmp(you: Integer) -> ComparisonSign
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitand(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_and(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_and(result.handle, me.handle, other.handle)
   return result
 
 ### Computes the bitwise OR of this value and `other`.
@@ -265,8 +265,8 @@ routine Integer.bitand(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitor(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_or(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_or(result.handle, me.handle, other.handle)
   return result
 
 ### Computes the bitwise XOR of this value and `other`.
@@ -274,8 +274,8 @@ routine Integer.bitor(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitxor(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_xor(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
 
 ### Shifts this value left by `bits` positions.
@@ -284,8 +284,8 @@ routine Integer.bitxor(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shl(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_shl(result.handle, me.handle, bits)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_shl(result.handle, me.handle, bits)
   return result
 
 ### Shifts this value right by `bits` positions.
@@ -293,8 +293,8 @@ routine Integer.shl(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shr(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_shr(result.handle, me.handle, bits)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_shr(result.handle, me.handle, bits)
   return result
 
 # ============================================================================
@@ -305,8 +305,8 @@ routine Integer.shr(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.abs() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_abs(result: result.handle, a: me.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_abs(result: result.handle, a: me.handle)
   return result
 
 ### Raises this value to a non-negative integer exponent.
@@ -314,8 +314,8 @@ routine Integer.abs() -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.pow(exp: U32) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_pow(result.handle, me.handle, exp)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_pow(result.handle, me.handle, exp)
   return result
 
 ### Returns the integer square root of this value.
@@ -323,8 +323,8 @@ routine Integer.pow(exp: U32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sqrt() -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_sqrt(result: result.handle, a: me.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_sqrt(result: result.handle, a: me.handle)
   return result
 
 ### Computes the greatest common divisor of this value and `other`.
@@ -332,8 +332,8 @@ routine Integer.sqrt() -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.gcd(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_gcd(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_gcd(result.handle, me.handle, other.handle)
   return result
 
 ### Computes the least common multiple of this value and `other`.
@@ -341,8 +341,8 @@ routine Integer.gcd(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.lcm(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_lcm(result.handle, me.handle, other.handle)
+  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_lcm(result.handle, me.handle, other.handle)
   return result
 
 # ============================================================================
@@ -353,13 +353,13 @@ routine Integer.lcm(other: Integer) -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_zero() -> Bool
-  return rf_bigint_is_zero(me.handle) != 0
+  return C::rf_bigint_is_zero(me.handle) != 0
 
 ### Returns `true` when this value is less than zero.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_negative() -> Bool
-  return rf_bigint_is_neg(me.handle) != 0
+  return C::rf_bigint_is_neg(me.handle) != 0
 
 ### Returns `true` when this value is greater than zero.
 ### :returns: The resulting `Bool` value.
@@ -372,9 +372,9 @@ routine Integer.is_positive() -> Bool
 @readonly
 routine Integer.signum() -> S32
   return when
-    me.is_positive() => 1
-    me.is_negative() => -1
-    else => 0
+    me.is_positive() => 1_s32
+    me.is_negative() => -1_s32
+    else => 0_s32
 
 ### Returns `true` when this value is even (divisible by two).
 ### :returns: The resulting `Bool` value.
@@ -415,7 +415,7 @@ routine Integer.bit_length() -> U64
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.min(other: Integer) -> Integer
-  if me.cmp(you: other) is ME_LARGE
+  if me.cmp(you: other) == ME_LARGE
     return other.assign()
   return me.assign()
 
@@ -424,7 +424,7 @@ routine Integer.min(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.max(other: Integer) -> Integer
-  if me.cmp(you: other) is ME_SMALL
+  if me.cmp(you: other) == ME_SMALL
     return other.assign()
   return me.assign()
 
@@ -434,9 +434,9 @@ routine Integer.max(other: Integer) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.clamp(low: Integer, high: Integer) -> Integer
-  if me.cmp(you: low) is ME_SMALL
+  if me.cmp(you: low) == ME_SMALL
     return low.assign()
-  if me.cmp(you: high) is ME_LARGE
+  if me.cmp(you: high) == ME_LARGE
     return high.assign()
   return me.assign()
 
@@ -448,9 +448,9 @@ routine Integer.clamp(low: Integer, high: Integer) -> Integer
 routine Integer.divmod!(other: Integer) -> (Integer, Integer)
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var remainder = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
+  var quotient = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var remainder = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  C::rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
   return (quotient, remainder)
 
 ### Modular exponentiation `me^exp mod modulus` via right-to-left binary exponentiation
@@ -480,20 +480,26 @@ routine Integer.modpow!(exp: Integer, modulus: Integer) -> Integer
 # ============================================================================
 
 ### Converts an arbitrary-precision integer to `S64`.
-### This conversion is intended for values that are known to fit the target
-### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S64` value.
+### :throws: {IntegerOverflowError} if `from` is outside `S64_MIN..S64_MAX`.
 routine S64!(from: Integer) -> S64
-  return rf_bigint_get_i64(from.handle)
+  if from.cmp(you: Integer(value: S64_MAX)) == ME_LARGE
+    throw IntegerOverflowError()
+  if from.cmp(you: Integer(value: S64_MIN)) == ME_SMALL
+    throw IntegerOverflowError()
+  return C::rf_bigint_get_i64(from.handle)
 
 ### Converts an arbitrary-precision integer to `U64`.
-### This conversion is intended for non-negative values that fit the target
-### range.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
+### :throws: {IntegerOverflowError} if `from` is negative or exceeds `U64_MAX`.
 routine U64!(from: Integer) -> U64
-  return rf_bigint_get_u64(from.handle)
+  if from.is_negative()
+    throw IntegerOverflowError()
+  if from.cmp(you: Integer(value: U64_MAX)) == ME_LARGE
+    throw IntegerOverflowError()
+  return C::rf_bigint_get_u64(from.handle)
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
@@ -508,9 +514,10 @@ routine Integer.represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Integer.represent_radix(radix: S32) -> Text
-  var CStr = rf_bigint_get_str(handle: me.handle, radix: radix)
+  var CStr = C::rf_bigint_get_str(handle: me.handle, radix: radix)
   var text = Text(from: CStr)
-  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr()))
+  danger
+    rf_invalidate(LLVM::pointer_to_int[Byte, Address](CStr.ptr()))
   return text
 
 # ============================================================================
@@ -537,8 +544,8 @@ routine Integer.hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
 routine Integer!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
   return int
@@ -549,8 +556,8 @@ routine Integer!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_binary!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 2)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
   return int
@@ -561,8 +568,8 @@ common routine Integer.from_binary!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_hex!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new(), ctrl: FrozenController().hijack())
-  var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
+  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
+  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 16)
   if result != 0
     throw InvalidValueError(input: text, target: "Integer")
   return int

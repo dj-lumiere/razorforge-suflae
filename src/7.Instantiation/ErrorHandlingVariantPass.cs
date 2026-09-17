@@ -1366,7 +1366,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <c>create</c>) — there the variant surface must be <c>{prefix}_{surfaceMember}</c> (<c>try_S64</c>),
     /// NOT <c>variant.Name</c> (<c>try_create</c>): SA's conversion resolution maps <c>.try_S64()</c> →
     /// <c>S64.try_create</c> (the TARGET), whereas bare <c>try_create</c> re-resolves against the RECEIVER
-    /// type (<c>F64.try_create</c>) and corrupts the binding. Prefix is recovered from <c>variant.Name</c>.
+    /// type (<c>B64.try_create</c>) and corrupts the binding. Prefix is recovered from <c>variant.Name</c>.
     /// </summary>
     private static string VariantSurfaceMember(string surfaceMember, RoutineInfo original,
         RoutineInfo variant)

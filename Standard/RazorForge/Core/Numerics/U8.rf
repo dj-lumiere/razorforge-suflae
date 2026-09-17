@@ -123,32 +123,32 @@ routine U8!(from: U256) -> U8
     throw IntegerOverflowError()
   return LLVM::int_truncate[U256, U8](from)
 
-### Converts an `F16` to `U8` by first converting to `U32`, then truncating.
-### :param from: The `F16` value to convert.
+### Converts an `B16` to `U8` by first converting to `U32`, then truncating.
+### :param from: The `B16` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8!(from: F16) -> U8
+routine U8!(from: B16) -> U8
   return from.U32!().U8!()
 
-### Converts an `F32` to `U8` by first converting to `U32`, then truncating.
-### :param from: The `F32` value to convert.
+### Converts an `B32` to `U8` by first converting to `U32`, then truncating.
+### :param from: The `B32` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8!(from: F32) -> U8
+routine U8!(from: B32) -> U8
   return from.U32!().U8!()
 
-### Converts an `F64` to `U8` by first converting to `U32`, then truncating.
-### :param from: The `F64` value to convert.
+### Converts an `B64` to `U8` by first converting to `U32`, then truncating.
+### :param from: The `B64` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8!(from: F64) -> U8
+routine U8!(from: B64) -> U8
   return from.U32!().U8!()
 
-### Converts an `F128` to `U8` by first converting to `U32`, then truncating.
-### :param from: The `F128` value to convert.
+### Converts an `B128` to `U8` by first converting to `U32`, then truncating.
+### :param from: The `B128` value to convert.
 ### :returns: The integer part of `from` as a `U8`.
 ### :throws: {IntegerOverflowError} if the integer part exceeds 255.
-routine U8!(from: F128) -> U8
+routine U8!(from: B128) -> U8
   return from.U32!().U8!()
 
 ### Converts a `D32` to `U8` by first converting to `U32`, then truncating.
@@ -595,17 +595,17 @@ routine U64(from: U8) -> U64
 routine U128(from: U8) -> U128
   return LLVM::zero_extend[U8, U128](from)
 
-### Converts `from` to the nearest representable `F32`.
+### Converts `from` to the nearest representable `B32`.
 ### :param from: The `U8` value to convert.
-### :returns: An `F32` with the same numeric value as `from`.
-routine F32(from: U8) -> F32
-  return LLVM::unsigned_to_float[U8, F32](from)
+### :returns: An `B32` with the same numeric value as `from`.
+routine B32(from: U8) -> B32
+  return LLVM::unsigned_to_float[U8, B32](from)
 
-### Converts `from` to the nearest representable `F64`.
+### Converts `from` to the nearest representable `B64`.
 ### :param from: The `U8` value to convert.
-### :returns: An `F64` with the same numeric value as `from`.
-routine F64(from: U8) -> F64
-  return LLVM::unsigned_to_float[U8, F64](from)
+### :returns: An `B64` with the same numeric value as `from`.
+routine B64(from: U8) -> B64
+  return LLVM::unsigned_to_float[U8, B64](from)
 
 ### Returns `false` if `from` is `0`; `true` for any other value.
 ### :param from: The `U8` value to convert.

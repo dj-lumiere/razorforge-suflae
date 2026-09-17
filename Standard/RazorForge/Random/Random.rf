@@ -70,10 +70,10 @@ routine Random.next_u32() -> U32
 
 ### Advances the generator and returns the next double in the half-open unit
 ### interval `[0.0, 1.0)`.
-### Uses the top 53 bits of a fresh draw, matching the mantissa width of `F64`.
-### :returns: A uniformly distributed `F64` in `[0.0, 1.0)`.
-routine Random.next_f64() -> F64
-  return F64(from: me.next_u64() >>> 11u32) / 9007199254740992.0_f64
+### Uses the top 53 bits of a fresh draw, matching the mantissa width of `B64`.
+### :returns: A uniformly distributed `B64` in `[0.0, 1.0)`.
+routine Random.next_b64() -> B64
+  return B64(from: me.next_u64() >>> 11u32) / 9007199254740992.0_b64
 
 ### Returns whether a Bernoulli trial with the given success probability
 ### succeeds. A probability of `0.0` never succeeds and `1.0` always does.
@@ -81,8 +81,8 @@ routine Random.next_f64() -> F64
 ###   handled by clamping behaviour (`<= 0.0` never succeeds, `>= 1.0` always
 ###   succeeds).
 ### :returns: `true` with the given probability, otherwise `false`.
-routine Random.chance(probability: F64) -> Bool
-  return me.next_f64() < probability
+routine Random.chance(probability: B64) -> Bool
+  return me.next_b64() < probability
 
 ### Returns a uniformly distributed value in the half-open range
 ### `[low, high)`, advancing the generator once.

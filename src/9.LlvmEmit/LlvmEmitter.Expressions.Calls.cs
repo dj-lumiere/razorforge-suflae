@@ -496,7 +496,7 @@ public partial class LlvmEmitter
 
         // When SA resolved a real single-parameter creator routine, that routine IS the conversion.
         // Its body handles every backend shape correctly — scalar casts for @llvm primitives, and
-        // BID/IEEE encoding for carrier records (F128/F256/D32/D64/D128/Decimal). Honor it —
+        // BID/IEEE encoding for carrier records (B128/F256/D32/D64/D128/Decimal). Honor it —
         // never inline a scalar cast that would bypass the encoding and corrupt carrier values.
         // The backend must not re-decide a conversion the resolver already settled.
         if (resolvedRoutine is { IsSynthesized: false, IsCreator: true, Parameters.Count: 1 })
@@ -608,8 +608,8 @@ public partial class LlvmEmitter
         // conversion SOURCE: it becomes the `from:` argument, NOT an implicit `me`. Emit the
         // resolved creator call directly — no re-resolution, no inline scalar-cast heuristic. The
         // numeric `create` bodies do the real cast (e.g. U64.create(from: U8) = zero_extend),
-        // which is also why F128 is correct here: its i128 backend is an IEEE bit carrier, so a
-        // scalar cast would reinterpret integer bits as float bits (the old s128→F128 NaN bug).
+        // which is also why B128 is correct here: its i128 backend is an IEEE bit carrier, so a
+        // scalar cast would reinterpret integer bits as float bits (the old s128→B128 NaN bug).
         if (EmitMemberConversionCall(sb: sb,
                 loweringKind: loweringKind,
                 receiver: receiver,
@@ -1021,10 +1021,10 @@ public partial class LlvmEmitter
     // ── Helpers extracted from EmitFreeCallInstruction to keep cognitive complexity ≤ 15 ──────────
 
     /// <summary>
-    /// Iterates the argument lists in place and bitcasts any <c>half</c> (F16) argument to
+    /// Iterates the argument lists in place and bitcasts any <c>half</c> (B16) argument to
     /// <c>i16</c>, as required by the C ABI on all supported targets.
     /// </summary>
-    private void CoerceCExternF16Arguments(StringBuilder sb, List<string> argValues,
+    private void CoerceCExternB16Arguments(StringBuilder sb, List<string> argValues,
         List<string> argTypes)
     {
         for (int i = 0; i < argTypes.Count; i++)
@@ -1042,7 +1042,7 @@ public partial class LlvmEmitter
     /// <summary>
     /// Emits the final LLVM call instruction for a free-function call and returns the result
     /// temporary. Handles all four return paths: sret (ABI-indirect struct), coerced struct
-    /// (Phase-2 ABI integer), void, and normal value (including C-extern F16 bitcast round-trip).
+    /// (Phase-2 ABI integer), void, and normal value (including C-extern B16 bitcast round-trip).
     /// </summary>
     private string EmitFreeCallAndGetResult(StringBuilder sb, List<Expression> arguments,
         RoutineInfo? routine, FreeCallSpec spec, List<string> argTypes, List<string> argValues)
@@ -2213,11 +2213,11 @@ public partial class LlvmEmitter
             _generatedRoutines.Add(item: mangledName);
         }
 
-        // For external("C") functions, F16 (half) params must be bitcast to i16 (C ABI)
+        // For external("C") functions, B16 (half) params must be bitcast to i16 (C ABI)
         bool isCExtern = routine is { CallingConvention: "C" };
         if (isCExtern)
         {
-            CoerceCExternF16Arguments(sb: sb, argValues: argValues, argTypes: argTypes);
+            CoerceCExternB16Arguments(sb: sb, argValues: argValues, argTypes: argTypes);
         }
 
         string returnType = routine?.ReturnType != null

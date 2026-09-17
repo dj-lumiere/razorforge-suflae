@@ -579,10 +579,10 @@ public partial class LlvmEmitter
     /// singleton (<c>__globals__.g = __globals__.g.add(d)</c>) — and emits a single seq-cst
     /// <c>atomicrmw</c> on the field ADDRESS (lock-free, thread-safe) instead of the locked
     /// load-compute-store. Returns true when handled. Only fires when the field is an atomic width
-    /// (i8..i64 / f32 / f64) and the delta touches no other global field (see
+    /// (i8..i64 / b32 / b64) and the delta touches no other global field (see
     /// <see cref="TryMatchAtomicModuleGlobalRmw"/>); the matching statement is left UN-bracketed by
     /// <c>RoamedLockBracketLoweringPass</c>, so this is the only code that touches the field. Heavy-value
-    /// fields (S128/S256/F16/F128/Text/Decimal/records) fall through to the ordinary locked field write.
+    /// fields (S128/S256/B16/B128/Text/Decimal/records) fall through to the ordinary locked field write.
     /// </summary>
     private bool TryEmitAtomicGlobalRmw(StringBuilder sb, Expression target, Expression valueExpr)
     {
@@ -611,7 +611,7 @@ public partial class LlvmEmitter
 
     /// <summary>
     /// Matches <c>__globals__.field = __globals__.field.add|sub(delta)</c> where <c>field</c> is an
-    /// atomic-width scalar (i8..i64 / f32 / f64) of the <c>__ModuleGlobals</c> singleton and <c>delta</c>
+    /// atomic-width scalar (i8..i64 / b32 / b64) of the <c>__ModuleGlobals</c> singleton and <c>delta</c>
     /// touches no global field. Shared by codegen (emits the <c>atomicrmw</c>) and
     /// <c>RoamedLockBracketLoweringPass</c> (skips the access-lock bracket for the matched statement) so
     /// the two agree exactly on which RMWs are lock-free.
@@ -723,7 +723,7 @@ public partial class LlvmEmitter
         {
             case "S8" or "S16" or "S32" or "S64" or "U8" or "U16" or "U32" or "U64":
                 return true;
-            case "F32" or "F64":
+            case "B32" or "B64":
                 isFloat = true;
                 return true;
             default:

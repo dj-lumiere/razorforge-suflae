@@ -1286,10 +1286,10 @@ public sealed partial class SemanticVerifier
         // `Type(...)` written *inside* Type's own `create` only needs the
         // inline base case when it resolves back to the SAME `create` we are
         // compiling — that is the genuine self-recursion to break. A call to a
-        // *different* overload (e.g. `F128(from: hi)` resolving to
+        // *different* overload (e.g. `B128(from: hi)` resolving to
         // `create(from: U64)` inside `create(from: U128)`) is an ordinary
         // conversion and must keep its resolved routine; otherwise codegen is left
-        // to guess and, for bit-carrier types like F128, mis-lowers it to a raw
+        // to guess and, for bit-carrier types like B128, mis-lowers it to a raw
         // `sext`/reinterpret of the integer into the i128 IEEE carrier.
         bool insideOwnCreate = _currentRoutine is { IsCreator: true } currentCreate &&
                                currentCreate.OwnerType != null &&

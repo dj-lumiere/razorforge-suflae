@@ -13,6 +13,6 @@ a dot b: 100
 a length_squared: 30
 a == a2: true
 a == b: false
-c (F64x2): <1.5, 1.5>
+c (B64x2): <1.5, 1.5>
 c sum: 3
 DONE

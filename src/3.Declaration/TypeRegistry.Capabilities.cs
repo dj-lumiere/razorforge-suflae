@@ -425,7 +425,7 @@ public sealed partial class TypeRegistry
     {
         // "void" (zero-sized) and any layout without "ptr" auto-derives.
         // Substring check is safe: LLVM type syntax uses "ptr" only as a literal type
-        // token; no primitive scalar contains the substring (i8, i64, f32, [N x T], etc.).
+        // token; no primitive scalar contains the substring (i8, i64, b32, [N x T], etc.).
         return layout.Contains(value: "ptr", comparisonType: StringComparison.Ordinal);
     }
 

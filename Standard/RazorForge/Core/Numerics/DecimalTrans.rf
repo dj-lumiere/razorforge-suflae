@@ -77,6 +77,10 @@ routine Decimal.cbrt() -> Decimal
 routine hypot(x: Decimal, y: Decimal) -> Decimal
   return dec_of_d128(x: hypot(x: dec_to_d128(x: x), y: dec_to_d128(x: y)))
 
+### 3D Euclidean norm sqrt(x^2 + y^2 + z^2), computed without overflow/underflow.
+routine hypot(x: Decimal, y: Decimal, z: Decimal) -> Decimal
+  return dec_of_d128(x: hypot(x: dec_to_d128(x: x), y: dec_to_d128(x: y), z: dec_to_d128(x: z)))
+
 ### Fused multiply-add me*b + c with a single rounding.
 routine Decimal.fma!(b: Decimal, c: Decimal) -> Decimal
   return dec_of_d128(x: dec_to_d128(x: me).fma(b: dec_to_d128(x: b), c: dec_to_d128(x: c)))

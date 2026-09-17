@@ -9,55 +9,55 @@ import IO/Console
 # by-value param, sret-sized returns, and value semantics (callee gets a copy).
 
 record Vec2
-  posted x: F32
-  posted y: F32
+  posted x: B32
+  posted y: B32
 
 record Vec2d
-  posted x: F64
-  posted y: F64
+  posted x: B64
+  posted y: B64
 
 record Mixed
   posted n: S32
-  posted f: F32
+  posted f: B32
 
 record Vec3
-  posted x: F32
-  posted y: F32
-  posted z: F32
+  posted x: B32
+  posted y: B32
+  posted z: B32
 
 @positional
 routine add2(a: Vec2, b: Vec2) -> Vec2
   return Vec2(x: a.x + b.x, y: a.y + b.y)
 
 @positional
-routine dot2(a: Vec2, b: Vec2) -> F32
+routine dot2(a: Vec2, b: Vec2) -> B32
   return a.x * b.x + a.y * b.y
 
 @positional
-routine scale2d(v: Vec2d, s: F64) -> Vec2d
+routine scale2d(v: Vec2d, s: B64) -> Vec2d
   return Vec2d(x: v.x * s, y: v.y * s)
 
 @positional
 routine bump(m: Mixed) -> Mixed
-  return Mixed(n: m.n + 1_s32, f: m.f * 2.0_f32)
+  return Mixed(n: m.n + 1_s32, f: m.f * 2.0_b32)
 
 @positional
 routine rot3(v: Vec3) -> Vec3
   return Vec3(x: v.y, y: v.z, z: v.x)
 
 routine start()
-  var p = Vec2(x: 1.0_f32, y: 2.0_f32)
-  var q = add2(p, Vec2(x: 3.0_f32, y: 4.0_f32))
+  var p = Vec2(x: 1.0_b32, y: 2.0_b32)
+  var q = add2(p, Vec2(x: 3.0_b32, y: 4.0_b32))
   show(f"add2: {q.x},{q.y}")
-  show(f"dot2: {dot2(p, Vec2(x: 5.0_f32, y: 6.0_f32))}")
+  show(f"dot2: {dot2(p, Vec2(x: 5.0_b32, y: 6.0_b32))}")
 
-  var d = scale2d(Vec2d(x: 1.5_f64, y: 2.5_f64), 2.0_f64)
+  var d = scale2d(Vec2d(x: 1.5_b64, y: 2.5_b64), 2.0_b64)
   show(f"scale2d: {d.x},{d.y}")
 
-  var m = bump(Mixed(n: 41_s32, f: 1.25_f32))
+  var m = bump(Mixed(n: 41_s32, f: 1.25_b32))
   show(f"bump: {m.n},{m.f}")
 
-  var r = rot3(Vec3(x: 1.0_f32, y: 2.0_f32, z: 3.0_f32))
+  var r = rot3(Vec3(x: 1.0_b32, y: 2.0_b32, z: 3.0_b32))
   show(f"rot3: {r.x},{r.y},{r.z}")
 
   show(f"orig unchanged: {p.x},{p.y}")

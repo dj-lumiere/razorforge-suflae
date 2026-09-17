@@ -2945,7 +2945,7 @@ internal static class GenericAstRewriter
         // Annotate with the ACTUAL member's type on the object's concrete type when it can be
         // determined. This differs from the expand-source member type when the object is a CONTAINER
         // whose members are derived from the source type — the SoA case: `me.x` on a `SplitArray[Point]`
-        // is the column `Array[F32, N]`, not the source field `F32`. For the common case (the object IS
+        // is the column `Array[B32, N]`, not the source field `B32`. For the common case (the object IS
         // the expand source, e.g. `me` is the record being walked, or `result` is a fresh element), the
         // lookup falls back to the source member type.
         TypeSymbol? objType = ResolveSpliceObjectType(obj: obj, ctx: ctx);
@@ -3069,7 +3069,7 @@ internal static class GenericAstRewriter
 
     /// <summary>True when <paramref name="type"/> is a container declaring decl-position
     /// <c>expand</c> (SoA) columns — its <c>${m.name}</c> members are generated column types
-    /// (<c>Array[F32, N]</c>) that diverge from the expand source's member types, so their
+    /// (<c>Array[B32, N]</c>) that diverge from the expand source's member types, so their
     /// monomorph-computed type must be preserved rather than overwritten with the deferred splice
     /// placeholder.</summary>
     private static bool IsSoAContainerType(TypeSymbol? type)

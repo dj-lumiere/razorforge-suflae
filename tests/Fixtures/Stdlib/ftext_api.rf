@@ -4,7 +4,7 @@ import IO/Console
 # F-string formatting — covers the {value} / {value:?} forms and conversion paths.
 routine start()
   var n: S64 = 42
-  var f: F64 = 3.14_f64
+  var f: B64 = 3.14_b64
   var b: Bool = true
   var t: Text = "hello"
 

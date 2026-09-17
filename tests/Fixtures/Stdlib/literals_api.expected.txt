@@ -17,21 +17,22 @@ hex: 255
 hex mixed: 3735928559
 binary: 10
 sep: 1234567
-f16: 1.5
-f32: 3.14
-f64: 2.5
-f128: 1.25
+b16: 1.5
+b32: 3.14
+b64: 2.5
+b128: 1.25
 sci: 1500
 d32: 3.5
 d64: 2.5
 d128: 1.25
 dn: 3.14
 dn exact: 0.3
-j32: 0+2j
-j64: 0+3j
-j64 short: 0+4j
-j128: 0+5j
-jn: 0+6j
+i default: 0+2i
+i sep: 0+4i
+c default: 3+4i
+c in C64: 1+3i
+c in C256: 2+5i
+c in Complex: 3+6i
 true: true
 false: false
 text: hello

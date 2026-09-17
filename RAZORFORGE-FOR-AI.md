@@ -123,9 +123,11 @@ binding RazorForge has.
 ## 3. Types
 
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
-- Floats: `F16 F32 F64 F128` · decimals: `D32 D64 D128`
-- Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`)
-- Complex: `j32/j64/j128/jn` literal suffixes (e.g. `3j64`)
+- Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
+- Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`), `Real` (binary), `Complex`
+- Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
+  `i` (also `_i`): `3 + 4i`. Width/radix comes from context (a `C64`/`Complex` slot); with no context it
+  defaults to `C128`. Plain `3` fills the real part, `4i` the imaginary.
 - `Bool`, `Text` (UTF-32 string), `Character`, `Byte`, `Bytes`
 - `Duration`, `ByteSize` (with literal forms), `Moment`/`LocalMoment` temporals
 - Collections: `List[T]`, `Dict[K,V]`, `Set[T]`, `CircularList[T]`, `BitList`, `PriorityQueue[TPriority, TElement]`,
@@ -217,8 +219,8 @@ when v
 routine add(a: S64, b: S64) -> S64
   return a + b
 
-routine Point.magnitude() -> F64        # method: Type.name, receiver is `me`
-  return F64(me.x * me.x + me.y * me.y).sqrt()
+routine Point.magnitude() -> B64        # method: Type.name, receiver is `me`
+  return B64(me.x * me.x + me.y * me.y).sqrt()
 
 routine get_text!(n: S64) -> Text      # `!` = failable
   when n

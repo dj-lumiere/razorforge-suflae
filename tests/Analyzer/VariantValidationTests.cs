@@ -40,7 +40,7 @@ public class VariantValidationTests
         string source = """
                         variant Value
                           S32
-                          F64
+                          B64
                           None
                         """;
 

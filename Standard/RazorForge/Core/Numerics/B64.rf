@@ -1,10 +1,10 @@
 module Core
 
 import Collections
-# Core F64 type definition - maps to LLVM double
+# Core B64 type definition - maps to LLVM double
 
 ### A 64-bit IEEE 754 binary floating-point value (double precision).
-### `F64` is the default floating-point type for general scientific, financial,
+### `B64` is the default floating-point type for general scientific, financial,
 ### and system-level numeric code in RazorForge. With 53 bits of significand, it
 ### provides about 15–16 significant decimal digits of precision and can represent
 ### values up to approximately ±1.8 × 10³⁰⁸.
@@ -13,139 +13,139 @@ import Collections
 ### non-finite (infinity or NaN). Use `truediv_unchecked` for raw IEEE 754
 ### semantics without the overflow guard.
 @llvm("double")
-record F64 obeys Numeric, Ordered, Assignable, Copyable, Splittable
+record B64 obeys Numeric, Ordered, Assignable, Copyable, Splittable
   pass
 
 # IEEE 754 double precision constants
-preset F64_EPSILON: F64 = 2.220446049250313e-16_f64
-preset F64_MIN: F64 = -1.7976931348623157e+308_f64
-preset F64_MAX: F64 = 1.7976931348623157e+308_f64
-preset F64_MIN_POSITIVE: F64 = 2.2250738585072014e-308_f64
-preset F64_ZERO: F64 = 0.0_f64
-preset F64_ONE: F64 = 1.0_f64
-preset F64_NAN: F64 = nan_f64
-preset F64_INFINITY: F64 = inf_f64
-preset F64_PI: F64 = 3.141592653589793_f64
-preset F64_E: F64 = 2.718281828459045_f64
-preset F64_SQRT_2: F64 = 1.4142135623730951_f64
-preset F64_LN_2: F64 = 0.6931471805599453_f64
-preset F64_LN_10: F64 = 2.302585092994046_f64
+preset B64_EPSILON: B64 = 2.220446049250313e-16_b64
+preset B64_MIN: B64 = -1.7976931348623157e+308_b64
+preset B64_MAX: B64 = 1.7976931348623157e+308_b64
+preset B64_MIN_POSITIVE: B64 = 2.2250738585072014e-308_b64
+preset B64_ZERO: B64 = 0.0_b64
+preset B64_ONE: B64 = 1.0_b64
+preset B64_NAN: B64 = nan_b64
+preset B64_INFINITY: B64 = inf_b64
+preset B64_PI: B64 = 3.141592653589793_b64
+preset B64_E: B64 = 2.718281828459045_b64
+preset B64_SQRT_2: B64 = 1.4142135623730951_b64
+preset B64_LN_2: B64 = 0.6931471805599453_b64
+preset B64_LN_10: B64 = 2.302585092994046_b64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Converts an `S8` to `F64`. The result is exact for all values.
+### Converts an `S8` to `B64`. The result is exact for all values.
 ### :param from: The signed 8-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: S8) -> F64
-  return LLVM::signed_to_float[S8, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: S8) -> B64
+  return LLVM::signed_to_float[S8, B64](from)
 
-### Converts an `S16` to `F64`. The result is exact for all values.
+### Converts an `S16` to `B64`. The result is exact for all values.
 ### :param from: The signed 16-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: S16) -> F64
-  return LLVM::signed_to_float[S16, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: S16) -> B64
+  return LLVM::signed_to_float[S16, B64](from)
 
-### Converts an `S32` to `F64`. The result is exact for all values.
+### Converts an `S32` to `B64`. The result is exact for all values.
 ### :param from: The signed 32-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: S32) -> F64
-  return LLVM::signed_to_float[S32, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: S32) -> B64
+  return LLVM::signed_to_float[S32, B64](from)
 
-### Converts an `S64` to `F64`.
+### Converts an `S64` to `B64`.
 ### Values with magnitude larger than 2⁵³ may be rounded to the nearest
 ### representable double.
 ### :param from: The signed 64-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: S64) -> F64
-  return LLVM::signed_to_float[S64, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: S64) -> B64
+  return LLVM::signed_to_float[S64, B64](from)
 
-### Converts an `S128` to `F64`.
+### Converts an `S128` to `B64`.
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The signed 128-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: S128) -> F64
-  return LLVM::signed_to_float[S128, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: S128) -> B64
+  return LLVM::signed_to_float[S128, B64](from)
 
-### Converts a `U8` to `F64`. The result is exact for all values.
+### Converts a `U8` to `B64`. The result is exact for all values.
 ### :param from: The unsigned 8-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: U8) -> F64
-  return LLVM::unsigned_to_float[U8, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: U8) -> B64
+  return LLVM::unsigned_to_float[U8, B64](from)
 
-### Converts a `U16` to `F64`. The result is exact for all values.
+### Converts a `U16` to `B64`. The result is exact for all values.
 ### :param from: The unsigned 16-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: U16) -> F64
-  return LLVM::unsigned_to_float[U16, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: U16) -> B64
+  return LLVM::unsigned_to_float[U16, B64](from)
 
-### Converts a `U32` to `F64`. The result is exact for all values.
+### Converts a `U32` to `B64`. The result is exact for all values.
 ### :param from: The unsigned 32-bit integer to convert.
-### :returns: The corresponding `F64` value.
-routine F64(from: U32) -> F64
-  return LLVM::unsigned_to_float[U32, F64](from)
+### :returns: The corresponding `B64` value.
+routine B64(from: U32) -> B64
+  return LLVM::unsigned_to_float[U32, B64](from)
 
-### Converts a `U64` to `F64`.
+### Converts a `U64` to `B64`.
 ### Values larger than 2⁵³ may be rounded to the nearest representable double.
 ### :param from: The unsigned 64-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: U64) -> F64
-  return LLVM::unsigned_to_float[U64, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: U64) -> B64
+  return LLVM::unsigned_to_float[U64, B64](from)
 
-### Converts a `U128` to `F64`.
+### Converts a `U128` to `B64`.
 ### Precision is limited to approximately 53 bits of significand.
 ### :param from: The unsigned 128-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: U128) -> F64
-  return LLVM::unsigned_to_float[U128, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: U128) -> B64
+  return LLVM::unsigned_to_float[U128, B64](from)
 
-### Converts an `S256` to `F64` (precision limited to ~53 bits of significand).
+### Converts an `S256` to `B64` (precision limited to ~53 bits of significand).
 ### :param from: The signed 256-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: S256) -> F64
-  return LLVM::signed_to_float[S256, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: S256) -> B64
+  return LLVM::signed_to_float[S256, B64](from)
 
-### Converts a `U256` to `F64` (precision limited to ~53 bits of significand).
+### Converts a `U256` to `B64` (precision limited to ~53 bits of significand).
 ### :param from: The unsigned 256-bit integer to convert.
-### :returns: The closest representable `F64` value.
-routine F64(from: U256) -> F64
-  return LLVM::unsigned_to_float[U256, F64](from)
+### :returns: The closest representable `B64` value.
+routine B64(from: U256) -> B64
+  return LLVM::unsigned_to_float[U256, B64](from)
 
 ### Widens a half-precision float to double precision.
-### :param from: The `F16` value to widen.
-### :returns: An `F64` carrying the same numeric value.
-routine F64(from: F16) -> F64
-  return LLVM::float_extend[F16, F64](from)
+### :param from: The `B16` value to widen.
+### :returns: An `B64` carrying the same numeric value.
+routine B64(from: B16) -> B64
+  return LLVM::float_extend[B16, B64](from)
 
 ### Widens a single-precision float to double precision.
-### :param from: The `F32` value to widen.
-### :returns: An `F64` carrying the same numeric value.
-routine F64(from: F32) -> F64
-  return LLVM::float_extend[F32, F64](from)
+### :param from: The `B32` value to widen.
+### :returns: An `B64` carrying the same numeric value.
+routine B64(from: B32) -> B64
+  return LLVM::float_extend[B32, B64](from)
 
-### Returns an existing `F64` unchanged.
+### Returns an existing `B64` unchanged.
 ### :param from: The double-precision value to forward.
 ### :returns: `from`.
-routine F64(from: F64) -> F64
+routine B64(from: B64) -> B64
   return from
 
-### (`F64(from: F128)` is provided by the quadruple-precision engine — `F128.rf` — which owns
+### (`B64(from: B128)` is provided by the quadruple-precision engine — `B128.rf` — which owns
 ### the bit-surgery narrowing; a forwarding stub here would recurse into itself.)
 
-### (`F64(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
+### (`B64(from: D32)` is provided by the decimal32 engine — `D32Trans.rf`.)
 
 ### Converts a decimal64 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
-### :returns: The closest representable `F64` value.
-routine F64(from: D64) -> F64
-  return d64_to_f128(x: from).F64()
+### :returns: The closest representable `B64` value.
+routine B64(from: D64) -> B64
+  return d64_to_b128(x: from).B64()
 
 ### Converts a decimal128 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
-### :returns: The closest representable `F64` value.
-routine F64(from: D128) -> F64
-  return d128_to_uf192(x: from).to_f128().F64()
+### :returns: The closest representable `B64` value.
+routine B64(from: D128) -> B64
+  return d128_to_uf192(x: from).to_b128().B64()
 
 # ============================================================================
 # Arithmetic Operations
@@ -166,8 +166,8 @@ routine F64(from: D128) -> F64
 ### (domain). Use `add_unchecked` for raw IEEE 754 propagation.
 ### :param you: The addend.
 ### :returns: The double-precision sum (always finite).
-routine F64.add!(you: F64) -> F64
-  var r = LLVM::float_add[F64](a: me, b: you)
+routine B64.add!(you: B64) -> B64
+  var r = LLVM::float_add[B64](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -178,20 +178,33 @@ routine F64.add!(you: F64) -> F64
 ### Use `sub_unchecked` for raw IEEE 754 propagation.
 ### :param you: The value to subtract.
 ### :returns: The double-precision difference (always finite).
-routine F64.sub!(you: F64) -> F64
-  var r = LLVM::float_sub[F64](a: me, b: you)
+routine B64.sub!(you: B64) -> B64
+  var r = LLVM::float_sub[B64](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
+### Returns `me + you`, promoting the real `me` to complex (imaginary part 0). Only `+`/`-` allow
+### real↔complex mixing; the component width must match (B64 pairs with C128).
+### :param you: The complex addend.
+### :returns: The complex sum.
+routine B64.add(you: C128) -> C128
+  return C128(from: me).add(you)
+
+### Returns `me - you`, promoting the real `me` to complex (imaginary part 0).
+### :param you: The complex value to subtract.
+### :returns: The complex difference.
+routine B64.sub(you: C128) -> C128
+  return C128(from: me).sub(you)
+
 ### Returns `me * you`. Checked: crashes if the IEEE result is non-finite.
 ### Use `mul_unchecked` for raw IEEE 754 propagation.
 ### :param you: The multiplier.
 ### :returns: The double-precision product (always finite).
-routine F64.mul!(you: F64) -> F64
-  var r = LLVM::float_mul[F64](a: me, b: you)
+routine B64.mul!(you: B64) -> B64
+  var r = LLVM::float_mul[B64](a: me, b: you)
   if r.is_finite()
     return r
   if r.is_nan()
@@ -203,8 +216,8 @@ routine F64.mul!(you: F64) -> F64
 ### IEEE 754 (`x/0` -> ±inf, `0/0` -> NaN), or `(a / b).finite()` for recoverable handling.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient (always finite).
-routine F64.truediv!(you: F64) -> F64
-  var r = LLVM::float_div[F64](a: me, b: you)
+routine B64.truediv!(you: B64) -> B64
+  var r = LLVM::float_div[B64](a: me, b: you)
   if r.is_finite()
     return r
   if you.is_zero() and not me.is_zero()
@@ -219,15 +232,15 @@ routine F64.truediv!(you: F64) -> F64
 ### crash instead, so a checked `(a * b)` would already have crashed before reaching `finite!`.)
 ### :returns: `me`, when finite.
 ### :throws: {NumericOverflowError} if `me` is ±infinity or NaN.
-routine F64.finite!() -> F64
+routine B64.finite!() -> B64
   if not me.is_finite()
-    throw NumericOverflowError(description: f"F64 value is non-finite: {me}")
+    throw NumericOverflowError(description: f"B64 value is non-finite: {me}")
   return me
 
 ### Returns the arithmetic negation of this value.
 ### :returns: `-me` in double precision.
-routine F64.neg() -> F64
-  return LLVM::float_neg[F64](me)
+routine B64.neg() -> B64
+  return LLVM::float_neg[B64](me)
 
 # Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). inf/NaN
 # are valid IEEE values, not memory hazards, so these are plain (NOT `dangerous`) — the operator
@@ -237,20 +250,20 @@ routine F64.neg() -> F64
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient, possibly ±infinity or NaN.
-routine F64.truediv_unchecked(you: F64) -> F64
-  return LLVM::float_div[F64](a: me, b: you)
+routine B64.truediv_unchecked(you: B64) -> B64
+  return LLVM::float_div[B64](a: me, b: you)
 
 ### Returns `me + you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.add_unchecked(you: F64) -> F64
-  return LLVM::float_add[F64](a: me, b: you)
+routine B64.add_unchecked(you: B64) -> B64
+  return LLVM::float_add[B64](a: me, b: you)
 
 ### Returns `me - you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.sub_unchecked(you: F64) -> F64
-  return LLVM::float_sub[F64](a: me, b: you)
+routine B64.sub_unchecked(you: B64) -> B64
+  return LLVM::float_sub[B64](a: me, b: you)
 
 ### Returns `me * you` with raw IEEE 754 propagation (may yield ±infinity or NaN). No crash.
-routine F64.mul_unchecked(you: F64) -> F64
-  return LLVM::float_mul[F64](a: me, b: you)
+routine B64.mul_unchecked(you: B64) -> B64
+  return LLVM::float_mul[B64](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -259,16 +272,16 @@ routine F64.mul_unchecked(you: F64) -> F64
 ### Returns `true` if both values are equal under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` if either operand is NaN.
-routine F64.eq(you: F64) -> Bool
-  return LLVM::float_eq[F64](a: me, b: you)
+routine B64.eq(you: B64) -> Bool
+  return LLVM::float_eq[B64](a: me, b: you)
 
 ### Compares this value with `you` under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
-routine F64.cmp(you: F64) -> ComparisonSign
-  if LLVM::float_lt[F64](a: me, b: you)
+routine B64.cmp(you: B64) -> ComparisonSign
+  if LLVM::float_lt[B64](a: me, b: you)
     return ME_SMALL
-  if LLVM::float_gt[F64](a: me, b: you)
+  if LLVM::float_gt[B64](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -280,7 +293,7 @@ routine F64.cmp(you: F64) -> ComparisonSign
 ### NaN).
 ### Use `sqrt_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision square root (always finite).
-routine F64.sqrt!() -> F64
+routine B64.sqrt!() -> B64
   var r = me.sqrt_unchecked()
   if r.is_finite()
     return r
@@ -289,48 +302,48 @@ routine F64.sqrt!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns the square root with raw IEEE 754 propagation (`sqrt(<0)` -> NaN).
-routine F64.sqrt_unchecked() -> F64
-  return LLVM::sqrt[F64](me)
+routine B64.sqrt_unchecked() -> B64
+  return LLVM::sqrt[B64](me)
 
 ### Returns the absolute value.
 ### :returns: `|me|` in double precision.
-routine F64.abs() -> F64
-  return LLVM::float_abs[F64](me)
+routine B64.abs() -> B64
+  return LLVM::float_abs[B64](me)
 
 ### Rounds this value toward negative infinity.
-### :returns: The greatest integral-valued `F64` not larger than `me`.
-routine F64.floor() -> F64
-  return LLVM::floor[F64](me)
+### :returns: The greatest integral-valued `B64` not larger than `me`.
+routine B64.floor() -> B64
+  return LLVM::floor[B64](me)
 
 ### Rounds this value toward positive infinity.
-### :returns: The smallest integral-valued `F64` not smaller than `me`.
-routine F64.ceil() -> F64
-  return LLVM::ceil[F64](me)
+### :returns: The smallest integral-valued `B64` not smaller than `me`.
+routine B64.ceil() -> B64
+  return LLVM::ceil[B64](me)
 
-### Rounds this value to the nearest integral-valued `F64`.
+### Rounds this value to the nearest integral-valued `B64`.
 ### :returns: The rounded result in double precision.
-routine F64.round() -> F64
-  return LLVM::round[F64](me)
+routine B64.round() -> B64
+  return LLVM::round[B64](me)
 
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in double precision.
-routine F64.int_truncate() -> F64
-  return LLVM::float_truncate[F64](me)
+routine B64.int_truncate() -> B64
+  return LLVM::float_truncate[B64](me)
 
 ### Returns the sine of this value, interpreting it as radians.
 ### :returns: The double-precision sine result.
-routine F64.sin() -> F64
-  return LLVM::sin[F64](me)
+routine B64.sin() -> B64
+  return LLVM::sin[B64](me)
 
 ### Returns the cosine of this value, interpreting it as radians.
 ### :returns: The double-precision cosine result.
-routine F64.cos() -> F64
-  return LLVM::cos[F64](me)
+routine B64.cos() -> B64
+  return LLVM::cos[B64](me)
 
 ### Returns `e` raised to this value. Checked: crashes (overflow) if the result is ±infinity.
 ### Use `exp_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision exponential result (always finite).
-routine F64.exp!() -> F64
+routine B64.exp!() -> B64
   var r = me.exp_unchecked()
   if r.is_finite()
     return r
@@ -339,13 +352,13 @@ routine F64.exp!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns `e` raised to this value with raw IEEE 754 propagation (overflow -> +infinity).
-routine F64.exp_unchecked() -> F64
-  return LLVM::exp[F64](me)
+routine B64.exp_unchecked() -> B64
+  return LLVM::exp[B64](me)
 
 ### Returns the natural logarithm. Checked: crashes on a non-finite result (`log(0)` -> -inf,
 ### `log(<0)` -> NaN). Use `log_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision natural-log result (always finite).
-routine F64.log!() -> F64
+routine B64.log!() -> B64
   var r = me.log_unchecked()
   if r.is_finite()
     return r
@@ -355,13 +368,13 @@ routine F64.log!() -> F64
 
 ### Returns the natural logarithm with raw IEEE 754 propagation (`log(0)` -> -inf, `log(<0)` ->
 ### NaN).
-routine F64.log_unchecked() -> F64
-  return LLVM::log[F64](me)
+routine B64.log_unchecked() -> B64
+  return LLVM::log[B64](me)
 
 ### Returns the base-10 logarithm. Checked: crashes on a non-finite result.
 ### Use `log10_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision common-log result (always finite).
-routine F64.log10!() -> F64
+routine B64.log10!() -> B64
   var r = me.log10_unchecked()
   if r.is_finite()
     return r
@@ -370,8 +383,8 @@ routine F64.log10!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Returns the base-10 logarithm with raw IEEE 754 propagation.
-routine F64.log10_unchecked() -> F64
-  return LLVM::log10[F64](me)
+routine B64.log10_unchecked() -> B64
+  return LLVM::log10[B64](me)
 
 ### Raises this value to the power `exp`. Checked: crashes on a non-finite result (overflow -> inf,
 ### domain error like `(-1)^0.5` -> NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
@@ -382,14 +395,14 @@ routine F64.log10_unchecked() -> F64
 ### Raises this value to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp`, possibly ±infinity or NaN.
-routine F64.pow_unchecked(exp: F64) -> F64
-  return LLVM::pow[F64](me, exp)
+routine B64.pow_unchecked(exp: B64) -> B64
+  return LLVM::pow[B64](me, exp)
 
 ### `**` operator: raises this value to `exp`, checked (crashes on non-finite result).
 ### NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` (always finite).
-routine F64.pow!(exp: F64) -> F64
+routine B64.pow!(exp: B64) -> B64
   var r = me.pow_unchecked(exp)
   if r.is_finite()
     return r
@@ -400,8 +413,8 @@ routine F64.pow!(exp: F64) -> F64
 ### Returns this value with its sign bit replaced by the sign of `sign`.
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value with the magnitude of `me` and the sign of `sign`.
-routine F64.copysign(sign: F64) -> F64
-  return LLVM::copysign[F64](me, sign)
+routine B64.copysign(sign: B64) -> B64
+  return LLVM::copysign[B64](me, sign)
 
 # ============================================================================
 # Utility Methods
@@ -410,13 +423,13 @@ routine F64.copysign(sign: F64) -> F64
 ### Returns the smaller of this value and `you`.
 ### :param you: The value to compare against.
 ### :returns: The lower of the two values under the ordered comparison rules.
-routine F64.min(you: F64) -> F64
+routine B64.min(you: B64) -> B64
   return if me <= you then me else you
 
 ### Returns the larger of this value and `you`.
 ### :param you: The value to compare against.
 ### :returns: The greater of the two values under the ordered comparison rules.
-routine F64.max(you: F64) -> F64
+routine B64.max(you: B64) -> B64
   return if me >= you then me else you
 
 ### Restricts this value to the closed interval `[min_val, max_val]`.
@@ -424,32 +437,32 @@ routine F64.max(you: F64) -> F64
 ### :param max_val: The upper bound to enforce.
 ### :returns: `me` if already in range, otherwise the nearest bound.
 @positional
-routine F64.clamp(min_val: F64, max_val: F64) -> F64
+routine B64.clamp(min_val: B64, max_val: B64) -> B64
   return me.min(max_val).max(min_val)
 
 ### Returns `true` if this value is strictly positive (greater than zero).
 ### :returns: `true` if `me > 0.0`.
-routine F64.is_positive() -> Bool
-  return me > 0.0_f64
+routine B64.is_positive() -> Bool
+  return me > 0.0_b64
 
 ### Returns `true` if this value is strictly negative (less than zero).
 ### :returns: `true` if `me < 0.0`.
-routine F64.is_negative() -> Bool
-  return me < 0.0_f64
+routine B64.is_negative() -> Bool
+  return me < 0.0_b64
 
 ### Returns `true` if this value compares equal to zero.
 ### :returns: `true` if `me == 0.0`.
-routine F64.is_zero() -> Bool
-  return me == 0.0_f64
+routine B64.is_zero() -> Bool
+  return me == 0.0_b64
 
 ### Returns `true` when this value is neither NaN nor infinity.
 ### :returns: Whether the value is finite.
-routine F64.is_finite() -> Bool
+routine B64.is_finite() -> Bool
   return not me.is_nan() and not me.is_infinite()
 
 ### Returns `true` when this value encodes an IEEE 754 NaN.
 ### :returns: Whether the bit pattern represents a not-a-number payload.
-routine F64.is_nan() -> Bool
+routine B64.is_nan() -> Bool
   var bits = me.to_bits()
   var exponent = LLVM::bit_and(a: bits, b: 0x7FF0000000000000u64)
   var mantissa = LLVM::bit_and(a: bits, b: 0x000FFFFFFFFFFFFF_u64)
@@ -459,12 +472,12 @@ routine F64.is_nan() -> Bool
 ### arithmetic only ever produces quiet NaN, so this holds only for values from raw bits or
 ### `signaling_nan()`. `is_nan` stays true for both kinds.
 ### :returns: Whether the value is a signaling NaN.
-routine F64.is_signaling() -> Bool
+routine B64.is_signaling() -> Bool
   return me.is_nan() and LLVM::bit_and(a: me.to_bits(), b: 0x0008000000000000_u64) == 0_u64
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
-routine F64.is_infinite() -> Bool
+routine B64.is_infinite() -> Bool
   var bits = me.to_bits()
   var exponent = LLVM::bit_and(a: bits, b: 0x7FF0000000000000u64)
   var mantissa = LLVM::bit_and(a: bits, b: 0x000FFFFFFFFFFFFF_u64)
@@ -472,28 +485,28 @@ routine F64.is_infinite() -> Bool
 
 ### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
 ### :returns: A unit-sign value describing the sign of `me`.
-routine F64.signum() -> F64
+routine B64.signum() -> B64
   return when
-    me > 0.0_f64 => 1.0_f64
-    me < 0.0_f64 => -1.0_f64
-    else => 0.0_f64
+    me > 0.0_b64 => 1.0_b64
+    me < 0.0_b64 => -1.0_b64
+    else => 0.0_b64
 
 ### Reinterprets this float as its raw IEEE 754 bit pattern.
 ### :returns: The underlying `U64` encoding of this value.
-routine F64.to_bits() -> U64
-  return LLVM::reinterpret_bits[F64, U64](me)
+routine B64.to_bits() -> U64
+  return LLVM::reinterpret_bits[B64, U64](me)
 
-### Reinterprets a raw IEEE 754 bit pattern as an `F64`.
+### Reinterprets a raw IEEE 754 bit pattern as an `B64`.
 ### :param bits: The exact double-precision encoding to decode.
-### :returns: The `F64` value with that bit pattern.
-common routine F64.from_bits(bits: U64) -> F64
-  return LLVM::reinterpret_bits[U64, F64](bits)
+### :returns: The `B64` value with that bit pattern.
+common routine B64.from_bits(bits: U64) -> B64
+  return LLVM::reinterpret_bits[U64, B64](bits)
 
 ### Returns a signaling NaN (exponent all-ones, quiet bit clear, nonzero payload). For interop /
 ### testing; RazorForge arithmetic never produces one, and consuming it in checked arithmetic
 ### crashes.
-common routine F64.signaling_nan() -> F64
-  return F64.from_bits(bits: 0x7FF0000000000001_u64)
+common routine B64.signaling_nan() -> B64
+  return B64.from_bits(bits: 0x7FF0000000000001_u64)
 
 # ============================================================================
 # Text Representation and Parsing
@@ -502,80 +515,41 @@ common routine F64.signaling_nan() -> F64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @override
-routine F64.represent() -> Text
+routine B64.represent() -> Text
   if me.is_signaling()
     return "snan"
-  var cstr_result = C::rf_format_F64(me)
-  return Text(from: CStr(from_ptr: cstr_result))
+  return me.to_text(sig_digits: 15u64)
+
+### Renders this value to `sig_digits` significant decimal digits with C `%g`
+### layout (pure-RF exact-rational conversion).
+### :param sig_digits: The number of significant decimal digits (>= 1).
+### :returns: The resulting `Text` value.
+routine B64.to_text(sig_digits: U64) -> Text
+  return format_binary(value: me, sig: sig_digits)
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @override
-routine F64.diagnose() -> Text
-  return "F64(" + me.represent() + ")"
+routine B64.diagnose() -> Text
+  return "B64(" + me.represent() + ")"
 
-### Parses a decimal float literal into an `F64`.
+### Parses a decimal float literal into an `B64`.
 ### :param from_text: The text to parse. Accepts standard decimal notation and
 ###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
 ###   optional leading sign).
-### :returns: The `F64` value parsed from the input.
+### :returns: The `B64` value parsed from the input.
 ### :throws: {InvalidValueError} if the text is not a valid float literal.
-routine F64!(from_text: Text) -> F64
-  var len = from_text.count()
-  if len == 0u64
-    throw InvalidValueError(input: from_text, target: "F64")
-  var i = 0u64
-  var first = from_text[0u64]
-  if first == Character(0x002Bu32) or first == Character(0x002Du32)
-    i = 1u64
-    if i >= len
-      throw InvalidValueError(input: from_text, target: "F64")
-  var special = false
-  var rest = len - i
-  if rest >= 3u64
-    var c0 = from_text[i].to_lowercase()
-    var c1 = from_text[i + 1u64].to_lowercase()
-    var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      special = true
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      special = true
-    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      var c3 = from_text[i + 3u64].to_lowercase()
-      var c4 = from_text[i + 4u64].to_lowercase()
-      var c5 = from_text[i + 5u64].to_lowercase()
-      var c6 = from_text[i + 6u64].to_lowercase()
-      var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        special = true
-  if not special
-    var has_digit = false
-    var has_dot = false
-    var has_exp = false
-    while i < len
-      var ch = from_text[i]
-      if ch.is_numeric()
-        has_digit = true
-      elseif ch == Character(0x002Eu32)
-        if has_dot or has_exp
-          throw InvalidValueError(input: from_text, target: "F64")
-        has_dot = true
-      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-        if has_exp or not has_digit
-          throw InvalidValueError(input: from_text, target: "F64")
-        has_exp = true
-        has_digit = false
-        if i + 1u64 < len
-          var next_ch = from_text[i + 1u64]
-          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-            i = i + 1u64
-      else
-        throw InvalidValueError(input: from_text, target: "F64")
-      i = i + 1u64
-    if not has_digit
-      throw InvalidValueError(input: from_text, target: "F64")
-  var cstr_val = CStr(from: from_text)
-  return C::rf_parse_F64(cstr_val)
+routine B64!(from_text: Text) -> B64
+  var pc = parse_float_components(from_text: from_text, target: "B64")
+  if pc.kind == 3_s32
+    throw InvalidValueError(input: from_text, target: "B64")
+  if pc.kind == 1_s32
+    return B64_NAN
+  if pc.kind == 2_s32
+    if pc.is_neg
+      return -B64_INFINITY
+    return B64_INFINITY
+  return b64_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
 
 # ============================================================================
 # Hashing
@@ -587,8 +561,8 @@ routine F64!(from_text: Text) -> F64
 
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
-routine F64.to_bytes_le() -> Array[Byte, 8]
-  var raw = LLVM::reinterpret_bits[F64, U64](me)
+routine B64.to_bytes_le() -> Array[Byte, 8]
+  var raw = LLVM::reinterpret_bits[B64, U64](me)
   var result = Array[Byte, 8]()
   result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
   result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)))
@@ -602,8 +576,8 @@ routine F64.to_bytes_le() -> Array[Byte, 8]
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
-routine F64.to_bytes_be() -> Array[Byte, 8]
-  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[F64, U64](me))
+routine B64.to_bytes_be() -> Array[Byte, 8]
+  var raw = LLVM::byte_swap(LLVM::reinterpret_bits[B64, U64](me))
   var result = Array[Byte, 8]()
   result = LLVM::set_byte_at(array: result, index: 0u64, value: LLVM::int_truncate[U64, U8](raw))
   result = LLVM::set_byte_at(array: result, index: 1_u64, value: LLVM::int_truncate[U64, U8](LLVM::shift_right_unsigned(raw, 8_u64)))
@@ -619,82 +593,82 @@ routine F64.to_bytes_be() -> Array[Byte, 8]
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
-routine F64.hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: LLVM::reinterpret_bits[F64, U64](me), k0: k0, k1: k1)
+routine B64.hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: LLVM::reinterpret_bits[B64, U64](me), k0: k0, k1: k1)
 
 # ============================================================================
-# Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_f64_*
+# Platform libm (<math.h>) doubles via the runtime's UNIQUELY-NAMED rf_b64_*
 # passthroughs (native/runtime/math_functions.c). Unique names are essential: a
 # bare `atan`/`cbrt`/... (or a method `x.cbrt()`) resolves to UnpackedFloat's
 # same-named 0-arg generic wherever the engine is in scope (a resolver quirk).
-# erf/erfc/tgamma/lgamma have no rf_f64_ passthrough but also no UnpackedFloat
+# erf/erfc/tgamma/lgamma have no rf_b64_ passthrough but also no UnpackedFloat
 # twin, so their bare libm symbols bind fine.
 # ============================================================================
-### C libm extern (rf_f64_ passthrough): sine (radians).
-routine C::rf_f64_sin(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): cosine (radians).
-routine C::rf_f64_cos(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): tangent (radians).
-routine C::rf_f64_tan(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): arc sine.
-routine C::rf_f64_asin(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): arc cosine.
-routine C::rf_f64_acos(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): arc tangent.
-routine C::rf_f64_atan(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): two-argument arc tangent atan2(y, x).
-routine C::rf_f64_atan2(y: F64, x: F64) -> F64
-### C libm extern (rf_f64_ passthrough): hyperbolic sine.
-routine C::rf_f64_sinh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): hyperbolic cosine.
-routine C::rf_f64_cosh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): hyperbolic tangent.
-routine C::rf_f64_tanh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): inverse hyperbolic sine.
-routine C::rf_f64_asinh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): inverse hyperbolic cosine.
-routine C::rf_f64_acosh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): inverse hyperbolic tangent.
-routine C::rf_f64_atanh(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): square root.
-routine C::rf_f64_sqrt(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): cube root.
-routine C::rf_f64_cbrt(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): natural exponential e^x.
-routine C::rf_f64_exp(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): base-2 exponential 2^x.
-routine C::rf_f64_exp2(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): exp(x) - 1, accurate near zero.
-routine C::rf_f64_expm1(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): natural logarithm.
-routine C::rf_f64_log(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): base-2 logarithm.
-routine C::rf_f64_log2(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): base-10 logarithm.
-routine C::rf_f64_log10(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): log(1 + x), accurate near zero.
-routine C::rf_f64_log1p(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): base raised to exp.
-routine C::rf_f64_pow(base: F64, exp: F64) -> F64
-### C libm extern (rf_f64_ passthrough): hypotenuse sqrt(x^2 + y^2) without overflow.
-routine C::rf_f64_hypot(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): fused multiply-add x*y + z with a single rounding.
-routine C::rf_f64_fma(x: F64, y: F64, z: F64) -> F64
+### C libm extern (rf_b64_ passthrough): sine (radians).
+routine C::rf_b64_sin(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): cosine (radians).
+routine C::rf_b64_cos(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): tangent (radians).
+routine C::rf_b64_tan(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): arc sine.
+routine C::rf_b64_asin(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): arc cosine.
+routine C::rf_b64_acos(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): arc tangent.
+routine C::rf_b64_atan(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): two-argument arc tangent atan2(y, x).
+routine C::rf_b64_atan2(y: B64, x: B64) -> B64
+### C libm extern (rf_b64_ passthrough): hyperbolic sine.
+routine C::rf_b64_sinh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): hyperbolic cosine.
+routine C::rf_b64_cosh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): hyperbolic tangent.
+routine C::rf_b64_tanh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): inverse hyperbolic sine.
+routine C::rf_b64_asinh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): inverse hyperbolic cosine.
+routine C::rf_b64_acosh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): inverse hyperbolic tangent.
+routine C::rf_b64_atanh(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): square root.
+routine C::rf_b64_sqrt(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): cube root.
+routine C::rf_b64_cbrt(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): natural exponential e^x.
+routine C::rf_b64_exp(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): base-2 exponential 2^x.
+routine C::rf_b64_exp2(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): exp(x) - 1, accurate near zero.
+routine C::rf_b64_expm1(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): natural logarithm.
+routine C::rf_b64_log(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): base-2 logarithm.
+routine C::rf_b64_log2(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): base-10 logarithm.
+routine C::rf_b64_log10(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): log(1 + x), accurate near zero.
+routine C::rf_b64_log1p(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): base raised to exp.
+routine C::rf_b64_pow(base: B64, exp: B64) -> B64
+### C libm extern (rf_b64_ passthrough): hypotenuse sqrt(x^2 + y^2) without overflow.
+routine C::rf_b64_hypot(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): fused multiply-add x*y + z with a single rounding.
+routine C::rf_b64_fma(x: B64, y: B64, z: B64) -> B64
 ### C libm extern (bare symbol, no UnpackedFloat twin): error function.
-routine C::erf(value: F64) -> F64
+routine C::erf(value: B64) -> B64
 ### C libm extern (bare symbol): complementary error function.
-routine C::erfc(value: F64) -> F64
+routine C::erfc(value: B64) -> B64
 ### C libm extern (bare symbol): gamma function.
-routine C::tgamma(value: F64) -> F64
+routine C::tgamma(value: B64) -> B64
 ### C libm extern (bare symbol): natural log of the absolute value of gamma.
-routine C::lgamma(value: F64) -> F64
+routine C::lgamma(value: B64) -> B64
 
 # ============================================================================
-# F64 libm methods (the C99 doubles F64 didn't already have via LLVM intrinsics),
-# delegating to the rf_f64_* runtime passthroughs / bare libm externals above.
+# B64 libm methods (the C99 doubles B64 didn't already have via LLVM intrinsics),
+# delegating to the rf_b64_* runtime passthroughs / bare libm externals above.
 # ============================================================================
 ### exp(me) - 1, accurate near 0. Checked: crashes on overflow. Use `expm1_unchecked` for raw IEEE.
-routine F64.expm1!() -> F64
+routine B64.expm1!() -> B64
   var r = me.expm1_unchecked()
   if r.is_finite()
     return r
@@ -703,11 +677,11 @@ routine F64.expm1!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### exp(me) - 1 with raw IEEE 754 propagation.
-routine F64.expm1_unchecked() -> F64
-  return C::rf_f64_expm1(value: me)
+routine B64.expm1_unchecked() -> B64
+  return C::rf_b64_expm1(value: me)
 
 ### 2 raised to me. Checked: crashes on overflow. Use `exp2_unchecked` for raw IEEE.
-routine F64.exp2!() -> F64
+routine B64.exp2!() -> B64
   var r = me.exp2_unchecked()
   if r.is_finite()
     return r
@@ -716,12 +690,12 @@ routine F64.exp2!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### 2 raised to me with raw IEEE 754 propagation.
-routine F64.exp2_unchecked() -> F64
-  return LLVM::exp2[F64](value: me)
+routine B64.exp2_unchecked() -> B64
+  return LLVM::exp2[B64](value: me)
 
 ### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for
 ### raw IEEE.
-routine F64.log1p!() -> F64
+routine B64.log1p!() -> B64
   var r = me.log1p_unchecked()
   if r.is_finite()
     return r
@@ -730,11 +704,11 @@ routine F64.log1p!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### log(1 + me) with raw IEEE 754 propagation.
-routine F64.log1p_unchecked() -> F64
-  return C::rf_f64_log1p(value: me)
+routine B64.log1p_unchecked() -> B64
+  return C::rf_b64_log1p(value: me)
 
 ### Base-2 logarithm. Checked: crashes on a non-finite result. Use `log2_unchecked` for raw IEEE.
-routine F64.log2!() -> F64
+routine B64.log2!() -> B64
   var r = me.log2_unchecked()
   if r.is_finite()
     return r
@@ -743,14 +717,14 @@ routine F64.log2!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Base-2 logarithm with raw IEEE 754 propagation.
-routine F64.log2_unchecked() -> F64
-  return LLVM::log2[F64](value: me)
+routine B64.log2_unchecked() -> B64
+  return LLVM::log2[B64](value: me)
 
 ### Euclidean distance sqrt(x^2 + y^2). Checked: crashes on overflow. Use `hypot_unchecked` for
 ### raw IEEE.
 ### :param x: One leg.
 ### :param y: The other leg.
-routine hypot!(x: F64, y: F64) -> F64
+routine hypot!(x: B64, y: B64) -> B64
   var r = hypot_unchecked(x: x, y: y)
   if r.is_finite()
     return r
@@ -761,12 +735,33 @@ routine hypot!(x: F64, y: F64) -> F64
 ### Euclidean distance with raw IEEE 754 propagation (overflow -> +infinity).
 ### :param x: One leg.
 ### :param y: The other leg.
-routine hypot_unchecked(x: F64, y: F64) -> F64
-  return C::rf_f64_hypot(x: x, y: y)
+routine hypot_unchecked(x: B64, y: B64) -> B64
+  return C::rf_b64_hypot(x: x, y: y)
+
+### 3D Euclidean distance sqrt(x^2 + y^2 + z^2). Checked: crashes on overflow. Use
+### `hypot_unchecked` for raw IEEE.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot!(x: B64, y: B64, z: B64) -> B64
+  var r = hypot_unchecked(x: x, y: y, z: z)
+  if r.is_finite()
+    return r
+  if r.is_nan()
+    throw NumericDomainError(description: "domain error: no real result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### 3D Euclidean distance with raw IEEE 754 propagation (overflow -> +infinity). Composed as
+### `hypot(hypot(x, y), z)` — overflow-safe, libm has no 3-arg hypot.
+### :param x: First leg.
+### :param y: Second leg.
+### :param z: Third leg.
+routine hypot_unchecked(x: B64, y: B64, z: B64) -> B64
+  return hypot_unchecked(x: hypot_unchecked(x: x, y: y), y: z)
 
 ### Fused multiply-add me*b + c (single rounding). Checked: crashes on overflow. Use `fma_unchecked`
 ### for raw IEEE.
-routine F64.fma!(b: F64, c: F64) -> F64
+routine B64.fma!(b: B64, c: B64) -> B64
   var r = me.fma_unchecked(b: b, c: c)
   if r.is_finite()
     return r
@@ -775,20 +770,20 @@ routine F64.fma!(b: F64, c: F64) -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Fused multiply-add with raw IEEE 754 propagation.
-routine F64.fma_unchecked(b: F64, c: F64) -> F64
-  return LLVM::fma[F64](a: me, b: b, c: c)
+routine B64.fma_unchecked(b: B64, c: B64) -> B64
+  return LLVM::fma[B64](a: me, b: b, c: c)
 
 ### Cube root.
-routine F64.cbrt() -> F64
-  return C::rf_f64_cbrt(value: me)
+routine B64.cbrt() -> B64
+  return C::rf_b64_cbrt(value: me)
 
 ### Tangent (radians).
-routine F64.tan() -> F64
-  return LLVM::tan[F64](value: me)
+routine B64.tan() -> B64
+  return LLVM::tan[B64](value: me)
 
 ### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
 ### IEEE.
-routine F64.asin!() -> F64
+routine B64.asin!() -> B64
   var r = me.asin_unchecked()
   if r.is_finite()
     return r
@@ -797,12 +792,12 @@ routine F64.asin!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
-routine F64.asin_unchecked() -> F64
-  return LLVM::asin[F64](value: me)
+routine B64.asin_unchecked() -> B64
+  return LLVM::asin[B64](value: me)
 
 ### Arc cosine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `acos_unchecked` for raw
 ### IEEE.
-routine F64.acos!() -> F64
+routine B64.acos!() -> B64
   var r = me.acos_unchecked()
   if r.is_finite()
     return r
@@ -811,21 +806,21 @@ routine F64.acos!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
-routine F64.acos_unchecked() -> F64
-  return LLVM::acos[F64](value: me)
+routine B64.acos_unchecked() -> B64
+  return LLVM::acos[B64](value: me)
 
 ### Arc tangent.
-routine F64.atan() -> F64
-  return LLVM::atan[F64](value: me)
+routine B64.atan() -> B64
+  return LLVM::atan[B64](value: me)
 
 ### Two-argument arc tangent atan2(y, x).
 ### :param y: The y-coordinate.
 ### :param x: The x-coordinate.
-routine atan2(y: F64, x: F64) -> F64
-  return LLVM::atan2[F64](a: y, b: x)
+routine atan2(y: B64, x: B64) -> B64
+  return LLVM::atan2[B64](a: y, b: x)
 
 ### Hyperbolic sine. Checked: crashes on overflow. Use `sinh_unchecked` for raw IEEE.
-routine F64.sinh!() -> F64
+routine B64.sinh!() -> B64
   var r = me.sinh_unchecked()
   if r.is_finite()
     return r
@@ -834,11 +829,11 @@ routine F64.sinh!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity).
-routine F64.sinh_unchecked() -> F64
-  return LLVM::sinh[F64](value: me)
+routine B64.sinh_unchecked() -> B64
+  return LLVM::sinh[B64](value: me)
 
 ### Hyperbolic cosine. Checked: crashes on overflow. Use `cosh_unchecked` for raw IEEE.
-routine F64.cosh!() -> F64
+routine B64.cosh!() -> B64
   var r = me.cosh_unchecked()
   if r.is_finite()
     return r
@@ -847,20 +842,20 @@ routine F64.cosh!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity).
-routine F64.cosh_unchecked() -> F64
-  return LLVM::cosh[F64](value: me)
+routine B64.cosh_unchecked() -> B64
+  return LLVM::cosh[B64](value: me)
 
 ### Hyperbolic tangent.
-routine F64.tanh() -> F64
-  return LLVM::tanh[F64](value: me)
+routine B64.tanh() -> B64
+  return LLVM::tanh[B64](value: me)
 
 ### Inverse hyperbolic sine.
-routine F64.asinh() -> F64
-  return C::rf_f64_asinh(value: me)
+routine B64.asinh() -> B64
+  return C::rf_b64_asinh(value: me)
 
 ### Inverse hyperbolic cosine. Checked: crashes (domain) if `me < 1`. Use `acosh_unchecked` for raw
 ### IEEE.
-routine F64.acosh!() -> F64
+routine B64.acosh!() -> B64
   var r = me.acosh_unchecked()
   if r.is_finite()
     return r
@@ -869,12 +864,12 @@ routine F64.acosh!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Inverse hyperbolic cosine with raw IEEE 754 propagation (`me < 1` -> NaN).
-routine F64.acosh_unchecked() -> F64
-  return C::rf_f64_acosh(value: me)
+routine B64.acosh_unchecked() -> B64
+  return C::rf_b64_acosh(value: me)
 
 ### Inverse hyperbolic tangent. Checked: crashes if `|me| >= 1` (`±1` -> ±inf, `|me| > 1` -> NaN).
 ### Use `atanh_unchecked` for raw IEEE.
-routine F64.atanh!() -> F64
+routine B64.atanh!() -> B64
   var r = me.atanh_unchecked()
   if r.is_finite()
     return r
@@ -883,20 +878,20 @@ routine F64.atanh!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Inverse hyperbolic tangent with raw IEEE 754 propagation (`±1` -> ±inf, `|me| > 1` -> NaN).
-routine F64.atanh_unchecked() -> F64
-  return C::rf_f64_atanh(value: me)
+routine B64.atanh_unchecked() -> B64
+  return C::rf_b64_atanh(value: me)
 
 ### Error function.
-routine F64.erf() -> F64
+routine B64.erf() -> B64
   return C::erf(value: me)
 
 ### Complementary error function.
-routine F64.erfc() -> F64
+routine B64.erfc() -> B64
   return C::erfc(value: me)
 
 ### Gamma function. Checked: crashes on a non-finite result (overflow or pole). Use
 ### `tgamma_unchecked` for raw IEEE.
-routine F64.tgamma!() -> F64
+routine B64.tgamma!() -> B64
   var r = me.tgamma_unchecked()
   if r.is_finite()
     return r
@@ -905,11 +900,11 @@ routine F64.tgamma!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±infinity or NaN).
-routine F64.tgamma_unchecked() -> F64
+routine B64.tgamma_unchecked() -> B64
   return C::tgamma(value: me)
 
 ### Natural log of |gamma(me)|.
-routine F64.lgamma() -> F64
+routine B64.lgamma() -> B64
   return C::lgamma(value: me)
 
 # ============================================================================
@@ -917,35 +912,35 @@ routine F64.lgamma() -> F64
 # frexp, modf, rint, fdim, fmod, remainder, fmax/fmin, trunc, frac, and
 # classification (signbit/is_normal/is_subnormal/fpclassify).
 # ============================================================================
-### C libm extern (rf_f64_ passthrough): base-10 exponential 10^x.
-routine C::rf_f64_exp10(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): sin(pi*x).
-routine C::rf_f64_sinpi(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): cos(pi*x).
-routine C::rf_f64_cospi(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): tan(pi*x).
-routine C::rf_f64_tanpi(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): next representable value after x toward y.
-routine C::rf_f64_nextafter(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): x * 2^n (C scalbn).
-routine C::rf_f64_scalbn(value: F64, n: S64) -> F64
-### C libm extern (rf_f64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
-routine C::rf_f64_ilogb(value: F64) -> S64
-### C libm extern (rf_f64_ passthrough): round to nearest integer in the current mode (C rint).
-routine C::rf_f64_rint(value: F64) -> F64
-### C libm extern (rf_f64_ passthrough): positive difference max(x - y, 0) (C fdim).
-routine C::rf_f64_fdim(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): floating-point remainder (C fmod).
-routine C::rf_f64_fmod(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): IEEE remainder, ties to even (C remainder).
-routine C::rf_f64_remainder(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): larger of x and y (C fmax).
-routine C::rf_f64_fmax(x: F64, y: F64) -> F64
-### C libm extern (rf_f64_ passthrough): smaller of x and y (C fmin).
-routine C::rf_f64_fmin(x: F64, y: F64) -> F64
+### C libm extern (rf_b64_ passthrough): base-10 exponential 10^x.
+routine C::rf_b64_exp10(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): sin(pi*x).
+routine C::rf_b64_sinpi(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): cos(pi*x).
+routine C::rf_b64_cospi(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): tan(pi*x).
+routine C::rf_b64_tanpi(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): next representable value after x toward y.
+routine C::rf_b64_nextafter(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): x * 2^n (C scalbn).
+routine C::rf_b64_scalbn(value: B64, n: S64) -> B64
+### C libm extern (rf_b64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
+routine C::rf_b64_ilogb(value: B64) -> S64
+### C libm extern (rf_b64_ passthrough): round to nearest integer in the current mode (C rint).
+routine C::rf_b64_rint(value: B64) -> B64
+### C libm extern (rf_b64_ passthrough): positive difference max(x - y, 0) (C fdim).
+routine C::rf_b64_fdim(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): floating-point remainder (C fmod).
+routine C::rf_b64_fmod(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): IEEE remainder, ties to even (C remainder).
+routine C::rf_b64_remainder(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): larger of x and y (C fmax).
+routine C::rf_b64_fmax(x: B64, y: B64) -> B64
+### C libm extern (rf_b64_ passthrough): smaller of x and y (C fmin).
+routine C::rf_b64_fmin(x: B64, y: B64) -> B64
 
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
-routine F64.exp10!() -> F64
+routine B64.exp10!() -> B64
   var r = me.exp10_unchecked()
   if r.is_finite()
     return r
@@ -954,94 +949,94 @@ routine F64.exp10!() -> F64
   throw NumericOverflowError(description: "overflow: out of range")
 
 ### Base-10 exponential with raw IEEE 754 propagation (overflow -> +infinity).
-routine F64.exp10_unchecked() -> F64
-  return C::rf_f64_exp10(value: me)
+routine B64.exp10_unchecked() -> B64
+  return C::rf_b64_exp10(value: me)
 
 ### sin(pi*me), exact at integers/half-integers.
-routine F64.sinpi() -> F64
-  return C::rf_f64_sinpi(value: me)
+routine B64.sinpi() -> B64
+  return C::rf_b64_sinpi(value: me)
 
 ### cos(pi*me).
-routine F64.cospi() -> F64
-  return C::rf_f64_cospi(value: me)
+routine B64.cospi() -> B64
+  return C::rf_b64_cospi(value: me)
 
 ### tan(pi*me).
-routine F64.tanpi() -> F64
-  return C::rf_f64_tanpi(value: me)
+routine B64.tanpi() -> B64
+  return C::rf_b64_tanpi(value: me)
 
 ### Next representable value after me toward you.
-routine F64.nextafter(you: F64) -> F64
-  return C::rf_f64_nextafter(x: me, y: you)
+routine B64.nextafter(you: B64) -> B64
+  return C::rf_b64_nextafter(x: me, y: you)
 
 ### me * 2^n (C scalbn).
-routine F64.scalbn(n: S64) -> F64
-  return C::rf_f64_scalbn(value: me, n: n)
+routine B64.scalbn(n: S64) -> B64
+  return C::rf_b64_scalbn(value: me, n: n)
 
 ### Alias of scalbn (C ldexp).
-routine F64.ldexp(n: S64) -> F64
-  return C::rf_f64_scalbn(value: me, n: n)
+routine B64.ldexp(n: S64) -> B64
+  return C::rf_b64_scalbn(value: me, n: n)
 
 ### Rounds to nearest integer in the current rounding mode (C rint).
-routine F64.rint() -> F64
-  return LLVM::rint[F64](value: me)
+routine B64.rint() -> B64
+  return LLVM::rint[B64](value: me)
 
 ### Positive difference max(me - you, 0) (C fdim).
-routine F64.fdim(you: F64) -> F64
-  return C::rf_f64_fdim(x: me, y: you)
+routine B64.fdim(you: B64) -> B64
+  return C::rf_b64_fdim(x: me, y: you)
 
 ### Floating-point remainder of me/you (C fmod).
-routine F64.fmod(you: F64) -> F64
-  return LLVM::float_rem[F64](a: me, b: you)
+routine B64.fmod(you: B64) -> B64
+  return LLVM::float_rem[B64](a: me, b: you)
 
 ### IEEE remainder of me/you, ties to even (C remainder).
-routine F64.remainder(you: F64) -> F64
-  return C::rf_f64_remainder(x: me, y: you)
+routine B64.remainder(you: B64) -> B64
+  return C::rf_b64_remainder(x: me, y: you)
 
 ### Larger of me and you (C fmax).
-routine F64.fmax(you: F64) -> F64
-  return LLVM::maxnum[F64](a: me, b: you)
+routine B64.fmax(you: B64) -> B64
+  return LLVM::maxnum[B64](a: me, b: you)
 
 ### Smaller of me and you (C fmin).
-routine F64.fmin(you: F64) -> F64
-  return LLVM::minnum[F64](a: me, b: you)
+routine B64.fmin(you: B64) -> B64
+  return LLVM::minnum[B64](a: me, b: you)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
-routine F64.trunc() -> F64
-  return LLVM::float_truncate[F64](me)
+routine B64.trunc() -> B64
+  return LLVM::float_truncate[B64](me)
 
 ### Fractional part me - trunc(me).
-routine F64.frac() -> F64
-  return me - LLVM::float_truncate[F64](me)
+routine B64.frac() -> B64
+  return me - LLVM::float_truncate[B64](me)
 
 ### Integer and fractional parts (C modf); both carry me's sign.
-routine F64.modf() -> (F64, F64)
-  var ip = LLVM::float_truncate[F64](me)
+routine B64.modf() -> (B64, B64)
+  var ip = LLVM::float_truncate[B64](me)
   return (ip, me - ip)
 
 ### Fraction in [0.5,1) and power-of-two exponent (C frexp).
-routine F64.frexp() -> (F64, S64)
+routine B64.frexp() -> (B64, S64)
   if me.is_zero() or me.is_infinite() or me.is_nan()
     return (me, 0_s64)
-  var e = LLVM::add(a: C::rf_f64_ilogb(value: me), b: 1_s64)
-  return (C::rf_f64_scalbn(value: me, n: LLVM::sub(a: 0_s64, b: e)), e)
+  var e = LLVM::add(a: C::rf_b64_ilogb(value: me), b: 1_s64)
+  return (C::rf_b64_scalbn(value: me, n: LLVM::sub(a: 0_s64, b: e)), e)
 
 ### True if the sign bit is set (C signbit; true for -0 and -NaN).
-routine F64.signbit() -> Bool
+routine B64.signbit() -> Bool
   return LLVM::int_ne(a: LLVM::bit_and(a: me.to_bits(), b: 0x8000000000000000_u64), b: 0_u64)
 
 ### True for a subnormal (denormalized, nonzero) value.
-routine F64.is_subnormal() -> Bool
+routine B64.is_subnormal() -> Bool
   var bits = me.to_bits()
   var exponent = LLVM::bit_and(a: bits, b: 0x7FF0000000000000_u64)
   var mantissa = LLVM::bit_and(a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0_u64 and mantissa != 0_u64
 
 ### True for a finite, normal value (nonzero and not subnormal).
-routine F64.is_normal() -> Bool
+routine B64.is_normal() -> Bool
   return me.is_finite() and not me.is_zero() and not me.is_subnormal()
 
 ### C fpclassify: 0 NaN, 1 infinite, 2 zero, 3 subnormal, 4 normal.
-routine F64.fpclassify() -> FpClass
+routine B64.fpclassify() -> FpClass
   if me.is_signaling()
     return SIGNALING_NAN
   if me.is_nan()
@@ -1060,7 +1055,7 @@ routine F64.fpclassify() -> FpClass
 
 ### Sign-magnitude total-order key: negatives become small, non-negatives large, so an
 ### unsigned `<=` reproduces the IEEE 754 totalOrder ranking (-NaN < -inf < ... < +inf < +NaN).
-routine f64_order_key(bits: U64) -> U64
+routine b64_order_key(bits: U64) -> U64
   if LLVM::int_ne(a: LLVM::bit_and(a: bits, b: 0x8000000000000000_u64), b: 0_u64)
     return LLVM::bit_xor(a: bits, b: 0xFFFFFFFFFFFFFFFF_u64)
   return LLVM::bit_or(a: bits, b: 0x8000000000000000_u64)
@@ -1069,13 +1064,13 @@ routine f64_order_key(bits: U64) -> U64
 ### (-NaN < -inf < negatives < -0 < +0 < positives < +inf < +NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: Whether `me` precedes or equals `you` in the total order.
-routine F64.total_order(you: F64) -> Bool
-  return f64_order_key(bits: me.to_bits()) <= f64_order_key(bits: you.to_bits())
+routine B64.total_order(you: B64) -> Bool
+  return b64_order_key(bits: me.to_bits()) <= b64_order_key(bits: you.to_bits())
 
 ### IEEE 754 totalOrderMag: `total_order` applied to the magnitudes (sign bit cleared).
 ### :param you: The value whose magnitude to compare against.
 ### :returns: Whether `|me|` precedes or equals `|you|` in the total order.
-routine F64.total_order_mag(you: F64) -> Bool
+routine B64.total_order_mag(you: B64) -> Bool
   return LLVM::bit_and(a: me.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64) <= LLVM::bit_and(a: you.to_bits(), b: 0x7FFFFFFFFFFFFFFF_u64)
 
 # ============================================================================
@@ -1085,32 +1080,32 @@ routine F64.total_order_mag(you: F64) -> Bool
 ### IEEE 754 nextUp: the least value greater than `me` (nextUp(+inf)=+inf, nextUp(NaN)=NaN,
 ### nextUp(maxFinite)=+inf, nextUp(-0)=smallest positive subnormal). Propagating; never crashes.
 ### :returns: The next representable value toward +infinity.
-routine F64.next_up() -> F64
-  return me.nextafter(you: F64_INFINITY)
+routine B64.next_up() -> B64
+  return me.nextafter(you: B64_INFINITY)
 
 ### IEEE 754 nextDown: the greatest value less than `me` (= -nextUp(-me)). Never crashes.
 ### :returns: The next representable value toward -infinity.
-routine F64.next_down() -> F64
-  return me.nextafter(you: -F64_INFINITY)
+routine B64.next_down() -> B64
+  return me.nextafter(you: -B64_INFINITY)
 
 ### IEEE 754 logb: the unbiased exponent of `me` as a floating value (logb(0)=-inf, logb(±inf)=+inf,
 ### logb(NaN)=NaN; otherwise floor(log2|me|)). Propagating; never crashes.
 ### :returns: The radix-2 exponent of `me`.
-routine F64.logb() -> F64
+routine B64.logb() -> B64
   if me.is_nan()
     return me
   if me.is_infinite()
-    return F64_INFINITY
+    return B64_INFINITY
   if me.is_zero()
-    return -F64_INFINITY
-  return F64(from: C::rf_f64_ilogb(value: me))
+    return -B64_INFINITY
+  return B64(from: C::rf_b64_ilogb(value: me))
 
 ### IEEE 754 scaleB: `me * 2^n`, computed without intermediate rounding. Checked: crashes if a
 ### finite `me` overflows to ±infinity (use `scaleb_unchecked` for raw IEEE propagation).
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
-routine F64.scaleb!(n: S64) -> F64
-  var r = C::rf_f64_scalbn(value: me, n: n)
+routine B64.scaleb!(n: S64) -> B64
+  var r = C::rf_b64_scalbn(value: me, n: n)
   if r.is_finite() or not me.is_finite()
     return r
   if r.is_nan()
@@ -1120,26 +1115,26 @@ routine F64.scaleb!(n: S64) -> F64
 ### `me * 2^n` with raw IEEE 754 propagation (overflow -> ±infinity).
 ### :param n: The power-of-two exponent to apply.
 ### :returns: `me` scaled by `2^n`.
-routine F64.scaleb_unchecked(n: S64) -> F64
-  return C::rf_f64_scalbn(value: me, n: n)
+routine B64.scaleb_unchecked(n: S64) -> B64
+  return C::rf_b64_scalbn(value: me, n: n)
 
 ### IEEE 754-2008 minNum: the smaller operand, treating NaN as missing (returns the non-NaN
 ### operand; NaN only if both are NaN). Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, ignoring NaN.
-routine F64.min_num(you: F64) -> F64
-  return LLVM::minnum[F64](a: me, b: you)
+routine B64.min_num(you: B64) -> B64
+  return LLVM::minnum[B64](a: me, b: you)
 
 ### IEEE 754-2008 maxNum: the larger operand, treating NaN as missing. Never crashes.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, ignoring NaN.
-routine F64.max_num(you: F64) -> F64
-  return LLVM::maxnum[F64](a: me, b: you)
+routine B64.max_num(you: B64) -> B64
+  return LLVM::maxnum[B64](a: me, b: you)
 
 ### IEEE 754-2019 minimum: the smaller operand, propagating NaN, and ordering -0 below +0.
 ### :param you: The value to compare against.
 ### :returns: The minimum of `me` and `you`, NaN if either is NaN.
-routine F64.minimum(you: F64) -> F64
+routine B64.minimum(you: B64) -> B64
   if me.is_nan()
     return me
   if you.is_nan()
@@ -1153,7 +1148,7 @@ routine F64.minimum(you: F64) -> F64
 ### IEEE 754-2019 maximum: the larger operand, propagating NaN, and ordering +0 above -0.
 ### :param you: The value to compare against.
 ### :returns: The maximum of `me` and `you`, NaN if either is NaN.
-routine F64.maximum(you: F64) -> F64
+routine B64.maximum(you: B64) -> B64
   if me.is_nan()
     return me
   if you.is_nan()
@@ -1167,10 +1162,10 @@ routine F64.maximum(you: F64) -> F64
 ### IEEE 754 roundToIntegralTiesToAway: rounds to the nearest integer, halves away from zero
 ### (round(0.5)=1, round(-2.5)=-3). Exact and never crashes (non-finite inputs pass through).
 ### :returns: `me` rounded to an integral value with ties away from zero.
-routine F64.round_ties_away() -> F64
+routine B64.round_ties_away() -> B64
   if not me.is_finite()
     return me
   var a = me.abs()
   var t = a.trunc()
-  var rounded = if a - t >= 0.5_f64 then t + 1.0_f64 else t
+  var rounded = if a - t >= 0.5_b64 then t + 1.0_b64 else t
   return rounded.copysign(sign: me)
