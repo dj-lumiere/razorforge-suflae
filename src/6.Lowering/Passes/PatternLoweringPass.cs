@@ -1287,9 +1287,19 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx) : AstRewrit
         SourceLocation loc)
     {
         TypeSymbol? type = value.ResolvedType;
+        // Emit NO declared type when the resolved type still carries a generic parameter (e.g. an
+        // else-var bound to a `PQEntry[TPriority, TElement]` field inside a generic-def body). Such an
+        // annotation cannot survive standalone: TypeInfoToExpr must null its ResolvedType (the
+        // completeness guard forbids freezing an unsubstituted parameter) and rebuild it from the param
+        // NAME. Monomorphization then substitutes only the NAME (via a string-only rewrite path that has
+        // no TypeSubs), leaving the ResolvedType null — and codegen cannot re-resolve a bare/qualified
+        // name string, so the whole generic instance collapses back to its bare generic-def and trips the
+        // "generic-definition reached GetLlvmType" guard. The initializer already carries the fully
+        // substituted concrete type post-monomorphization, so leave Type null and let codegen infer it.
+        bool annotate = type != null && !TypeContainsGenericParameter(type: type);
         var decl = new VariableDeclaration(Name: name,
-            Type: type != null
-                ? TypeInfoToExpr(type: type, loc: loc)
+            Type: annotate
+                ? TypeInfoToExpr(type: type!, loc: loc)
                 : null,
             Initializer: value,
             Visibility: VisibilityModifier.Secret,
