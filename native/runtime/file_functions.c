@@ -428,6 +428,87 @@ char* rf_file_map_path_range(const char* path, rf_S32 path_len, rf_address offse
 }
 
 /**
+ * Memory-map a page-aligned WINDOW [offset, offset+length) of a file READ/WRITE, SHARED (writes land
+ * in the file), clamped to the file end. The read/write dual of rf_file_map_path_range: it is the
+ * windowing path for PRODUCING output into a file too large to map whole — size the file first
+ * (rf_file_set_size), then map and fill one window at a time. Like the read-only range it returns the
+ * mapping BASE (rounded down to the platform mapping granularity); the caller adds rf_file_map_delta()
+ * to reach the requested offset, and rf_last_result_len gives the clamped caller-visible length. The
+ * mapping cannot grow the file: an offset at/after the end yields the empty-map sentinel. Released with
+ * rf_file_unmap(base, delta + result_len), which flushes dirty pages back to the file.
+ */
+char* rf_file_map_path_range_rw(const char* path, rf_S32 path_len, rf_address offset, rf_address length)
+{
+    char* cpath = make_cstr(path, path_len);
+    if (!cpath) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    rf_address gran = (rf_address)si.dwAllocationGranularity;
+    rf_address aligned = offset - (offset % gran);
+    rf_address delta = offset - aligned;
+
+    HANDLE hFile = CreateFileA(cpath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(cpath);
+    if (hFile == INVALID_HANDLE_VALUE) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    LARGE_INTEGER sz;
+    if (!GetFileSizeEx(hFile, &sz))
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0; rf_last_map_delta = 0;
+        return NULL;
+    }
+    rf_address filesize = (rf_address)sz.QuadPart;
+    if (offset >= filesize) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address avail = filesize - offset;
+    rf_address want = (length < avail) ? length : avail;
+    if (want == 0) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address maplen = want + delta;
+
+    HANDLE hMap = CreateFileMappingA(hFile, NULL, PAGE_READWRITE, 0, 0, NULL);
+    if (!hMap) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE,
+                               (DWORD)(aligned >> 32), (DWORD)(aligned & 0xFFFFFFFFu), (SIZE_T)maplen);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+    if (!view) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    rf_last_result_len = want;
+    rf_last_map_delta = delta;
+    return (char*)view;
+#else
+    long ps = sysconf(_SC_PAGE_SIZE);
+    rf_address page = (ps > 0) ? (rf_address)ps : 4096u;
+    rf_address aligned = offset - (offset % page);
+    rf_address delta = offset - aligned;
+
+    int fd = open(cpath, O_RDWR);
+    free(cpath);
+    if (fd < 0) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+    rf_address filesize = (rf_address)st.st_size;
+    if (offset >= filesize) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address avail = filesize - offset;
+    rf_address want = (length < avail) ? length : avail;
+    if (want == 0) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address maplen = want + delta;
+
+    void* p = mmap(NULL, (size_t)maplen, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (off_t)aligned);
+    close(fd);
+    if (p == MAP_FAILED) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    rf_last_result_len = want;
+    rf_last_map_delta = delta;
+    return (char*)p;
+#endif
+}
+
+/**
  * Release a mapping created by rf_file_map_path. `len` is the mapped size (ignored on Windows,
  * where UnmapViewOfFile takes only the base). A NULL pointer is a no-op.
  */

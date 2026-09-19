@@ -124,17 +124,21 @@ routine File.canonical!() -> File
   var bytes = Bytes(ptr: ptr, count: len)
   return File(at: bytes.decode_as_utf8_lossy())
 
-### Reads this whole file as text (UTF-8, lossy). UNCOLORED, like the free `read_text`.
+### Reads this whole file as text (UTF-8, lossy). UNCOLORED, like `waitfor`: inside a `suspended
+### routine` the calling coroutine PARKS while a worker thread does the blocking read (sibling coroutines
+### keep progressing); outside one it reads inline. This is the coroutine-safe way to read a whole file —
+### prefer it to opening a {Source} and looping `load` inside a coroutine.
 ### :returns: The file contents as `Text`.
 @readonly
 routine File.read_text() -> Text
   return read_text(path: me.at)
 
-### Writes `content` to this file, truncating any existing contents. UNCOLORED, like the free
-### `write_text`. The text is encoded as UTF-8.
+### Writes `content` to this file, truncating any existing contents. UNCOLORED, like `waitfor`: inside a
+### `suspended routine` the calling coroutine PARKS while a worker thread does the blocking write (sibling
+### coroutines keep progressing); outside one it writes inline. This is the coroutine-safe way to write a
+### whole file. The text is encoded as UTF-8.
 ### :param content: The text to write.
 ### :returns: The number of bytes written, or a negative value on error.
-@readonly
 routine File.write_text(content: Text) -> S64
   return write_text(path: me.at, content: content)
 
@@ -142,7 +146,6 @@ routine File.write_text(content: Text) -> S64
 ### truncating). Size a file before `wield`ing it to produce output through a mapping.
 ### :param bytes: The exact size in bytes.
 ### :throws: {IOError} when the size cannot be set.
-@readonly
 routine File.set_size!(bytes: U64)
   var cstr = CStr(from: me.at)
   var result = rf_fs_set_size(path: cstr, len: cstr.count().S32(), size: bytes)
@@ -302,19 +305,19 @@ dangerous routine File.expose[T]() -> Exposed[T]
   return Exposed[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
 
 ### Exposes a WINDOW of this file's bytes as a read-only sequence of `T`: `count` elements starting at
-### element `from`, clamped to the file end. This is the windowing path for files larger than the
+### element `start`, clamped to the file end. This is the windowing path for files larger than the
 ### address space — map and scan one window at a time instead of the whole file. The window's own
-### `count()` may be smaller than `count` when it reaches EOF, and a `from` at/after EOF yields an empty
+### `count()` may be smaller than `count` when it reaches EOF, and a `start` at/after EOF yields an empty
 ### view. Named `expose_range` (not an `expose` overload) because two same-name method-generics currently
 ### defeat generic lowering. RazorForge-only, `dangerous` (see `expose`).
-### :param from: The starting element index.
+### :param start: The starting element index.
 ### :param count: The number of `T` elements to map (clamped to the file end).
 ### :returns: The resulting {Exposed} window, to be bound by `using`.
 ### :throws: {IOError} when the file cannot be mapped.
-dangerous routine File.expose_range[T](from: U64, count: U64) -> Exposed[T]
+dangerous routine File.expose_range[T](start: U64, count: U64) -> Exposed[T]
   var cstr = CStr(from: me.at)
   var esize = T.data_size().byte_size()
-  var buf = rf_file_map_path_range(cstr, cstr.count().S32(), from *% esize, count *% esize)
+  var buf = rf_file_map_path_range(cstr, cstr.count().S32(), start *% esize, count *% esize)
   if buf.is_none()
     throw IOError(description: f"Cannot expose range of file: {me.at}")
   var user_len = rf_get_result_len()
@@ -335,13 +338,37 @@ dangerous routine File.wield[T]() -> Wielded[T]
   if buf.is_none()
     throw IOError(description: f"Cannot wield file: {me.at}")
   var byte_len = rf_get_result_len()
-  return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len)
+  return Wielded[T](buf: buf.recast_as[T](), byte_len: byte_len, map_delta: 0u64)
+
+### Wields a WINDOW of this file's bytes as a read/write sequence of `T` (SHARED: writes land in the
+### file): `count` elements starting at element `start`, clamped to the file end. The write-side dual of
+### `expose_range` — the windowing path for PRODUCING output into a file larger than the address space:
+### size the file first (`set_size!`), then wield and fill one window at a time. The window's own
+### `count()` may be smaller than `count` at EOF, and a `start` at/after the file end yields an empty
+### view. The mapping CANNOT grow the file. Named `wield_range` (not a `wield` overload) because two
+### same-name method-generics currently defeat generic lowering. RazorForge-only, `dangerous` (see `wield`).
+### :param start: The starting element index.
+### :param count: The number of `T` elements to map (clamped to the file end).
+### :returns: The resulting {Wielded} window, to be bound by `using`.
+### :throws: {IOError} when the file cannot be mapped.
+dangerous routine File.wield_range[T](start: U64, count: U64) -> Wielded[T]
+  var cstr = CStr(from: me.at)
+  var esize = T.data_size().byte_size()
+  var buf = rf_file_map_path_range_rw(cstr, cstr.count().S32(), start *% esize, count *% esize)
+  if buf.is_none()
+    throw IOError(description: f"Cannot wield range of file: {me.at}")
+  var user_len = rf_get_result_len()
+  var delta = rf_file_map_delta()
+  var user = buf.offset(bytes: ByteSize(bytes: delta)).recast_as[T]()
+  return Wielded[T](buf: user, byte_len: user_len, map_delta: delta)
 
 # To PRODUCE output through a mapping (mmap cannot grow a file), size the file first, then wield it:
 #   var f = File(at: out)
 #   f.set_size!(bytes: count *% T.data_size().byte_size())
 #   using f.wield[T]() as w
 #     ...
+# For output larger than the address space, size the file, then wield one window at a time with
+# `wield_range[T](start:, count:)` — the write-side dual of `expose_range`.
 # (A `wield[T](count:)` convenience overload is intentionally omitted: two same-name method-generic
 # overloads currently defeat GenericCallLoweringPass, and keeping `set_size!` explicit is truer to the
 # fact that a writable mapping cannot resize its own file.)
@@ -420,22 +447,29 @@ dangerous routine Exposed[T].raw_buffer() -> Hijacked[T]
 ### `Wielded[T]` has NO cursor — it is a live, shared, mutable window, indexed directly. Suflae never
 ### sees this: `File.wield`/`raw_buffer` are `dangerous`, and Suflae has no `danger` block.
 entity Wielded[T] obeys Enterable
-  ### The wielded read/write buffer, typed as `T` (non-owning; the OS releases it on `exit`).
+  ### The wielded read/write buffer, typed as `T`, at the caller-facing element 0 (non-owning; the OS
+  ### releases it on `exit`).
   secret buf: Hijacked[T]
   ### The wielded size in bytes; the element count is `byte_len // T.data_size()`.
   secret byte_len: U64
+  ### Bytes from the real mapping base to `buf` — nonzero only for a `wield_range` window whose start
+  ### was rounded down to the mapping granularity. `exit` strides back by this to flush and unmap the
+  ### true base.
+  secret map_delta: U64
 
 ### Pass-through entry: the view was already acquired by `File.wield`.
 ### :returns: This `Wielded[T]`.
 routine Wielded[T].enter!() -> Wielded[T]
   return me
 
-### Flushes pending writes to the file and releases the view on scope exit. A null buffer is a runtime
+### Flushes pending writes to the file and releases the view on scope exit, unmapping from the true
+### mapping base (`buf` minus `map_delta`) for the full mapped length. A null/empty buffer is a runtime
 ### no-op, and `using` guarantees a single `exit`, so the view is flushed and released exactly once.
 routine Wielded[T].exit()
   me.flush()
   danger
-    rf_file_unmap(me.buf.recast_as[Byte](), me.byte_len)
+    var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.S64())
+    rf_file_unmap(base, me.byte_len +% me.map_delta)
   return
 
 ### The number of `T` elements in the wielded view (`byte_len // T.data_size()`).
@@ -470,10 +504,12 @@ routine Wielded[T].poke!(index: U64, value: T)
   return
 
 ### Forces pending writes to be written back to the file now (a durability checkpoint). Writes are
-### otherwise flushed lazily by the OS, and always on `exit`.
+### otherwise flushed lazily by the OS, and always on `exit`. Flushes from the true mapping base (`buf`
+### minus `map_delta`) for the full mapped length.
 routine Wielded[T].flush()
   danger
-    rf_file_map_flush(me.buf.recast_as[Byte](), me.byte_len)
+    var base = me.buf.recast_as[Byte]().stride(count: 0s64 -% me.map_delta.S64())
+    rf_file_map_flush(base, me.byte_len +% me.map_delta)
   return
 
 ### Hands out the raw view pointer for hot, bounds-check-free scanning or bulk writes. `dangerous`: the

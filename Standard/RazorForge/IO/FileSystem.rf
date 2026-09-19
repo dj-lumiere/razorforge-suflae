@@ -99,8 +99,10 @@ routine with_file_name(path: Text, name: Text) -> Text
 # ============================================================================
 # Directory-listing / metadata records
 #
-# Produced by `File.list_dir_entries!` and `File.metadata!` (in `IO/File`); kept
-# here so both this module's callers and `IO/File` (which imports it) can name them.
+# Produced by `Directory.entries!` and `File.metadata!` / `Directory.metadata!`
+# (all in `IO/File`); kept here — the module that owns the path-string math they
+# describe — so both this module's callers and `IO/File` (which imports it) can
+# name them. Look for the methods that CREATE them on `Directory`/`File`.
 # ============================================================================
 
 ### One directory entry: its bare name, kind, and last-modification time.

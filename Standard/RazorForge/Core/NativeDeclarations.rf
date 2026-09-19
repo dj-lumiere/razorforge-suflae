@@ -946,6 +946,18 @@ dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
 ### :param length: The requested window length in bytes (clamped to the file end).
 ### :returns: A pointer to the mapped window base.
 dangerous routine C::rf_file_map_path_range(path: CStr, path_len: S32, offset: U64, length: U64) -> Hijacked[Byte]
+### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file READ/WRITE, SHARED
+### (writes land in the file), clamped to the file end — the read/write dual of `rf_file_map_path_range`.
+### Size the file first (`rf_file_set_size`); the mapping cannot grow it. Returns the mapping BASE
+### (rounded down to the platform mapping granularity); add `rf_file_map_delta()` to reach the requested
+### offset, and `rf_get_result_len()` gives the clamped caller-visible byte length. None on failure; the
+### empty-map sentinel (len 0) when the window is empty. Release with `rf_file_unmap(base, delta + result_len)`.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :param offset: The starting byte offset within the file.
+### :param length: The requested window length in bytes (clamped to the file end).
+### :returns: A pointer to the mapped window base.
+dangerous routine C::rf_file_map_path_range_rw(path: CStr, path_len: S32, offset: U64, length: U64) -> Hijacked[Byte]
 ### RF-only: the byte offset from a range mapping's base to the caller-requested offset (see
 ### `rf_file_map_path_range`). Zero for a whole-file mapping.
 ### :returns: The delta in bytes.
