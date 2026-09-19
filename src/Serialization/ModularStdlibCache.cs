@@ -153,6 +153,11 @@ public static class ModularStdlibCache
 
         /// <summary>Deferred error-variant base bodies awaiting specialization, attributed to this module.</summary>
         public Dictionary<string, DeferredEntry> DeferredVariantBases { get; set; } = new();
+
+        /// <summary>Auto-derive template overloads (global; bucketed into one slice). Restored so the warm build
+        /// clones the RAW template body per concrete type instead of re-deriving it from a serialized program
+        /// AST whose template-routine body lost its <c>expand</c> node to in-place expansion before capture.</summary>
+        public List<DeriveTemplateEntry> DeriveTemplates { get; set; } = new();
     }
 
     // ValueTuples serialize via reflection (boxed struct) which is slow + fragile for records; use plain
@@ -192,6 +197,29 @@ public static class ModularStdlibCache
 
         /// <summary>True if this deferred body was produced under pessimistic (check_) semantics.</summary>
         public bool Pessimistic { get; set; }
+    }
+
+    /// <summary>Holds one auto-derive template overload (the value-tuple shape of
+    /// <c>TypeRegistry._deriveTemplates</c>) as a plain class so it serializes via the fast compiled-field
+    /// path rather than a boxed ValueTuple. Carried so the warm/daemon build restores the RAW template body —
+    /// which still holds its <c>expand m in allmemvarof(T)</c> node — instead of re-deriving it from the
+    /// serialized program AST (whose template-routine body was expanded-in-place before capture).</summary>
+    public sealed class DeriveTemplateEntry
+    {
+        /// <summary>The derive member-routine name this template produces (the _deriveTemplates dict key).</summary>
+        public string MemberRoutine { get; set; } = "";
+
+        /// <summary>The owner type-parameter name for the T→concrete substitution.</summary>
+        public string OwnerParam { get; set; } = "";
+
+        /// <summary>The template's parameter arity (distinguishes <c>hash()</c> / <c>hash(k0, k1)</c>).</summary>
+        public int Arity { get; set; }
+
+        /// <summary>The kind gates (<c>needs T is VariantType/…</c>) that select this template per type.</summary>
+        public List<GenericConstraintDeclaration> Gates { get; set; } = new();
+
+        /// <summary>The RAW (pre-analysis) template body cloned per concrete owner at fold time.</summary>
+        public Statement Body { get; set; } = null!;
     }
 
     /// <summary>Top-level index: global (non-sliced) metadata + the module label list.</summary>
@@ -402,6 +430,31 @@ public static class ModularStdlibCache
                 Pessimistic = kv.Value.pessimistic
             };
         }
+
+        // Auto-derive templates are keyed by member-routine name (global, no owning module), so bucket them
+        // all into the Misc slice. Restored via RestoreDeriveTemplates BEFORE any demand re-derivation, so the
+        // raw `expand`-bearing template body wins the dedup over a program-AST re-registration.
+        if (reg.DeriveTemplates != null)
+        {
+            foreach (KeyValuePair<string, List<(string OwnerParam, int Arity,
+                         List<GenericConstraintDeclaration> Gates, Statement Body)>> kv in
+                     reg.DeriveTemplates)
+            {
+                foreach ((string ownerParam, int arity, List<GenericConstraintDeclaration> gates,
+                             Statement body) in kv.Value)
+                {
+                    getSlice(arg: Misc)
+                       .DeriveTemplates.Add(item: new DeriveTemplateEntry
+                    {
+                        MemberRoutine = kv.Key,
+                        OwnerParam = ownerParam,
+                        Arity = arity,
+                        Gates = gates,
+                        Body = body
+                    });
+                }
+            }
+        }
     }
 
     /// <summary>Slices the body dictionaries from <paramref name="state"/> into per-module slices
@@ -547,7 +600,16 @@ public static class ModularStdlibCache
             DeferredVariantBases = merged.DeferredVariantBases.ToDictionary(
                 keySelector: kv => kv.Key,
                 elementSelector: kv =>
-                    (kv.Value.BaseRoutine, kv.Value.Body, kv.Value.Pessimistic))
+                    (kv.Value.BaseRoutine, kv.Value.Body, kv.Value.Pessimistic)),
+            DeriveTemplates = merged.DeriveTemplates
+                                    .GroupBy(keySelector: e => e.MemberRoutine,
+                                         comparer: StringComparer.Ordinal)
+                                    .ToDictionary(keySelector: g => g.Key,
+                                         elementSelector: g => g
+                                            .Select(selector: e =>
+                                                 (e.OwnerParam, e.Arity, e.Gates, e.Body))
+                                            .ToList(),
+                                         comparer: StringComparer.Ordinal)
         };
 
         return new SemanticVerifier.CompiledStdlibState
@@ -665,6 +727,8 @@ public static class ModularStdlibCache
         {
             dst.DeferredVariantBases[key: kv.Key] = kv.Value;
         }
+
+        dst.DeriveTemplates.AddRange(collection: src.DeriveTemplates);
     }
 
     // ---- symbol collection (whole-graph walk) ----------------------------------------------------
