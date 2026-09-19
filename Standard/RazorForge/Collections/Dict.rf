@@ -351,6 +351,36 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
   me.count = me.count +% 1u64
   return true
 
+### Single-probe find-or-insert returning a raw handle to the VALUE slot for `key` — the general
+### primitive behind read-modify-write. On miss inserts `seed` and returns a handle to it; on hit returns
+### a handle to the existing value. ONE hash/probe replaces the `contains` → `[]` → `add` three-hash RMW
+### idiom: `var p = d.slot(k, seed)` then read/write `p.peek()`/`p.poke(...)` directly. Any accumulator
+### (`+= v`, min/max, counters) is a caller-side one-liner over this, so no bespoke `updating_add` is needed.
+### DANGER: the handle is invalidated by the NEXT structural mutation on this dict — an insert that triggers
+### `rehash` reallocates the values buffer. Read/modify it BEFORE any further `add`/`slot`-insert.
+### :param key: The key to find or insert.
+### :param seed: The value stored (and returned) when `key` is absent.
+### :returns: A {Hijacked[V]} addressing the value cell for `key`.
+@inline
+routine Dict[K, V].slot(key: K, seed: V) -> Hijacked[V]
+  if me.should_rehash()
+    me.rehash()
+  var s = me.find_slot(key)
+  var ei = 0u64
+  if s < me.capacity
+    ei = me.read_index(s)
+  else
+    ei = me.entries_used
+    danger
+      me.keys.offset(K.data_size() * ei).poke(key)
+      me.vals.offset(V.data_size() * ei).poke(seed)
+      me.entry_live.offset(ByteSize(bytes: ei)).poke(ENTRY_LIVE)
+    me.entries_used = me.entries_used +% 1u64
+    me.insert_index_raw(h: key.hash(k0: me.k0, k1: me.k1), entry_index: ei)
+    me.count = me.count +% 1u64
+  danger
+    return me.vals.offset(V.data_size() * ei)
+
 routine Dict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity

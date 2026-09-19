@@ -518,6 +518,37 @@ routine SortedDict[K, V].setitem!(key: Accessing[K], value: V)
   discard me.add(key: key, value: value)
   return
 
+### Find-or-insert returning a raw handle to the VALUE slot for `key` — the ordered analog of
+### {Dict[K, V].slot}, the general read-modify-write primitive. On miss inserts `seed` first, then returns
+### a handle to the value cell; on hit returns the existing cell so the caller mutates it in place instead
+### of a second descend-and-rewrite (`get!` then `add`). O(log n) find-or-insert.
+### DANGER: the handle is invalidated by the next structural mutation — an `add`/`remove` can split or merge
+### B-tree nodes and relocate the value. Read/modify it BEFORE any further `add`/`remove`/`slot`-insert.
+### :param key: The key to find or insert.
+### :param seed: The value stored when `key` is absent.
+### :returns: A {Hijacked[V]} addressing the value cell for `key`.
+routine SortedDict[K, V].slot(key: K, seed: V) -> Hijacked[V]
+  if not me.contains(key: key)
+    discard me.add(key: key, value: seed)
+  danger
+    var root_ref = me.root!!.as_entity()
+    return me.value_slot_in(node: root_ref, key: key)
+
+### Descends `node`'s subtree to the value cell for an EXISTING `key`, returning a raw {Hijacked[V]} to it.
+### Precondition: `key` is present (the public `slot` inserts it first) — so the exact-match branch always
+### fires at or above the leaf, never descending past one. Mirrors `get_from_node` but yields the cell
+### ADDRESS instead of a copy.
+### :param node: The subtree root to search.
+### :param key: The key whose value cell to locate.
+### :returns: A {Hijacked[V]} addressing the value cell.
+@readonly
+routine SortedDict[K, V].value_slot_in(node: Accessing[BTreeDictNode[K, V]], key: K) -> Hijacked[V]
+  danger
+    var i = me.lower_bound(node: node, key: key)
+    if i < node.keys_count() and key == node.key_get(i)
+      return node.values_base().stride(count: i.S64())
+    return me.value_slot_in(node: node.children_get(i).as_entity(), key: key)
+
 # ============================================================================
 # Insert
 # ============================================================================
