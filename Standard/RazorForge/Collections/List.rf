@@ -249,21 +249,20 @@ routine List[T].remove_at!(index: U64) -> T
 ### :absent: The list is empty.
 @readonly
 routine List[T].first!() -> T
+needs T obeys Copyable
   if me.is_empty()
     absent
-  danger
-    return me.data.peek()
+  return me.get_raw(index: 0u64).duplicate()
 
 ### Returns the last element without removing it.
 ### :returns: The current last element.
 ### :absent: The list is empty.
 @readonly
 routine List[T].last!() -> T
+needs T obeys Copyable
   if me.is_empty()
     absent
-  var byte_offset = T.data_size() * (me.count - 1u64)
-  danger
-    return me.data.offset(byte_offset).peek()
+  return me.get_raw(index: me.count - 1u64).duplicate()
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -275,11 +274,13 @@ routine List[T].last!() -> T
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
 routine List[T].getitem!(index: U64) -> T
+needs T obeys Copyable
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  var byte_offset = T.data_size() * index
-  danger
-    return me.data.offset(byte_offset).peek()
+  # Copy OUT while the list keeps its own element: `duplicate` is retain-aware (managed leaves like
+  # Text bump their refcount; elided for trivially-copyable T). A raw `peek` would hand back a
+  # non-owning view typed as owned -> the caller's scope-exit destroy double-frees the shared Text.
+  return me.get_raw(index: index).duplicate()
 
 ### Replaces the element at `index` with `value`.
 ### :param index: The zero-based position to update.
