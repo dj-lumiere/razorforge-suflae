@@ -811,14 +811,52 @@ internal partial class Program
             }
         }
 
+        /// <summary>Response-read timeout (ms). Generous — a warm daemon answers in ~1-2 s, a cold-snapshot
+        /// first build in a few — but a WEDGED daemon that connects yet never frames a response must not hang
+        /// the client forever. That was the `build` stall: <see cref="TryClientCompile"/>'s cold fallback only
+        /// fires when this method RETURNS, and an unbounded pipe read never returns. On timeout we return null,
+        /// so the caller falls back to a cold in-process build — the safety net the JIT IR path already had
+        /// (its daemon fetch is optional, with an immediate cold branch), now extended to the exe path.</summary>
+        private const int ResponseReadTimeoutMs = 30_000;
+
         private static DaemonResponse? SendRequest(DaemonRequest request, int timeoutMs)
         {
+            bool trace = Environment.GetEnvironmentVariable(variable: "RF_DAEMON_TRACE") is { Length: > 0 };
+            void T(string m)
+            {
+                if (trace) { Console.Error.WriteLine(value: $"[daemon-client] {m}"); }
+            }
+
             using var client = new NamedPipeClientStream(serverName: ".",
                 pipeName: PipeName(),
-                direction: PipeDirection.InOut);
+                direction: PipeDirection.InOut,
+                options: PipeOptions.None);
+            T(m: $"connecting (verb={request.Verb}, connect-timeout={timeoutMs}ms)...");
             client.Connect(timeout: timeoutMs);
+            T(m: "connected; writing request...");
             WriteMessage(stream: client, value: request);
-            return ReadMessage<DaemonResponse>(stream: client);
+            T(m: "request written+flushed; reading response...");
+
+            // A NamedPipe read ignores its CancellationToken once pending, so bound the response read with
+            // a worker task and force-unblock a stuck read by DISPOSING the stream on timeout (the reliable
+            // way to abort a blocked pipe read). Timeout -> null -> caller falls back to a cold build.
+            var readTask = System.Threading.Tasks.Task.Run(
+                function: () => ReadMessage<DaemonResponse>(stream: client));
+            if (!readTask.Wait(millisecondsTimeout: ResponseReadTimeoutMs))
+            {
+                T(m: $"response read TIMED OUT after {ResponseReadTimeoutMs}ms -> abandoning daemon, cold build");
+                try { client.Dispose(); } catch { /* unblocks the worker's Read */ }
+                return null;
+            }
+
+            if (readTask.IsFaulted)
+            {
+                T(m: $"response read FAULTED: {readTask.Exception?.InnerException?.Message}");
+                return null;
+            }
+
+            T(m: $"response read complete (exit={readTask.Result?.ExitCode})");
+            return readTask.Result;
         }
 
         // ---- auto-spawn (manifest `[target] use-daemon = true` -> the builder manages the daemon) -----
@@ -828,13 +866,14 @@ internal partial class Program
         /// the DLL makes them differ (the daemon is running stale code + a stale warm snapshot).</summary>
         private static string CompilerVersionStamp()
         {
+            long ticks = 0;
             try
             {
                 string? loc = System.Reflection.Assembly.GetEntryAssembly()
                                    ?.Location;
                 if (!string.IsNullOrEmpty(value: loc) && File.Exists(path: loc))
                 {
-                    return new FileInfo(fileName: loc).LastWriteTimeUtc.Ticks.ToString();
+                    ticks = new FileInfo(fileName: loc).LastWriteTimeUtc.Ticks;
                 }
             }
             catch
@@ -842,7 +881,48 @@ internal partial class Program
                 /* best-effort */
             }
 
-            return "0";
+            // Fold the stdlib source tree's NEWEST mtime into the stamp. A `dotnet build` that only recopied
+            // stdlib `.rf`/`.sf` (no C# change) leaves the DLL mtime untouched, so a DLL-mtime-only stamp
+            // would let a running daemon keep serving a STALE stdlib snapshot (the phantom "routine X not
+            // defined" after editing stdlib). Bumping the stamp on any stdlib edit makes the existing
+            // stale-daemon restart path (TryPing mismatch -> ShutdownStaleDaemonIfPresent -> respawn) fire.
+            // Both client (fresh each ping) and daemon (captured at startup) resolve the same root, so the
+            // values agree until a file actually changes. Best-effort: a walk failure just omits stdlib.
+            try
+            {
+                string stdlibRoot = Builder.Declaration.StdlibLoader.GetDefaultStdlibPath();
+                if (Directory.Exists(path: stdlibRoot))
+                {
+                    ticks = NewestMtimeTicks(root: stdlibRoot, pattern: "*.rf", floor: ticks);
+                    ticks = NewestMtimeTicks(root: stdlibRoot, pattern: "*.sf", floor: ticks);
+                }
+            }
+            catch
+            {
+                /* best-effort: fall back to the DLL-mtime-only stamp */
+            }
+
+            return ticks.ToString();
+        }
+
+        /// <summary>The newest last-write time (ticks) among files matching <paramref name="pattern"/> under
+        /// <paramref name="root"/>, or <paramref name="floor"/> if none is newer. Used to fold the stdlib tree
+        /// into the daemon freshness stamp.</summary>
+        private static long NewestMtimeTicks(string root, string pattern, long floor)
+        {
+            long max = floor;
+            foreach (string f in Directory.EnumerateFiles(path: root,
+                         searchPattern: pattern,
+                         searchOption: SearchOption.AllDirectories))
+            {
+                long t = File.GetLastWriteTimeUtc(path: f).Ticks;
+                if (t > max)
+                {
+                    max = t;
+                }
+            }
+
+            return max;
         }
 
         /// <summary>Pings the daemon and returns the compiler stamp it reported (from <c>pong &lt;stamp&gt;</c>),
@@ -890,7 +970,7 @@ internal partial class Program
             }
 
             Console.Error.WriteLine(
-                value: "[daemon] running daemon is stale (compiler was rebuilt) — restarting it.");
+                value: "[daemon] running daemon is stale (compiler or stdlib changed) — restarting it.");
             try { SendRequest(request: new DaemonRequest { Verb = "shutdown" }, timeoutMs: 2000); }
             catch
             {
@@ -1096,5 +1176,6 @@ internal partial class Program
 
             return true;
         }
+
     }
 }

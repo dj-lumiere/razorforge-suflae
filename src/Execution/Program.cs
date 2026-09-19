@@ -634,7 +634,7 @@ internal partial class Program
                 CLibraries = target.CLibraries,
                 LibraryPaths = target.LibraryPaths,
                 LibraryConfigs = target.LibraryConfigs,
-                UseDaemon = target.UseDaemon,
+                UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
                 Incremental = target.Incremental
             };
@@ -717,7 +717,7 @@ internal partial class Program
                 CLibraries = target.CLibraries,
                 LibraryPaths = target.LibraryPaths,
                 LibraryConfigs = target.LibraryConfigs,
-                UseDaemon = target.UseDaemon,
+                UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
                 Incremental = target.Incremental
             };
@@ -756,6 +756,17 @@ internal partial class Program
         return string.Equals(a: mode?.Trim(),
             b: "debug-jit",
             comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Env kill-switch: <c>RF_NO_DAEMON=1</c> forces every build onto the cold in-process path,
+    /// bypassing the warm daemon entirely. A safety valve for when the daemon misbehaves (e.g. a wedged
+    /// pipe read in a constrained sandbox) — cold builds are slower but never depend on the daemon.
+    /// The ORC-JIT dev loop still runs in-process (its daemon IR fetch is optional, with a cold branch),
+    /// so <c>buildandrun</c> in <c>debug-jit</c> mode stays fast; only the daemon round-trip is skipped.</summary>
+    private static bool DaemonDisabledByEnv()
+    {
+        string? v = Environment.GetEnvironmentVariable(variable: "RF_NO_DAEMON");
+        return !string.IsNullOrEmpty(value: v) && v != "0";
     }
 
     /// <summary>
