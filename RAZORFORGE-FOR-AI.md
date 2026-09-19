@@ -416,30 +416,40 @@ that differ from other languages:
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate.
 
-## 10b. Filesystem and paths (`IO/FileSystem`)
+## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
 
-Synchronous path/filesystem operations live in `import IO/FileSystem` as **free
-routines** (not methods on a path type — RF has no `Path` type; paths are plain
-`Text`). This is distinct from the *async* file-content I/O in §14 (`IO/File`).
-Highlights, with the gotchas that differ from Python `os`/`pathlib`:
+Filesystem operations are **methods on two value types** in `import IO/File`:
+`File` (a named regular file — byte content) and `Directory` (a named directory —
+a container of entries). Both are cheap values wrapping a path (`at: Text`);
+constructing one touches nothing. The *pure, OS-free* path-string math lives
+separately in `import IO/FileSystem` as free routines (RF has no `Path` type;
+paths are plain `Text`). This is distinct from the *async* file-content sessions
+in §14 (also `IO/File`). Gotchas that differ from Python `os`/`pathlib`:
 
-- **Existence (pure, non-throwing):** `exists`, `is_file`, `is_directory`,
-  `can_read`/`can_write`/`can_execute`.
-- **Mutation (failable):** `create_dir!`/`create_dir_all!`, `delete_path!`/
-  `delete_path_all!`, `move!`, `move_if_absent!` (→ `Bool`, false if the dest
-  existed), `touch!`, `set_readonly!`. **Copy is `copy_path!` / `copy_path_all!`,
-  NOT `copy!`** — a bare `copy` collides with the structural `copy` derive verb.
-- **Path builders (pure, no OS call):** `join_path(a:, b:)`, `parent_path`,
-  `file_name`, `file_stem`, `extension`, `split_extension` (→ `(stem, ext)`
-  tuple), `with_extension(path:, ext:)`, `with_file_name`. **`extension()`
-  returns WITHOUT the leading dot** (`"txt"`, not `".txt"`), and round-trips
-  through `with_extension`.
-- **Listing / walking:** `list_dir!` (→ `List[Text]` bare names), `list_dir_entries!`
-  (→ `List[DirEntry]` with `name`/`is_directory`/`modified` in ONE read — prefer
-  it when walking, no per-entry stat on Windows), `walk_dir!` (→ full descendant
-  paths, recursive, symlink-safe).
-- **Metadata:** `metadata!` (→ `FileMetadata`), `file_size!`.
-- **Dirs:** `current_dir!`/`set_current_dir!`, `home_dir!`, `temp_dir` (never fails).
+- **`File` (`File(at:)`):** `exists`/`is_file`, `size!`, `metadata!` (→
+  `FileMetadata`), `extension`/`name`/`stem`, `parent` (→ **`Directory`**),
+  `with_extension`, `absolute!`/`canonical!` (→ `File`), `read_text`/`write_text`,
+  `set_size!`, `can_read`/`can_write`/`can_execute`, `set_readonly!`, `copy_to!` /
+  `move_to!` / `move_to_if_absent!` (→ `Bool`, false if dest existed) / `delete!`
+  / `touch!` (all take/return `File`). **Copy is `copy_to!`, NOT `copy`** — a bare
+  `copy` collides with the structural `copy` derive verb.
+- **`Directory` (`Directory(at:)`):** `exists`/`is_directory`, `metadata!`,
+  `name`, `parent` (→ `Directory`), `file(name:)` (→ `File`) / `subdir(name:)` (→
+  `Directory`) to build child paths, `absolute!`/`canonical!` (→ `Directory`),
+  `can_*`/`set_readonly!`, `create!`/`create_all!`, `delete!` (empty) /
+  `delete_all!` (recursive tree), `move_to!` / `move_to_if_absent!`, `copy_to!`
+  (recursive tree copy, symlink-safe). Listing: `list!` (→ `List[Text]` bare
+  names), `entries!` (→ `List[DirEntry]` with `name`/`is_directory`/`modified` in
+  ONE read — prefer it when walking, no per-entry stat on Windows), `walk!` (→
+  full descendant paths, recursive, symlink-safe).
+- **Process/standard dirs (free routines in `IO/File`):** `current_dir!` /
+  `set_current_dir!(directory:)`, `home_dir!`, `temp_dir` (never fails) — all
+  return/take `Directory`.
+- **Path builders (pure, no OS call — `IO/FileSystem`):** `join_path(a:, b:)`,
+  `parent_path`, `file_name`, `file_stem`, `extension`, `split_extension` (→
+  `(stem, ext)` tuple), `with_extension(path:, ext:)`, `with_file_name`.
+  **`extension()` returns WITHOUT the leading dot** (`"txt"`, not `".txt"`), and
+  round-trips through `with_extension`.
 
 Not yet present (do not generate): symlink ops (`is_symlink`/`read_link!`/
 `symlink!`/`hard_link!`) and `glob`.

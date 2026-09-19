@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -46,6 +47,22 @@ rf_address rf_get_result_len(void)
 {
     return rf_last_result_len;
 }
+
+/* Byte offset from a sub-range mapping's real (alignment-rounded) base to the caller-requested
+ * offset. rf_file_map_path_range returns the base; the caller strides forward by this delta to reach
+ * the requested element, and back by it at unmap. Zero for a whole-file mapping.                 */
+static rf_address rf_last_map_delta = 0;
+
+rf_address rf_file_map_delta(void)
+{
+    return rf_last_map_delta;
+}
+
+/* Sentinel returned for a valid ZERO-length mapping (an empty file, or a range at/after EOF). mmap
+ * cannot map 0 bytes, so this non-NULL marker distinguishes "empty, OK" (len 0) from NULL ("error").
+ * RF builds an empty view (count()==0); rf_file_unmap/rf_file_map_flush no-op when len==0, so the
+ * sentinel is never dereferenced.                                                                */
+#define RF_EMPTY_MAP ((char*)1)
 
 /* ========================================================================== */
 /* Helper: null-terminate a counted string                                     */
@@ -212,6 +229,341 @@ char* rf_file_read_bytes(rf_S32 fd, rf_address count)
     buf[actual] = '\0';
     rf_last_result_len = (rf_address)actual;
     return buf;
+}
+
+/**
+ * Prefault budget: the largest mapping size worth prefaulting whole. Prefaulting a file bigger than
+ * this evicts pages it just faulted in (thrash), so a >budget mapping skips the whole-file
+ * WILLNEED/Prefetch and relies on demand paging (+ MADV_SEQUENTIAL readahead on POSIX). Heuristic:
+ * half of total physical RAM. Returns 0 if the query fails, which safely disables prefault (no
+ * nonzero file compares <= 0).
+ */
+static uint64_t rf_prefault_budget(void)
+{
+#ifdef _WIN32
+    MEMORYSTATUSEX ms;
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) return 0;
+    return (uint64_t)(ms.ullTotalPhys / 2);
+#else
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long pgsz = sysconf(_SC_PAGE_SIZE);
+    if (pages <= 0 || pgsz <= 0) return 0;
+    return ((uint64_t)pages * (uint64_t)pgsz) / 2u;
+#endif
+}
+
+/**
+ * Memory-map a file read-only and return the mapped base pointer (sets rf_last_result_len to the
+ * mapped size). Returns NULL on failure — a missing/non-regular/zero-length file, or a mapping
+ * error. The returned view stays valid until rf_file_unmap; the OS file and mapping handles are
+ * closed here (MapViewOfFile / mmap keep the view alive after their source handles close). This is
+ * RazorForge's zero-copy read path: no heap buffer, bytes fault in on access (demand paging).
+ */
+char* rf_file_map_path(const char* path, rf_S32 path_len)
+{
+    char* cpath = make_cstr(path, path_len);
+    if (!cpath) { rf_last_result_len = 0; return NULL; }
+
+#ifdef _WIN32
+    /* FILE_FLAG_SEQUENTIAL_SCAN: hint the cache manager toward aggressive readahead and away from
+     * cache-thrashing on a full sequential scan. */
+    HANDLE hFile = CreateFileA(cpath, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    free(cpath);
+    if (hFile == INVALID_HANDLE_VALUE) { rf_last_result_len = 0; return NULL; }
+
+    LARGE_INTEGER sz;
+    if (!GetFileSizeEx(hFile, &sz))
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0;
+        return NULL;
+    }
+    if (sz.QuadPart == 0)
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0;
+        return RF_EMPTY_MAP;   // a zero-length file IS a file — empty view, not an error
+    }
+
+    HANDLE hMap = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!hMap) { CloseHandle(hFile); rf_last_result_len = 0; return NULL; }
+
+    void* view = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+    if (!view) { rf_last_result_len = 0; return NULL; }
+
+    /* Prefault: batch-read the whole mapping into the working set with one async request (the
+     * analog of madvise(MADV_WILLNEED)). This converts the scattered per-page faults that would
+     * otherwise hit during parsing into a single kernel-batched readahead, overlapped with the
+     * caller's setup. Gated to files within the prefault budget (~half RAM): a bigger file would
+     * evict pages it just faulted in, so it relies on demand paging instead. */
+    if ((uint64_t)sz.QuadPart <= rf_prefault_budget())
+    {
+        WIN32_MEMORY_RANGE_ENTRY range;
+        range.VirtualAddress = view;
+        range.NumberOfBytes = (SIZE_T)sz.QuadPart;
+        PrefetchVirtualMemory(GetCurrentProcess(), 1, &range, 0);
+    }
+
+    rf_last_result_len = (rf_address)sz.QuadPart;
+    return (char*)view;
+#else
+    int fd = open(cpath, O_RDONLY);
+    free(cpath);
+    if (fd < 0) { rf_last_result_len = 0; return NULL; }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0)
+    {
+        close(fd);
+        rf_last_result_len = 0;
+        return NULL;
+    }
+    if (st.st_size == 0)
+    {
+        close(fd);
+        rf_last_result_len = 0;
+        return RF_EMPTY_MAP;   // a zero-length file IS a file — empty view, not an error
+    }
+
+    void* p = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (p == MAP_FAILED) { rf_last_result_len = 0; return NULL; }
+
+    /* Prefault + sequential hint: MADV_WILLNEED kicks off batched readahead but is gated to the
+     * prefault budget (~half RAM) — over a >RAM file it would evict pages it just paged in.
+     * MADV_SEQUENTIAL is always safe: it asks the kernel to read ahead aggressively and drop pages
+     * behind the cursor, which is correct for >RAM scans too. */
+    if ((uint64_t)st.st_size <= rf_prefault_budget())
+        madvise(p, (size_t)st.st_size, MADV_WILLNEED);
+    madvise(p, (size_t)st.st_size, MADV_SEQUENTIAL);
+
+    rf_last_result_len = (rf_address)st.st_size;
+    return (char*)p;
+#endif
+}
+
+/**
+ * Memory-map a page-aligned WINDOW of a file read-only: [offset, offset+length) clamped to the file
+ * end. Returns the mapping BASE (rounded down to the platform's mapping granularity); the caller adds
+ * rf_file_map_delta() to reach the requested offset, and rf_get_result_len() gives the caller-visible
+ * byte length (the clamped length). This is the windowing path for files larger than the address
+ * space. Returns NULL on error, or RF_EMPTY_MAP (len 0) when the requested window is empty (offset at
+ * or past EOF, or a zero length). Released with rf_file_unmap(base, delta + result_len).
+ */
+char* rf_file_map_path_range(const char* path, rf_S32 path_len, rf_address offset, rf_address length)
+{
+    char* cpath = make_cstr(path, path_len);
+    if (!cpath) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    rf_address gran = (rf_address)si.dwAllocationGranularity;
+    rf_address aligned = offset - (offset % gran);
+    rf_address delta = offset - aligned;
+
+    HANDLE hFile = CreateFileA(cpath, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    free(cpath);
+    if (hFile == INVALID_HANDLE_VALUE) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    LARGE_INTEGER sz;
+    if (!GetFileSizeEx(hFile, &sz))
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0; rf_last_map_delta = 0;
+        return NULL;
+    }
+    rf_address filesize = (rf_address)sz.QuadPart;
+    if (offset >= filesize) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address avail = filesize - offset;
+    rf_address want = (length < avail) ? length : avail;
+    if (want == 0) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address maplen = want + delta;
+
+    HANDLE hMap = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!hMap) { CloseHandle(hFile); rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+    void* view = MapViewOfFile(hMap, FILE_MAP_READ,
+                               (DWORD)(aligned >> 32), (DWORD)(aligned & 0xFFFFFFFFu), (SIZE_T)maplen);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+    if (!view) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    rf_last_result_len = want;
+    rf_last_map_delta = delta;
+    return (char*)view;
+#else
+    long ps = sysconf(_SC_PAGE_SIZE);
+    rf_address page = (ps > 0) ? (rf_address)ps : 4096u;
+    rf_address aligned = offset - (offset % page);
+    rf_address delta = offset - aligned;
+
+    int fd = open(cpath, O_RDONLY);
+    free(cpath);
+    if (fd < 0) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+    rf_address filesize = (rf_address)st.st_size;
+    if (offset >= filesize) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address avail = filesize - offset;
+    rf_address want = (length < avail) ? length : avail;
+    if (want == 0) { close(fd); rf_last_result_len = 0; rf_last_map_delta = 0; return RF_EMPTY_MAP; }
+    rf_address maplen = want + delta;
+
+    void* p = mmap(NULL, (size_t)maplen, PROT_READ, MAP_PRIVATE, fd, (off_t)aligned);
+    close(fd);
+    if (p == MAP_FAILED) { rf_last_result_len = 0; rf_last_map_delta = 0; return NULL; }
+
+    madvise(p, (size_t)maplen, MADV_SEQUENTIAL);
+
+    rf_last_result_len = want;
+    rf_last_map_delta = delta;
+    return (char*)p;
+#endif
+}
+
+/**
+ * Release a mapping created by rf_file_map_path. `len` is the mapped size (ignored on Windows,
+ * where UnmapViewOfFile takes only the base). A NULL pointer is a no-op.
+ */
+void rf_file_unmap(char* ptr, rf_address len)
+{
+    if (!ptr || len == 0) return;   // NULL, or the empty-map sentinel (len 0) — nothing mapped
+#ifdef _WIN32
+    (void)len;
+    // Flush dirty pages back to the file before releasing the view, then unmap. UnmapViewOfFile
+    // itself schedules a lazy writeback; FlushViewOfFile makes the write-back deterministic here.
+    FlushViewOfFile(ptr, 0);
+    UnmapViewOfFile(ptr);
+#else
+    // MAP_SHARED dirty pages are written back to the file on munmap; msync first makes it explicit.
+    msync(ptr, (size_t)len, MS_SYNC);
+    munmap(ptr, (size_t)len);
+#endif
+}
+
+/**
+ * Memory-map a file read/write, SHARED, and return the mapped base pointer (sets rf_last_result_len
+ * to the mapped size). Writes through the returned view land in the file (flushed lazily, or on
+ * rf_file_map_flush / rf_file_unmap). Returns NULL on failure — a missing/non-regular/zero-length
+ * file, or a mapping error. The mapping cannot grow the file: writes must stay within the mapped
+ * size. Released with rf_file_unmap, which flushes dirty pages back to the file.
+ */
+char* rf_file_map_path_rw(const char* path, rf_S32 path_len)
+{
+    char* cpath = make_cstr(path, path_len);
+    if (!cpath) { rf_last_result_len = 0; return NULL; }
+
+#ifdef _WIN32
+    HANDLE hFile = CreateFileA(cpath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(cpath);
+    if (hFile == INVALID_HANDLE_VALUE) { rf_last_result_len = 0; return NULL; }
+
+    LARGE_INTEGER sz;
+    if (!GetFileSizeEx(hFile, &sz))
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0;
+        return NULL;
+    }
+    if (sz.QuadPart == 0)
+    {
+        CloseHandle(hFile);
+        rf_last_result_len = 0;
+        return RF_EMPTY_MAP;   // a zero-length file IS a file — empty view, not an error
+    }
+
+    HANDLE hMap = CreateFileMappingA(hFile, NULL, PAGE_READWRITE, 0, 0, NULL);
+    if (!hMap) { CloseHandle(hFile); rf_last_result_len = 0; return NULL; }
+
+    void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, 0);
+    CloseHandle(hMap);
+    CloseHandle(hFile);
+    if (!view) { rf_last_result_len = 0; return NULL; }
+
+    rf_last_result_len = (rf_address)sz.QuadPart;
+    return (char*)view;
+#else
+    int fd = open(cpath, O_RDWR);
+    free(cpath);
+    if (fd < 0) { rf_last_result_len = 0; return NULL; }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0)
+    {
+        close(fd);
+        rf_last_result_len = 0;
+        return NULL;
+    }
+    if (st.st_size == 0)
+    {
+        close(fd);
+        rf_last_result_len = 0;
+        return RF_EMPTY_MAP;   // a zero-length file IS a file — empty view, not an error
+    }
+
+    void* p = mmap(NULL, (size_t)st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (p == MAP_FAILED) { rf_last_result_len = 0; return NULL; }
+
+    rf_last_result_len = (rf_address)st.st_size;
+    return (char*)p;
+#endif
+}
+
+/**
+ * Force dirty pages of a read/write mapping to be written back to the file. `len` is the mapped size
+ * (ignored on Windows, where FlushViewOfFile takes only the base). A NULL pointer is a no-op.
+ */
+void rf_file_map_flush(char* ptr, rf_address len)
+{
+    if (!ptr || len == 0) return;
+#ifdef _WIN32
+    (void)len;
+    FlushViewOfFile(ptr, 0);
+#else
+    msync(ptr, (size_t)len, MS_SYNC);
+#endif
+}
+
+/**
+ * Set a file's size to exactly `size` bytes — creating it if missing, extending with zero bytes or
+ * truncating as needed. This is what makes a writable mapping able to PRODUCE output: mmap cannot grow
+ * a file, so the file must be sized first. Returns 0 on success, -1 on failure.
+ */
+rf_S32 rf_fs_set_size(const char* path, rf_S32 path_len, rf_address size)
+{
+    char* cpath = make_cstr(path, path_len);
+    if (!cpath) return -1;
+
+#ifdef _WIN32
+    HANDLE h = CreateFileA(cpath, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    free(cpath);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    LARGE_INTEGER li;
+    li.QuadPart = (LONGLONG)size;
+    if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h))
+    {
+        CloseHandle(h);
+        return -1;
+    }
+    CloseHandle(h);
+    return 0;
+#else
+    int fd = open(cpath, O_WRONLY | O_CREAT, 0644);
+    free(cpath);
+    if (fd < 0) return -1;
+    int r = ftruncate(fd, (off_t)size);
+    close(fd);
+    return r == 0 ? 0 : -1;
+#endif
 }
 
 /**

@@ -168,6 +168,18 @@ routine Bytes.count_of(byte: Byte) -> U64
 routine Bytes.is_empty() -> Bool
   return me.count == 0u64
 
+### Hands out the raw, NON-OWNING `Hijacked[Byte]` over this sequence's backing buffer — the
+### zero-copy escape hatch for hot byte scanning. The returned handle borrows the buffer: it does
+### NOT own or free it (the `Bytes` value remains the sole owner), and it is invalidated when the
+### `Bytes` is destroyed or reallocated. `dangerous` because it exposes an unchecked pointer with a
+### caller-guaranteed lifetime; callers must keep the source `Bytes` alive for as long as the handle
+### (or any slice `stride`d from it) is used. Use for raw `stride`/`peek` walks that must skip the
+### per-index bounds check of `getitem!`, and for building pointer-keyed slices into the buffer.
+### :returns: A non-owning `Hijacked[Byte]` positioned at byte 0 of the backing buffer.
+@readonly
+dangerous routine Bytes.raw_buffer() -> Hijacked[Byte]
+  return me.data
+
 # Indexing
 
 ### Returns the byte at `index`.

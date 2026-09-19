@@ -1,0 +1,33 @@
+module IO/Stream
+
+### A one-way byte flow consumed forward only — a socket, pipe, or console end, or a {File} opened for
+### sequential reading. Unlike a `File`'s spatial view ({Exposed}), a stream has NO length, NO index,
+### and NO seek: its bytes exist in time, not space, behind an intrinsic, unobservable cursor. `load`
+### pulls the next bytes and advances that cursor; an empty result means end-of-stream (EOF). The dual
+### of {Sink}: you `load` FROM a source, you `store` TO a sink — mirroring a CPU's load/store across a
+### byte flow.
+###
+### `Enterable` is ORTHOGONAL: a source that owns a closable OS resource (a file descriptor, a socket)
+### additionally obeys {Enterable} so `using` closes it deterministically ({FileSource}); a source over
+### a never-closed process-global stream (stdin) does not, and is used directly.
+protocol Source
+  ### Loads up to `max` bytes from the source, advancing its cursor. May return fewer than `max` bytes
+  ### (a short read is normal); an empty `Bytes` (count 0) signals EOF. There is no length to query
+  ### first — a stream's extent is unknown until it ends.
+  ### :param max: The maximum number of bytes to load.
+  ### :returns: The bytes loaded, or an empty `Bytes` at EOF.
+  routine Me.load(max: U64) -> Bytes
+
+### A byte sink you can only push into — a socket, pipe, or console end, or a {File} opened for
+### sequential writing or appending. Like {Source} it has no length and no position; you just `store`
+### bytes into the flow. As with `Source`, {Enterable} is orthogonal: a resource-owning sink ({FileSink})
+### also obeys it so `using` flushes and closes; a process-global sink (stdout/stderr) does not.
+protocol Sink
+  ### Stores `data` into the sink, returning the number of bytes accepted (may be fewer than
+  ### `data.count()` — a short store is normal; retry the remainder).
+  ### :param data: The bytes to store.
+  ### :returns: The number of bytes accepted.
+  routine Me.store(data: Bytes) -> U64
+
+  ### Pushes any buffered bytes to the underlying medium.
+  routine Me.flush()

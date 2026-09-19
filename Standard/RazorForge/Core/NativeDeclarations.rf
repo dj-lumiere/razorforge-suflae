@@ -911,6 +911,45 @@ routine C::rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### :param fd: The file descriptor to read from.
 ### :returns: A pointer to the captured byte buffer.
 routine C::rf_file_read_line(fd: S32) -> Hijacked[Byte]
+### RF-only: memory-maps a file read-only and returns the mapped base pointer
+### (`rf_get_result_len()` yields the mapped size); none on failure (missing / non-regular /
+### zero-length file). The view stays valid until `rf_file_unmap`.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :returns: A pointer to the mapped read-only byte view.
+dangerous routine C::rf_file_map_path(path: CStr, path_len: S32) -> Hijacked[Byte]
+### RF-only: releases a mapping created by `rf_file_map_path`.
+### :param ptr: The mapped base pointer.
+### :param len: The mapped size in bytes.
+dangerous routine C::rf_file_unmap(ptr: Hijacked[Byte], len: U64)
+### RF-only: memory-maps a file read/write, SHARED (writes are flushed back to the file) and returns
+### the mapped base pointer (`rf_get_result_len()` yields the mapped size); none on failure (missing /
+### non-regular / zero-length file). The view stays valid until `rf_file_unmap`, which flushes dirty
+### pages back to the file. The mapping cannot grow the file.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :returns: A pointer to the mapped read/write byte view.
+dangerous routine C::rf_file_map_path_rw(path: CStr, path_len: S32) -> Hijacked[Byte]
+### RF-only: forces dirty pages of a read/write mapping to be written back to the file (msync /
+### FlushViewOfFile). A null pointer is a no-op.
+### :param ptr: The mapped base pointer.
+### :param len: The mapped size in bytes.
+dangerous routine C::rf_file_map_flush(ptr: Hijacked[Byte], len: U64)
+### RF-only: memory-maps a page-aligned WINDOW `[offset, offset+length)` of a file read-only, clamped
+### to the file end. Returns the mapping BASE (rounded down to the platform mapping granularity); add
+### `rf_file_map_delta()` to reach the requested offset, and `rf_get_result_len()` gives the clamped
+### caller-visible byte length. None on failure; the empty-map sentinel (len 0) when the window is
+### empty. Release with `rf_file_unmap(base, delta + result_len)`.
+### :param path: The null-terminated file path.
+### :param path_len: The path length in bytes.
+### :param offset: The starting byte offset within the file.
+### :param length: The requested window length in bytes (clamped to the file end).
+### :returns: A pointer to the mapped window base.
+dangerous routine C::rf_file_map_path_range(path: CStr, path_len: S32, offset: U64, length: U64) -> Hijacked[Byte]
+### RF-only: the byte offset from a range mapping's base to the caller-requested offset (see
+### `rf_file_map_path_range`). Zero for a whole-file mapping.
+### :returns: The delta in bytes.
+routine C::rf_file_map_delta() -> U64
 ### Reads a whole file asynchronously off the libuv threadpool. Inside a suspended routine the calling
 ### coroutine parks while the read runs (siblings keep progressing); outside one it reads inline.
 ### :param path: The null-terminated file path.
@@ -1174,6 +1213,13 @@ routine C::rf_fs_home_dir() -> Hijacked[Byte]
 ### :param len: The path length in bytes.
 ### :returns: `0` on success, or `-1` on error.
 routine C::rf_fs_touch(path: CStr, len: S32) -> S32
+### Sets a file's size to exactly `size` bytes, creating it if missing (extending with zero bytes or
+### truncating as needed). Enables writable mappings that produce output — mmap cannot grow a file.
+### :param path: The null-terminated file path.
+### :param len: The path length in bytes.
+### :param size: The exact size in bytes.
+### :returns: `0` on success, or `-1` on error.
+routine C::rf_fs_set_size(path: CStr, len: S32, size: U64) -> S32
 
 # ============================================================================
 # Real (arbitrary-precision binary float, libbf-backed) — handle lifecycle +
