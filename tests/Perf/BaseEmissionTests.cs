@@ -502,6 +502,68 @@ public sealed partial class BaseEmissionTests
     }
 
     /// <summary>
+    /// Step 2 validation: base/delta split with a DISK-OBJECT base (the real win — base AOT'd once to a
+    /// cached <c>.o</c>, only the delta JIT'd per run). AOTs the base via <see cref="BaseObjectCache"/>, then
+    /// <see cref="OrcJitExecutor.JitAndRunSplitWithBaseObject"/> loads that object + JITs only the delta +
+    /// runs <c>@main</c>. NEEDS libLLVM staged + runs the native runtime in-process, so Skip'd (run locally).
+    /// Shares the base DEFINE-completeness tail with <see cref="JitAndRunSplit_BasePlusDelta_RunsMain"/>: the
+    /// base object leaves the ~represent gap as undefined externs, which the DELTA must define (residentSymbols
+    /// = base's DEFINED syms, so main's reached represents fall to the delta) — that closure is Step 3's job.
+    /// </summary>
+    [Fact(Skip =
+        "Local ORC-JIT run: needs libLLVM staged next to the test binary + runs the native runtime in-process. Shares the base define-completeness tail — full closure is Step 3 (wire into the daemon/client dev-loop).")]
+    public void JitAndRunSplitWithBaseObject_RunsMain()
+    {
+        var baseSa =
+            new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
+        AnalysisResult baseR = baseSa.Analyze(
+            program: Parse(src: "module Base\nroutine start()\n  return", file: "base.rf"));
+        Assert.Empty(collection: baseR.Errors);
+        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+            programs: baseR.Registry.UserPrograms,
+            instantiatedBodies: baseR.InstantiatedGenericBodies,
+            maySuspendKeys: baseR.MaySuspendRoutineKeys,
+            registry: baseR.Registry);
+        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
+            registry: baseR.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = baseR.Registry.StdlibPrograms,
+                SynthesizedBodies = baseR.SynthesizedBodies,
+                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
+            });
+        (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
+
+        var cache = new Builder.Execution.BaseObjectCache(
+            dir: Path.Combine(path1: Path.GetTempPath(), path2: "rf_base_cache_test"));
+        string fp = "split-" + baseIr.Length;
+        File.Delete(path: cache.ObjectPath(fingerprint: fp));
+        string? baseObj = cache.GetOrBuild(fingerprint: fp,
+            baseIr: baseIr,
+            buildMode: Builder.Targeting.RfBuildMode.Debug,
+            wasCached: out _);
+        Assert.NotNull(@object: baseObj);
+
+        AnalysisResult r = new SemanticVerifier(language: Language.RazorForge).Analyze(
+            program: Parse(src: Trivial, file: "bench.rf"));
+        Assert.Empty(collection: r.Errors);
+        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+            programs: r.Registry.UserPrograms,
+            instantiatedBodies: r.InstantiatedGenericBodies,
+            maySuspendKeys: r.MaySuspendRoutineKeys,
+            registry: r.Registry);
+        string deltaIr = DeltaBuild(r: r, residentSymbols: baseSyms);
+
+        int rc = Builder.Execution.OrcJitExecutor.JitAndRunSplitWithBaseObject(
+            baseObjectPath: baseObj!,
+            deltaIr: deltaIr,
+            programName: "test",
+            programArgs: Array.Empty<string>());
+        _out.WriteLine(message: $"JitAndRunSplitWithBaseObject exit code = {rc}");
+        Assert.Equal(expected: 0, actual: rc);
+    }
+
+    /// <summary>
     /// Resident-JIT incremental (B) FULLY-LAZY on-demand M2a — proves `show("hi")` runs with NO pruning pass,
     /// NO base, and NO caller-side closure walk: a MAIN module (@main + user routines + trace globals; every
     /// stdlib callee an extern declare) plus an ORC custom definition generator that codegens each unresolved

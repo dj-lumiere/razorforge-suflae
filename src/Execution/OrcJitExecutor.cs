@@ -421,6 +421,80 @@ internal static unsafe class OrcJitExecutor
     }
 
     /// <summary>
+    /// Resident-JIT base/delta split, DISK-OBJECT base (Step 2): loads a PRECOMPILED base object file (the
+    /// stdlib closure AOT-compiled once by <see cref="BaseObjectCache"/>) into the dylib — NOT JIT-compiled,
+    /// just relocated+linked — then JITs ONLY the small per-run <paramref name="deltaIr"/> (user code +
+    /// non-resident instantiations), whose extern <c>declare</c>s for base symbols resolve to the object's
+    /// defines. This is the win over <see cref="JitAndRunSplit"/> (which re-JITs the whole base IR each run):
+    /// the ~MB stdlib base is compiled once to a cached <c>.o</c>, and each dev-loop run only JITs the delta.
+    /// Single dylib, disposable client (option 3): no cross-dylib link order or ResourceTracker teardown.
+    /// Returns the program exit code.
+    /// </summary>
+    public static int JitAndRunSplitWithBaseObject(string baseObjectPath, string deltaIr,
+        string programName, string[] programArgs)
+    {
+        if (!TryInitialize(error: out string? error))
+        {
+            throw new InvalidOperationException(message: $"ORC JIT unavailable: {error}");
+        }
+
+        bool traceJit = Builder.Diagnostics.DiagnosticFlags.JitTrace;
+
+        void JitStage(string s)
+        {
+            if (traceJit)
+            {
+                Console.Error.WriteLine(value: $"[jit-stage] {s}");
+                Console.Error.Flush();
+            }
+        }
+
+        LLVMOrcOpaqueThreadSafeModule* tsmDelta = ParseToTsm(llvmIr: deltaIr, modName: "rf_delta");
+        JitStage(s: "delta IR parsed");
+
+        LLVMOrcOpaqueLLJITBuilder* builder = LLVM.OrcCreateLLJITBuilder();
+        if (OperatingSystem.IsWindows())
+        {
+            OrcContiguousMemoryManager.InstallOn(builder: builder);
+        }
+
+        LLVMOrcOpaqueLLJIT* jit;
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
+
+        // Load the precompiled stdlib base object — linked into the dylib, NOT JIT-compiled.
+        AddObjectFile(jit: jit, dylib: dylib, objectPath: baseObjectPath);
+        JitStage(s: "base object loaded");
+
+        // JIT ONLY the delta; its extern declares for base symbols resolve to the object's defines.
+        CheckErr(err: LLVM.OrcLLJITAddLLVMIRModule(J: jit, JD: dylib, TSM: tsmDelta),
+            what: "AddLLVMIRModule(delta)");
+        JitStage(s: "delta module added — resolving main");
+
+        return RunMain(jit: jit, programName: programName, programArgs: programArgs);
+    }
+
+    /// <summary>Loads a native object file from disk into the given JITDylib (relocated + linked, not
+    /// compiled). ORC takes ownership of the memory buffer (a COPY of the file bytes).</summary>
+    private static void AddObjectFile(LLVMOrcOpaqueLLJIT* jit, LLVMOrcOpaqueJITDylib* dylib,
+        string objectPath)
+    {
+        byte[] obj = File.ReadAllBytes(path: objectPath);
+        byte[] nm = Encoding.ASCII.GetBytes(s: "rf_base_obj\0");
+        LLVMOpaqueMemoryBuffer* buf;
+        fixed (byte* objp = obj)
+        fixed (byte* np = nm)
+        {
+            buf = LLVM.CreateMemoryBufferWithMemoryRangeCopy(InputData: (sbyte*)objp,
+                InputDataLength: (nuint)obj.Length,
+                BufferName: (sbyte*)np);
+        }
+
+        CheckErr(err: LLVM.OrcLLJITAddObjectFile(J: jit, JD: dylib, ObjBuffer: buf),
+            what: "OrcLLJITAddObjectFile(base)");
+    }
+
+    /// <summary>
     /// Resident-JIT incremental (B) FULLY-LAZY on-demand materialization (M2a). JITs <paramref name="mainIr"/>
     /// (@main + user routines + shared runtime globals; every stdlib callee an extern <c>declare</c>) and
     /// attaches an ORC custom definition generator: when a materialization needs an unresolved RF symbol,
