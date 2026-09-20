@@ -1679,7 +1679,11 @@ internal partial class Program
         string? outputFile = p3.OutputFile;
         TargetConfig target = p3.Target;
         RfBuildMode buildMode = p3.BuildMode;
-        bool saTiming = p3.SaTiming, dumpAst = p3.DumpAst, showBuildStages = p3.ShowBuildStages;
+        // OR with the process-wide PhaseTiming flag so codegen [CG] stage timings honor `[debug] timing` on
+        // EVERY path (the daemon server-compile sets DiagnosticFlags.PhaseTiming from the request but does not
+        // thread p3.SaTiming through) — mirrors the analyze-side merge (RunMultipleFullPipeline).
+        bool saTiming = p3.SaTiming || DiagnosticFlags.PhaseTiming;
+        bool dumpAst = p3.DumpAst, showBuildStages = p3.ShowBuildStages;
         Action<string>? irCallback = p3.IrCallback;
         Stopwatch? swPhase = p3.SwPhase;
         if (showBuildStages)
