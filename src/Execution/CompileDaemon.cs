@@ -223,7 +223,13 @@ internal partial class Program
                     {
                         StdlibPrograms = baseR.Registry.StdlibPrograms,
                         SynthesizedBodies = baseR.SynthesizedBodies,
-                        InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
+                        InstantiatedGenericBodies = baseR.InstantiatedGenericBodies,
+                        // MUST match the delta's mode+target: ShouldEmitTrace (Debug/Release) gates whether the
+                        // base DEFINES the shared trace TLS globals the delta extern-references, and the target
+                        // fixes the triple/datalayout the delta is JIT-linked against. Omitting these made the
+                        // base skip the trace globals → delta's externs "not found" at JIT link.
+                        BuildMode = buildMode,
+                        Target = TargetConfig.ForCurrentHost()
                     });
                 (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
 
