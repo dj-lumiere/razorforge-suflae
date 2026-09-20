@@ -33,6 +33,16 @@
     <InternalsVisibleTo Include="RazorForge.Tests" />
   </ItemGroup>
 
+  <!-- Kill any lingering resident daemon BEFORE the build. A daemon (spawned by a non-jit build/buildandrun)
+       runs the OLD RazorForge.dll and holds an open handle to it, so a subsequent `dotnet build` cannot
+       overwrite bin\...\RazorForge.dll (MSB3021 "being used by another process"). The daemon is stale after
+       any C# change anyway (it would be shut down as stale on the next ping), so killing it here is free —
+       the next run cold-spawns a fresh warm daemon. Best-effort (ContinueOnError): no daemon → no-op. -->
+  <Target Name="StopResidentDaemonBeforeBuild" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\build-support\stop-resident-daemon.ps1&quot;"
+          ContinueOnError="true"/>
+  </Target>
+
   <!-- Build native libraries before main build -->
   <Target Name="BuildNativeLibraries" BeforeTargets="BeforeBuild" Condition="'$(SkipNative)' != 'true'">
     <Exec Command="$(MSBuildProjectDirectory)\native\build.bat" WorkingDirectory="$(MSBuildProjectDirectory)\native" Condition="'$(OS)' == 'Windows_NT'"/>
