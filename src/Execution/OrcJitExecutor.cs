@@ -361,8 +361,25 @@ internal static unsafe class OrcJitExecutor
     /// <summary>Resolves <c>@main</c> in the JIT and calls it with a C argv; returns its exit code.</summary>
     private static int RunMain(LLVMOrcOpaqueLLJIT* jit, string programName, string[] programArgs)
     {
+        bool traceJit = Builder.Diagnostics.DiagnosticFlags.JitTrace;
+        var clk = System.Diagnostics.Stopwatch.StartNew();
         ulong addr = ResolveMain(jit: jit);
-        return InvokeMain(addr: addr, programName: programName, programArgs: programArgs);
+        if (traceJit)
+        {
+            Console.Error.WriteLine(
+                value: $"[jit-stage] {clk.ElapsedMilliseconds} ms — main resolved (delta compiled + base linked)");
+            Console.Error.Flush();
+            clk.Restart();
+        }
+
+        int rc = InvokeMain(addr: addr, programName: programName, programArgs: programArgs);
+        if (traceJit)
+        {
+            Console.Error.WriteLine(value: $"[jit-stage] {clk.ElapsedMilliseconds} ms — main executed");
+            Console.Error.Flush();
+        }
+
+        return rc;
     }
 
     /// <summary>
@@ -439,12 +456,13 @@ internal static unsafe class OrcJitExecutor
         }
 
         bool traceJit = Builder.Diagnostics.DiagnosticFlags.JitTrace;
+        var jitClk = System.Diagnostics.Stopwatch.StartNew();
 
         void JitStage(string s)
         {
             if (traceJit)
             {
-                Console.Error.WriteLine(value: $"[jit-stage] {s}");
+                Console.Error.WriteLine(value: $"[jit-stage] {jitClk.ElapsedMilliseconds} ms — {s}");
                 Console.Error.Flush();
             }
         }
