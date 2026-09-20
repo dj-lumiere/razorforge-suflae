@@ -366,6 +366,59 @@ public sealed partial class BaseEmissionTests
     /// IR. No native execution, so this isolates genuine malformed-emission bugs in non-pruned stdlib
     /// routines. NEEDS libLLVM staged next to the test binary (parse is an LLVM call) → Skip'd in CI.
     /// </summary>
+    /// <summary>
+    /// AOT the standalone base IR to a native object via <see cref="BaseObjectCache"/> (opt + clang -c).
+    /// clang runs as an EXTERNAL tool (no in-process libLLVM), so this is NOT Skip'd — it validates the
+    /// base-object AOT primitive AND, on failure, clang's stderr pinpoints the exact malformed base IR
+    /// (the (a') latent stdlib-internal codegen tail). clang -c tolerates undefined symbols (the ~102
+    /// represent/serialize gap is resolved by the delta at JIT-link), so only genuinely malformed IR fails.
+    /// </summary>
+    [Fact]
+    public void GenerateBase_Standalone_CompilesToObject()
+    {
+        // SeedAllStdlibRoutines = the full non-pruned stdlib base (12k+ defines), same setup as
+        // GenerateBase_Standalone_DefineCompleteness — WITHOUT it the demand-flip analysis of an empty
+        // program materializes nothing and the base is trivially empty (syms=0).
+        var baseSa =
+            new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
+        AnalysisResult baseR = baseSa.Analyze(
+            program: Parse(src: "module Base\nroutine start()\n  return", file: "base.rf"));
+        Assert.Empty(collection: baseR.Errors);
+        Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+            programs: baseR.Registry.UserPrograms,
+            instantiatedBodies: baseR.InstantiatedGenericBodies,
+            maySuspendKeys: baseR.MaySuspendRoutineKeys,
+            registry: baseR.Registry);
+
+        var baseGen = new LlvmEmitter(userPrograms: new List<(Program, string, string)>(),
+            registry: baseR.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = baseR.Registry.StdlibPrograms,
+                SynthesizedBodies = baseR.SynthesizedBodies,
+                InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
+            });
+        (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
+
+        var cache = new Builder.Execution.BaseObjectCache(
+            dir: Path.Combine(path1: Path.GetTempPath(), path2: "rf_base_cache_test"));
+        // Fresh fingerprint per run so we always exercise the compile (not a stale hit).
+        string fp = "test-" + baseIr.Length;
+        File.Delete(path: cache.ObjectPath(fingerprint: fp));
+        string? obj = cache.GetOrBuild(fingerprint: fp,
+            baseIr: baseIr,
+            buildMode: Builder.Targeting.RfBuildMode.Debug,
+            wasCached: out bool cached);
+
+        _out.WriteLine(
+            message:
+            $"standalone base: syms={baseSyms.Count} chars={baseIr.Length} obj={(obj ?? "<compile failed>")} cached={cached}");
+        Assert.False(condition: cached);
+        Assert.NotNull(@object: obj);
+        Assert.True(condition: new FileInfo(fileName: obj!).Length > 0,
+            userMessage: "base object file is empty");
+    }
+
     [Fact(Skip =
         "Local Phase 0a (a') hardening harness: needs libLLVM staged next to the test binary (parse is an LLVM call). Currently FAILS — non-pruned base surfaces a genuine stdlib-internal monomorphization gap: List[Bytes].duplicate() calls abstract Core.Copyable.duplicate() (ptr) instead of concrete Bytes.duplicate(). See RESIDENT-JIT doc Phase 0a finding.")]
     public void GenerateBase_Standalone_ParsesValid()

@@ -984,6 +984,33 @@ internal static class NativeToolchain
             : "";
     }
 
+    /// <summary>
+    /// Compiles optimized LLVM IR to a native OBJECT file (<c>clang -c</c>) — NO linking, no runtime libs.
+    /// Used to AOT the resident-JIT base: the stdlib closure is compiled to a cached <c>.o</c> ONCE per
+    /// stdlib fingerprint, then the dev-loop client loads that object and JITs only the per-run delta,
+    /// instead of re-JIT-compiling the whole stdlib IR every run. Returns 0 on success, 1 on failure.
+    /// </summary>
+    internal static int CompileIrToObject(string optFile, string objFile, RfBuildMode buildMode)
+    {
+        // clang uses -Ox flag style (not opt's -passes=). Same target codegen flags as the link path so the
+        // object's ABI/target matches the delta the JIT layers on top of it.
+        string clangOptLevel = $"-{OptLevelString(buildMode: buildMode)}";
+        string clangArgs =
+            $"-c {clangOptLevel}{TargetCodegenFlags()} -o \"{objFile}\" \"{optFile}\"";
+        int rc = RunToolCapture(toolPath: ClangTool.Value, args: clangArgs, stderr: out string err);
+        if (rc != 0)
+        {
+            if (!string.IsNullOrWhiteSpace(value: err))
+            {
+                Console.Error.Write(value: err);
+            }
+
+            Console.WriteLine(value: $"base-object compile failed (clang exited with code {rc})");
+        }
+
+        return rc;
+    }
+
     internal static int LinkExecutable(string optFile, string exeFile, string runtimeLibDir,
         RfBuildMode buildMode, IReadOnlyList<string>? cLibraries = null,
         IReadOnlyList<string>? libraryPaths = null)
