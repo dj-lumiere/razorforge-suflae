@@ -319,6 +319,14 @@ public sealed partial class TypeRegistry
 
     #region Routine Storage
 
+    /// <summary>Set true whenever a cross-module-lazy SIGNATURE REPAIR re-keys a routine entry
+    /// (<c>StdlibLoader.ReResolveProgramForLazyImports</c> → <c>UpdateRoutine</c>). The warm daemon's per-file
+    /// analysis cache reads+resets this around each file's on-demand analysis: a file whose analysis repaired a
+    /// signature is NOT cached, because the repair is a PER-BUILD registry re-key (not a shared-object
+    /// mutation), so a cached build reusing the file would resolve the stale error-keyed signature. Such files
+    /// stay demand-analyzed every build (correct); the far more common no-repair files still cache.</summary>
+    public bool StdlibSignatureRepairOccurred { get; set; }
+
     /// <summary>All registered routines by their full name.</summary>
     private readonly Dictionary<string, RoutineInfo> _routines = new();
 

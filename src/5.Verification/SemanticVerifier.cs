@@ -1362,7 +1362,15 @@ public sealed partial class SemanticVerifier
     /// calls it the first time the collector reaches a routine declared in this file, instead of the eager
     /// sweep analyzing every stdlib file up front.
     /// </summary>
-    private void AnalyzeOneStdlibProgram(Program program, string filePath, string module)
+    /// <param name="repairOnly">Run only the per-file scope setup + cross-module signature repair
+    /// (<see cref="StdlibLoader.ReResolveProgramForLazyImports"/>), skipping body analysis. Used at SNAPSHOT
+    /// CAPTURE (<see cref="EagerlyRepairStdlibSignatures"/>) to fold every cross-module-lazy signature repair
+    /// into the snapshot registry ONCE, so no warm build repeats it per-file and every file is cacheable.
+    /// Safe on a RAW (un-analyzed) program — the repair only rewrites error-typed signatures; running it on an
+    /// ALREADY-analyzed program is NOT (it strips internal/nounwind off leaf destroy routines), so this is
+    /// capture-only, never the warm cache-hit path.</param>
+    private void AnalyzeOneStdlibProgram(Program program, string filePath, string module,
+        bool repairOnly = false)
     {
         _currentFilePath = filePath;
         _currentModuleName = module;
@@ -1427,7 +1435,77 @@ public sealed partial class SemanticVerifier
             _registry.ActiveRegistrationImports = savedImports;
         }
 
+        if (repairOnly)
+        {
+            return; // capture-time eager repair: signatures re-keyed; bodies are analyzed on-demand per build.
+        }
+
         AnalyzeBodies(program: program);
+    }
+
+    /// <summary>
+    /// SNAPSHOT-CAPTURE ONLY: fold every stdlib file's cross-module-lazy SIGNATURE REPAIR into the registry
+    /// ONCE, so the captured snapshot carries repaired signatures (e.g. <c>pow10_int -&gt; Numerics.Integer</c>,
+    /// a record field <c>mantissa: Integer</c>). Without this the repair runs per-file on-demand in EVERY warm
+    /// build (<see cref="StdlibLoader.ReResolveProgramForLazyImports"/> re-keys a routine PER BUILD, a mutation
+    /// not shared across builds), which forced the warm <see cref="CompiledStdlibState.AnalyzedFileCache"/> to
+    /// EXCLUDE any file whose analysis repaired a signature (else a cache-reuse build resolves the stale
+    /// error-keyed signature — dropped return type / missing sret). Running it here — where the capture has
+    /// imported EVERY module, so every referenced type is registered — makes the repair a shared, one-time
+    /// snapshot result, so no build repeats it and ALL files become cacheable. Bounded: one guarded pass over
+    /// stdlib declarations, NO body analysis and NO instantiation (so no eager-monomorphization runaway).
+    /// Mirrors <see cref="AnalyzeStdlibProgramOnDemand"/>'s scope management (stdlib-analysis mode, per-file
+    /// realm/imports via <see cref="AnalyzeOneStdlibProgram"/>, discard stdlib-internal diagnostics).
+    /// </summary>
+    public void EagerlyRepairStdlibSignatures()
+    {
+        Language savedLanguage = _registry.Language;
+        string previousFilePath = _currentFilePath;
+        string? previousModuleName = _currentModuleName;
+        var previousImports = new HashSet<string>(collection: _importedModules,
+            comparer: StringComparer.OrdinalIgnoreCase);
+        bool prevReduced = _isReducedStdlibValidation;
+        int errorsBefore = _errors.Count;
+        int warningsBefore = _warnings.Count;
+        _registry.CompilationLanguage = savedLanguage;
+        _registry.Language = Language.RazorForge;
+        _registry.BeginStdlibAnalysis();
+        _isReducedStdlibValidation = true;
+        try
+        {
+            foreach ((Program Program, string FilePath, string Module) entry in _registry
+                        .StdlibPrograms.ToList())
+            {
+                AnalyzeOneStdlibProgram(program: entry.Program,
+                    filePath: entry.FilePath,
+                    module: entry.Module,
+                    repairOnly: true);
+            }
+        }
+        finally
+        {
+            if (_errors.Count > errorsBefore)
+            {
+                _errors.RemoveRange(index: errorsBefore, count: _errors.Count - errorsBefore);
+            }
+
+            if (_warnings.Count > warningsBefore)
+            {
+                _warnings.RemoveRange(index: warningsBefore, count: _warnings.Count - warningsBefore);
+            }
+
+            _registry.EndStdlibAnalysis();
+            _registry.ResolutionRealm = _registry.AmbientRealm;
+            _registry.Language = savedLanguage;
+            _isReducedStdlibValidation = prevReduced;
+            _currentFilePath = previousFilePath;
+            _currentModuleName = previousModuleName;
+            _importedModules.Clear();
+            foreach (string ns in previousImports)
+            {
+                _importedModules.Add(item: ns);
+            }
+        }
     }
 
     /// <summary>
@@ -1527,6 +1605,27 @@ public sealed partial class SemanticVerifier
         // into the user build and fails it — the demand-only regression across the stdlib fixtures.
         int errorsBeforeStdlib = _errors.Count;
         int warningsBeforeStdlib = _warnings.Count;
+        // Warm AnalyzedFileCache (daemon-lifetime): a cached file was PRE-MARKED demand-analyzed in the warm
+        // ctor (its analyzed+lowered program + variant/synth bodies restored), so control never reaches here
+        // for it — the `_demandAnalyzedFiles.Add` gate above already returned null. This is a MISS: analyze
+        // fully, then store the result for the next build. Snapshot the variant/synth keys before analysis so
+        // the store captures exactly the bodies THIS file's analysis adds.
+        bool cacheThisFile = _warmState != null &&
+                             !_warmState.AnalyzedFileCache.ContainsKey(key: entry.FilePath);
+        HashSet<string>? variantKeysBefore = cacheThisFile
+            ? new HashSet<string>(collection: _variantBodies.Keys, comparer: StringComparer.Ordinal)
+            : null;
+        HashSet<string>? synthKeysBefore = cacheThisFile
+            ? new HashSet<string>(collection: _synthesizedBodies.Keys,
+                comparer: StringComparer.Ordinal)
+            : null;
+        // Reset the repair flag so we can tell if THIS file's analysis re-keyed a cross-module-lazy signature
+        // (which makes the file uncacheable — the repair is per-build; see StdlibSignatureRepairOccurred).
+        if (cacheThisFile)
+        {
+            _registry.StdlibSignatureRepairOccurred = false;
+        }
+
         try
         {
             AnalyzeOneStdlibProgram(program: entry.Program,
@@ -1647,6 +1746,30 @@ public sealed partial class SemanticVerifier
             {
                 _importedModules.Add(item: ns);
             }
+        }
+
+        // Store this freshly-analyzed file into the daemon-lifetime cache so the NEXT build reaching it skips
+        // the ~420 ms of SA+desugar+lower (see CompiledStdlibState.AnalyzedFileCache). Clone the program NOW —
+        // entry.Program is fully analyzed+lowered at this point (the collector does not further mutate stdlib
+        // template/non-generic program bodies; it materializes reached ones into InstantiatedGenericBodies) —
+        // so the cached copy is a pristine snapshot. Capture only the variant/synth bodies THIS file's analysis
+        // added (the delta since the pre-analysis snapshot); monomorphized INSTANCES are never cached (they
+        // stay per-build demand → no define-set pollution, no eager runaway).
+        if (cacheThisFile && variantKeysBefore != null && synthKeysBefore != null &&
+            !_registry.StdlibSignatureRepairOccurred)
+        {
+            List<KeyValuePair<string, Statement>> variantDelta = _variantBodies
+               .Where(predicate: kv => !variantKeysBefore.Contains(item: kv.Key))
+               .ToList();
+            List<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> synthDelta =
+                _synthesizedBodies
+                   .Where(predicate: kv => !synthKeysBefore.Contains(item: kv.Key))
+                   .ToList();
+            _warmState!.AnalyzedFileCache[key: entry.FilePath] = new CachedFileAnalysis(
+                AnalyzedProgram: Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
+                    program: entry.Program),
+                VariantBodies: variantDelta,
+                SynthBodies: synthDelta);
         }
 
         return entry.Program; // analyzed+desugared a NEW file → collector re-indexes THAT program's decls

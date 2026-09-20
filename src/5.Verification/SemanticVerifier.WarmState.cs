@@ -61,7 +61,36 @@ public partial class SemanticVerifier
         /// </summary>
         public Dictionary<RoutineDeclaration, RoutineBodyScan> BodyScanCache { get; init; } =
             new();
+
+        /// <summary>
+        /// Daemon-lifetime cache of per-file ON-DEMAND ANALYSIS results, keyed by stdlib file path. Under the
+        /// demand flip the snapshot is captured from an `import EVERY module` program with no entry, so its
+        /// demand collector reaches NOTHING — the per-file body SA + desugar + lower never runs at capture, and
+        /// EVERY warm build re-runs it for each file its <c>start()</c> reaches (measured ~420 ms, the dominant
+        /// warm dev-loop cost). This memo lets a build REUSE a file another build already analyzed: it holds the
+        /// analyzed+lowered file program AST plus the variant/synth routine bodies that file's analysis produced.
+        /// <para>PROGRAM-INDEPENDENT by construction: it caches the file's own TEMPLATE / non-generic bodies
+        /// (a function of the file, not of any user program), NOT monomorphized generic INSTANCES — those stay
+        /// per-build demand (rebuilt by the collector from <c>start()</c>'s reachability), so the define-set is
+        /// still decided per build (warm/cold parity preserved) and there is no eager-instantiation runaway.</para>
+        /// Grows as successive builds reach more files; shared by reference across every warm build served from
+        /// this one state (the daemon holds ONE <see cref="CompiledStdlibState"/> per language, serving builds
+        /// serially — no locking needed), exactly like <see cref="BodyScanCache"/>. Starts empty; warms over the
+        /// daemon's lifetime.
+        /// </summary>
+        public Dictionary<string, CachedFileAnalysis> AnalyzedFileCache { get; init; } =
+            new(comparer: StringComparer.Ordinal);
     }
+
+    /// <summary>
+    /// One stdlib file's cached on-demand analysis (see <see cref="CompiledStdlibState.AnalyzedFileCache"/>):
+    /// the analyzed+lowered program AST plus the variant/synthesized routine bodies that file's analysis added,
+    /// so a warm build reusing the file can replay them without re-running Phase-5 SA + desugar + lower.
+    /// </summary>
+    public sealed record CachedFileAnalysis(
+        Program AnalyzedProgram,
+        IReadOnlyList<KeyValuePair<string, Statement>> VariantBodies,
+        IReadOnlyList<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> SynthBodies);
 
     /// <summary>
     /// Runs one full compile of a minimal program to fully process the stdlib, then captures the
@@ -97,6 +126,10 @@ public partial class SemanticVerifier
             language: language,
             fileName: "__snapshot__");
         sa.Analyze(program: parser.Parse());
+        // Fold every cross-module-lazy signature repair into the snapshot ONCE (all modules imported here, so
+        // every referenced type resolves), so no warm build re-repairs per-file and every file is cacheable in
+        // AnalyzedFileCache (see EagerlyRepairStdlibSignatures / [[daemon-analysis-cache]]).
+        sa.EagerlyRepairStdlibSignatures();
         return sa.CaptureCompiledState();
     }
 
@@ -131,9 +164,16 @@ public partial class SemanticVerifier
     /// full <see cref="Analyze"/> only processes the user program (+ its incremental instantiations) and
     /// can codegen without redoing the ~5 s of stdlib desugaring/verification/monomorphization.
     /// </summary>
+    /// <summary>The resident warm state this verifier restored from (daemon-lifetime, shared across builds).
+    /// Held so on-demand stdlib analysis can WRITE freshly-analyzed files back into
+    /// <see cref="CompiledStdlibState.AnalyzedFileCache"/> for the next build to reuse. Null on the cold /
+    /// snapshot-only ctors.</summary>
+    private readonly CompiledStdlibState? _warmState;
+
     public SemanticVerifier(Language language, CompiledStdlibState warm,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {
+        _warmState = warm;
         _registry = new TypeRegistry(language: language, snapshot: warm.Registry);
         // PER-BUILD ISOLATION: the captured stdlib program ASTs are shared BY REFERENCE across every warm build
         // the daemon serves from this one snapshot. On-demand analysis + monomorphization + the collector lower
@@ -145,10 +185,26 @@ public partial class SemanticVerifier
         // per-build lowering lands on build-local ASTs and the shared snapshot graph is never mutated. Every
         // reader — on-demand analysis, GMP's FindInStdlib template index, and codegen — resolves through the SAME
         // cloned program (StdlibPrograms serves this list), so there is no shared-vs-clone split.
+        // CACHE-AWARE restore: if a prior build already analyzed this file on demand, clone the CACHED
+        // analyzed+lowered program (annotations preserved by the cloner — they point at the shared snapshot
+        // routine/type objects, valid across builds) instead of the snapshot's un-body-analyzed one, and
+        // PRE-MARK the file demand-analyzed so AnalyzeStdlibProgramOnDemand skips re-running SA+lower + repair.
+        // Installing an analyzed program for a file THIS build never reaches is harmless — codegen only emits
+        // REACHED bodies (liveness), same as the un-analyzed programs already in StdlibPrograms.
         _registry.RestoreStdlibPrograms(programs: warm.StdlibPrograms
            .Select(selector: e =>
-                (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(program: e.Program),
-                    e.FilePath, e.Module))
+            {
+                if (warm.AnalyzedFileCache.TryGetValue(key: e.FilePath,
+                        value: out CachedFileAnalysis? cachedFile))
+                {
+                    _demandAnalyzedFiles.Add(item: e.FilePath);
+                    return (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
+                        program: cachedFile.AnalyzedProgram), e.FilePath, e.Module);
+                }
+
+                return (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(program: e.Program),
+                    e.FilePath, e.Module);
+            })
            .ToList());
         // Re-lazy the primed whole-stdlib instance closure so this warm compile re-discovers only what the
         // USER program reaches (like cold), instead of GMP re-processing all ~638 primed instances (cold
@@ -182,6 +238,26 @@ public partial class SemanticVerifier
         }
 
         _variantBodies = new Dictionary<string, Statement>(dictionary: warm.VariantBodies);
+
+        // Replay the variant/synthesized bodies each cached file's on-demand analysis produced. A file's
+        // Phase-5 analysis drains its own failables' try_/check_/lookup_ variants into _variantBodies and
+        // synthesizes their represent/diagnose/derives into _synthesizedBodies; the snapshot (no reachability
+        // at capture) never generated them, so a build that REUSES the cached file (skipping its analysis)
+        // must have these replayed or the variant call site link-fails ("declared+called but never defined").
+        // Keyed by RegistryKey; merging a not-reached file's bodies is harmless (codegen gates on liveness).
+        foreach (CachedFileAnalysis cachedFile in warm.AnalyzedFileCache.Values)
+        {
+            foreach (KeyValuePair<string, Statement> vb in cachedFile.VariantBodies)
+            {
+                _variantBodies[key: vb.Key] = vb.Value;
+            }
+
+            foreach (KeyValuePair<string, (RoutineInfo Routine, Statement Body)> sb in cachedFile
+                        .SynthBodies)
+            {
+                _synthesizedBodies[key: sb.Key] = sb.Value;
+            }
+        }
         // Skip restoring EMPTY synthesized sentinels that have NO matching variant body. The stdlib
         // snapshot captures a placeholder body for a resolved routine whose owner was not live in the
         // stdlib-only snapshot program (e.g. `DictEmittable[Text,SerialValue].try_emit` — no stdlib code
@@ -213,7 +289,9 @@ public partial class SemanticVerifier
         // downstream.
         _memo = new StdlibMemo(
             IsWarm: true,
-            RestoredVariantKeys: new HashSet<string>(collection: warm.VariantBodies.Keys,
+            // From _variantBodies (NOT warm.VariantBodies): it now also holds the replayed cached-file variant
+            // bodies, and RestoredVariantKeys must cover them so the demand path treats them as already-built.
+            RestoredVariantKeys: new HashSet<string>(collection: _variantBodies.Keys,
                 comparer: StringComparer.Ordinal),
             RestoredInstantiationKeys: new HashSet<string>(collection: restoredInst.Keys,
                 comparer: StringComparer.Ordinal),

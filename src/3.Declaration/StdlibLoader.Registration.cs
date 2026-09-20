@@ -2126,6 +2126,10 @@ public sealed partial class StdlibLoader
         if (updated != null)
         {
             routine.ResolvedInfo = updated;
+            // Signal the warm analysis cache: this file's analysis re-keyed a routine (cross-module-lazy
+            // signature repair), a PER-BUILD registry mutation — so the file must not be cached (see
+            // TypeRegistry.StdlibSignatureRepairOccurred).
+            registry.StdlibSignatureRepairOccurred = true;
         }
     }
 
