@@ -10,6 +10,13 @@ module Core
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = load {T}, ptr {address}")
 routine LLVM::load[T](address: Hijacked[T]) -> T
+### Loads a `T` with `align 1` — a byte-unaligned load. Required when reinterpreting a `Hijacked[Byte]`
+### as a wider type (e.g. reading 8 bytes as a `U64` for SWAR scanning): the default `load` assumes ABI
+### alignment, which is UB for an unaligned source and may miscompile. This form is always safe on x86/ARM.
+### :param address: The source address (any alignment).
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = load {T}, ptr {address}, align 1")
+dangerous routine LLVM::load_unaligned[T](address: Hijacked[T]) -> T
 ### Stores `value` to `address`.
 ### This is the direct wrapper for the LLVM `store` instruction.
 ### :param address: The destination address.

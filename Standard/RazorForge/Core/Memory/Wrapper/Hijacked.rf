@@ -116,6 +116,13 @@ dangerous routine Hijacked[T].peek_as[U]() -> U
   var as_u = me.recast_as[U]()
   return as_u.peek()
 
+### Loads a `U` at this pointer reinterpreted as `U`, with `align 1` (byte-unaligned). Use to read a wider
+### word out of a byte buffer — e.g. `Hijacked[Byte].peek_unaligned_as[U64]()` grabs 8 bytes for SWAR
+### scanning. The plain `peek_as` assumes ABI alignment (UB for an unaligned source); this form is safe.
+### :returns: The value stored at this address interpreted as `U`, loaded unaligned.
+dangerous routine Hijacked[T].peek_unaligned_as[U]() -> U
+  return LLVM::load_unaligned[U](me.recast_as[U]())
+
 ### Writes `value` at this pointer reinterpreted as type `U` without type-system checks.
 ### :param value: The value to write at this pointer reinterpreted as `Hijacked[U]`.
 dangerous routine Hijacked[T].poke_as[U](value: U)
@@ -281,3 +288,32 @@ routine Hijacked[T].represent() -> Text
 @[readonly, override]
 routine Hijacked[T].diagnose() -> Text
   return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"
+
+# ============================================================================
+# SWAR byte scanning (Core, Byte-buffer only)
+# ============================================================================
+
+### Returns the index of the first byte equal to `target` at or after `from`, scanning up to `limit`
+### (exclusive); returns `limit` if none. Processes 8 bytes per step via SWAR — one unaligned U64 load +
+### the classic zero-byte test `(x - 0x01..) & ~x & 0x80..` where `x = word ^ broadcast(target)` — so a
+### long scan (e.g. a station name) costs ~1 iteration per 8 bytes instead of one per byte. A scalar tail
+### handles the final <8 bytes so no read ever crosses `limit` (keeps the mmap in-bounds). `dangerous`:
+### reads raw memory in `[from, limit)`; the caller guarantees that range is mapped.
+dangerous routine scan_to_byte(buf: Hijacked[Byte], target: Byte, from: U64, limit: U64) -> U64
+  var i = from
+  var bcast = U64(from: U8(from: target)) *% 0x0101010101010101_u64
+  var ones = 0x0101010101010101_u64
+  var high = 0x8080808080808080_u64
+  var all_ones = U64_MAX
+  while i +% 8u64 <= limit
+    var word = buf.stride(count: S64(i)).peek_unaligned_as[U64]()
+    var x = word ^ bcast
+    var mask = (x -% ones) & (x ^ all_ones) & high
+    if mask != 0u64
+      return i +% (LLVM::trailing_zeros(value: mask) >> 3)
+    i = i +% 8u64
+  while i < limit
+    if buf.stride(count: S64(i)).peek() == target
+      return i
+    i = i +% 1u64
+  return limit
