@@ -404,7 +404,11 @@ internal partial class Program
         Func<Language, IReadOnlyList<string>, IReadOnlyDictionary<string, string>?>?
             StdlibIndexProvider,
         Action<LazyJitInputs>? LazyJitSink = null,
-        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null);
+        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null,
+        // Resident-JIT base/delta (Step 3): when set, codegen emits a DELTA — it DEFINES only non-resident
+        // symbols and extern-DECLAREs these (the base object's defines). The daemon supplies the base's
+        // DEFINED-symbol set so a warm build ships only the small delta IR alongside the cached base .o.
+        IReadOnlyCollection<string>? ResidentSymbols = null);
 
     /// <summary>
     /// Bundles the inputs that drive Phase 2 (semantic analysis) of the multi-file pipeline,
@@ -442,7 +446,8 @@ internal partial class Program
         bool ShowBuildStages,
         Action<string>? IrCallback,
         Stopwatch? SwPhase,
-        Action<LazyJitInputs>? LazyJitSink = null);
+        Action<LazyJitInputs>? LazyJitSink = null,
+        IReadOnlyCollection<string>? ResidentSymbols = null);
 
     /// <summary>
     /// The fully-resolved build configuration for a <c>build</c>/<c>buildandrun</c>/<c>check</c> invocation:
@@ -498,6 +503,10 @@ internal partial class Program
 
         /// <summary>Reserved: incremental compilation (manifest <c>[target] incremental</c>); not yet wired.</summary>
         public bool Incremental { get; init; }
+
+        /// <summary>Resident-JIT base/delta split (manifest <c>[target] base-delta</c>): daemon AOTs the
+        /// stdlib base to a cached object once and ships only the per-run delta IR.</summary>
+        public bool BaseDelta { get; init; }
     }
 
     /// <summary>
@@ -636,7 +645,8 @@ internal partial class Program
                 LibraryConfigs = target.LibraryConfigs,
                 UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
-                Incremental = target.Incremental
+                Incremental = target.Incremental,
+                BaseDelta = target.BaseDelta
             };
         }
         catch (Exception ex)
@@ -719,7 +729,8 @@ internal partial class Program
                 LibraryConfigs = target.LibraryConfigs,
                 UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
-                Incremental = target.Incremental
+                Incremental = target.Incremental,
+                BaseDelta = target.BaseDelta
             };
         }
         catch (Exception ex)
@@ -1345,6 +1356,7 @@ internal partial class Program
             stdlibIndexProvider = warm?.StdlibIndexProvider;
         Action<LazyJitInputs>? lazyJitSink = warm?.LazyJitSink;
         Func<TypeModel.Symbols.RoutineInfo, bool>? instanceCheckSkip = warm?.InstanceCheckSkip;
+        IReadOnlyCollection<string>? residentSymbols = warm?.ResidentSymbols;
         // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
         // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
         // AST is available; stays empty on the early-error paths below.
@@ -1431,7 +1443,8 @@ internal partial class Program
                     ShowBuildStages: showBuildStages,
                     IrCallback: irCallback,
                     SwPhase: _swPhase,
-                    LazyJitSink: lazyJitSink),
+                    LazyJitSink: lazyJitSink,
+                    ResidentSymbols: residentSymbols),
                 orderedFiles: orderedFiles,
                 unitsByFile: unitsByFile,
                 result: result);
@@ -1745,7 +1758,10 @@ internal partial class Program
                 SynthesizedBodies = result.SynthesizedBodies,
                 InstantiatedGenericBodies = result.InstantiatedGenericBodies,
                 LiveRoutineKeys = result.LiveRoutineKeys,
-                MaySuspendRoutineKeys = result.MaySuspendRoutineKeys
+                MaySuspendRoutineKeys = result.MaySuspendRoutineKeys,
+                // Resident-JIT base/delta: when the daemon supplies the base's defined-symbol set, this
+                // emission is the DELTA — C4 skips defining resident symbols and extern-declares them instead.
+                ResidentSymbols = p3.ResidentSymbols
             }) { Timing = saTiming, EntryModule = entryModule };
 
         // dump-ast dumps the EXACT AST that LLVM codegen consumes — captured immediately BEFORE
@@ -2398,7 +2414,8 @@ internal partial class Program
             config: config,
             warm: new WarmProviders(WarmProvider: warm?.WarmProvider,
                 IrCallback: s => captured = s,
-                StdlibIndexProvider: warm?.StdlibIndexProvider));
+                StdlibIndexProvider: warm?.StdlibIndexProvider,
+                ResidentSymbols: warm?.ResidentSymbols));
         ir = captured;
         return rc;
     }

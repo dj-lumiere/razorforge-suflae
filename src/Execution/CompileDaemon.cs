@@ -51,6 +51,11 @@ internal partial class Program
             public List<string> LibraryRoots { get; set; } = [];
             public List<string> CLibraries { get; set; } = [];
             public List<string> LibraryPaths { get; set; } = [];
+
+            /// <summary>Resident-JIT base/delta split (config <c>[target] base-delta</c>): when true the daemon
+            /// AOT-compiles the stdlib base to a cached <c>.o</c> ONCE and returns only the small DELTA IR plus
+            /// the base object path, so the client loads the object and JITs only the delta.</summary>
+            public bool BaseDelta { get; set; }
         }
 
         private sealed class DaemonResponse
@@ -59,6 +64,10 @@ internal partial class Program
             public string Output { get; set; } = "";
             public string? ExePath { get; set; }
             public string? Ir { get; set; }
+
+            /// <summary>Resident-JIT base/delta: path to the cached AOT'd base object the client must load
+            /// before JIT-ing <see cref="Ir"/> (the delta). Null on the normal full-IR path.</summary>
+            public string? BaseObjectPath { get; set; }
 
             /// <summary>Server-side wall-clock ms of the warm compile itself (excludes IPC/transfer), so a
             /// client can report where dev-loop latency goes: round-trip − CompileMs = transfer.</summary>
@@ -151,6 +160,94 @@ internal partial class Program
                     libraryRoots: libraryRoots);
             StdlibIndexCache[key: key] = index;
             return index;
+        }
+
+        /// <summary>Daemon-lifetime cache of the resident-JIT BASE artifact (AOT'd stdlib object path + the
+        /// base's DEFINED-symbol set) per (language, build mode).</summary>
+        private static readonly Dictionary<string, (string ObjPath, IReadOnlyCollection<string> Syms)>
+            BaseArtifactCache = new();
+
+        /// <summary>
+        /// Builds (ONCE per language+mode, then daemon- and disk-cached) the resident-JIT base: a full
+        /// <c>SeedAllStdlibRoutines</c> analysis → <c>GenerateBase</c> (non-pruned stdlib IR, no <c>@main</c>)
+        /// → AOT-compiled <c>.o</c> via <see cref="BaseObjectCache"/>. Returns the object path plus the base's
+        /// DEFINED-symbol set — the <c>residentSymbols</c> the per-run DELTA emission extern-declares instead
+        /// of re-defining. Returns null on failure so the caller falls back to shipping the full IR.
+        /// </summary>
+        private static (string ObjPath, IReadOnlyCollection<string> Syms)? EnsureBaseArtifact(
+            Language language, RfBuildMode buildMode)
+        {
+            string key = language + "" + (int)buildMode;
+            if (BaseArtifactCache.TryGetValue(key: key,
+                    value: out (string ObjPath, IReadOnlyCollection<string> Syms) cached))
+            {
+                return cached;
+            }
+
+            string? fp = Builder.Serialization.StdlibSnapshotCache.ComputeStdlibHash(language: language);
+            if (fp == null)
+            {
+                return null;
+            }
+
+            fp = fp + "-" + (int)buildMode;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Console.Error.WriteLine(value: $"[daemon] building resident-JIT base ({language})...");
+            try
+            {
+                var baseSa = new SemanticVerifier(language: language)
+                {
+                    SeedAllStdlibRoutines = true
+                };
+                System.Collections.Generic.List<Builder.Tokenizer.Token> toks =
+                    new Builder.Tokenizer.Tokenizer(source: "module Base\nroutine start()\n  return",
+                        fileName: "base.rf", language: language).Tokenize();
+                Builder.Verification.Results.AnalysisResult baseR = baseSa.Analyze(
+                    program: new Builder.Parser.Parser(tokens: toks, language: language,
+                        fileName: "base.rf").Parse());
+                if (baseR.Errors.Count > 0)
+                {
+                    return null;
+                }
+
+                Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
+                    programs: baseR.Registry.UserPrograms,
+                    instantiatedBodies: baseR.InstantiatedGenericBodies,
+                    maySuspendKeys: baseR.MaySuspendRoutineKeys,
+                    registry: baseR.Registry);
+                var baseGen = new Builder.LlvmEmit.LlvmEmitter(
+                    userPrograms: new System.Collections.Generic.List<(SyntaxTree.Program, string,
+                        string)>(),
+                    registry: baseR.Registry,
+                    options: new Builder.LlvmEmit.LlvmEmitterOptions
+                    {
+                        StdlibPrograms = baseR.Registry.StdlibPrograms,
+                        SynthesizedBodies = baseR.SynthesizedBodies,
+                        InstantiatedGenericBodies = baseR.InstantiatedGenericBodies
+                    });
+                (string baseIr, IReadOnlyCollection<string> baseSyms) = baseGen.GenerateBase();
+
+                string? obj = new BaseObjectCache().GetOrBuild(fingerprint: fp,
+                    baseIr: baseIr,
+                    buildMode: buildMode,
+                    wasCached: out bool wasCached);
+                if (obj == null)
+                {
+                    return null;
+                }
+
+                Console.Error.WriteLine(
+                    value:
+                    $"[daemon] resident-JIT base ready: {baseSyms.Count} syms, obj-cached={wasCached} ({sw.ElapsedMilliseconds} ms)");
+                (string ObjPath, IReadOnlyCollection<string> Syms) result = (obj, baseSyms);
+                BaseArtifactCache[key: key] = result;
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"[daemon] resident-JIT base build failed: {ex.Message}");
+                return null;
+            }
         }
 
         private static volatile bool _shutdownRequested;
@@ -359,10 +456,29 @@ internal partial class Program
             TextWriter savedErr = Console.Error;
             int exit;
             string ir;
+            string? baseObjectPath = null;
             try
             {
                 Console.SetOut(newOut: captured);
                 Console.SetError(newError: captured);
+                // Resident-JIT base/delta: AOT the stdlib base once (cached), then emit only the DELTA IR
+                // (residentSymbols = the base's defined syms ⇒ codegen extern-declares them). Falls back to
+                // full IR if the base can't be built, so the client path stays correct either way.
+                IReadOnlyCollection<string>? residentSymbols = null;
+                if (req.BaseDelta)
+                {
+                    Language lang = InvokedAsSuflae
+                        ? Language.Suflae
+                        : Language.RazorForge;
+                    (string ObjPath, IReadOnlyCollection<string> Syms)? baseArtifact =
+                        EnsureBaseArtifact(language: lang, buildMode: (RfBuildMode)req.BuildMode);
+                    if (baseArtifact is { } ba)
+                    {
+                        residentSymbols = ba.Syms;
+                        baseObjectPath = ba.ObjPath;
+                    }
+                }
+
                 exit = BuildToIr(entryFile: req.EntryFile,
                     ir: out ir,
                     config: new ResolvedEntry
@@ -374,7 +490,8 @@ internal partial class Program
                     },
                     warm: new WarmProviders(WarmProvider: GetWarm,
                         IrCallback: null,
-                        StdlibIndexProvider: GetStdlibIndex));
+                        StdlibIndexProvider: GetStdlibIndex,
+                        ResidentSymbols: residentSymbols));
             }
             catch (Exception ex)
             {
@@ -399,6 +516,9 @@ internal partial class Program
                 CompileMs = sw.ElapsedMilliseconds,
                 Ir = exit == 0
                     ? ir
+                    : null,
+                BaseObjectPath = exit == 0
+                    ? baseObjectPath
                     : null
             };
         }
@@ -520,7 +640,8 @@ internal partial class Program
             string ir = "";
             int rc = 0;
             bool haveIr = resolved.UseDaemon &&
-                          TryGetWarmDaemonIr(resolved: resolved, ir: out ir, exitCode: out rc);
+                          TryGetWarmDaemonIr(resolved: resolved, ir: out ir, exitCode: out rc,
+                              baseObjectPath: out _);
             if (!haveIr)
             {
                 rc = BuildToIr(entryFile: Path.GetFullPath(path: resolved.EntryFile),
@@ -580,7 +701,8 @@ internal partial class Program
             // in-process lazy path when no daemon is reachable.
             if (resolved.UseDaemon &&
                 TryGetWarmDaemonIr(resolved: resolved, ir: out string daemonIr,
-                    exitCode: out int daemonRc))
+                    exitCode: out int daemonRc, baseObjectPath: out string? daemonBaseObj,
+                    allowBaseDelta: true))
             {
                 if (daemonRc != 0)
                 {
@@ -591,14 +713,22 @@ internal partial class Program
                 try
                 {
                     var swJit = System.Diagnostics.Stopwatch.StartNew();
-                    exitCode = OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
-                        programName: entryFull,
-                        programArgs: []);
+                    // Base/delta: load the AOT'd stdlib base object + JIT only the delta. Full-IR fallback
+                    // when the daemon shipped no base object (base build failed, or base-delta disabled).
+                    exitCode = daemonBaseObj != null
+                        ? OrcJitExecutor.JitAndRunSplitWithBaseObject(baseObjectPath: daemonBaseObj,
+                            deltaIr: daemonIr,
+                            programName: entryFull,
+                            programArgs: [])
+                        : OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
+                            programName: entryFull,
+                            programArgs: []);
                     swJit.Stop();
                     if (PhaseTiming())
                     {
                         Console.Error.WriteLine(
-                            value: $"[timing] JIT compile + run (daemon IR): {swJit.ElapsedMilliseconds} ms");
+                            value:
+                            $"[timing] JIT compile + run (daemon IR{(daemonBaseObj != null ? ", base/delta" : "")}): {swJit.ElapsedMilliseconds} ms");
                     }
 
                     return true;
@@ -678,10 +808,11 @@ internal partial class Program
         /// spawn+warm wait and the IPC-transfer timing separately. Returns false (cold fallback) when the
         /// daemon can't be reached or the fetch fails.</summary>
         private static bool TryGetWarmDaemonIr(ResolvedEntry resolved, out string ir,
-            out int exitCode)
+            out int exitCode, out string? baseObjectPath, bool allowBaseDelta = false)
         {
             ir = "";
             exitCode = 0;
+            baseObjectPath = null;
             if (!EnsureDaemonRunning(warmWaitMs: out long warmWaitMs, spawned: out bool spawned))
             {
                 return false;
@@ -700,7 +831,9 @@ internal partial class Program
             if (!TryDaemonIr(resolved: resolved,
                     ir: out ir,
                     exitCode: out exitCode,
-                    serverCompileMs: out long serverCompileMs))
+                    serverCompileMs: out long serverCompileMs,
+                    baseObjectPath: out baseObjectPath,
+                    allowBaseDelta: allowBaseDelta))
             {
                 return false;
             }
@@ -720,11 +853,12 @@ internal partial class Program
         /// unreachable. On success, writes the daemon's captured build diagnostics to the console and yields
         /// the IR + build exit code.</summary>
         private static bool TryDaemonIr(ResolvedEntry resolved, out string ir, out int exitCode,
-            out long serverCompileMs)
+            out long serverCompileMs, out string? baseObjectPath, bool allowBaseDelta = false)
         {
             ir = "";
             exitCode = 0;
             serverCompileMs = 0;
+            baseObjectPath = null;
             var req = new DaemonRequest
             {
                 Verb = "ir",
@@ -733,7 +867,10 @@ internal partial class Program
                 BuildMode = (int)resolved.BuildMode,
                 RequireStart = resolved.RequireStartRoutine,
                 SaTiming = resolved.SaTiming,
-                LibraryRoots = [.. resolved.LibraryRoots]
+                LibraryRoots = [.. resolved.LibraryRoots],
+                // base/delta ONLY on the incremental JIT path (it loads the base object); the plain full-IR
+                // JitAndRun caller must NOT request a delta (it can't resolve the base's extern symbols).
+                BaseDelta = resolved.BaseDelta && allowBaseDelta
             };
             try
             {
@@ -747,6 +884,7 @@ internal partial class Program
                 ir = resp.Ir ?? "";
                 exitCode = resp.ExitCode;
                 serverCompileMs = resp.CompileMs;
+                baseObjectPath = resp.BaseObjectPath;
                 return true;
             }
             catch

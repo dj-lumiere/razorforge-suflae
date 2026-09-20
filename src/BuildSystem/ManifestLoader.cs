@@ -313,6 +313,13 @@ public static class ManifestLoader
             target.Incremental = incremental is true;
         }
 
+        // Resident-JIT base/delta split (opt-in; needs mode="debug-jit" + use-daemon + incremental): AOT the
+        // stdlib base to a cached object once, ship only the per-run delta IR.
+        if (table.TryGetValue(key: "base-delta", value: out object? baseDelta))
+        {
+            target.BaseDelta = baseDelta is true;
+        }
+
         // Resolve the executable's module name to a file path
         if (moduleIndex == null)
         {
