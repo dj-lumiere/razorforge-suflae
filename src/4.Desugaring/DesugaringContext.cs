@@ -84,6 +84,15 @@ public sealed class DesugaringContext
     public HashSet<string> LiveRoutineKeys { get; init; } = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// Resident-JIT base/delta: RegistryKeys already built into the precompiled base object. When non-empty,
+    /// the demand walk (<c>IsolationCollector.Discover</c>) treats a reached instance whose key is here as an
+    /// already-built leaf — no re-monomorphize / re-analyze / callee expansion. Mirrored from
+    /// <see cref="InstantiationContext.ResidentInstanceKeys"/>. Empty on a normal build.
+    /// </summary>
+    public IReadOnlySet<string> ResidentInstanceKeys { get; init; } =
+        new HashSet<string>(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Live concrete owner-type FullNames mirrored from
     /// <c>InstantiationContext.LiveOwnerTypeNames</c>. GMP skips
     /// <c>ProcessConcreteType</c> for any concrete type not in this set when non-empty.

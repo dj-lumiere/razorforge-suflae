@@ -408,7 +408,10 @@ internal partial class Program
         // Resident-JIT base/delta (Step 3): when set, codegen emits a DELTA — it DEFINES only non-resident
         // symbols and extern-DECLAREs these (the base object's defines). The daemon supplies the base's
         // DEFINED-symbol set so a warm build ships only the small delta IR alongside the cached base .o.
-        IReadOnlyCollection<string>? ResidentSymbols = null);
+        IReadOnlyCollection<string>? ResidentSymbols = null,
+        // Resident-JIT base/delta: RegistryKeys already built into the base object (the base's collected
+        // instance set). Threaded to the demand collector so it skips re-building/analyzing/expanding them.
+        IReadOnlySet<string>? ResidentInstanceKeys = null);
 
     /// <summary>
     /// Bundles the inputs that drive Phase 2 (semantic analysis) of the multi-file pipeline,
@@ -421,7 +424,8 @@ internal partial class Program
         bool ShowBuildStages,
         bool RequireStartRoutine,
         Func<Language, SemanticVerifier.CompiledStdlibState?>? WarmProvider,
-        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null);
+        Func<TypeModel.Symbols.RoutineInfo, bool>? InstanceCheckSkip = null,
+        IReadOnlySet<string>? ResidentInstanceKeys = null);
 
     /// <summary>Groups the parameters for <see cref="RunPhase1BuildDriver"/>.</summary>
     private sealed record Phase1Context(
@@ -1357,6 +1361,7 @@ internal partial class Program
         Action<LazyJitInputs>? lazyJitSink = warm?.LazyJitSink;
         Func<TypeModel.Symbols.RoutineInfo, bool>? instanceCheckSkip = warm?.InstanceCheckSkip;
         IReadOnlyCollection<string>? residentSymbols = warm?.ResidentSymbols;
+        IReadOnlySet<string>? residentInstanceKeys = warm?.ResidentInstanceKeys;
         // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
         // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
         // AST is available; stays empty on the early-error paths below.
@@ -1421,7 +1426,8 @@ internal partial class Program
                 ShowBuildStages: showBuildStages,
                 RequireStartRoutine: requireStartRoutine,
                 WarmProvider: warmProvider,
-                InstanceCheckSkip: instanceCheckSkip);
+                InstanceCheckSkip: instanceCheckSkip,
+                ResidentInstanceKeys: residentInstanceKeys);
             int phase2Result = RunPhase2SemanticAnalysis(ctx: phase2Ctx,
                 driver: driver,
                 orderedFiles: orderedFiles,
@@ -1513,6 +1519,9 @@ internal partial class Program
         // Incremental JIT only: skip Phase-9 backend-repr+validate for instances whose IR is already cached
         // (they will be M2b codegen-cache hits, never re-emitted this run). Null on every other path.
         analyzer.SkipInstanceCheckIfIrCached = ctx.InstanceCheckSkip;
+        // Resident-JIT base/delta: RegistryKeys already built into the base object — the demand collector skips
+        // re-building/analyzing/expanding them (codegen extern-declares; JIT resolves into the base dylib).
+        analyzer.ResidentInstanceKeys = ctx.ResidentInstanceKeys;
         swPhase = DiagnosticFlags.PhaseTiming
             ? Stopwatch.StartNew()
             : null;
@@ -2415,7 +2424,8 @@ internal partial class Program
             warm: new WarmProviders(WarmProvider: warm?.WarmProvider,
                 IrCallback: s => captured = s,
                 StdlibIndexProvider: warm?.StdlibIndexProvider,
-                ResidentSymbols: warm?.ResidentSymbols));
+                ResidentSymbols: warm?.ResidentSymbols,
+                ResidentInstanceKeys: warm?.ResidentInstanceKeys));
         ir = captured;
         return rc;
     }

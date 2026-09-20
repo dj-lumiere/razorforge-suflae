@@ -162,9 +162,11 @@ internal partial class Program
             return index;
         }
 
-        /// <summary>Daemon-lifetime cache of the resident-JIT BASE artifact (AOT'd stdlib object path + the
-        /// base's DEFINED-symbol set) per (language, build mode).</summary>
-        private static readonly Dictionary<string, (string ObjPath, IReadOnlyCollection<string> Syms)>
+        /// <summary>Daemon-lifetime cache of the resident-JIT BASE artifact (AOT'd stdlib object path, the
+        /// base's DEFINED-symbol set for codegen extern-declaration, and the base's collected RegistryKey set
+        /// for demand-collector skip) per (language, build mode).</summary>
+        private static readonly Dictionary<string, (string ObjPath, IReadOnlyCollection<string> Syms,
+                IReadOnlySet<string> InstanceKeys)>
             BaseArtifactCache = new();
 
         /// <summary>
@@ -174,12 +176,14 @@ internal partial class Program
         /// DEFINED-symbol set — the <c>residentSymbols</c> the per-run DELTA emission extern-declares instead
         /// of re-defining. Returns null on failure so the caller falls back to shipping the full IR.
         /// </summary>
-        private static (string ObjPath, IReadOnlyCollection<string> Syms)? EnsureBaseArtifact(
+        private static (string ObjPath, IReadOnlyCollection<string> Syms,
+            IReadOnlySet<string> InstanceKeys)? EnsureBaseArtifact(
             Language language, RfBuildMode buildMode)
         {
             string key = language + "" + (int)buildMode;
             if (BaseArtifactCache.TryGetValue(key: key,
-                    value: out (string ObjPath, IReadOnlyCollection<string> Syms) cached))
+                    value: out (string ObjPath, IReadOnlyCollection<string> Syms,
+                        IReadOnlySet<string> InstanceKeys) cached))
             {
                 return cached;
             }
@@ -190,23 +194,28 @@ internal partial class Program
                 return null;
             }
 
-            fp = fp + "-" + (int)buildMode;
+            fp = fp + "-" + (int)buildMode + "-seed" + BaseObjectCache.SeedProgramSource.Length;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Console.Error.WriteLine(value: $"[daemon] building resident-JIT base ({language})...");
             try
             {
-                var baseSa = new SemanticVerifier(language: language)
-                {
-                    SeedAllStdlibRoutines = true
-                };
+                // REALISTIC-SEED base (NOT SeedAll): analyze a representative program that exercises the common
+                // generic instances most programs share (BaseObjectCache.SeedProgramSource). The normal demand
+                // pipeline materializes exactly that reached closure into InstantiatedGenericBodies — no
+                // speculative Hijacked[…] explosion — and we feed the FULL set to the base. A program's own
+                // uncommon instances fall to the per-run DELTA (base∪delta coverage stays complete).
+                var baseSa = new SemanticVerifier(language: language);
                 System.Collections.Generic.List<Builder.Tokenizer.Token> toks =
-                    new Builder.Tokenizer.Tokenizer(source: "module Base\nroutine start()\n  return",
+                    new Builder.Tokenizer.Tokenizer(source: BaseObjectCache.SeedProgramSource,
                         fileName: "base.rf", language: language).Tokenize();
                 Builder.Verification.Results.AnalysisResult baseR = baseSa.Analyze(
                     program: new Builder.Parser.Parser(tokens: toks, language: language,
                         fileName: "base.rf").Parse());
                 if (baseR.Errors.Count > 0)
                 {
+                    Console.Error.WriteLine(
+                        value:
+                        $"[daemon] resident-JIT base seed had {baseR.Errors.Count} error(s): {baseR.Errors[index: 0].Message}");
                     return null;
                 }
 
@@ -215,6 +224,7 @@ internal partial class Program
                     instantiatedBodies: baseR.InstantiatedGenericBodies,
                     maySuspendKeys: baseR.MaySuspendRoutineKeys,
                     registry: baseR.Registry);
+
                 var baseGen = new Builder.LlvmEmit.LlvmEmitter(
                     userPrograms: new System.Collections.Generic.List<(SyntaxTree.Program, string,
                         string)>(),
@@ -226,8 +236,7 @@ internal partial class Program
                         InstantiatedGenericBodies = baseR.InstantiatedGenericBodies,
                         // MUST match the delta's mode+target: ShouldEmitTrace (Debug/Release) gates whether the
                         // base DEFINES the shared trace TLS globals the delta extern-references, and the target
-                        // fixes the triple/datalayout the delta is JIT-linked against. Omitting these made the
-                        // base skip the trace globals → delta's externs "not found" at JIT link.
+                        // fixes the triple/datalayout the delta is JIT-linked against.
                         BuildMode = buildMode,
                         Target = TargetConfig.ForCurrentHost()
                     });
@@ -242,10 +251,16 @@ internal partial class Program
                     return null;
                 }
 
+                // The base's COLLECTED instance set (RegistryKeys) — the delta collector skips re-building these
+                // (they are defined in the base object; the base's own collect already expanded their callees).
+                IReadOnlySet<string> instanceKeys =
+                    new HashSet<string>(collection: baseR.InstantiatedGenericBodies.Keys,
+                        comparer: StringComparer.Ordinal);
                 Console.Error.WriteLine(
                     value:
-                    $"[daemon] resident-JIT base ready: {baseSyms.Count} syms, obj-cached={wasCached} ({sw.ElapsedMilliseconds} ms)");
-                (string ObjPath, IReadOnlyCollection<string> Syms) result = (obj, baseSyms);
+                    $"[daemon] resident-JIT base ready: {baseSyms.Count} syms, {instanceKeys.Count} instance keys, obj-cached={wasCached} ({sw.ElapsedMilliseconds} ms)");
+                (string ObjPath, IReadOnlyCollection<string> Syms, IReadOnlySet<string> InstanceKeys)
+                    result = (obj, baseSyms, instanceKeys);
                 BaseArtifactCache[key: key] = result;
                 return result;
             }
@@ -471,16 +486,19 @@ internal partial class Program
                 // (residentSymbols = the base's defined syms ⇒ codegen extern-declares them). Falls back to
                 // full IR if the base can't be built, so the client path stays correct either way.
                 IReadOnlyCollection<string>? residentSymbols = null;
+                IReadOnlySet<string>? residentInstanceKeys = null;
                 if (req.BaseDelta)
                 {
                     Language lang = InvokedAsSuflae
                         ? Language.Suflae
                         : Language.RazorForge;
-                    (string ObjPath, IReadOnlyCollection<string> Syms)? baseArtifact =
-                        EnsureBaseArtifact(language: lang, buildMode: (RfBuildMode)req.BuildMode);
+                    (string ObjPath, IReadOnlyCollection<string> Syms,
+                        IReadOnlySet<string> InstanceKeys)? baseArtifact =
+                            EnsureBaseArtifact(language: lang, buildMode: (RfBuildMode)req.BuildMode);
                     if (baseArtifact is { } ba)
                     {
                         residentSymbols = ba.Syms;
+                        residentInstanceKeys = ba.InstanceKeys;
                         baseObjectPath = ba.ObjPath;
                     }
                 }
@@ -497,7 +515,8 @@ internal partial class Program
                     warm: new WarmProviders(WarmProvider: GetWarm,
                         IrCallback: null,
                         StdlibIndexProvider: GetStdlibIndex,
-                        ResidentSymbols: residentSymbols));
+                        ResidentSymbols: residentSymbols,
+                        ResidentInstanceKeys: residentInstanceKeys));
             }
             catch (Exception ex)
             {

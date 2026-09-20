@@ -161,6 +161,18 @@ public sealed class InstantiationContext
     public bool SeedAllStdlibRoutines { get; init; }
 
     /// <summary>
+    /// Resident-JIT base/delta: <see cref="RegistryKey"/> values already DEFINED in the precompiled base
+    /// object (the base's collected instance set). When non-empty, the demand collector treats a reached
+    /// instance whose key is here as an already-built LEAF — it does NOT re-monomorphize/lower/resolve the
+    /// body (codegen extern-declares it and the JIT resolves the reference into the base dylib). SAFE because
+    /// the base's own collect fixpoint already expanded every callee of a resident instance INTO the base
+    /// (base∪delta closure), so skipping expansion here loses no reachable callee. Empty ⇒ full self-contained
+    /// build (no base). Measured: eliminates ~71% redundant delta re-collection.
+    /// </summary>
+    public IReadOnlySet<string> ResidentInstanceKeys { get; init; } =
+        new HashSet<string>(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Daemon-lifetime cache of per-body reachability scans (see <see cref="RoutineBodyScan"/>), keyed
     /// by stdlib <see cref="RoutineDeclaration"/> reference. Null on a plain compile with no warm state;
     /// when non-null, <c>RoutineReachabilityPass</c> reuses a cached scan instead of re-walking the body
@@ -192,6 +204,10 @@ public sealed class InstantiationContext
         Target = options?.Target ?? TargetConfig.ForCurrentHost();
         BuildMode = options?.BuildMode ?? RfBuildMode.Debug;
         BodyScanCache = options?.BodyScanCache;
+        if (options?.ResidentInstanceKeys is { Count: > 0 } rik)
+        {
+            ResidentInstanceKeys = rik;
+        }
     }
 }
 
@@ -212,6 +228,12 @@ public sealed class InstantiationOptions
 
     /// <summary>Concrete generic bodies produced by prior instantiation runs.</summary>
     public Dictionary<string, MonomorphizedBody>? InstantiatedGenericBodies { get; init; }
+
+    /// <summary>
+    /// Resident-JIT base/delta: <see cref="RegistryKey"/> values already built into the precompiled base
+    /// object. See <see cref="InstantiationContext.ResidentInstanceKeys"/>. Null/empty on a normal build.
+    /// </summary>
+    public IReadOnlySet<string>? ResidentInstanceKeys { get; init; }
 
     /// <summary>Target platform; defaults to the host platform when null.</summary>
     public TargetConfig? Target { get; init; }

@@ -1151,6 +1151,19 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
             MarkOwner(t: r.OwnerType);
             string key = r.RegistryKey;
+
+            // Resident-JIT base/delta: this instance is ALREADY built + defined in the precompiled base object.
+            // Skip its on-demand SA, body build, derive-template materialization, and callee expansion — the
+            // base's own collect fixpoint already expanded every callee INTO the base (base∪delta closure), so
+            // there is nothing new to discover below it, and codegen emits an extern declaration for the call
+            // (resolved into the base dylib at JIT link) from the registry, NOT from the built-body set. Mark it
+            // live so any liveness-gated declaration logic still sees it; do NOT enqueue its body (no walk).
+            if (_ctx.ResidentInstanceKeys.Contains(item: key))
+            {
+                _ctx.LiveRoutineKeys.Add(item: key);
+                return;
+            }
+
             TriggerOnDemandAnalysis(r: r, key: key);
             // Mark EVERY reached routine live FIRST — generic instance OR non-generic (e.g.
             // `Bytes.create(from_list:)` reached through `Bytes.getitem`). Everything reachable from an entry

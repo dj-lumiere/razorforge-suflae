@@ -59,6 +59,7 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
                 VariantBodies = ctx.VariantBodies,
                 InstantiatedGenericBodies = ctx.InstantiatedGenericBodies,
                 LiveRoutineKeys = ctx.LiveRoutineKeys,
+                ResidentInstanceKeys = ctx.ResidentInstanceKeys,
                 LiveOwnerTypeNames = ctx.LiveOwnerTypeNames,
                 SynthesizeAllDerives = ctx.SeedAllStdlibRoutines,
                 AnalyzeRoutineOnDemand = ctx.AnalyzeRoutineOnDemand,
@@ -288,8 +289,11 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
     {
         HashSet<string> userKeys = CollectUserRoutineKeys();
         foreach (string liveKey in ctx.LiveRoutineKeys.Where(predicate: k =>
-                     !userKeys.Contains(item: k)))
+                     !userKeys.Contains(item: k) && !ctx.ResidentInstanceKeys.Contains(item: k)))
         {
+            // Resident (base/delta): a resident non-generic stdlib body is already DEFINED in the base object;
+            // materializing it here would emit a duplicate definition the delta must NOT own. Codegen declares
+            // it extern from the registry and the JIT resolves the reference into the base dylib.
             TryMaterializeStdlibBody(liveKey: liveKey, programBodies: programBodies);
         }
 
@@ -314,6 +318,7 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         foreach (string liveKey in ctx.LiveRoutineKeys)
         {
             if (ctx.InstantiatedGenericBodies.ContainsKey(key: liveKey) ||
+                ctx.ResidentInstanceKeys.Contains(item: liveKey) ||
                 !ctx.VariantBodies.TryGetValue(key: liveKey, value: out Statement? variantBody))
             {
                 continue;

@@ -377,6 +377,14 @@ public sealed partial class SemanticVerifier
     /// </summary>
     public bool SeedAllStdlibRoutines { get; set; }
 
+    /// <summary>
+    /// Resident-JIT base/delta: <see cref="RegistryKey"/> values already built into the precompiled base
+    /// object (the base's collected instance set). Threaded into
+    /// <see cref="InstantiationContext.ResidentInstanceKeys"/> so the demand collector skips re-building /
+    /// re-analyzing / expanding those instances (they are defined in the base dylib). Empty on a normal build.
+    /// </summary>
+    public IReadOnlySet<string>? ResidentInstanceKeys { get; set; }
+
     #endregion
 
     #region Public API
@@ -824,7 +832,8 @@ public sealed partial class SemanticVerifier
                 Target = _target,
                 BuildMode = _buildMode,
                 StdlibTemplateBodies = _memo.WarmStdlibRoutineBodies,
-                RestoredVariantKeys = _memo.RestoredVariantKeys
+                RestoredVariantKeys = _memo.RestoredVariantKeys,
+                ResidentInstanceKeys = ResidentInstanceKeys
             }) { SaTiming = SaTiming, SeedAllStdlibRoutines = SeedAllStdlibRoutines };
 
         // Rewrite Accessing[T]/Controlling[T] params to inner T before reachability so

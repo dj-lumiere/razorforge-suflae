@@ -376,13 +376,15 @@ public sealed partial class BaseEmissionTests
     [Fact]
     public void GenerateBase_Standalone_CompilesToObject()
     {
-        // SeedAllStdlibRoutines = the full non-pruned stdlib base (12k+ defines), same setup as
-        // GenerateBase_Standalone_DefineCompleteness — WITHOUT it the demand-flip analysis of an empty
-        // program materializes nothing and the base is trivially empty (syms=0).
-        var baseSa =
-            new SemanticVerifier(language: Language.RazorForge) { SeedAllStdlibRoutines = true };
+        // REALISTIC-SEED base (matches CompileDaemon.EnsureBaseArtifact): analyze a representative program that
+        // exercises the COMMON generic instances (List/Dict/Set + display), NOT SeedAllStdlibRoutines. The demand
+        // pipeline materializes exactly the reached closure into InstantiatedGenericBodies (no speculative
+        // Hijacked[…] explosion) and we feed the FULL set to the base; a program's own uncommon instances fall to
+        // the per-run delta. The seed's own `start` lives in UserPrograms, so passing empty userPrograms below
+        // keeps it out of the base (@main is gated off in base mode regardless).
+        var baseSa = new SemanticVerifier(language: Language.RazorForge);
         AnalysisResult baseR = baseSa.Analyze(
-            program: Parse(src: "module Base\nroutine start()\n  return", file: "base.rf"));
+            program: Parse(src: Builder.Execution.BaseObjectCache.SeedProgramSource, file: "base.rf"));
         Assert.Empty(collection: baseR.Errors);
         Builder.Lowering.Passes.CancellationInstrumentationPass.Run(
             programs: baseR.Registry.UserPrograms,

@@ -16,6 +16,51 @@ namespace Builder.Execution;
 /// </summary>
 public sealed class BaseObjectCache
 {
+    /// <summary>
+    /// The REALISTIC-SEED base program. The resident-JIT base is NOT built from
+    /// <c>SeedAllStdlibRoutines</c> (which speculatively materializes every generic instance — measured 4268
+    /// bodies, 53% of them <c>Hijacked[…]</c> cycle-collector combinations no real program uses — and bloats
+    /// the base). Under monomorphization there is no separable "non-generic stdlib core" to precompile (an
+    /// empty-<c>start</c> analysis yields only ~38 per-type lifecycle hooks). The stable, amortizable surface
+    /// is instead the COMMON generic instances that most programs share — List/Dict/Set/Maybe over common
+    /// element types plus the scalar/collection display closure — so we build the base by analyzing a
+    /// representative program that actually EXERCISES them. The normal demand pipeline then materializes
+    /// exactly that reached closure; each program's own tail (uncommon instances) falls to the per-run delta.
+    /// This constant participates in the base fingerprint, so editing the seed rebuilds the base.
+    /// </summary>
+    public const string SeedProgramSource =
+        "module Base\n" +
+        "import IO/Console\n" +
+        "routine start()\n" +
+        "  var xs = [1, 2, 3]\n" +
+        "  xs.add_last(value: 4)\n" +
+        "  xs.add_first(value: 0)\n" +
+        "  show(f\"xs: {xs} size {xs.count()} first {xs[0]}\")\n" +
+        "  var sum = 0\n" +
+        "  each x in xs\n" +
+        "    sum = sum + x\n" +
+        "  show(f\"sum: {sum}\")\n" +
+        "  var names = [\"alpha\", \"beta\"]\n" +
+        "  names.add_last(value: \"gamma\")\n" +
+        "  show(f\"names: {names} have beta {names have \"beta\"}\")\n" +
+        "  var d = Dict[Text, S64]()\n" +
+        "  discard d.add(key: \"one\", value: 1)\n" +
+        "  discard d.add(key: \"two\", value: 2)\n" +
+        "  show(f\"d: {d} d[one] {d[\"one\"]} have two {d have \"two\"}\")\n" +
+        "  var di = Dict[S64, S64]()\n" +
+        "  discard di.add(key: 10, value: 100)\n" +
+        "  show(f\"di: {di} size {di.count()}\")\n" +
+        "  var s = Set[S64]()\n" +
+        "  discard s.add(value: 7)\n" +
+        "  discard s.add(value: 8)\n" +
+        "  show(f\"s: {s} size {s.count()} have 7 {s have 7}\")\n" +
+        "  var b = true\n" +
+        "  var n: S64 = 42\n" +
+        "  var u: U64 = 42\n" +
+        "  show(f\"scalars: {b} {n} {u} {n + 1} {n // 2}\")\n" +
+        "  show(\"BASE_SEED_DONE\")\n" +
+        "  return\n";
+
     private readonly string _dir;
 
     public BaseObjectCache(string? dir = null)
