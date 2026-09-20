@@ -994,9 +994,14 @@ internal static class NativeToolchain
     {
         // clang uses -Ox flag style (not opt's -passes=). Same target codegen flags as the link path so the
         // object's ABI/target matches the delta the JIT layers on top of it.
+        // -femulated-tls is LOAD-BEARING for the resident-JIT base: the ORC JIT lowers `thread_local` via
+        // EMULATED TLS (`__emutls_v.<name>` + `__emutls_get_address`) — it cannot use native TLS in JIT'd code
+        // on Windows — so the AOT'd base object MUST also use emulated TLS, else the base defines native-TLS
+        // `_rf_trace_stack` while the delta references emutls `__emutls_v._rf_trace_stack` → "symbol not found"
+        // at JIT link (the shared trace globals). Emulated TLS makes both sides agree on the symbol names.
         string clangOptLevel = $"-{OptLevelString(buildMode: buildMode)}";
         string clangArgs =
-            $"-c {clangOptLevel}{TargetCodegenFlags()} -o \"{objFile}\" \"{optFile}\"";
+            $"-c -femulated-tls {clangOptLevel}{TargetCodegenFlags()} -o \"{objFile}\" \"{optFile}\"";
         int rc = RunToolCapture(toolPath: ClangTool.Value, args: clangArgs, stderr: out string err);
         if (rc != 0)
         {
