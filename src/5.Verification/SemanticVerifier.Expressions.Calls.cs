@@ -2294,13 +2294,21 @@ public sealed partial class SemanticVerifier
             location: call.Location);
 
         // For a VARIADIC generic member routine (e.g. `List[T].from_literal(elements...: T)`),
-        // the arity generic `__VarargN` must be inferred from the freshly-packed
-        // `Array[T, K]` literal BEFORE AnalyzeCallArguments below re-analyzes that literal
-        // against the still-generic parameter type `Array[T, __VarargN]` — which would
-        // re-resolve the array's arity type-arg back to the unbound `__VarargN` and lose K.
-        // Infer + monomorphize here so the subsequent analysis runs against the concrete
-        // per-arity body. (Mirrors the free-routine path: pack → infer → analyze.)
-        if (didPackVariadic && memberRoutine.IsGenericDefinition)
+        // the arity generic `__VarargN` must be inferred from the packed `Array[T, K]` literal
+        // BEFORE AnalyzeCallArguments below re-analyzes that literal against the still-generic
+        // parameter type `Array[T, __VarargN]` — which would re-resolve the array's arity type-arg
+        // back to the unbound `__VarargN` and lose K. Infer + monomorphize here so the subsequent
+        // analysis runs against the concrete per-arity body. (Mirrors the free-routine path: pack →
+        // infer → analyze.)
+        //
+        // The guard also fires when the args are ALREADY packed (`!didPackVariadic` but the routine
+        // is variadic): a variadic-generic call nested as another call's ARGUMENT is analyzed more
+        // than once (overload probe + arg type-check), and every pass after the first sees the
+        // packed `Array[T, K]` literal. Those later passes still land here with `memberRoutine` reset
+        // to the generic definition, so they must re-infer from the (still concretely-typed) packed
+        // literal — otherwise the routine reaches codegen unmonomorphized. `arg.ResolvedType` is
+        // consumed before the corrupting re-analysis below, so K survives.
+        if ((didPackVariadic || memberRoutine.IsVariadic) && memberRoutine.IsGenericDefinition)
         {
             List<TypeSymbol>? variadicArgs = InferMemberRoutineGenericTypeArguments(
                 genericMemberRoutine: memberRoutine,
