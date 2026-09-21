@@ -307,17 +307,12 @@ public static class ManifestLoader
 
         // Incremental JIT (resident-JIT (B) M3): `mode="debug-jit"` + this runs @main via the fully-lazy ORC
         // generator + per-routine disk IR cache (CompileDaemon.TryClientJitRunIncremental) — a re-run reuses
-        // each cached pure-stdlib routine instead of re-codegen'ing it.
+        // each cached pure-stdlib routine instead of re-codegen'ing it. Enabling this also turns on the
+        // base/delta split (daemon AOTs the stdlib base once + ships only the delta IR); it is no longer a
+        // separate `base-delta` field.
         if (table.TryGetValue(key: "incremental", value: out object? incremental))
         {
             target.Incremental = incremental is true;
-        }
-
-        // Resident-JIT base/delta split (opt-in; needs mode="debug-jit" + use-daemon + incremental): AOT the
-        // stdlib base to a cached object once, ship only the per-run delta IR.
-        if (table.TryGetValue(key: "base-delta", value: out object? baseDelta))
-        {
-            target.BaseDelta = baseDelta is true;
         }
 
         // Resolve the executable's module name to a file path

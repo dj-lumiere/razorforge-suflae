@@ -108,14 +108,11 @@ public sealed class BuildTarget
     /// <c>@main</c> via the fully-lazy ORC generator + a per-routine on-disk IR cache, so a re-run reuses each
     /// cached pure-stdlib routine instead of re-codegen'ing it (the path toward the sub-250ms loop). Controlled
     /// by the <c>[target] incremental</c> field; consumed by <c>CompileDaemon.TryClientJitRunIncremental</c>.
-    /// (Cross-run ANALYSIS reuse — the dominant cost — is a separate later step.)</summary>
+    /// (Cross-run ANALYSIS reuse — the dominant cost — is a separate later step.) Enabling this also turns on
+    /// the resident-JIT base/delta split: the daemon AOT-compiles the stdlib base to a cached native object
+    /// ONCE, then ships only the small per-run DELTA IR (see <c>CompileDaemon.TryDaemonIr</c>). Base/delta is
+    /// no longer a separate opt-in — it is part of the incremental JIT path.</summary>
     public bool Incremental { get; set; }
-
-    /// <summary>Enable the resident-JIT base/delta split (with <c>mode="debug-jit"</c> + <c>use-daemon</c>):
-    /// the daemon AOT-compiles the stdlib base to a cached native object ONCE, then ships only the small
-    /// per-run DELTA IR; the client loads the object and JITs only the delta. Controlled by the
-    /// <c>[target] base-delta</c> field; consumed by <c>CompileDaemon.HandleIr</c>.</summary>
-    public bool BaseDelta { get; set; }
 }
 
 /// <summary>

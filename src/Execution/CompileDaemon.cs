@@ -52,9 +52,10 @@ internal partial class Program
             public List<string> CLibraries { get; set; } = [];
             public List<string> LibraryPaths { get; set; } = [];
 
-            /// <summary>Resident-JIT base/delta split (config <c>[target] base-delta</c>): when true the daemon
-            /// AOT-compiles the stdlib base to a cached <c>.o</c> ONCE and returns only the small DELTA IR plus
-            /// the base object path, so the client loads the object and JITs only the delta.</summary>
+            /// <summary>Resident-JIT base/delta split: when true the daemon AOT-compiles the stdlib base to a
+            /// cached <c>.o</c> ONCE and returns only the small DELTA IR plus the base object path, so the
+            /// client loads the object and JITs only the delta. Set only on the incremental JIT path
+            /// (<c>[target] incremental</c>); there is no separate <c>base-delta</c> manifest field.</summary>
             public bool BaseDelta { get; set; }
         }
 
@@ -739,7 +740,7 @@ internal partial class Program
                 {
                     var swJit = System.Diagnostics.Stopwatch.StartNew();
                     // Base/delta: load the AOT'd stdlib base object + JIT only the delta. Full-IR fallback
-                    // when the daemon shipped no base object (base build failed, or base-delta disabled).
+                    // when the daemon shipped no base object (e.g. the base build failed).
                     exitCode = daemonBaseObj != null
                         ? OrcJitExecutor.JitAndRunSplitWithBaseObject(baseObjectPath: daemonBaseObj,
                             deltaIr: daemonIr,
@@ -895,7 +896,9 @@ internal partial class Program
                 LibraryRoots = [.. resolved.LibraryRoots],
                 // base/delta ONLY on the incremental JIT path (it loads the base object); the plain full-IR
                 // JitAndRun caller must NOT request a delta (it can't resolve the base's extern symbols).
-                BaseDelta = resolved.BaseDelta && allowBaseDelta
+                // allowBaseDelta is true only from TryClientJitRunIncremental, so base/delta rides on the
+                // incremental JIT path and has no separate manifest opt-in.
+                BaseDelta = allowBaseDelta
             };
             try
             {

@@ -505,12 +505,10 @@ internal partial class Program
         /// <summary>Use the ORC-JIT dev-loop path for buildandrun (manifest <c>mode = "debug-jit"</c>).</summary>
         public bool Jit { get; init; }
 
-        /// <summary>Reserved: incremental compilation (manifest <c>[target] incremental</c>); not yet wired.</summary>
+        /// <summary>Incremental JIT dev loop (manifest <c>[target] incremental</c>): fully-lazy on-demand JIT +
+        /// per-routine IR cache. Also enables the resident-JIT base/delta split (daemon AOTs the stdlib base
+        /// once + ships only the per-run delta IR) — base/delta has no separate opt-in.</summary>
         public bool Incremental { get; init; }
-
-        /// <summary>Resident-JIT base/delta split (manifest <c>[target] base-delta</c>): daemon AOTs the
-        /// stdlib base to a cached object once and ships only the per-run delta IR.</summary>
-        public bool BaseDelta { get; init; }
     }
 
     /// <summary>
@@ -649,8 +647,7 @@ internal partial class Program
                 LibraryConfigs = target.LibraryConfigs,
                 UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
-                Incremental = target.Incremental,
-                BaseDelta = target.BaseDelta
+                Incremental = target.Incremental
             };
         }
         catch (Exception ex)
@@ -733,8 +730,7 @@ internal partial class Program
                 LibraryConfigs = target.LibraryConfigs,
                 UseDaemon = target.UseDaemon && !DaemonDisabledByEnv(),
                 Jit = ModeUsesJit(mode: target.Mode),
-                Incremental = target.Incremental,
-                BaseDelta = target.BaseDelta
+                Incremental = target.Incremental
             };
         }
         catch (Exception ex)
