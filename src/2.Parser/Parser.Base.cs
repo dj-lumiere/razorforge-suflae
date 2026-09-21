@@ -238,46 +238,71 @@ public partial class Parser
             TokenType.Or => Precedence.LogicalOr,
             TokenType.And => Precedence.LogicalAnd,
 
-            // Comparison operators
-            TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
-            TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
-            TokenType.Have or TokenType.Lack => Precedence.Comparison,
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
-                Precedence.Comparison,
-            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
-               .Comparison,
-            TokenType.IdentityEqual or TokenType.IdentityNotEqual => Precedence.Comparison,
-
             // Bitwise operators
             TokenType.Pipe => Precedence.BitwiseOr,
             TokenType.Caret => Precedence.BitwiseXor,
             TokenType.Ampersand => Precedence.BitwiseAnd,
 
-            // Shift operators
-            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift
-                or TokenType.LogicalRightShift => Precedence.Shift,
-
-            // Additive operators
-            TokenType.Plus or TokenType.Minus => Precedence.Additive,
-            TokenType.PlusWrap or TokenType.PlusClamp => Precedence.Additive,
-            TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
-            TokenType.PlusUnchecked or TokenType.MinusUnchecked => Precedence.Additive,
-
-            // Multiplicative operators
-            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent =>
-                Precedence.Multiplicative,
-            TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
-            TokenType.SlashClamp => Precedence.Multiplicative,
-            TokenType.MultiplyUnchecked or TokenType.SlashUnchecked or TokenType.DivideUnchecked
-                or TokenType.PercentUnchecked => Precedence.Multiplicative,
-
-            // Power operators
-            TokenType.Power => Precedence.Power,
-            TokenType.PowerWrap or TokenType.PowerClamp => Precedence.Power,
-            TokenType.PowerUnchecked => Precedence.Power,
+            _ when IsComparisonPrecedenceOperator(type: type) => Precedence.Comparison,
+            _ when IsShiftOperator(type: type) => Precedence.Shift,
+            _ when IsAdditiveOperator(type: type) => Precedence.Additive,
+            _ when IsMultiplicativeOperator(type: type) => Precedence.Multiplicative,
+            _ when IsPowerOperator(type: type) => Precedence.Power,
 
             _ => Precedence.None
         };
+    }
+
+    private static bool IsComparisonPrecedenceOperator(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.In or TokenType.Is or TokenType.Obeys => true,
+            TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => true,
+            TokenType.Have or TokenType.Lack => true,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
+                true,
+            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => true,
+            TokenType.IdentityEqual or TokenType.IdentityNotEqual => true,
+            _ => false
+        };
+    }
+
+    private static bool IsShiftOperator(TokenType type)
+    {
+        return type is TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift
+            or TokenType.LogicalRightShift;
+    }
+
+    private static bool IsAdditiveOperator(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.Plus or TokenType.Minus => true,
+            TokenType.PlusWrap or TokenType.PlusClamp => true,
+            TokenType.MinusWrap or TokenType.MinusClamp => true,
+            TokenType.PlusUnchecked or TokenType.MinusUnchecked => true,
+            _ => false
+        };
+    }
+
+    private static bool IsMultiplicativeOperator(TokenType type)
+    {
+        return type switch
+        {
+            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => true,
+            TokenType.MultiplyWrap or TokenType.MultiplyClamp => true,
+            TokenType.SlashClamp => true,
+            TokenType.MultiplyUnchecked or TokenType.SlashUnchecked or TokenType.DivideUnchecked
+                or TokenType.PercentUnchecked => true,
+            _ => false
+        };
+    }
+
+    private static bool IsPowerOperator(TokenType type)
+    {
+        return type is TokenType.Power or TokenType.PowerWrap or TokenType.PowerClamp
+            or TokenType.PowerUnchecked;
     }
 
     /// <summary>

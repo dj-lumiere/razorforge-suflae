@@ -63,6 +63,10 @@ public sealed class BaseObjectCache
 
     private readonly string _dir;
 
+    /// <summary>
+    /// Creates a base-object cache rooted at <paramref name="dir"/>, defaulting to a
+    /// <c>rf_jit_base_cache</c> folder under the system temp path; the directory is created if missing.
+    /// </summary>
     public BaseObjectCache(string? dir = null)
     {
         _dir = dir ?? Path.Combine(path1: Path.GetTempPath(), path2: "rf_jit_base_cache");

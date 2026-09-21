@@ -645,26 +645,9 @@ public sealed partial class StdlibLoader
             return null;
         }
 
-        // Buildtime type-position splice `${m.type}` in a stdlib decl-position expand column template
-        // (e.g. `Hijacked[${m.type}]` in `SplitList[T]`). Resolve to the synthetic per-field placeholder,
-        // mirroring TypeResolver.ResolveTypeCore; the registry substitutes each concrete field's type at
-        // instantiation (ExpandSoAColumns). Without this the stdlib registration path — which does NOT go
-        // through TypeBodyResolver.ResolveExpandTemplates — never sees the splice, so a stdlib SoA type
-        // (SplitList) gets no columns.
-        if (typeExpr.SpliceHandle != null)
+        if (ResolveSpliceType(typeExpr: typeExpr) is { } spliced)
         {
-            return new GenericParameterTypeSymbol(name: TypeModel.Symbols.MemberExpandTemplateInfo
-                                                               .ColumnPlaceholderName);
-        }
-
-        // Buildtime VALUE-position splice used as a const-generic argument, e.g. the carrier payload
-        // size `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Resolve to a symbolic
-        // BuildtimeConstGenericTypeSymbol; RoutineInfo/RecordTypeSymbol.SubstituteType fold it at
-        // monomorphization. Without this the stdlib registration path returns null and the whole field
-        // (Result/Lookup `payload`) is silently dropped from the record's member list.
-        if (typeExpr.BuildtimeValue != null)
-        {
-            return new BuildtimeConstGenericTypeSymbol(buildtimeExpr: typeExpr.BuildtimeValue);
+            return spliced;
         }
 
         string typeName = typeExpr.Name;
@@ -738,11 +721,51 @@ public sealed partial class StdlibLoader
             return resolved;
         }
 
-        // Import-scoped fallback: a bare cross-module type name (e.g. `Integer` in a `module Core` file
-        // that `import Numerics.Integer`) no longer resolves via a global short-name scan (removed), and
-        // its module loads on-demand — so it is unresolved at eager Core registration. When re-resolved
-        // on demand (the imported module now loaded) with the file's imports installed, try each imported
-        // namespace as a prefix. Mirrors the body-analysis TypeResolver, scoped to genuine imports only.
+        return ResolveViaActiveImports(registry: registry, typeName: typeName);
+    }
+
+    /// <summary>
+    /// Resolves a buildtime type-position splice (<c>${m.type}</c>) to the synthetic per-field placeholder,
+    /// or a buildtime VALUE-position splice (const-generic argument) to a symbolic
+    /// <see cref="BuildtimeConstGenericTypeSymbol"/>. Returns null when the expression carries no splice.
+    /// </summary>
+    private static TypeSymbol? ResolveSpliceType(TypeExpression typeExpr)
+    {
+        // Buildtime type-position splice `${m.type}` in a stdlib decl-position expand column template
+        // (e.g. `Hijacked[${m.type}]` in `SplitList[T]`). Resolve to the synthetic per-field placeholder,
+        // mirroring TypeResolver.ResolveTypeCore; the registry substitutes each concrete field's type at
+        // instantiation (ExpandSoAColumns). Without this the stdlib registration path — which does NOT go
+        // through TypeBodyResolver.ResolveExpandTemplates — never sees the splice, so a stdlib SoA type
+        // (SplitList) gets no columns.
+        if (typeExpr.SpliceHandle != null)
+        {
+            return new GenericParameterTypeSymbol(name: TypeModel.Symbols.MemberExpandTemplateInfo
+                                                               .ColumnPlaceholderName);
+        }
+
+        // Buildtime VALUE-position splice used as a const-generic argument, e.g. the carrier payload
+        // size `Array[U8, ${max(T.data_size().byte_size(), 8)}]`. Resolve to a symbolic
+        // BuildtimeConstGenericTypeSymbol; RoutineInfo/RecordTypeSymbol.SubstituteType fold it at
+        // monomorphization. Without this the stdlib registration path returns null and the whole field
+        // (Result/Lookup `payload`) is silently dropped from the record's member list.
+        if (typeExpr.BuildtimeValue != null)
+        {
+            return new BuildtimeConstGenericTypeSymbol(buildtimeExpr: typeExpr.BuildtimeValue);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Import-scoped fallback: a bare cross-module type name (e.g. <c>Integer</c> in a <c>module Core</c>
+    /// file that <c>import Numerics.Integer</c>) no longer resolves via a global short-name scan (removed),
+    /// and its module loads on-demand — so it is unresolved at eager Core registration. When re-resolved on
+    /// demand (the imported module now loaded) with the file's imports installed, try each imported namespace
+    /// as a prefix. Mirrors the body-analysis TypeResolver, scoped to genuine imports only. Returns null when
+    /// no import qualifies the name.
+    /// </summary>
+    private static TypeSymbol? ResolveViaActiveImports(TypeRegistry registry, string typeName)
+    {
         if (!typeName.Contains(value: '.') &&
             registry.ActiveRegistrationImports is { Count: > 0 } imports)
         {

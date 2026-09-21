@@ -181,7 +181,7 @@ internal partial class Program
             IReadOnlySet<string> InstanceKeys)? EnsureBaseArtifact(
             Language language, RfBuildMode buildMode)
         {
-            string key = language + "" + (int)buildMode;
+            string key = language + "\u0001" + (int)buildMode;
             if (BaseArtifactCache.TryGetValue(key: key,
                     value: out (string ObjPath, IReadOnlyCollection<string> Syms,
                         IReadOnlySet<string> InstanceKeys) cached))
@@ -728,43 +728,11 @@ internal partial class Program
             if (resolved.UseDaemon &&
                 TryGetWarmDaemonIr(resolved: resolved, ir: out string daemonIr,
                     exitCode: out int daemonRc, baseObjectPath: out string? daemonBaseObj,
-                    allowBaseDelta: true))
+                    allowBaseDelta: true) &&
+                TryRunWarmDaemonIr(daemonRc: daemonRc, daemonIr: daemonIr,
+                    daemonBaseObj: daemonBaseObj, entryFull: entryFull, exitCode: out exitCode))
             {
-                if (daemonRc != 0)
-                {
-                    exitCode = daemonRc;
-                    return true;
-                }
-
-                try
-                {
-                    var swJit = System.Diagnostics.Stopwatch.StartNew();
-                    // Base/delta: load the AOT'd stdlib base object + JIT only the delta. Full-IR fallback
-                    // when the daemon shipped no base object (e.g. the base build failed).
-                    exitCode = daemonBaseObj != null
-                        ? OrcJitExecutor.JitAndRunSplitWithBaseObject(baseObjectPath: daemonBaseObj,
-                            deltaIr: daemonIr,
-                            programName: entryFull,
-                            programArgs: [])
-                        : OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
-                            programName: entryFull,
-                            programArgs: []);
-                    swJit.Stop();
-                    if (PhaseTiming())
-                    {
-                        Console.Error.WriteLine(
-                            value:
-                            $"[timing] JIT compile + run (daemon IR{(daemonBaseObj != null ? ", base/delta" : "")}): {swJit.ElapsedMilliseconds} ms");
-                    }
-
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine(value: $"[jit] incremental (daemon) execution failed: {ex.Message}");
-                    exitCode = 1;
-                    return true;
-                }
+                return true;
             }
 
             // The IR-cache fingerprint is stdlib+compiler-only (program-INVARIANT), so it is known before the
@@ -825,6 +793,50 @@ internal partial class Program
             catch (Exception ex)
             {
                 Console.Error.WriteLine(value: $"[jit] incremental execution failed: {ex.Message}");
+                exitCode = 1;
+                return true;
+            }
+        }
+
+        /// <summary>JITs + runs the IR shipped by a warm daemon (base/delta split when a base object was
+        /// shipped, otherwise full IR). Returns true when it handled the request (setting <paramref
+        /// name="exitCode"/> — including a non-zero daemon build error or a JIT-execution failure).</summary>
+        private static bool TryRunWarmDaemonIr(int daemonRc, string daemonIr, string? daemonBaseObj,
+            string entryFull, out int exitCode)
+        {
+            exitCode = 0;
+            if (daemonRc != 0)
+            {
+                exitCode = daemonRc;
+                return true;
+            }
+
+            try
+            {
+                var swJit = System.Diagnostics.Stopwatch.StartNew();
+                // Base/delta: load the AOT'd stdlib base object + JIT only the delta. Full-IR fallback
+                // when the daemon shipped no base object (e.g. the base build failed).
+                exitCode = daemonBaseObj != null
+                    ? OrcJitExecutor.JitAndRunSplitWithBaseObject(baseObjectPath: daemonBaseObj,
+                        deltaIr: daemonIr,
+                        programName: entryFull,
+                        programArgs: [])
+                    : OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
+                        programName: entryFull,
+                        programArgs: []);
+                swJit.Stop();
+                if (PhaseTiming())
+                {
+                    Console.Error.WriteLine(
+                        value:
+                        $"[timing] JIT compile + run (daemon IR{(daemonBaseObj != null ? ", base/delta" : "")}): {swJit.ElapsedMilliseconds} ms");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"[jit] incremental (daemon) execution failed: {ex.Message}");
                 exitCode = 1;
                 return true;
             }

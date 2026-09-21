@@ -905,6 +905,10 @@ public sealed partial class SemanticVerifier
         // this creator can't be matched here, so it is skipped (no deferred base), not a user-facing error.
         int errorsBefore = _errors.Count;
         var argTypes = new List<TypeSymbol>(capacity: decl.Parameters.Count);
+        // Not a plain projection. An unresolved (null) param type bails the whole method after trimming
+        // the speculative errors, and each ResolveType has diagnostic side effects. A Select cannot express
+        // the early method-return, so S3267 is a false positive here.
+        #pragma warning disable S3267
         foreach (Parameter p in decl.Parameters)
         {
             if (p.Type is null)
@@ -915,6 +919,7 @@ public sealed partial class SemanticVerifier
 
             argTypes.Add(item: ResolveType(typeExpr: p.Type));
         }
+        #pragma warning restore S3267
 
         TrimErrorsTo(count: errorsBefore);
         return _registry.LookupCreatorOverload(type: ctorType, argTypes: argTypes);

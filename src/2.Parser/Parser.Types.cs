@@ -97,10 +97,6 @@ public partial class Parser
                 Location: location));
     }
 
-    private const string TypeKindNamesHint =
-        "RecordType, VariantType, EntityType, ChoiceType, FlagsType, TupleType, RoutineType, " +
-        "ZeroMemvarType, CrashableType, TypeName";
-
     /// <summary>Parses the target of an <c>is</c> generic constraint after the <c>is</c> keyword has
     /// been consumed. <c>is</c> now means ONLY <b>type equality</b> (<c>T is S32</c> — the type parameter
     /// must be exactly that type). The two other axes are classifier-FIRST and no longer spelled with

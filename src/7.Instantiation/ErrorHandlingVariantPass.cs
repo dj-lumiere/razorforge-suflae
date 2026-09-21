@@ -804,9 +804,9 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                     nextOnly: nextOnly);
                 result.Add(item: BuildCarrierPropagationWhen(subject: carrierCall!,
                     bindName: carrierBind,
-                    kind: kind,
-                    innerCanNone: innerCanNone,
-                    innerCanError: innerCanError,
+                    caps: new CarrierCapabilities(Kind: kind,
+                        InnerCanNone: innerCanNone,
+                        InnerCanError: innerCanError),
                     remainder: remainder,
                     registry: registry!,
                     loc: s.Location));
@@ -949,12 +949,13 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 MemberName: RuntimeContract.Carrier.ValueField,
                 Location: loc) { ResolvedType = valueType };
 
-            // The extracted payload ALIASES the carrier's heap buffer (a plain field read, not a move), so
-            // binding `var x = carrier.value` and later destroying BOTH x AND the carrier double-frees a
-            // MANAGED/ASSIGNABLE payload (Bytes/Text/record — for these `.assign()` is a refcount++ share /
-            // structural co-own, NOT a buffer copy, which balances the two destroys). A MOVE-ONLY entity
-            // payload has no `assign` (it's single-owner); leave the extract as a plain passthrough and let
-            // the ownership checker treat it as the move it is (assigning it would reach codegen unresolved).
+            // The extracted payload ALIASES the carrier's heap buffer as a plain field read rather than a
+            // move. Binding the payload and later destroying BOTH the bound name AND the carrier would
+            // double-free a MANAGED or ASSIGNABLE payload such as Bytes, Text, or a record. For those, the
+            // Assign derive performs a refcount-increment share or structural co-own rather than a buffer
+            // copy, which balances the two destroys. A MOVE-ONLY entity payload has no Assign derive because
+            // it is single-owner. Leave that extract as a plain passthrough and let the ownership checker
+            // treat it as the move it is. Trying to assign it would reach codegen unresolved.
             bool payloadAssignable = valueType != null && registry.LookupMemberRoutine(
                 type: valueType,
                 memberRoutineName: RuntimeContract.Duplication.Assign,
@@ -1028,26 +1029,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         string[] order = kind == ErrorHandlingVariantKind.Check
             ? [PrefixCheck, PrefixLookup, PrefixTry]
             : [PrefixLookup, PrefixCheck, PrefixTry];
-        RoutineInfo? variant = null;
-        string chosen = "";
-        foreach (string p in order)
-        {
-            RoutineInfo? v = registry.OnDemandVariantForBase?.Invoke(arg1: failRoutine, arg2: p);
-            if (v == null && failRoutine.OwnerType is { } owner)
-            {
-                v = LookupVariantForOverload(registry: registry,
-                    owner: owner,
-                    prefix: p,
-                    original: failRoutine);
-            }
-
-            if (v?.ReturnType is { TypeArguments.Count: > 0 })
-            {
-                variant = v;
-                chosen = p;
-                break;
-            }
-        }
+        (RoutineInfo? variant, string chosen) =
+            ChooseInnerVariant(registry: registry, failRoutine: failRoutine, order: order);
 
         if (variant?.ReturnType is not { } carrier)
         {
@@ -1092,6 +1075,35 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     }
 
     /// <summary>
+    /// Walks the preferred variant prefixes in order and returns the first synthesized safe variant whose
+    /// carrier return type carries payload type arguments, together with the prefix that selected it. Each
+    /// prefix is resolved via the on-demand synth hook first, then via the member-scoped overload lookup
+    /// when the failable base has an owner type. Returns <c>(null, "")</c> when none apply.
+    /// </summary>
+    private static (RoutineInfo? variant, string chosen) ChooseInnerVariant(TypeRegistry registry,
+        RoutineInfo failRoutine, string[] order)
+    {
+        foreach (string p in order)
+        {
+            RoutineInfo? v = registry.OnDemandVariantForBase?.Invoke(arg1: failRoutine, arg2: p);
+            if (v == null && failRoutine.OwnerType is { } owner)
+            {
+                v = LookupVariantForOverload(registry: registry,
+                    owner: owner,
+                    prefix: p,
+                    original: failRoutine);
+            }
+
+            if (v?.ReturnType is { TypeArguments.Count: > 0 })
+            {
+                return (v, p);
+            }
+        }
+
+        return (null, "");
+    }
+
+    /// <summary>
     /// Builds the <c>when</c> that short-circuits a Check/Lookup variant on the inner carrier's
     /// failure and otherwise binds the unwrapped success value before running the remainder:
     /// <code>
@@ -1103,10 +1115,20 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// Arms are emitted only for failures the chosen inner carrier can produce AND the outer can
     /// represent. Lowered by CrashableExpansionPass + PatternLoweringPass on path-1 variant bodies.
     /// </summary>
+    /// <summary>
+    /// The outer variant kind together with the failure states the chosen inner carrier can produce —
+    /// the capability triple that drives which propagation arms <see cref="BuildCarrierPropagationWhen"/>
+    /// emits.
+    /// </summary>
+    private readonly record struct CarrierCapabilities(
+        ErrorHandlingVariantKind Kind, bool InnerCanNone, bool InnerCanError);
+
     private static Statement BuildCarrierPropagationWhen(Expression subject, string? bindName,
-        ErrorHandlingVariantKind kind, bool innerCanNone, bool innerCanError,
-        List<Statement> remainder, TypeRegistry registry, SourceLocation loc)
+        CarrierCapabilities caps, List<Statement> remainder, TypeRegistry registry, SourceLocation loc)
     {
+        ErrorHandlingVariantKind kind = caps.Kind;
+        bool innerCanNone = caps.InnerCanNone;
+        bool innerCanError = caps.InnerCanError;
         // Bind the subject carrier to a temp so the Crashable arm can read its RUNTIME type_id — the outer
         // carrier must re-wrap the failure preserving the concrete crashable identity, which the caught,
         // erased `Crashable` value alone does not carry (only the source carrier's type_id field does).

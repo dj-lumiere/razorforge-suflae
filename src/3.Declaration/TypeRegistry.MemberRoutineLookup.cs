@@ -586,6 +586,8 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="name">The routine name (without generic params).</param>
     /// <param name="preferredArity">Expected argument count; -1 means any arity is acceptable.</param>
+    /// <param name="includeForeign">When true, also bind foreign (C/LLVM) generic routines; those are
+    /// only reachable via a realm-qualified call site.</param>
     public RoutineInfo? LookupGenericOverload(string name, int preferredArity = -1,
         bool includeForeign = false)
     {
@@ -951,7 +953,7 @@ public sealed partial class TypeRegistry
             : null;
     }
 
-    /// <summary>Generic-definition free functions with the bare name <paramref name="name"/> — filtered off
+    /// <summary>Generic-definition free functions with the given bare name — filtered off
     /// the FreeOwnerKey store (which is keyed by BaseName = Module.Name), replacing the old separate
     /// _genericFreeFunctions by-Name index. Matches the old semantics (all modules' same-named generics).</summary>
     /// <summary>

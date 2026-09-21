@@ -7,7 +7,7 @@ namespace Builder;
 /// <summary>
 /// Native toolchain driver: resolves the LLVM tools (clang/opt) and the bundled native
 /// runtime, optimizes/links emitted LLVM IR into an executable, stages the runtime's shared
-/// libraries, and cleans stale build artifacts. Split out of <see cref="Program"/> so the CLI
+/// libraries, and cleans stale build artifacts. Split out of the CLI entry point so the CLI
 /// entry point only parses arguments and dispatches; all platform/linker knowledge lives here.
 /// </summary>
 internal static class NativeToolchain
@@ -18,6 +18,9 @@ internal static class NativeToolchain
     private const string OptToolName = "opt";
     private const string LlvmLinkToolName = "llvm-link";
     private const string CMakeToolName = "cmake";
+
+    // The native runtime's source/build subdirectory name (development checkout layout).
+    private const string NativeDirName = "native";
 
     /// <summary>
     /// The native-runtime C sources compiled to LLVM bitcode and llvm-linked into the RF module
@@ -87,7 +90,7 @@ internal static class NativeToolchain
         string? current = exeDir;
         for (int i = 0; i < 6 && current != null; i++)
         {
-            string candidate = Path.Combine(path1: current, path2: "native", path3: "build");
+            string candidate = Path.Combine(path1: current, path2: NativeDirName, path3: "build");
             if (File.Exists(path: Path.Combine(path1: candidate, path2: "build.ninja")) ||
                 File.Exists(path: Path.Combine(path1: candidate, path2: "Makefile")))
             {
@@ -183,11 +186,11 @@ internal static class NativeToolchain
             string nativeBinDir = Path.Combine(path1: nativeBuildDir, path2: "bin");
             string nativeLibDir = Path.Combine(path1: nativeBuildDir, path2: "lib");
             string exeNativeBinDir = Path.Combine(path1: exeDir,
-                path2: "native",
+                path2: NativeDirName,
                 path3: "build",
                 path4: "bin");
             string exeNativeLibDir = Path.Combine(path1: exeDir,
-                path2: "native",
+                path2: NativeDirName,
                 path3: "build",
                 path4: "lib");
 
@@ -677,7 +680,7 @@ internal static class NativeToolchain
         string? current = exeDir;
         for (int i = 0; i < 6 && current != null; i++)
         {
-            string candidate = Path.Combine(path1: current, path2: "native", path3: "runtime");
+            string candidate = Path.Combine(path1: current, path2: NativeDirName, path3: "runtime");
             if (File.Exists(path: Path.Combine(path1: candidate, path2: "memory.c")))
             {
                 runtimeDir = candidate;

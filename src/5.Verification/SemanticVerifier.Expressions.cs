@@ -143,49 +143,9 @@ public sealed partial class SemanticVerifier
             return choiceCase.Value.ChoiceType;
         }
 
-        // Compiler-generated re-analysis of a concrete generic instance's member body binds each parameter
-        // name to its concrete argument (T -> Particle). Resolve a bare parameter reference here — the
-        // identifier-as-type-receiver path (`var result = T.blank()`) — to that concrete argument BEFORE the
-        // global type lookup below. The concrete owner is not a generic-definition scope, so the slot-shadow
-        // block that follows does NOT fire, and a same-named global user type (`record T`) would otherwise
-        // hijack `T` (the generic-param-name-collision). Mirrors the guard in TypeResolver.ResolveTypeCore.
-        if (_compilerGeneratedTypeParamBindings is { } cgBind &&
-            cgBind.TryGetValue(key: id.Name, value: out TypeSymbol? boundParam))
+        if (TryResolveGenericOrStampedIdentifier(id: id, result: out TypeSymbol? genericOrStamped))
         {
-            return boundParam;
-        }
-
-        // An in-scope generic PARAMETER shadows a same-named global type, BEFORE the global lookup.
-        // A parameter's NAME is only a label; its identity is its positional slot. Inside a
-        // `common routine T.to_width()` body the receiver `T` is UNAMBIGUOUSLY that parameter — there
-        // is no other reading — so a user `record T` must NOT hijack it as the type-level receiver of
-        // `T.to_width(...)`. Without this the receiver resolved to the record, the call bound to
-        // `record-T.to_width`, and GMP emitted it into a 256-bit numeric routine (garbage
-        // `zext i64 to record-T` / `shl i256 <record-T>`). Mirrors TypeResolver.ResolveTypeCore; the
-        // shadow is granted only for a GENUINE definition-scope parameter (generic-parameter
-        // identity = SLOT, not name).
-        if (IsGenericParameter(name: id.Name) && (LookupTypeWithImports(name: id.Name) is null ||
-                                                  IsGenericDefinitionScopeParam(name: id.Name)))
-        {
-            return new GenericParameterTypeSymbol(name: id.Name,
-                slot: GenericParameterSlot(name: id.Name));
-        }
-
-        // A monomorphization-substituted type-param receiver — `T.blank()` where GenericAstRewriter
-        // rewrote the receiver `T` to the concrete element type and stamped the module-qualified type
-        // on the node — reaches re-analysis as a bare type NAME (e.g. "Point"). Trust that already-
-        // resolved concrete type instead of the module-ambiguous bare-name lookup below: when several
-        // modules declare a same-named record (two fixtures' `record Point`), the name lookup binds the
-        // first-registered one, silently clobbering the substituted type to the wrong module (the SoA
-        // getitem building a `BuilderQueryApi.Point` for a `SoaSplitArrayApi.Point` column — a
-        // link-time struct-type mismatch). A variable/param of this name already won above; this fires
-        // only in genuine type-name position, so honoring the stamped concrete type is safe.
-        if (id.ResolvedType is { IsGenericDefinition: false } stamped &&
-            stamped is not GenericParameterTypeSymbol and not ErrorTypeSymbol &&
-            stamped.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
-                or TypeCategory.Flags or TypeCategory.Crashable)
-        {
-            return stamped;
+            return genericOrStamped!;
         }
 
         // Types take precedence over routines when both share a bare name — bare type references for
@@ -225,6 +185,67 @@ public sealed partial class SemanticVerifier
             $"Unknown identifier '{id.Name}'.{DidYouMean(target: id.Name, candidates: IdentifierSuggestionCandidates())}",
             location: id.Location);
         return ErrorTypeSymbol.Instance;
+    }
+
+    /// <summary>
+    /// Resolves a bare identifier that names a generic parameter (compiler-generated concrete binding or an
+    /// in-scope definition-scope parameter shadowing a same-named global type) or a monomorphization-stamped
+    /// concrete type, BEFORE the global type/routine lookup. Returns true and sets <paramref name="result"/>
+    /// when one of these resolutions applies; false means the caller should continue with normal lookup.
+    /// </summary>
+    private bool TryResolveGenericOrStampedIdentifier(IdentifierExpression id, out TypeSymbol? result)
+    {
+        result = null;
+
+        // Compiler-generated re-analysis of a concrete generic instance's member body binds each parameter
+        // name to its concrete argument (T -> Particle). Resolve a bare parameter reference here — the
+        // identifier-as-type-receiver path (`var result = T.blank()`) — to that concrete argument BEFORE the
+        // global type lookup below. The concrete owner is not a generic-definition scope, so the slot-shadow
+        // block that follows does NOT fire, and a same-named global user type (`record T`) would otherwise
+        // hijack `T` (the generic-param-name-collision). Mirrors the guard in TypeResolver.ResolveTypeCore.
+        if (_compilerGeneratedTypeParamBindings is { } cgBind &&
+            cgBind.TryGetValue(key: id.Name, value: out TypeSymbol? boundParam))
+        {
+            result = boundParam;
+            return true;
+        }
+
+        // An in-scope generic PARAMETER shadows a same-named global type, BEFORE the global lookup.
+        // A parameter's NAME is only a label; its identity is its positional slot. Inside a
+        // `common routine T.to_width()` body the receiver `T` is UNAMBIGUOUSLY that parameter — there
+        // is no other reading — so a user `record T` must NOT hijack it as the type-level receiver of
+        // `T.to_width(...)`. Without this the receiver resolved to the record, the call bound to
+        // `record-T.to_width`, and GMP emitted it into a 256-bit numeric routine (garbage
+        // `zext i64 to record-T` / `shl i256 <record-T>`). Mirrors TypeResolver.ResolveTypeCore; the
+        // shadow is granted only for a GENUINE definition-scope parameter (generic-parameter
+        // identity = SLOT, not name).
+        if (IsGenericParameter(name: id.Name) && (LookupTypeWithImports(name: id.Name) is null ||
+                                                  IsGenericDefinitionScopeParam(name: id.Name)))
+        {
+            result = new GenericParameterTypeSymbol(name: id.Name,
+                slot: GenericParameterSlot(name: id.Name));
+            return true;
+        }
+
+        // A monomorphization-substituted type-param receiver — `T.blank()` where GenericAstRewriter
+        // rewrote the receiver `T` to the concrete element type and stamped the module-qualified type
+        // on the node — reaches re-analysis as a bare type NAME (e.g. "Point"). Trust that already-
+        // resolved concrete type instead of the module-ambiguous bare-name lookup below: when several
+        // modules declare a same-named record (two fixtures' `record Point`), the name lookup binds the
+        // first-registered one, silently clobbering the substituted type to the wrong module (the SoA
+        // getitem building a `BuilderQueryApi.Point` for a `SoaSplitArrayApi.Point` column — a
+        // link-time struct-type mismatch). A variable/param of this name already won above; this fires
+        // only in genuine type-name position, so honoring the stamped concrete type is safe.
+        if (id.ResolvedType is { IsGenericDefinition: false } stamped &&
+            stamped is not GenericParameterTypeSymbol and not ErrorTypeSymbol &&
+            stamped.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
+                or TypeCategory.Flags or TypeCategory.Crashable)
+        {
+            result = stamped;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -529,30 +550,9 @@ public sealed partial class SemanticVerifier
             return ErrorTypeSymbol.Instance;
         }
 
-        // #117: Fixed-width numeric types must match exactly (S32 + S64 = error).
-        // System types (Address) are exempt. Shift operators are also exempt because
-        // they intentionally use U32 for the shift amount regardless of the left-operand type.
-        if (leftType.Name != rightType.Name && IsFixedWidthNumericType(type: leftType) &&
-            IsFixedWidthNumericType(type: rightType) && !IsLogicalOperator(op: binary.Operator) &&
-            !IsComparisonOperator(op: binary.Operator) && !IsShiftOperator(op: binary.Operator))
+        if (TryReportFixedWidthMismatch(binary: binary, leftType: leftType, rightType: rightType) ||
+            TryReportUncheckedOperatorOutsideDanger(binary: binary))
         {
-            ReportError(code: SemanticDiagnosticCode.FixedWidthTypeMismatch,
-                message:
-                $"Fixed-width type mismatch: '{leftType.Name}' and '{rightType.Name}'. Explicit conversion required.",
-                location: binary.Location);
-            return ErrorTypeSymbol.Instance;
-        }
-
-        // S854: Unchecked operators require a danger block or @dangerous routine.
-        if (binary.Operator is BinaryOperator.AddUnchecked or BinaryOperator.SubtractUnchecked
-                or BinaryOperator.MultiplyUnchecked or BinaryOperator.TrueDivideUnchecked
-                or BinaryOperator.FloorDivideUnchecked or BinaryOperator.ModuloUnchecked
-                or BinaryOperator.PowerUnchecked && !InDangerBlock)
-        {
-            ReportError(code: SemanticDiagnosticCode.UncheckedOperatorOutsideDanger,
-                message: $"Unchecked operator '{binary.Operator.ToStringRepresentation()}' " +
-                         "requires a 'danger' block or '@dangerous' routine.",
-                location: binary.Location);
             return ErrorTypeSymbol.Instance;
         }
 
@@ -566,6 +566,49 @@ public sealed partial class SemanticVerifier
         return AnalyzeBinaryExpressionByKind(binary: binary,
             leftType: leftType,
             rightType: rightType);
+    }
+
+    /// <summary>
+    /// #117: reports a fixed-width numeric type mismatch (e.g. <c>S32 + S64</c>). System types (Address)
+    /// and logical/comparison/shift operators are exempt (shifts intentionally use U32 for the amount).
+    /// Returns true when a violation was reported.
+    /// </summary>
+    private bool TryReportFixedWidthMismatch(BinaryExpression binary, TypeSymbol leftType,
+        TypeSymbol rightType)
+    {
+        if (leftType.Name != rightType.Name && IsFixedWidthNumericType(type: leftType) &&
+            IsFixedWidthNumericType(type: rightType) && !IsLogicalOperator(op: binary.Operator) &&
+            !IsComparisonOperator(op: binary.Operator) && !IsShiftOperator(op: binary.Operator))
+        {
+            ReportError(code: SemanticDiagnosticCode.FixedWidthTypeMismatch,
+                message:
+                $"Fixed-width type mismatch: '{leftType.Name}' and '{rightType.Name}'. Explicit conversion required.",
+                location: binary.Location);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// S854: unchecked operators (<c>+%</c>, <c>-%</c>, …) require a <c>danger</c> block or an
+    /// <c>@dangerous</c> routine. Returns true when a violation was reported.
+    /// </summary>
+    private bool TryReportUncheckedOperatorOutsideDanger(BinaryExpression binary)
+    {
+        if (binary.Operator is BinaryOperator.AddUnchecked or BinaryOperator.SubtractUnchecked
+                or BinaryOperator.MultiplyUnchecked or BinaryOperator.TrueDivideUnchecked
+                or BinaryOperator.FloorDivideUnchecked or BinaryOperator.ModuloUnchecked
+                or BinaryOperator.PowerUnchecked && !InDangerBlock)
+        {
+            ReportError(code: SemanticDiagnosticCode.UncheckedOperatorOutsideDanger,
+                message: $"Unchecked operator '{binary.Operator.ToStringRepresentation()}' " +
+                         "requires a 'danger' block or '@dangerous' routine.",
+                location: binary.Location);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -845,33 +888,59 @@ public sealed partial class SemanticVerifier
             leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
         }
 
-        // A bare real numeric literal paired with a complex PEER (no expected-type context, e.g.
-        // `3 + 4i` where `4i` defaulted to C128) conforms to the complex type as its real component,
-        // so the sum is one Complex+Complex op (Decision 4 / ApplyContextualTypeInference).
-        if (binary.Operator is BinaryOperator.Add or BinaryOperator.Subtract
-                or BinaryOperator.Multiply or BinaryOperator.TrueDivide)
+        (leftType, rightType) = ReinferComplexLiteralPeer(binary: binary,
+            leftType: leftType,
+            rightType: rightType);
+        (leftType, rightType) = ReinferMembershipLiteralOperand(binary: binary,
+            leftType: leftType,
+            rightType: rightType);
+
+        return (leftType, rightType);
+    }
+
+    /// <summary>
+    /// A bare real numeric literal paired with a complex PEER (no expected-type context, e.g.
+    /// <c>3 + 4i</c> where <c>4i</c> defaulted to C128) conforms to the complex type as its real
+    /// component, so the sum is one Complex+Complex op (Decision 4 / ApplyContextualTypeInference).
+    /// Only for arithmetic (+ - * /).
+    /// </summary>
+    private (TypeSymbol leftType, TypeSymbol rightType) ReinferComplexLiteralPeer(
+        BinaryExpression binary, TypeSymbol leftType, TypeSymbol rightType)
+    {
+        if (binary.Operator is not (BinaryOperator.Add or BinaryOperator.Subtract
+            or BinaryOperator.Multiply or BinaryOperator.TrueDivide))
         {
-            if (binary.Right is LiteralExpression
-                    { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
-                IsComplexType(type: leftType) && !IsComplexType(type: rightType))
-            {
-                rightType = AnalyzeExpression(expression: binary.Right, expectedType: leftType);
-            }
-            else if (binary.Left is LiteralExpression
-                         { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
-                     IsComplexType(type: rightType) && !IsComplexType(type: leftType))
-            {
-                leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
-            }
+            return (leftType, rightType);
         }
 
-        // Membership (`x in coll` / `x notin coll`) reverses to `coll.contains(x)`: the LEFT operand
-        // must conform to the collection's ELEMENT type, not stay at the bare-literal default. Without
-        // this a Suflae `20 in list_of_s64` keeps `20` at the `Integer` default → the element type
-        // never matches → `contains` is silently always false. (RF only escapes this by luck: its
-        // default already IS S64.) Inferring the operand type through the container is the compiler's
-        // job — unwrap SF's `Roamed`/RC wrappers to reach the collection, then take its first type
-        // argument (List/Set/Array element, Dict key).
+        if (binary.Right is LiteralExpression
+                { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
+            IsComplexType(type: leftType) && !IsComplexType(type: rightType))
+        {
+            rightType = AnalyzeExpression(expression: binary.Right, expectedType: leftType);
+        }
+        else if (binary.Left is LiteralExpression
+                     { LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal } &&
+                 IsComplexType(type: rightType) && !IsComplexType(type: leftType))
+        {
+            leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
+        }
+
+        return (leftType, rightType);
+    }
+
+    /// <summary>
+    /// Re-infers the bare-integer-literal ELEMENT operand of a membership expression against the
+    /// container's element type. Membership (<c>x in coll</c>/<c>x notin coll</c>) reverses to
+    /// <c>coll.contains(x)</c> (element is LEFT); container-first (<c>coll have 20</c>/<c>coll lack 20</c>)
+    /// keeps the container LEFT and the element RIGHT. Without this a Suflae <c>20 in list_of_s64</c> keeps
+    /// <c>20</c> at the <c>Integer</c> default so the element type never matches and <c>contains</c> is
+    /// silently always false. Unwrap SF's Roamed/RC wrappers to reach the collection, then take its first
+    /// type argument (List/Set/Array element, Dict key).
+    /// </summary>
+    private (TypeSymbol leftType, TypeSymbol rightType) ReinferMembershipLiteralOperand(
+        BinaryExpression binary, TypeSymbol leftType, TypeSymbol rightType)
+    {
         if (binary.Operator is BinaryOperator.In or BinaryOperator.NotIn &&
             binary.Left is LiteralExpression { LiteralType: TokenType.UndecidedInteger })
         {
@@ -884,8 +953,6 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Container-first `coll have 20` / `coll lack 20`: the container is LEFT, the ELEMENT (to conform)
-        // is RIGHT — mirror the reversed In/NotIn handling above with the operands swapped.
         if (binary.Operator is BinaryOperator.Have or BinaryOperator.Lack &&
             binary.Right is LiteralExpression { LiteralType: TokenType.UndecidedInteger })
         {

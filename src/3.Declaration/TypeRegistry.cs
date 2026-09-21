@@ -2147,18 +2147,11 @@ public sealed partial class TypeRegistry
     /// </summary>
     public int MaterializeAllLazyStdlibTypes()
     {
-        int n = 0;
-        foreach (TypeSymbol t in _resolutions.Values
-                                           .Distinct()
-                                           .ToList())
-        {
-            if (ClearStdlibLazy(type: t))
-            {
-                n++;
-            }
-        }
-
-        return n;
+        // Count evaluates the predicate exactly once per element, so ClearStdlibLazy runs for
+        // every instance (its per-instance side effect is preserved) and n counts the materializations.
+        return _resolutions.Values
+                           .Distinct()
+                           .Count(t => ClearStdlibLazy(type: t));
     }
 
     /// <summary>

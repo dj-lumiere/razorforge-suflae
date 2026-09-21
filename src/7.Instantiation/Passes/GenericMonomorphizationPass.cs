@@ -42,6 +42,10 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     // avoids re-allocating the literal on each call and keeps the name in sync with RuntimeContract.
     private const string RepresentMemberRoutineName = RuntimeContract.Display.Represent;
 
+    // The "destroy" lifecycle member-routine name, used across several liveness seeds and wired-callee
+    // walks. Named once so the string stays consistent everywhere it drives collection.
+    private const string DestroyMemberRoutineName = "destroy";
+
     // Routine-declaration index
 
     // Key: routine name (e.g. "List[T].getitem") -> list of matching declarations.
@@ -812,7 +816,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// </summary>
     private void SeedLifecycleHooks(Queue<MonomorphizedBody> worklist, ref int totalBuilt)
     {
-        string[] lifecycleHooks = ["destroy", "roam_free", "roam_trace"];
+        string[] lifecycleHooks = [DestroyMemberRoutineName, "roam_free", "roam_trace"];
         foreach (TypeSymbol t in ctx.Registry
                                   .AllConcreteGenericInstancesUnfiltered
                                   .Concat(second: ctx.Registry
@@ -1264,12 +1268,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // body (present in programBodies); a template-derived destroy never does.
             if (r.Name == "roam_free" && owner is EntityTypeSymbol &&
                 rewritten is BlockStatement roamFreeBlock &&
-                _ctx.Registry.LookupMemberRoutine(type: owner, memberRoutineName: "destroy") is
+                _ctx.Registry.LookupMemberRoutine(type: owner,
+                    memberRoutineName: DestroyMemberRoutineName) is
                     { RegistryKey: { } destroyKey } &&
                 programBodies.ContainsKey(key: destroyKey))
             {
                 rewritten = PrependReceiverCall(block: roamFreeBlock,
-                    memberRoutineName: "destroy",
+                    memberRoutineName: DestroyMemberRoutineName,
                     owner: owner);
             }
 
@@ -1545,7 +1550,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
             foreach (string hook in new[]
                      {
-                         "destroy",
+                         DestroyMemberRoutineName,
                          "roam_free",
                          "roam_trace"
                      })
@@ -1652,7 +1657,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 }
 
                 break;
-            case "destroy" or "assign" or "hash" or "eq":
+            case DestroyMemberRoutineName or "assign" or "hash" or "eq":
                 foreach (RoutineInfo fc in MemberVariableWiredCallees(owner: owner,
                              verb: routine.Name))
                 {

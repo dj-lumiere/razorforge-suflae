@@ -482,53 +482,7 @@ public partial class Parser
         // monadic composition + a dedicated RecoveryExpression node replace this rewrite later.
         if (CheckAndAdvance(TokenType.Try, TokenType.Grab, TokenType.Lookup))
         {
-            Token recoveryKw = PeekToken(offset: -1);
-            RecoveryKind recoveryKind = recoveryKw.Type switch
-            {
-                TokenType.Grab => RecoveryKind.Grab,
-                TokenType.Lookup => RecoveryKind.Lookup,
-                _ => RecoveryKind.Try
-            };
-            // The keyword takes the WHOLE following expression (down to — but not including — `??`, which
-            // ParseNoneCoalesce sits above and thus applies to the recovery RESULT). ParseLogicalOr captures
-            // arithmetic/comparison/range/logical operators so `try a + b` recovers the checked-arith overflow
-            // as a whole-expression composition (`try (a + b)`, not `(try a) + b`); SA's AnalyzeRecoveryExpression
-            // hoists every failable sub-call AND checked-arith operator inside it.
-            Expression recoveryInner = ParseLogicalOr();
-
-            // A trailing force-unwrap binds LOOSER than the recovery keyword: `try route()!!` means
-            // `(try route())!!`, not `try (route()!!)`. The keyword PRODUCES a carrier and `!!` CONSUMES it,
-            // so `!!` applies to the recovery RESULT. ParseUnary already folded the `!!` onto the inner
-            // (`ForceUnwrap(route())`); peel those TOP-LEVEL force-unwraps off, recover the inner, then re-apply
-            // them on top of the RecoveryExpression. (`??` needs no such handling — it is a binary operator
-            // above ParseLogicalOr, so it already applies to the recovery result.)
-            var forceUnwraps = new List<SourceLocation>();
-            Expression callSpine = recoveryInner;
-            while (callSpine is UnaryExpression
-                   {
-                       Operator: UnaryOperator.ForceUnwrap, Operand: { } unwrapped
-                   } fu)
-            {
-                forceUnwraps.Add(item: fu.Location);
-                callSpine = unwrapped;
-            }
-
-            // No CallExpression requirement: the inner may be any expression (a bare call, a member chain, or
-            // a checked-arith composition like `a + b`). An operand with no failable call or operator degenerates
-            // to an always-present carrier in SA — harmless, and keeping the surface uniform.
-            Expression recovery = new RecoveryExpression(Kind: recoveryKind,
-                Inner: callSpine,
-                Location: GetLocation(token: recoveryKw));
-
-            // Re-apply the peeled `!!`s outermost-last so `try route()!!` → `(try route())!!`.
-            for (int i = forceUnwraps.Count - 1; i >= 0; i--)
-            {
-                recovery = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap,
-                    Operand: recovery,
-                    Location: forceUnwraps[index: i]);
-            }
-
-            return recovery;
+            return ParseRecoveryPrefix();
         }
 
         // Handle steal expression (steal expr = ownership transfer, RazorForge only)
@@ -604,5 +558,62 @@ public partial class Parser
         return new UnaryExpression(Operator: TokenToUnaryOperator(tokenType: op.Type),
             Operand: expr,
             Location: opLocation);
+    }
+
+    /// <summary>
+    /// Parses a recovery-prefix expression (try/grab/lookup) after the keyword has been consumed.
+    /// Rewrites the wrapped failable expression into a <see cref="RecoveryExpression"/> carrier,
+    /// re-applying any trailing force-unwraps on top of the carrier.
+    /// </summary>
+    /// <returns>The parsed recovery expression.</returns>
+    private Expression ParseRecoveryPrefix()
+    {
+        Token recoveryKw = PeekToken(offset: -1);
+        RecoveryKind recoveryKind = recoveryKw.Type switch
+        {
+            TokenType.Grab => RecoveryKind.Grab,
+            TokenType.Lookup => RecoveryKind.Lookup,
+            _ => RecoveryKind.Try
+        };
+        // The keyword takes the WHOLE following expression (down to — but not including — `??`, which
+        // ParseNoneCoalesce sits above and thus applies to the recovery RESULT). ParseLogicalOr captures
+        // arithmetic/comparison/range/logical operators so `try a + b` recovers the checked-arith overflow
+        // as a whole-expression composition (`try (a + b)`, not `(try a) + b`). SA's AnalyzeRecoveryExpression
+        // hoists every failable sub-call AND checked-arith operator inside it.
+        Expression recoveryInner = ParseLogicalOr();
+
+        // A trailing force-unwrap binds LOOSER than the recovery keyword: `try route()!!` means
+        // `(try route())!!`, not `try (route()!!)`. The keyword PRODUCES a carrier and `!!` CONSUMES it,
+        // so `!!` applies to the recovery RESULT. ParseUnary already folded the `!!` onto the inner
+        // (`ForceUnwrap(route())`), peel those TOP-LEVEL force-unwraps off, recover the inner, then re-apply
+        // them on top of the RecoveryExpression. (`??` needs no such handling — it is a binary operator
+        // above ParseLogicalOr, so it already applies to the recovery result.)
+        var forceUnwraps = new List<SourceLocation>();
+        Expression callSpine = recoveryInner;
+        while (callSpine is UnaryExpression
+               {
+                   Operator: UnaryOperator.ForceUnwrap, Operand: { } unwrapped
+               } fu)
+        {
+            forceUnwraps.Add(item: fu.Location);
+            callSpine = unwrapped;
+        }
+
+        // No CallExpression requirement: the inner may be any expression (a bare call, a member chain, or
+        // a checked-arith composition like `a + b`). An operand with no failable call or operator degenerates
+        // to an always-present carrier in SA — harmless, and keeping the surface uniform.
+        Expression recovery = new RecoveryExpression(Kind: recoveryKind,
+            Inner: callSpine,
+            Location: GetLocation(token: recoveryKw));
+
+        // Re-apply the peeled `!!`s outermost-last so `try route()!!` → `(try route())!!`.
+        for (int i = forceUnwraps.Count - 1; i >= 0; i--)
+        {
+            recovery = new UnaryExpression(Operator: UnaryOperator.ForceUnwrap,
+                Operand: recovery,
+                Location: forceUnwraps[index: i]);
+        }
+
+        return recovery;
     }
 }

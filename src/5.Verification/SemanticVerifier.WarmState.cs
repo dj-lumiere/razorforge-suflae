@@ -158,18 +158,22 @@ public partial class SemanticVerifier
         };
     }
 
-    /// <summary>
-    /// Constructs a verifier pre-warmed from a full compiled-stdlib snapshot. Restores the lowered
-    /// stdlib programs + body dicts and marks the registry to SKIP stdlib reprocessing, so a subsequent
-    /// full <see cref="Analyze"/> only processes the user program (+ its incremental instantiations) and
-    /// can codegen without redoing the ~5 s of stdlib desugaring/verification/monomorphization.
-    /// </summary>
     /// <summary>The resident warm state this verifier restored from (daemon-lifetime, shared across builds).
     /// Held so on-demand stdlib analysis can WRITE freshly-analyzed files back into
     /// <see cref="CompiledStdlibState.AnalyzedFileCache"/> for the next build to reuse. Null on the cold /
     /// snapshot-only ctors.</summary>
     private readonly CompiledStdlibState? _warmState;
 
+    /// <summary>
+    /// Constructs a verifier pre-warmed from a full compiled-stdlib snapshot. Restores the lowered
+    /// stdlib programs + body dicts and marks the registry to SKIP stdlib reprocessing, so a subsequent
+    /// full <see cref="Analyze"/> only processes the user program (+ its incremental instantiations) and
+    /// can codegen without redoing the ~5 s of stdlib desugaring/verification/monomorphization.
+    /// </summary>
+    /// <param name="language">The source language (RazorForge or Suflae) this build targets.</param>
+    /// <param name="warm">The resident compiled-stdlib snapshot to restore from.</param>
+    /// <param name="target">Optional target configuration; null uses the host default.</param>
+    /// <param name="buildMode">The RazorForge build mode (optimization level).</param>
     public SemanticVerifier(Language language, CompiledStdlibState warm,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {

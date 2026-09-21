@@ -1579,20 +1579,15 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates comparison operands for type compatibility and operator support.
-    /// Called from both AnalyzeBinaryExpression (for non-desugared operators like is, obeys)
-    /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).
+    /// Validates the operators that have their OWN operand rules and do not fall through to the generic
+    /// compatibility/wired-support checks: variant (<c>is</c>/<c>isnot</c> only), membership
+    /// (<c>in</c>/<c>notin</c> → right has <c>contains</c>), and container-first (<c>have</c>/<c>lack</c>
+    /// → left is a flags type or has <c>contains</c>). Returns true when one of these applied (the caller
+    /// returns), false when the caller should continue with the generic checks.
     /// </summary>
-    private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op,
-        SourceLocation location)
+    private bool ValidateVariantOrMembershipOperands(TypeSymbol left, TypeSymbol right,
+        BinaryOperator op, SourceLocation location)
     {
-        // A `Accessing[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
-        // referent: comparing it auto-dispatches `refer()` / `control()` to the inner `T`. Compare
-        // against that referent so e.g. `me[i] == value` (with `value: Accessing[T]`) type-checks as
-        // `T == T` and resolves operator support on `T`.
-        left = UnwrapBorrowProtocol(type: left);
-        right = UnwrapBorrowProtocol(type: right);
-
         // Variants cannot use equality or ordering operators (only 'is' and 'isnot')
         if (left.Category == TypeCategory.Variant || right.Category == TypeCategory.Variant)
         {
@@ -1604,7 +1599,7 @@ public sealed partial class SemanticVerifier
                     location: location);
             }
 
-            return;
+            return true;
         }
 
         // Membership operators (in, notin): check that right has contains accepting left
@@ -1620,7 +1615,7 @@ public sealed partial class SemanticVerifier
                     location: location);
             }
 
-            return;
+            return true;
         }
 
         // Container-first membership (have, lack): the LEFT is the container. Flags membership is a bit
@@ -1636,6 +1631,31 @@ public sealed partial class SemanticVerifier
                     location: location);
             }
 
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Validates comparison operands for type compatibility and operator support.
+    /// Called from both AnalyzeBinaryExpression (for non-desugared operators like is, obeys)
+    /// and AnalyzeChainedComparisonExpression (for chained comparisons like a &lt; b &lt; c).
+    /// </summary>
+    private void ValidateComparisonOperands(TypeSymbol left, TypeSymbol right, BinaryOperator op,
+        SourceLocation location)
+    {
+        // A `Accessing[T]` / `Controlling[T]` operand is a borrow that transparently forwards to its
+        // referent: comparing it auto-dispatches `refer()` / `control()` to the inner `T`. Compare
+        // against that referent so e.g. `me[i] == value` (with `value: Accessing[T]`) type-checks as
+        // `T == T` and resolves operator support on `T`.
+        left = UnwrapBorrowProtocol(type: left);
+        right = UnwrapBorrowProtocol(type: right);
+
+        // Variant / membership / container-first operators are validated on their own terms and DO NOT
+        // fall through to the compatibility + wired-support checks below.
+        if (ValidateVariantOrMembershipOperands(left: left, right: right, op: op, location: location))
+        {
             return;
         }
 

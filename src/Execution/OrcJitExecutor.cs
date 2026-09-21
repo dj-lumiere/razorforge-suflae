@@ -31,6 +31,9 @@ internal static unsafe class OrcJitExecutor
     private static readonly object InitLock = new();
     private static bool _initialized;
 
+    // Error-context label for the OrcCreateLLJIT C-API call (passed to CheckErr).
+    private const string OrcCreateLljitWhat = "OrcCreateLLJIT";
+
     // --- Fully-lazy on-demand materialization (resident-JIT incremental (B), M2a) ---
     // Set for the duration of one JitAndRunLazy call. The ORC custom definition generator fires (under the
     // ExecutionSession lock) with the batch of unresolved RF symbols a materialization needs; the callback
@@ -173,7 +176,7 @@ internal static unsafe class OrcJitExecutor
         }
 
         LLVMOrcOpaqueLLJIT* jit;
-        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: OrcCreateLljitWhat);
         JitStage(s: "LLJIT created");
 
         LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
@@ -422,7 +425,7 @@ internal static unsafe class OrcJitExecutor
         }
 
         LLVMOrcOpaqueLLJIT* jit;
-        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: OrcCreateLljitWhat);
 
         LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
 
@@ -477,7 +480,7 @@ internal static unsafe class OrcJitExecutor
         }
 
         LLVMOrcOpaqueLLJIT* jit;
-        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: OrcCreateLljitWhat);
         LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
 
         // Load the precompiled stdlib base object — linked into the dylib, NOT JIT-compiled.
@@ -520,7 +523,7 @@ internal static unsafe class OrcJitExecutor
     /// external-linkage one-routine IR module (or null → defer to the process-search generator for <c>rf_*</c>
     /// runtime symbols). Codegen happens strictly on demand as ORC resolves each symbol — only what <c>@main</c>
     /// transitively reaches at run time is emitted, with NO caller-side closure walk (that was M1b's
-    /// <see cref="JitAndRunModules"/>). The materialize output MUST use external linkage
+    /// <c>JitAndRunModules</c>). The materialize output MUST use external linkage
     /// (<c>LlvmEmitterOptions.ForExternalJitModule</c>) or sibling modules can't see the define.
     /// </summary>
     public static int JitAndRunLazy(string mainIr, Func<string, string?> materialize,
@@ -543,7 +546,7 @@ internal static unsafe class OrcJitExecutor
         }
 
         LLVMOrcOpaqueLLJIT* jit;
-        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: "OrcCreateLLJIT");
+        CheckErr(err: LLVM.OrcCreateLLJIT(Result: &jit, Builder: builder), what: OrcCreateLljitWhat);
         _lazyJit = jit;
         LLVMOrcOpaqueJITDylib* dylib = AddProcessSearchGenerator(jit: jit);
 
@@ -569,6 +572,7 @@ internal static unsafe class OrcJitExecutor
     /// Runs under the ExecutionSession lock — adding the module here IS re-entrancy-safe (the added module's
     /// definitions satisfy the in-flight lookup, and its own unresolved callees re-fire this generator). A
     /// symbol the delegate can't produce is left for the process-search generator (rf_* runtime).</summary>
+#pragma warning disable S107 // signature is fixed by the LLVM ORC C-API generator fn-ptr type — params can't be bundled
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static LLVMOpaqueError* LazyGeneratorCallback(
         LLVMOrcOpaqueDefinitionGenerator* generatorObj, void* ctx,
@@ -576,6 +580,7 @@ internal static unsafe class OrcJitExecutor
         LLVMOrcJITDylibLookupFlags jdLookupFlags, LLVMOrcCLookupSetElement* lookupSet,
         nuint lookupSetSize)
     {
+#pragma warning restore S107
         Func<string, string?>? materialize = _lazyMaterialize;
         if (materialize == null)
         {

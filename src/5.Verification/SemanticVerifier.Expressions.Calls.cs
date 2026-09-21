@@ -2074,23 +2074,10 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeSymbol.Instance;
                 }
 
-                string hint;
-                if (namedField != null)
-                {
-                    hint = $" '{callLookupName}' is a field — access it as '.{callLookupName}' " +
-                           "(no parentheses), or define a routine of that name.";
-                }
-                else if (!isFailableMemberRoutineCall &&
-                         _registry.LookupMemberRoutine(type: objectType,
-                             memberRoutineName: callLookupName,
-                             isFailable: true) != null)
-                {
-                    hint = $" Did you mean the failable form '.{callLookupName}!()'?";
-                }
-                else
-                {
-                    hint = "";
-                }
+                string hint = BuildUnresolvedMemberCallHint(objectType: objectType,
+                    callLookupName: callLookupName,
+                    namedField: namedField,
+                    isFailableMemberRoutineCall: isFailableMemberRoutineCall);
 
                 ReportError(code: SemanticDiagnosticCode.MemberRoutineNotFound,
                     message:
@@ -2101,6 +2088,30 @@ public sealed partial class SemanticVerifier
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Builds the trailing hint for a "no routine defined" diagnostic: points at a same-named field
+    /// (access without parentheses), or suggests the failable form when only a failable overload exists.
+    /// </summary>
+    private string BuildUnresolvedMemberCallHint(TypeSymbol objectType, string callLookupName,
+        MemberVariableInfo? namedField, bool isFailableMemberRoutineCall)
+    {
+        if (namedField != null)
+        {
+            return $" '{callLookupName}' is a field — access it as '.{callLookupName}' " +
+                   "(no parentheses), or define a routine of that name.";
+        }
+
+        if (!isFailableMemberRoutineCall &&
+            _registry.LookupMemberRoutine(type: objectType,
+                memberRoutineName: callLookupName,
+                isFailable: true) != null)
+        {
+            return $" Did you mean the failable form '.{callLookupName}!()'?";
+        }
+
+        return "";
     }
 
     private TypeSymbol? AnalyzeMemberConversion(CallExpression call, TypeSymbol objectType,

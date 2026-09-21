@@ -520,40 +520,10 @@ public sealed partial class TypeRegistry
             return true;
         }
 
-        List<TypeSymbol>? implemented = type switch
-        {
-            ChoiceTypeSymbol c => c.ImplementedProtocols,
-            FlagsTypeSymbol f => f.ImplementedProtocols,
-            RecordTypeSymbol r => r.ImplementedProtocols,
-            EntityTypeSymbol e => e.ImplementedProtocols,
-            _ => null
-        };
+        List<TypeSymbol>? implemented = ImplementedProtocolsWithAmbientFold(type: type);
         if (implemented == null)
         {
             return false;
-        }
-
-        // A generic INSTANCE (e.g. `Dict[S64, S64]`) — or a REALM-BRIDGED copy of a type (the SF-realm `Core.Dict`
-        // an `.sf` file resolves to) — can carry an EMPTY own ImplementedProtocols: the declared conformances
-        // (`obeys Container, Iterable, …`) are populated by the eager Phase-3 conformance pass onto the AMBIENT
-        // (RF-realm) generic DEFINITION only. Without inheriting them, `x in dict` in an SF file false-fires
-        // RF-S065. Fold in the ambient definition's protocols (realm-blind lookup by bare name reaches the
-        // populated RF-realm def even under an SF ResolutionRealm); conditional (`onlyif`) conformances stay
-        // gated per-instance by ConditionalConformanceHolds below (checked against THIS instance's type args).
-        if (implemented.Count == 0 || type.IsGenericResolution)
-        {
-            List<TypeSymbol>? defImplemented = LookupTypeInAmbient(name: type.BareName) switch
-            {
-                ChoiceTypeSymbol c => c.ImplementedProtocols,
-                FlagsTypeSymbol f => f.ImplementedProtocols,
-                RecordTypeSymbol r => r.ImplementedProtocols,
-                EntityTypeSymbol e => e.ImplementedProtocols,
-                _ => null
-            };
-            if (defImplemented is { Count: > 0 })
-            {
-                implemented = implemented.Concat(second: defImplemented).ToList();
-            }
         }
 
         // Reduce the target to the registry's ONE canonical protocol object, then match every implemented
@@ -597,6 +567,52 @@ public sealed partial class TypeRegistry
 
             return false;
         }
+    }
+
+    /// <summary>Returns <paramref name="type"/>'s own declared <c>ImplementedProtocols</c>, or null when the
+    /// type is not a conformance-bearing kind (choice/flags/record/entity).</summary>
+    private static List<TypeSymbol>? OwnImplementedProtocols(TypeSymbol? type)
+    {
+        return type switch
+        {
+            ChoiceTypeSymbol c => c.ImplementedProtocols,
+            FlagsTypeSymbol f => f.ImplementedProtocols,
+            RecordTypeSymbol r => r.ImplementedProtocols,
+            EntityTypeSymbol e => e.ImplementedProtocols,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// The type's declared conformances, folding in the ambient generic-DEFINITION's protocols when needed.
+    /// Returns null when the type is not a conformance-bearing kind.
+    /// </summary>
+    private List<TypeSymbol>? ImplementedProtocolsWithAmbientFold(TypeSymbol type)
+    {
+        List<TypeSymbol>? implemented = OwnImplementedProtocols(type: type);
+        if (implemented == null)
+        {
+            return null;
+        }
+
+        // A generic INSTANCE (e.g. `Dict[S64, S64]`) — or a REALM-BRIDGED copy of a type (the SF-realm `Core.Dict`
+        // an `.sf` file resolves to) — can carry an EMPTY own ImplementedProtocols: the declared conformances
+        // (`obeys Container, Iterable, …`) are populated by the eager Phase-3 conformance pass onto the AMBIENT
+        // (RF-realm) generic DEFINITION only. Without inheriting them, `x in dict` in an SF file false-fires
+        // RF-S065. Fold in the ambient definition's protocols (realm-blind lookup by bare name reaches the
+        // populated RF-realm def even under an SF ResolutionRealm); conditional (`onlyif`) conformances stay
+        // gated per-instance by ConditionalConformanceHolds (checked against THIS instance's type args).
+        if (implemented.Count == 0 || type.IsGenericResolution)
+        {
+            List<TypeSymbol>? defImplemented = OwnImplementedProtocols(
+                type: LookupTypeInAmbient(name: type.BareName));
+            if (defImplemented is { Count: > 0 })
+            {
+                implemented = implemented.Concat(second: defImplemented).ToList();
+            }
+        }
+
+        return implemented;
     }
 
     /// <summary>The registry's single CANONICAL object for the protocol <paramref name="t"/> names — its

@@ -27,6 +27,9 @@ internal sealed class LiteralLoweringPass : AstRewriter
 
     // Arbitrary-precision literal lowering: `123n`/`3.14dn` -> Integer/Decimal.from_literal(text:"...").
     private const string FromLiteralRoutine = "from_literal";
+
+    // Name of the arbitrary-precision complex record type (components are Real).
+    private const string ComplexTypeName = "Complex";
     private readonly TypeSymbol? _integerType;
     private readonly TypeSymbol? _textType;
 
@@ -82,8 +85,8 @@ internal sealed class LiteralLoweringPass : AstRewriter
         _c64Type = ctx.Registry.LookupType(name: "C64");
         _c128Type = ctx.Registry.LookupType(name: "C128");
         _c256Type = ctx.Registry.LookupType(name: "C256");
-        _complexType = ctx.Registry.LookupType(name: "Numerics.Complex") ??
-                       ctx.Registry.LookupType(name: "Complex");
+        _complexType = ctx.Registry.LookupType(name: "Numerics." + ComplexTypeName) ??
+                       ctx.Registry.LookupType(name: ComplexTypeName);
         _b32Type = ctx.Registry.LookupType(name: "B32");
         _b64Type = ctx.Registry.LookupType(name: "B64");
         _b128Type = ctx.Registry.LookupType(name: "B128");
@@ -298,25 +301,28 @@ internal sealed class LiteralLoweringPass : AstRewriter
         string? complexName = literal.ResolvedType?.Name;
         // An imaginary literal always lowers (default C128); a real literal lowers ONLY when SA promoted
         // it to a complex type (e.g. the `3` in a `C128` context) — otherwise it stays a plain scalar.
-        if (realLiteral && complexName is not ("C64" or "C128" or "C256" or "Complex"))
+        if (realLiteral && complexName is not ("C64" or "C128" or "C256" or ComplexTypeName))
         {
             return null;
         }
 
         SourceLocation loc = literal.Location;
-        // Magnitude = the digits, underscores stripped; for an imaginary literal drop the `i` suffix too.
-        string mag;
-        if (imaginary)
-        {
-            int i = raw.LastIndexOfAny(anyOf: ['i', 'I']);
-            mag = (i < 0 ? raw : raw[..i]).Replace(oldValue: "_", newValue: "");
-        }
-        else
-        {
-            mag = raw.Replace(oldValue: "_", newValue: "");
-        }
+        string mag = ComplexMagnitude(raw: raw, imaginary: imaginary);
+        return BuildComplexCreator(complexName: complexName ?? "C128",
+            mag: mag,
+            imaginary: imaginary,
+            loc: loc);
+    }
 
-        return (complexName ?? "C128") switch
+    /// <summary>
+    /// Builds the concrete complex constructor for a resolved complex type name (C64→2×B32,
+    /// C256→2×B128, Complex over arbitrary-precision Real, or the C128 default/fallback). Returns null
+    /// when the required component types were not resolved in the registry.
+    /// </summary>
+    private CreatorExpression? BuildComplexCreator(string complexName, string mag, bool imaginary,
+        SourceLocation loc)
+    {
+        return complexName switch
         {
             "C64" when _c64Type != null => MakeComplexCreator(typeName: "C64",
                 type: _c64Type,
@@ -332,10 +338,10 @@ internal sealed class LiteralLoweringPass : AstRewriter
                 compLit: TokenType.B128Literal,
                 compType: _b128Type,
                 loc: loc),
-            "Complex" when _complexType != null && _realType != null && _realFromLiteral != null =>
+            ComplexTypeName when _complexType != null && _realType != null && _realFromLiteral != null =>
                 // Complex components are arbitrary-precision Real -> from_literal calls
                 // (the creator's args are not re-lowered, so build them already-lowered here).
-                new CreatorExpression(TypeName: "Complex",
+                new CreatorExpression(TypeName: ComplexTypeName,
                     TypeArguments: null,
                     MemberVariables:
                     [
@@ -361,6 +367,21 @@ internal sealed class LiteralLoweringPass : AstRewriter
                 loc: loc),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Extracts the bare magnitude digits from a complex literal's raw text: underscores are stripped,
+    /// and for an imaginary literal the trailing <c>i</c>/<c>I</c> suffix is dropped as well.
+    /// </summary>
+    private static string ComplexMagnitude(string raw, bool imaginary)
+    {
+        if (!imaginary)
+        {
+            return raw.Replace(oldValue: "_", newValue: "");
+        }
+
+        int i = raw.LastIndexOfAny(anyOf: ['i', 'I']);
+        return (i < 0 ? raw : raw[..i]).Replace(oldValue: "_", newValue: "");
     }
 
     /// <summary>Builds a fixed-width complex constructor from a single magnitude: an imaginary literal →

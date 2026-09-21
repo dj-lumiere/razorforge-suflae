@@ -1774,17 +1774,8 @@ internal partial class Program
         // mutation. Codegen is a pure translator, so this snapshot fully defines its input.
         if (dumpAst)
         {
-            string astPath = Path.ChangeExtension(path: entryFile, extension: ".rf.desugared");
-            string astText = new RfSyntaxTreePrinter().PrintMultiProgram(programs: userPrograms,
-                synthesizedBodies: result.SynthesizedBodies,
-                registry: result.Registry,
-                stdlibPrograms: stdlibPrograms,
-                instantiatedGenericBodies: result.InstantiatedGenericBodies);
-            File.WriteAllText(path: astPath, contents: astText);
-            if (showBuildStages)
-            {
-                Console.WriteLine(value: $"Codegen-input AST written to: {astPath}");
-            }
+            DumpCodegenInputAst(entryFile: entryFile, userPrograms: userPrograms,
+                stdlibPrograms: stdlibPrograms, result: result, showBuildStages: showBuildStages);
         }
 
         string llvmIr = generator.Generate();
@@ -1800,20 +1791,8 @@ internal partial class Program
             Console.Error.WriteLine(value: $"Routines emitted: {generator.EmittedRoutineCount}");
         }
 
-        // Output. The JIT path (irCallback set) takes the IR IN MEMORY — no temp .ll write + read-back.
-        if (irCallback != null)
-        {
-            irCallback(obj: llvmIr);
-        }
-        else
-        {
-            string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
-            File.WriteAllText(path: outPath, contents: llvmIr);
-            if (showBuildStages)
-            {
-                Console.WriteLine(value: $"LLVM IR written to: {outPath}");
-            }
-        }
+        WriteCodegenOutput(llvmIr: llvmIr, irCallback: irCallback, outputFile: outputFile,
+            entryFile: entryFile, showBuildStages: showBuildStages);
 
         if (showBuildStages)
         {
@@ -1822,6 +1801,50 @@ internal partial class Program
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the codegen-input AST snapshot (the exact AST LLVM codegen consumes, after all
+    /// desugaring/monomorphization + CancellationInstrumentation) to <c>&lt;entry&gt;.rf.desugared</c>.
+    /// </summary>
+    private static void DumpCodegenInputAst(string entryFile,
+        List<(SyntaxTree.Program Program, string FilePath, string Module)> userPrograms,
+        List<(SyntaxTree.Program Program, string FilePath, string Module)> stdlibPrograms,
+        AnalysisResult result, bool showBuildStages)
+    {
+        string astPath = Path.ChangeExtension(path: entryFile, extension: ".rf.desugared");
+        string astText = new RfSyntaxTreePrinter().PrintMultiProgram(programs: userPrograms,
+            synthesizedBodies: result.SynthesizedBodies,
+            registry: result.Registry,
+            stdlibPrograms: stdlibPrograms,
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
+        File.WriteAllText(path: astPath, contents: astText);
+        if (showBuildStages)
+        {
+            Console.WriteLine(value: $"Codegen-input AST written to: {astPath}");
+        }
+    }
+
+    /// <summary>
+    /// Emits the generated LLVM IR: hands it to <paramref name="irCallback"/> IN MEMORY when set
+    /// (the JIT path — no temp <c>.ll</c> write + read-back), otherwise writes it to the output file
+    /// (defaulting to <c>&lt;entry&gt;.ll</c>).
+    /// </summary>
+    private static void WriteCodegenOutput(string llvmIr, Action<string>? irCallback,
+        string? outputFile, string entryFile, bool showBuildStages)
+    {
+        if (irCallback != null)
+        {
+            irCallback(obj: llvmIr);
+            return;
+        }
+
+        string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
+        File.WriteAllText(path: outPath, contents: llvmIr);
+        if (showBuildStages)
+        {
+            Console.WriteLine(value: $"LLVM IR written to: {outPath}");
+        }
     }
 
     /// <summary>

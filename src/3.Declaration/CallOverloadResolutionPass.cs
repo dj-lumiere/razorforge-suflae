@@ -215,13 +215,7 @@ internal sealed class CallOverloadResolutionPass
 
                 break;
             case IfStatement ifs:
-                WalkExpression(expr: ifs.Condition);
-                WalkStatement(stmt: ifs.ThenStatement);
-                if (ifs.ElseStatement != null)
-                {
-                    WalkStatement(stmt: ifs.ElseStatement);
-                }
-
+                WalkIfStatement(ifs: ifs);
                 break;
             case WhileStatement w:
                 WalkExpression(expr: w.Condition);
@@ -235,12 +229,7 @@ internal sealed class CallOverloadResolutionPass
                 WalkStatement(stmt: f.Body);
                 break;
             case WhenStatement ws:
-                WalkExpression(expr: ws.Expression);
-                foreach (WhenClause c in ws.Clauses)
-                {
-                    WalkStatement(stmt: c.Body);
-                }
-
+                WalkWhenStatement(ws: ws);
                 break;
             case ReturnStatement { Value: not null } ret:
                 WalkExpression(expr: ret.Value);
@@ -253,20 +242,7 @@ internal sealed class CallOverloadResolutionPass
             {
                 Declaration: VariableDeclaration { Initializer: not null } vd
             }:
-                WalkExpression(expr: vd.Initializer);
-                // Track the local's inferred type (from the walked initializer) so a later member call on a
-                // reference to it can recover a receiver type the monomorph clone left un-annotated. Prefer the
-                // walked ResolvedType; fall back to the deferred-type recovery (a chained call / construction
-                // whose ResolvedType the un-SA'd body never set — e.g. `var ptr = Hijacked[U64](…)`), so
-                // `ptr.peek()` downstream still resolves.
-                if ((vd.Initializer.ResolvedType is { } vt and not ErrorTypeSymbol
-                        ? vt
-                        : ComputeDeferredType(expr: vd.Initializer)) is { } localVt and
-                    not (ErrorTypeSymbol or GenericParameterTypeSymbol))
-                {
-                    _localVarTypes[key: vd.Name] = localVt;
-                }
-
+                WalkVariableDeclaration(vd: vd);
                 break;
             case ExpressionStatement es:
                 WalkExpression(expr: es.Expression);
@@ -294,6 +270,42 @@ internal sealed class CallOverloadResolutionPass
             case DangerStatement danger:
                 WalkStatement(stmt: danger.Body);
                 break;
+        }
+    }
+
+    private void WalkIfStatement(IfStatement ifs)
+    {
+        WalkExpression(expr: ifs.Condition);
+        WalkStatement(stmt: ifs.ThenStatement);
+        if (ifs.ElseStatement != null)
+        {
+            WalkStatement(stmt: ifs.ElseStatement);
+        }
+    }
+
+    private void WalkWhenStatement(WhenStatement ws)
+    {
+        WalkExpression(expr: ws.Expression);
+        foreach (WhenClause c in ws.Clauses)
+        {
+            WalkStatement(stmt: c.Body);
+        }
+    }
+
+    private void WalkVariableDeclaration(VariableDeclaration vd)
+    {
+        WalkExpression(expr: vd.Initializer!);
+        // Track the local's inferred type (from the walked initializer) so a later member call on a
+        // reference to it can recover a receiver type the monomorph clone left un-annotated. Prefer the
+        // walked ResolvedType; fall back to the deferred-type recovery (a chained call / construction
+        // whose ResolvedType the un-SA'd body never set — e.g. `var ptr = Hijacked[U64](…)`), so
+        // `ptr.peek()` downstream still resolves.
+        if ((vd.Initializer!.ResolvedType is { } vt and not ErrorTypeSymbol
+                ? vt
+                : ComputeDeferredType(expr: vd.Initializer)) is { } localVt and
+            not (ErrorTypeSymbol or GenericParameterTypeSymbol))
+        {
+            _localVarTypes[key: vd.Name] = localVt;
         }
     }
 
@@ -759,19 +771,7 @@ internal sealed class CallOverloadResolutionPass
 
         if (expr is MemberExpression member)
         {
-            TypeSymbol? ownerType = ComputeDeferredType(expr: member.Object);
-            return ownerType switch
-            {
-                RecordTypeSymbol record => record
-                                        .LookupMemberVariable(
-                                             memberVariableName: member.MemberName)
-                                       ?.Type,
-                EntityTypeSymbol entity => entity
-                                        .LookupMemberVariable(
-                                             memberVariableName: member.MemberName)
-                                       ?.Type,
-                _ => null
-            };
+            return ComputeDeferredMemberType(member: member);
         }
 
         // A CONSTRUCTION written as a CreatorExpression (`Hijacked[U64](…)` in an un-SA'd body whose
@@ -788,39 +788,73 @@ internal sealed class CallOverloadResolutionPass
 
         if (expr is CallExpression call)
         {
-            // A construction `Type(...)`/`Type[Args](...)` carries its constructed type (set by
-            // ClassifyStandaloneCall / GenericCallLoweringPass) — e.g. `Hijacked[U64](…)`. Prefer it so a
-            // local bound to a construction (`var ptr = Hijacked[U64](…)`) gets a receiver type.
-            if (call.ConstructedType is { } ct and not ErrorTypeSymbol)
+            return ComputeDeferredCallType(call: call);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Deferred-type recovery for a member access: reads the named field's static type off its
+    /// (recursively computed) record/entity owner. Returns null when the owner is not a record/entity
+    /// or has no such member.
+    /// </summary>
+    private TypeSymbol? ComputeDeferredMemberType(MemberExpression member)
+    {
+        TypeSymbol? ownerType = ComputeDeferredType(expr: member.Object);
+        return ownerType switch
+        {
+            RecordTypeSymbol record => record
+                                    .LookupMemberVariable(
+                                         memberVariableName: member.MemberName)
+                                   ?.Type,
+            EntityTypeSymbol entity => entity
+                                    .LookupMemberVariable(
+                                         memberVariableName: member.MemberName)
+                                   ?.Type,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Deferred-type recovery for a call: a construction carries its constructed type (stamped, or
+    /// recovered from the callee type name + explicit type args); a member call yields the return type of
+    /// the (recursively-typed) receiver's member routine. Returns null when none apply.
+    /// </summary>
+    private TypeSymbol? ComputeDeferredCallType(CallExpression call)
+    {
+        // A construction `Type(...)`/`Type[Args](...)` carries its constructed type (set by
+        // ClassifyStandaloneCall / GenericCallLoweringPass) — e.g. `Hijacked[U64](…)`. Prefer it so a
+        // local bound to a construction (`var ptr = Hijacked[U64](…)`) gets a receiver type.
+        if (call.ConstructedType is { } ct and not ErrorTypeSymbol)
+        {
+            return ct;
+        }
+
+        // ConstructedType not yet stamped (an un-SA'd body whose construction GenericCallLoweringPass
+        // skipped for lack of a resolved routine): recover it from the callee type name + explicit type args.
+        if (call.Callee is IdentifierExpression { Name: var typeName } &&
+            ResolveConstructedByName(typeName: typeName, typeArgs: call.TypeArguments) is { } cbn)
+        {
+            return cbn;
+        }
+
+        // Member-call result: the return type of the (recursively-typed) receiver's member routine — what
+        // lets a chained call like `me.data.get_address()` (the receiver of a lowered `+%`/`add_wrap`)
+        // carry a type so the outer operator call resolves, even when the body was never SA-annotated.
+        if (call.Callee is MemberExpression callMember)
+        {
+            TypeSymbol? recvType = ComputeDeferredType(expr: callMember.Object);
+            if (recvType is null or GenericParameterTypeSymbol or ErrorTypeSymbol)
             {
-                return ct;
+                return null;
             }
 
-            // ConstructedType not yet stamped (an un-SA'd body whose construction GenericCallLoweringPass
-            // skipped for lack of a resolved routine): recover it from the callee type name + explicit type args.
-            if (call.Callee is IdentifierExpression { Name: var typeName } &&
-                ResolveConstructedByName(typeName: typeName, typeArgs: call.TypeArguments) is { } cbn)
-            {
-                return cbn;
-            }
-
-            // Member-call result: the return type of the (recursively-typed) receiver's member routine — what
-            // lets a chained call like `me.data.get_address()` (the receiver of a lowered `+%`/`add_wrap`)
-            // carry a type so the outer operator call resolves, even when the body was never SA-annotated.
-            if (call.Callee is MemberExpression callMember)
-            {
-                TypeSymbol? recvType = ComputeDeferredType(expr: callMember.Object);
-                if (recvType is null or GenericParameterTypeSymbol or ErrorTypeSymbol)
-                {
-                    return null;
-                }
-
-                return (_registry.LookupMemberRoutine(type: recvType,
-                            memberRoutineName: callMember.MemberName) ??
-                        _registry.LookupMemberRoutine(type: recvType,
-                            memberRoutineName: callMember.MemberName,
-                            isFailable: true))?.ReturnType;
-            }
+            return (_registry.LookupMemberRoutine(type: recvType,
+                        memberRoutineName: callMember.MemberName) ??
+                    _registry.LookupMemberRoutine(type: recvType,
+                        memberRoutineName: callMember.MemberName,
+                        isFailable: true))?.ReturnType;
         }
 
         return null;

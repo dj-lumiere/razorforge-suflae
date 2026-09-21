@@ -67,7 +67,6 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
             };
 
         List<(string Key, Statement Body)> entrySeeds = CollectEntrySeeds();
-        Dictionary<string, Statement> programBodies;
 
         // SaTiming diagnostic: accumulate per-category time across the fixpoint so a `[debug] timing` build
         // shows where RunCollect's ms go (index vs monomorphize `collect` vs lower vs materialize vs resolve).
@@ -107,109 +106,14 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         while (guard++ < 100)
         {
             rounds++;
-            var before = new HashSet<string>(collection: adapter.InstantiatedGenericBodies.Keys,
-                comparer: StringComparer.Ordinal);
-            int liveBefore = ctx.LiveRoutineKeys.Count;
-            // REBUILD the program-body index EACH round: a reached stdlib file is SA'd + desugared ON DEMAND
-            // during the walk (GMP.Discover → AnalyzeRoutineOnDemand), and the lowering passes REASSIGN
-            // decl.Body (immutable rewriters → a NEW decl in program.Declarations). The index captured at
-            // RunCollect start therefore holds STALE or ABSENT bodies for files reached this round; a routine
-            // Discovered here would be marked LIVE but GetBody would MISS it → it never gets walked, yet
-            // MaterializeReachedStdlibBodies below still emits it → its callees (a bounds-check `throw`'s
-            // crash_message, a `create`'s `gt`, a nested `getitem`) are never seeded → link over-prune (the ④
-            // collector-walk-completeness residual). Rebuilding here lets the next walk step THROUGH those
-            // freshly-lowered bodies and discover their callees.
-            Dictionary<string, Statement> idx = null!;
-            Meas(k: "index", a: () => idx = BuildProgramBodyIndex());
-            programBodies = idx;
-            int built = 0;
-            double tC0 = clk?.Elapsed.TotalMilliseconds ?? 0;
-            Meas(k: "collect",
-                a: () => built = new GenericMonomorphizationPass(ctx: adapter)
-                   .CollectReferencedInIsolation(
-                        entrySeeds: entrySeeds,
-                        programBodies: idx,
-                        synthesizedBodies: synthesizedBodies));
-            if (clk != null)
-            {
-                Console.Error.WriteLine(
-                    value:
-                    $"  RunCollect - round {rounds} collect: {clk.Elapsed.TotalMilliseconds - tC0:F0} ms (built={built}, liveNow={ctx.LiveRoutineKeys.Count})");
-            }
-            // Synthesize protocol-default-impls referenced by the bodies built this round, BEFORE lowering, so
-            // their fresh bodies join the same lower-all-fresh sweep below. Their OWN referenced generic
-            // instances are built DEMAND-scoped by the NEXT fixpoint round's CollectReferencedInIsolation walk
-            // (a PDIL body is call-reached from an entry point, so the walk steps into it once it exists) — NOT
-            // by GMP.RunIncremental, whose registry-wide `AllConcrete*InstancesUnfiltered` drain builds every
-            // instance the registry holds. That drain is the warm/cold divergence: warm's restored registry
-            // holds the whole stdlib's instances, so it over-materialized derives (Maybe[X].duplicate,
-            // *Emittable.destroy) a cold partial-registry build never reaches. Demand-only keeps them identical.
-            bool pdilSynth = false;
-            Meas(k: "pdil", a: () => pdilSynth = pdil.Run());
-            var freshBodies = adapter.InstantiatedGenericBodies
-                                     .Where(predicate: kv => !before.Contains(item: kv.Key))
-                                     .ToDictionary(keySelector: kv => kv.Key,
-                                          elementSelector: kv => kv.Value,
-                                          comparer: StringComparer.Ordinal);
-            if (freshBodies.Count > 0)
-            {
-                Meas(k: "lower", a: () => GenericClosurePass.LowerFreshBodies(ctx: ctx,
-                    adapter: adapter,
-                    freshBodies: freshBodies));
-                // LowerFreshBodies REASSIGNS entries (`dict[key] = body with { … }`, MonomorphizedBody is a
-                // record) on the `freshBodies` COPY, not the shared adapter map — so the lowered results
-                // (FString/Operator/VariantReturn/…) live only in the copy. Merge them back or codegen reads
-                // the UN-lowered originals (a composed iterator's try_emit reaching codegen with raw
-                // VariantReturnStatement). Mirrors GenericClosurePass.RunClosure's merge-back.
-                foreach ((string key, MonomorphizedBody body) in freshBodies)
-                {
-                    adapter.InstantiatedGenericBodies[key: key] = body;
-                }
-            }
-
-            // MATERIALIZE reached bodies INSIDE the fixpoint (was post-loop). Every body that will be EMITTED
-            // must also be WALKED so its codegen-inserted callees are seeded — so materialize now (into
-            // InstantiatedGenericBodies, which GetBody consults FIRST), and let the NEXT round's walk step
-            // through the freshly-materialized bodies to discover their callees. Materialized stdlib bodies
-            // are already lowered (copied from the rebuilt, on-demand-lowered programBodies), so they need no
-            // LowerFreshBodies; they land in `before` next round and are not re-processed.
-            // Re-read programBodies AFTER the walk: THIS round's walk triggered on-demand SA+lowering of newly
-            // reached stdlib files (U64.rf etc.), which reassigned their decl.Body to lowered form. The
-            // top-of-round index predates that, so materializing from it would emit an UN-lowered body (a raw
-            // `me == 0u64` in U64.represent). Rebuild so materialization copies the lowered decls.
-            Dictionary<string, Statement> idx2 = null!;
-            Meas(k: "index", a: () => idx2 = BuildProgramBodyIndex());
-            programBodies = idx2;
-            Meas(k: "materialize", a: () =>
-            {
-                if (synthesizedBodies != null)
-                {
-                    MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
-                }
-
-                MaterializeReachedStdlibBodies(programBodies: idx2);
-            });
-            // RESOLVE this round's built + materialized bodies BEFORE the next walk. A body materialized from a
-            // buildtime-`expand`/SoA template reaches here with un-resolved member calls (`me.col[index]` →
-            // `Array[S64,4].getitem`); the post-loop CallOverloadResolutionPass resolves them, but by then the
-            // walk is over — so the walk never Discovers `Array[S64,4].getitem` and it link-over-prunes. Resolve
-            // per-round so the NEXT walk sees the resolved calls and seeds their definitions (the resolve-then-
-            // walk ordering that closes the SoA-column-accessor + throw-`create` over-prune). Idempotent on
-            // already-resolved calls; scoped to this round's fresh + materialized set via the live keys.
-            var roundResolver = new Declaration.CallOverloadResolutionPass(
-                ctx: new PostprocessingContext(registry: ctx.Registry,
-                    variantBodies: ctx.VariantBodies,
-                    target: ctx.Target,
-                    buildMode: ctx.BuildMode));
-            Meas(k: "resolve", a: () => roundResolver.RunOnBodiesWithOwners(
-                bodies: ctx.InstantiatedGenericBodies.Values.Select(selector: b =>
-                    (b.Ast.Body, b.Info.OwnerType,
-                        (IReadOnlyList<ParamInfo>?)b.Info.Parameters))));
-            // Terminate only when a round adds NO new built instance, NO PDIL synth, AND NO new live key. The
-            // live-key check is load-bearing: a reached NON-generic stdlib body (U64.represent, Text.create)
-            // grows LiveRoutineKeys without incrementing `built`, and its callees are only discovered when the
-            // next round walks it — so stopping on `built == 0` alone would leave those callees unseeded.
-            if (built == 0 && !pdilSynth && ctx.LiveRoutineKeys.Count == liveBefore)
+            bool terminate = RunCollectRound(adapter: adapter,
+                entrySeeds: entrySeeds,
+                synthesizedBodies: synthesizedBodies,
+                pdil: pdil,
+                clk: clk,
+                round: rounds,
+                meas: Meas);
+            if (terminate)
             {
                 break;
             }
@@ -222,7 +126,6 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         // raw bodies (un-inlined presets, un-lowered operators). Re-read now that all reached files are lowered.
         Dictionary<string, Statement> idx3 = null!;
         Meas(k: "index", a: () => idx3 = BuildProgramBodyIndex());
-        programBodies = idx3;
         Meas(k: "materialize", a: () =>
         {
             if (synthesizedBodies != null)
@@ -278,6 +181,121 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
     }
 
     /// <summary>
+    /// Runs one round of the <see cref="RunCollect"/> demand fixpoint: rebuild the program-body index,
+    /// walk the reachable closure (building on demand), synthesize protocol-default-impls, lower the fresh
+    /// bodies, materialize + resolve the reached stdlib bodies. Returns <c>true</c> when the round added NO
+    /// new built instance, NO PDIL synth, AND NO new live key — the fixpoint's termination condition.
+    /// </summary>
+    private bool RunCollectRound(DesugaringContext adapter,
+        List<(string Key, Statement Body)> entrySeeds,
+        IReadOnlyDictionary<string, Statement>? synthesizedBodies,
+        ProtocolDefaultImplLoweringPass pdil, System.Diagnostics.Stopwatch? clk, int round,
+        Action<string, Action> meas)
+    {
+        var before = new HashSet<string>(collection: adapter.InstantiatedGenericBodies.Keys,
+            comparer: StringComparer.Ordinal);
+        int liveBefore = ctx.LiveRoutineKeys.Count;
+        // REBUILD the program-body index EACH round: a reached stdlib file is SA'd + desugared ON DEMAND
+        // during the walk (GMP.Discover → AnalyzeRoutineOnDemand), and the lowering passes REASSIGN
+        // decl.Body (immutable rewriters → a NEW decl in program.Declarations). The index captured at
+        // RunCollect start therefore holds STALE or ABSENT bodies for files reached this round; a routine
+        // Discovered here would be marked LIVE but GetBody would MISS it → it never gets walked, yet
+        // MaterializeReachedStdlibBodies below still emits it → its callees (a bounds-check `throw`'s
+        // crash_message, a `create`'s `gt`, a nested `getitem`) are never seeded → link over-prune (the ④
+        // collector-walk-completeness residual). Rebuilding here lets the next walk step THROUGH those
+        // freshly-lowered bodies and discover their callees.
+        Dictionary<string, Statement> idx = null!;
+        meas(arg1: "index", arg2: () => idx = BuildProgramBodyIndex());
+        int built = 0;
+        double tC0 = clk?.Elapsed.TotalMilliseconds ?? 0;
+        meas(arg1: "collect",
+            arg2: () => built = new GenericMonomorphizationPass(ctx: adapter)
+               .CollectReferencedInIsolation(
+                    entrySeeds: entrySeeds,
+                    programBodies: idx,
+                    synthesizedBodies: synthesizedBodies));
+        if (clk != null)
+        {
+            Console.Error.WriteLine(
+                value:
+                $"  RunCollect - round {round} collect: {clk.Elapsed.TotalMilliseconds - tC0:F0} ms (built={built}, liveNow={ctx.LiveRoutineKeys.Count})");
+        }
+        // Synthesize protocol-default-impls referenced by the bodies built this round, BEFORE lowering, so
+        // their fresh bodies join the same lower-all-fresh sweep below. Their OWN referenced generic
+        // instances are built DEMAND-scoped by the NEXT fixpoint round's CollectReferencedInIsolation walk
+        // (a PDIL body is call-reached from an entry point, so the walk steps into it once it exists) — NOT
+        // by GMP.RunIncremental, whose registry-wide `AllConcrete*InstancesUnfiltered` drain builds every
+        // instance the registry holds. That drain is the warm/cold divergence: warm's restored registry
+        // holds the whole stdlib's instances, so it over-materialized derives (Maybe[X].duplicate,
+        // *Emittable.destroy) a cold partial-registry build never reaches. Demand-only keeps them identical.
+        bool pdilSynth = false;
+        meas(arg1: "pdil", arg2: () => pdilSynth = pdil.Run());
+        var freshBodies = adapter.InstantiatedGenericBodies
+                                 .Where(predicate: kv => !before.Contains(item: kv.Key))
+                                 .ToDictionary(keySelector: kv => kv.Key,
+                                      elementSelector: kv => kv.Value,
+                                      comparer: StringComparer.Ordinal);
+        if (freshBodies.Count > 0)
+        {
+            meas(arg1: "lower", arg2: () => GenericClosurePass.LowerFreshBodies(ctx: ctx,
+                adapter: adapter,
+                freshBodies: freshBodies));
+            // LowerFreshBodies REASSIGNS entries (`dict[key] = body with { … }`, MonomorphizedBody is a
+            // record) on the `freshBodies` COPY, not the shared adapter map — so the lowered results
+            // (FString/Operator/VariantReturn/…) live only in the copy. Merge them back or codegen reads
+            // the UN-lowered originals (a composed iterator's try_emit reaching codegen with raw
+            // VariantReturnStatement). Mirrors GenericClosurePass.RunClosure's merge-back.
+            foreach ((string key, MonomorphizedBody body) in freshBodies)
+            {
+                adapter.InstantiatedGenericBodies[key: key] = body;
+            }
+        }
+
+        // MATERIALIZE reached bodies INSIDE the fixpoint (was post-loop). Every body that will be EMITTED
+        // must also be WALKED so its codegen-inserted callees are seeded — so materialize now (into
+        // InstantiatedGenericBodies, which GetBody consults FIRST), and let the NEXT round's walk step
+        // through the freshly-materialized bodies to discover their callees. Materialized stdlib bodies
+        // are already lowered (copied from the rebuilt, on-demand-lowered programBodies), so they need no
+        // LowerFreshBodies; they land in `before` next round and are not re-processed.
+        // Re-read programBodies AFTER the walk: THIS round's walk triggered on-demand SA+lowering of newly
+        // reached stdlib files (U64.rf etc.), which reassigned their decl.Body to lowered form. The
+        // top-of-round index predates that, so materializing from it would emit an UN-lowered body (a raw
+        // `me == 0u64` in U64.represent). Rebuild so materialization copies the lowered decls.
+        Dictionary<string, Statement> idx2 = null!;
+        meas(arg1: "index", arg2: () => idx2 = BuildProgramBodyIndex());
+        meas(arg1: "materialize", arg2: () =>
+        {
+            if (synthesizedBodies != null)
+            {
+                MaterializePerOwnerSynthesizedBodies(synthesizedBodies: synthesizedBodies);
+            }
+
+            MaterializeReachedStdlibBodies(programBodies: idx2);
+        });
+        // RESOLVE this round's built + materialized bodies BEFORE the next walk. A body materialized from a
+        // buildtime-`expand`/SoA template reaches here with un-resolved member calls (`me.col[index]` →
+        // `Array[S64,4].getitem`); the post-loop CallOverloadResolutionPass resolves them, but by then the
+        // walk is over — so the walk never Discovers `Array[S64,4].getitem` and it link-over-prunes. Resolve
+        // per-round so the NEXT walk sees the resolved calls and seeds their definitions (the resolve-then-
+        // walk ordering that closes the SoA-column-accessor + throw-`create` over-prune). Idempotent on
+        // already-resolved calls; scoped to this round's fresh + materialized set via the live keys.
+        var roundResolver = new Declaration.CallOverloadResolutionPass(
+            ctx: new PostprocessingContext(registry: ctx.Registry,
+                variantBodies: ctx.VariantBodies,
+                target: ctx.Target,
+                buildMode: ctx.BuildMode));
+        meas(arg1: "resolve", arg2: () => roundResolver.RunOnBodiesWithOwners(
+            bodies: ctx.InstantiatedGenericBodies.Values.Select(selector: b =>
+                (b.Ast.Body, b.Info.OwnerType,
+                    (IReadOnlyList<ParamInfo>?)b.Info.Parameters))));
+        // Terminate only when a round adds NO new built instance, NO PDIL synth, AND NO new live key. The
+        // live-key check is load-bearing: a reached NON-generic stdlib body (U64.represent, Text.create)
+        // grows LiveRoutineKeys without incrementing `built`, and its callees are only discovered when the
+        // next round walks it — so stopping on `built == 0` alone would leave those callees unseeded.
+        return built == 0 && !pdilSynth && ctx.LiveRoutineKeys.Count == liveBefore;
+    }
+
+    /// <summary>
     /// Adds every REACHED concrete non-generic STDLIB routine body to <c>InstantiatedGenericBodies</c> so
     /// codegen emits it from the one unified body set — no Phase-A stdlib resolution/filter of its own. USER
     /// routines are excluded (codegen emits those directly from their program ASTs). This is the pull move of
@@ -291,9 +309,9 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         foreach (string liveKey in ctx.LiveRoutineKeys.Where(predicate: k =>
                      !userKeys.Contains(item: k) && !ctx.ResidentInstanceKeys.Contains(item: k)))
         {
-            // Resident (base/delta): a resident non-generic stdlib body is already DEFINED in the base object;
-            // materializing it here would emit a duplicate definition the delta must NOT own. Codegen declares
-            // it extern from the registry and the JIT resolves the reference into the base dylib.
+            // Resident (base/delta): a resident non-generic stdlib body is already DEFINED in the base
+            // object. Materializing it here would emit a duplicate definition the delta must NOT own. Codegen
+            // declares it extern from the registry and the JIT resolves the reference into the base dylib.
             TryMaterializeStdlibBody(liveKey: liveKey, programBodies: programBodies);
         }
 

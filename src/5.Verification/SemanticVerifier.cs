@@ -378,7 +378,7 @@ public sealed partial class SemanticVerifier
     public bool SeedAllStdlibRoutines { get; set; }
 
     /// <summary>
-    /// Resident-JIT base/delta: <see cref="RegistryKey"/> values already built into the precompiled base
+    /// Resident-JIT base/delta: <c>RegistryKey</c> values already built into the precompiled base
     /// object (the base's collected instance set). Threaded into
     /// <see cref="InstantiationContext.ResidentInstanceKeys"/> so the demand collector skips re-building /
     /// re-analyzing / expanding those instances (they are defined in the base dylib). Empty on a normal build.
@@ -1371,6 +1371,9 @@ public sealed partial class SemanticVerifier
     /// calls it the first time the collector reaches a routine declared in this file, instead of the eager
     /// sweep analyzing every stdlib file up front.
     /// </summary>
+    /// <param name="program">The parsed stdlib program (single file) to set up scope for and analyze.</param>
+    /// <param name="filePath">Absolute path of the stdlib file backing <paramref name="program"/>.</param>
+    /// <param name="module">The module name this file declares (its resolution/own-module scope).</param>
     /// <param name="repairOnly">Run only the per-file scope setup + cross-module signature repair
     /// (<see cref="StdlibLoader.ReResolveProgramForLazyImports"/>), skipping body analysis. Used at SNAPSHOT
     /// CAPTURE (<see cref="EagerlyRepairStdlibSignatures"/>) to fold every cross-module-lazy signature repair
@@ -1565,20 +1568,7 @@ public sealed partial class SemanticVerifier
             return null;
         }
 
-        if (_demandStdlibProgramForKey == null)
-        {
-            _demandStdlibProgramForKey =
-                new Dictionary<string, (Program, string, string)>(
-                    comparer: StringComparer.Ordinal);
-            foreach ((Program p, string fp, string mod) in _registry.StdlibPrograms)
-            foreach (ISyntaxTreeNode d in p.Declarations)
-            {
-                if (d is RoutineDeclaration { ResolvedInfo: { } ri })
-                {
-                    _demandStdlibProgramForKey[key: ri.RegistryKey] = (p, fp, mod);
-                }
-            }
-        }
+        _demandStdlibProgramForKey ??= BuildDemandStdlibProgramForKey();
 
         if (!_demandStdlibProgramForKey.TryGetValue(key: routineKey,
                 value: out (Program Program, string FilePath, string Module) entry))
@@ -1674,58 +1664,7 @@ public sealed partial class SemanticVerifier
             // file's analysis enqueued, mirroring the eager sequence but scoped to the newly-synthesized keys.
             if (_variantBodyGenQueue.Count > 0)
             {
-                var priorVariantKeys = new HashSet<string>(collection: _variantBodies.Keys,
-                    comparer: StringComparer.Ordinal);
-                // Generates raw bodies for the enqueued variants into _variantBodies (drains transitively).
-                DrainVariantBodyGenQueue();
-                // SA-annotate ONLY the newly-added keys (mirrors AnalyzeVariantBodies; do NOT re-analyze all).
-                foreach (string key in _variantBodies.Keys.ToList())
-                {
-                    if (priorVariantKeys.Contains(item: key) ||
-                        _memo.RestoredVariantKeys.Contains(item: key))
-                    {
-                        continue;
-                    }
-
-                    RoutineInfo? variantInfo = _registry.LookupRoutine(fullName: key) ?? _registry
-                       .GetAllRoutines()
-                       .FirstOrDefault(predicate: r => r.RegistryKey == key);
-                    if (variantInfo == null)
-                    {
-                        continue;
-                    }
-
-                    AnalyzeCompilerGeneratedBody(routineInfo: variantInfo,
-                        body: _variantBodies[key: key]);
-                }
-
-                // Lower the newly-added variant bodies. Both RunGlobal variants iterate ctx.VariantBodies
-                // (the SAME _variantBodies object) and are idempotent no-ops on already-lowered bodies, so
-                // sweeping the whole dict re-touches the prior keys harmlessly while lowering the new ones.
-                var dctx2 = new DesugaringContext(registry: _registry,
-                    routineBodies: _routineBodies,
-                    target: _target,
-                    buildMode: _buildMode)
-                {
-                    VariantBodies = _variantBodies,
-                    SynthesizeAllDerives = SeedAllStdlibRoutines,
-                    RestoredVariantKeys = _memo.RestoredVariantKeys
-                };
-                new DesugaringPipeline(ctx: dctx2).RunGlobal();
-                _variantBodies = dctx2.VariantBodies;
-
-                var pctx2 = new PostprocessingContext(registry: _registry,
-                    variantBodies: _variantBodies,
-                    synthesizedBodies: _synthesizedBodies.ToDictionary(
-                        keySelector: kvp => kvp.Key,
-                        elementSelector: kvp => kvp.Value.Body),
-                    target: _target,
-                    buildMode: _buildMode,
-                    monomorphizedBodies: _instantiatedGenericBodies)
-                {
-                    SynthesizeAllDerives = SeedAllStdlibRoutines
-                };
-                new PostprocessingPipeline(ctx: pctx2).RunGlobal();
+                FinalizeEnqueuedVariantBodies();
             }
         }
         finally
@@ -1767,21 +1706,118 @@ public sealed partial class SemanticVerifier
         if (cacheThisFile && variantKeysBefore != null && synthKeysBefore != null &&
             !_registry.StdlibSignatureRepairOccurred)
         {
-            List<KeyValuePair<string, Statement>> variantDelta = _variantBodies
-               .Where(predicate: kv => !variantKeysBefore.Contains(item: kv.Key))
-               .ToList();
-            List<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> synthDelta =
-                _synthesizedBodies
-                   .Where(predicate: kv => !synthKeysBefore.Contains(item: kv.Key))
-                   .ToList();
-            _warmState!.AnalyzedFileCache[key: entry.FilePath] = new CachedFileAnalysis(
-                AnalyzedProgram: Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
-                    program: entry.Program),
-                VariantBodies: variantDelta,
-                SynthBodies: synthDelta);
+            StoreAnalyzedFileInWarmCache(filePath: entry.FilePath,
+                program: entry.Program,
+                variantKeysBefore: variantKeysBefore,
+                synthKeysBefore: synthKeysBefore);
         }
 
         return entry.Program; // analyzed+desugared a NEW file → collector re-indexes THAT program's decls
+    }
+
+    /// <summary>
+    /// Builds the RegistryKey → (Program, filePath, module) index over every stdlib program's routine
+    /// declarations, so on-demand analysis can locate the file declaring a reached routine key.
+    /// </summary>
+    private Dictionary<string, (Program, string, string)> BuildDemandStdlibProgramForKey()
+    {
+        var map = new Dictionary<string, (Program, string, string)>(comparer: StringComparer.Ordinal);
+        foreach ((Program p, string fp, string mod) in _registry.StdlibPrograms)
+        foreach (ISyntaxTreeNode d in p.Declarations)
+        {
+            if (d is RoutineDeclaration { ResolvedInfo: { } ri })
+            {
+                map[key: ri.RegistryKey] = (p, fp, mod);
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Finalizes any failable-variant bodies enqueued during this file's on-demand analysis: drains the
+    /// gen queue into <c>_variantBodies</c>, SA-annotates ONLY the newly-added keys (never re-analyzing
+    /// prior/restored keys), then lowers the whole variant-body dict (idempotent on already-lowered keys).
+    /// Without this the enqueued variant body is orphaned — SA resolved the call and codegen emits the call
+    /// site, but no body means declare-not-define and a link failure.
+    /// </summary>
+    private void FinalizeEnqueuedVariantBodies()
+    {
+        var priorVariantKeys = new HashSet<string>(collection: _variantBodies.Keys,
+            comparer: StringComparer.Ordinal);
+        // Generates raw bodies for the enqueued variants into _variantBodies (drains transitively).
+        DrainVariantBodyGenQueue();
+        // SA-annotate ONLY the newly-added keys (mirrors AnalyzeVariantBodies; do NOT re-analyze all).
+        foreach (string key in _variantBodies.Keys.ToList())
+        {
+            if (priorVariantKeys.Contains(item: key) ||
+                _memo.RestoredVariantKeys.Contains(item: key))
+            {
+                continue;
+            }
+
+            RoutineInfo? variantInfo = _registry.LookupRoutine(fullName: key) ?? _registry
+               .GetAllRoutines()
+               .FirstOrDefault(predicate: r => r.RegistryKey == key);
+            if (variantInfo == null)
+            {
+                continue;
+            }
+
+            AnalyzeCompilerGeneratedBody(routineInfo: variantInfo,
+                body: _variantBodies[key: key]);
+        }
+
+        // Lower the newly-added variant bodies. Both RunGlobal variants iterate ctx.VariantBodies
+        // (the SAME _variantBodies object) and are idempotent no-ops on already-lowered bodies, so
+        // sweeping the whole dict re-touches the prior keys harmlessly while lowering the new ones.
+        var dctx2 = new DesugaringContext(registry: _registry,
+            routineBodies: _routineBodies,
+            target: _target,
+            buildMode: _buildMode)
+        {
+            VariantBodies = _variantBodies,
+            SynthesizeAllDerives = SeedAllStdlibRoutines,
+            RestoredVariantKeys = _memo.RestoredVariantKeys
+        };
+        new DesugaringPipeline(ctx: dctx2).RunGlobal();
+        _variantBodies = dctx2.VariantBodies;
+
+        var pctx2 = new PostprocessingContext(registry: _registry,
+            variantBodies: _variantBodies,
+            synthesizedBodies: _synthesizedBodies.ToDictionary(
+                keySelector: kvp => kvp.Key,
+                elementSelector: kvp => kvp.Value.Body),
+            target: _target,
+            buildMode: _buildMode,
+            monomorphizedBodies: _instantiatedGenericBodies)
+        {
+            SynthesizeAllDerives = SeedAllStdlibRoutines
+        };
+        new PostprocessingPipeline(ctx: pctx2).RunGlobal();
+    }
+
+    /// <summary>
+    /// Stores a freshly analyzed+lowered stdlib file into the daemon-lifetime warm cache so the next build
+    /// reaching it skips the ~420 ms of SA+desugar+lower. Clones the program (a pristine snapshot) and
+    /// captures only the variant/synth bodies THIS file's analysis added (the delta since the pre-analysis
+    /// snapshot); monomorphized INSTANCES are never cached (they stay per-build demand).
+    /// </summary>
+    private void StoreAnalyzedFileInWarmCache(string filePath, Program program,
+        HashSet<string> variantKeysBefore, HashSet<string> synthKeysBefore)
+    {
+        List<KeyValuePair<string, Statement>> variantDelta = _variantBodies
+           .Where(predicate: kv => !variantKeysBefore.Contains(item: kv.Key))
+           .ToList();
+        List<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> synthDelta =
+            _synthesizedBodies
+               .Where(predicate: kv => !synthKeysBefore.Contains(item: kv.Key))
+               .ToList();
+        _warmState!.AnalyzedFileCache[key: filePath] = new CachedFileAnalysis(
+            AnalyzedProgram: Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
+                program: program),
+            VariantBodies: variantDelta,
+            SynthBodies: synthDelta);
     }
 
     /// <summary>
@@ -2244,22 +2280,7 @@ public sealed partial class SemanticVerifier
             comparer: StringComparer.Ordinal);
         string? previousModuleName = _currentModuleName;
 
-        bool importRestored = TryRestoreImportStateForRoutine(routineInfo: routineInfo);
-        if (!importRestored)
-        {
-            // Single-file path: no snapshot for stdlib files -> set up a minimal import
-            // state so SA can resolve Core type annotations (S128, U32, etc.) in variant bodies.
-            _importedModules.Add(item: "Core");
-            if (!string.IsNullOrEmpty(value: routineInfo.Module))
-            {
-                _importedModules.Add(item: routineInfo.Module);
-                int dotIdx = routineInfo.Module.IndexOf(value: '.');
-                if (dotIdx > 0)
-                {
-                    _importedModules.Add(item: routineInfo.Module[..dotIdx]);
-                }
-            }
-        }
+        RestoreImportScopeForCompilerGeneratedBody(routineInfo: routineInfo);
 
         // BuilderQuery per-type entity-list routines (member_variable_info / protocol_info / routine_info)
         // synthesize bodies that construct FieldInfo/ProtocolInfo/RoutineInfo/Visibility values — all in
@@ -2299,33 +2320,17 @@ public sealed partial class SemanticVerifier
 
         // Bind the owner type's generic parameters for this re-analysis. When re-analyzing a member body of a
         // concrete generic instance (e.g. `SplitList[Particle].getitem`, `SplitArray[Point, 4].count`), bare
-        // parameter references must resolve to the concrete arguments, not be re-resolved from scratch:
+        // parameter references must resolve to the concrete arguments, not be re-resolved from scratch.
         //  - a TYPE param in type/callee position (`var result = T.blank()`) would otherwise resolve to a
-        //    same-named global user type (`record T` → the generic-param-name-collision) → wrong `result` type;
-        //  - a CONST param in value position (`return N`) would otherwise be "Unknown identifier N".
+        //    same-named global user type (`record T`, the generic-param-name-collision) giving a wrong
+        //    `result` type
+        //  - a CONST param in value position (`return N`) would otherwise be "Unknown identifier N"
         // Zip the generic DEFINITION's parameter names against the concrete owner's type args: const args go in
         // the value scope (`DeclareVariable`), and ALL params go in `_compilerGeneratedTypeParamBindings` so the
         // type resolver maps a bare `T`/`N` to its concrete argument before any global lookup.
         Dictionary<string, TypeSymbol>? prevTypeParamBindings = _compilerGeneratedTypeParamBindings;
-        _compilerGeneratedTypeParamBindings = null;
-        if (routineInfo.GenericDefinition?.OwnerType?.GenericParameters is { } defParams &&
-            routineInfo.OwnerType?.TypeArguments is { } ownerArgs)
-        {
-            var bindings = new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal);
-            for (int i = 0; i < defParams.Count && i < ownerArgs.Count; i++)
-            {
-                bindings[key: defParams[index: i]] = ownerArgs[index: i];
-                if (ownerArgs[index: i] is ConstGenericValueTypeSymbol)
-                {
-                    _registry.DeclareVariable(name: defParams[index: i], type: ownerArgs[index: i]);
-                }
-            }
-
-            if (bindings.Count > 0)
-            {
-                _compilerGeneratedTypeParamBindings = bindings;
-            }
-        }
+        _compilerGeneratedTypeParamBindings =
+            BindOwnerGenericParamsForReanalysis(routineInfo: routineInfo);
 
         // Suppress errors for synthesized bodies -> they are compiler-generated and correct by construction.
         // Any error indicates a compiler bug, not user code error, so we don't surface them.
@@ -2362,6 +2367,60 @@ public sealed partial class SemanticVerifier
         {
             _importedSymbolNames.Add(item: symbol);
         }
+    }
+
+    /// <summary>
+    /// Restores the import scope for a compiler-generated body: from the routine's snapshot when one
+    /// exists, otherwise (single-file path, no stdlib snapshot) a minimal Core + own-module scope so SA
+    /// can resolve Core type annotations (S128, U32, …) referenced in the body.
+    /// </summary>
+    private void RestoreImportScopeForCompilerGeneratedBody(RoutineInfo routineInfo)
+    {
+        if (TryRestoreImportStateForRoutine(routineInfo: routineInfo))
+        {
+            return;
+        }
+
+        _importedModules.Add(item: "Core");
+        if (!string.IsNullOrEmpty(value: routineInfo.Module))
+        {
+            _importedModules.Add(item: routineInfo.Module);
+            int dotIdx = routineInfo.Module.IndexOf(value: '.');
+            if (dotIdx > 0)
+            {
+                _importedModules.Add(item: routineInfo.Module[..dotIdx]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Binds the owner type's generic parameters for re-analysis of a concrete generic instance's member
+    /// body (e.g. <c>SplitList[Particle].getitem</c>). Zips the generic DEFINITION's parameter names against
+    /// the concrete owner's type args: const args also go into the value scope (<c>DeclareVariable</c>), and
+    /// ALL params go into the returned bindings so the type resolver maps a bare <c>T</c>/<c>N</c> to its
+    /// concrete argument before any global lookup. Returns null when there are no bindings.
+    /// </summary>
+    private Dictionary<string, TypeSymbol>? BindOwnerGenericParamsForReanalysis(RoutineInfo routineInfo)
+    {
+        if (routineInfo.GenericDefinition?.OwnerType?.GenericParameters is not { } defParams ||
+            routineInfo.OwnerType?.TypeArguments is not { } ownerArgs)
+        {
+            return null;
+        }
+
+        var bindings = new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal);
+        for (int i = 0; i < defParams.Count && i < ownerArgs.Count; i++)
+        {
+            bindings[key: defParams[index: i]] = ownerArgs[index: i];
+            if (ownerArgs[index: i] is ConstGenericValueTypeSymbol)
+            {
+                _registry.DeclareVariable(name: defParams[index: i], type: ownerArgs[index: i]);
+            }
+        }
+
+        return bindings.Count > 0
+            ? bindings
+            : null;
     }
 
     /// <summary>

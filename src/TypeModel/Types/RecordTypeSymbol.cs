@@ -628,16 +628,7 @@ public class RecordTypeSymbol : TypeSymbol
         // overload's fold on the TypeSymbol map).
         if (type is BuildtimeConstGenericTypeSymbol buildtime)
         {
-            return buildtime.TryFold(resolveTypeParam: name =>
-                    substitution.TryGetValue(key: name, value: out TypeSymbol? bound)
-                        ? bound
-                        : null,
-                pointerSize: 8,
-                result: out long folded)
-                ? new ConstGenericValueTypeSymbol(literalText: folded.ToString(),
-                    value: folded,
-                    explicitTypeName: "U64")
-                : buildtime;
+            return SubstituteBuildtimeConstGeneric(buildtime: buildtime, substitution: substitution);
         }
 
         // If it's a type parameter, substitute it
@@ -678,6 +669,23 @@ public class RecordTypeSymbol : TypeSymbol
         }
 
         return SubstituteGenericResolution(type: type, substitution: substitution);
+    }
+
+    // Fold a buildtime const-generic to a concrete U64 value once its referenced type params are bound,
+    // else keep it symbolic (mirror of the RoutineInfo overload's fold on the TypeSymbol map).
+    private static TypeSymbol SubstituteBuildtimeConstGeneric(
+        BuildtimeConstGenericTypeSymbol buildtime, Dictionary<string, TypeSymbol> substitution)
+    {
+        return buildtime.TryFold(resolveTypeParam: name =>
+                substitution.TryGetValue(key: name, value: out TypeSymbol? bound)
+                    ? bound
+                    : null,
+            pointerSize: 8,
+            result: out long folded)
+            ? new ConstGenericValueTypeSymbol(literalText: folded.ToString(),
+                value: folded,
+                explicitTypeName: "U64")
+            : buildtime;
     }
 
     // Substitute an associated-type projection: re-base the projection onto its substituted base,

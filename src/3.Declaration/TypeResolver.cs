@@ -369,6 +369,16 @@ internal sealed class TypeResolver
             return ResolveGenericType(typeExpr: typeExpr);
         }
 
+        return ResolveBareNameType(typeExpr: typeExpr);
+    }
+
+    /// <summary>
+    /// Resolves a bare (non-parameterized, non-special-form) type name: compiler-generated param bindings,
+    /// the generic-parameter/global-type shadow rule, module-scoped ambiguity reporting, and the final
+    /// global lookup — falling back to a const-generic literal or Unknown.
+    /// </summary>
+    private TypeSymbol ResolveBareNameType(TypeExpression typeExpr)
+    {
         // Compiler-generated re-analysis (AnalyzeCompilerGeneratedBody) of a CONCRETE generic instance's
         // member body binds each parameter name to its concrete argument. Resolve a bare parameter reference
         // to that concrete argument BEFORE any global lookup — the concrete owner is not a generic-definition
@@ -402,18 +412,7 @@ internal sealed class TypeResolver
                 slot: GenericParameterSlot(name: typeExpr.Name));
         }
 
-        // Module-scoped ambiguity: a bare name declared in 2+ imported modules (with the current
-        // module NOT declaring its own to shadow) is ambiguous. Report here where a location exists.
-        // Still resolve (first-match) below so downstream analysis doesn't cascade on a null type.
-        List<string> ambiguousDeclarers = ImportedModulesDeclaring(name: typeExpr.Name);
-        if (ambiguousDeclarers.Count >= 2)
-        {
-            _sa.ReportError(code: SemanticDiagnosticCode.AmbiguousTypeReference,
-                message: $"Type '{typeExpr.Name}' is declared in multiple imported modules " +
-                         $"({string.Join(separator: ", ", values: ambiguousDeclarers)}) — the current module " +
-                         "declares no such type to shadow it. Qualify the reference or restructure imports.",
-                location: typeExpr.Location);
-        }
+        ReportModuleScopedAmbiguity(typeExpr: typeExpr);
 
         // Try to look up the type by name (including imported modules)
         TypeSymbol? resolved = globalType;
@@ -431,6 +430,24 @@ internal sealed class TypeResolver
         }
 
         return ResolveConstGenericOrUnknown(typeExpr: typeExpr);
+    }
+
+    /// <summary>
+    /// Module-scoped ambiguity: a bare name declared in 2+ imported modules (with the current module NOT
+    /// declaring its own to shadow) is ambiguous. Reports here where a location exists. Resolution still
+    /// proceeds (first-match) at the call site so downstream analysis doesn't cascade on a null type.
+    /// </summary>
+    private void ReportModuleScopedAmbiguity(TypeExpression typeExpr)
+    {
+        List<string> ambiguousDeclarers = ImportedModulesDeclaring(name: typeExpr.Name);
+        if (ambiguousDeclarers.Count >= 2)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.AmbiguousTypeReference,
+                message: $"Type '{typeExpr.Name}' is declared in multiple imported modules " +
+                         $"({string.Join(separator: ", ", values: ambiguousDeclarers)}) — the current module " +
+                         "declares no such type to shadow it. Qualify the reference or restructure imports.",
+                location: typeExpr.Location);
+        }
     }
 
     /// <summary>
@@ -664,37 +681,11 @@ internal sealed class TypeResolver
         // Lookup<None> is ambiguous in the type_id carrier model because None is also the absent sentinel.
         string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
 
-        // Carrier None-collapse (design invariant): a recovery carrier over the unit type None degenerates —
-        //   Maybe[None]  ≡ Bool          (present|absent with no payload = a 2-state = Bool)
-        //   Lookup[None] ≡ Check[None]   (Lookup's extra absent state is meaningless with no success payload)
-        // Check[None] is the canonical no-payload carrier and stays. These arise from `try`/`lookup` over a
-        // unit-returning call; enforce the identity in resolution so the carrier type is uniform.
-        if (typeArgs.Count == 1 && typeArgs[index: 0] is { Name: "None" })
+        if (ResolveNoneTypeArguments(typeExpr: typeExpr,
+                typeArgs: typeArgs,
+                genericDefCarrierName: genericDefCarrierName) is { } noneResult)
         {
-            if (genericDefCarrierName == MaybeTypeName)
-            {
-                return LookupTypeWithImports(name: "Bool") ?? ErrorTypeSymbol.Instance;
-            }
-
-            if (genericDefCarrierName is "Lookup" &&
-                LookupTypeWithImports(name: "Check") is { IsGenericDefinition: true } checkDef)
-            {
-                return _sa._registry.GetOrCreateResolution(genericDef: checkDef, typeArguments: typeArgs);
-            }
-        }
-
-        foreach (TypeSymbol arg in typeArgs)
-        {
-            if (arg is not { Name: "None" } || genericDefCarrierName is "Check")
-            {
-                continue;
-            }
-
-            _sa.ReportError(code: SemanticDiagnosticCode.NoneAsTypeArgument,
-                message: "'None' cannot be used as a type argument. " +
-                         "'None' is a unit type with no value.",
-                location: typeExpr.Location);
-            return ErrorTypeSymbol.Instance;
+            return noneResult;
         }
 
         // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
@@ -725,6 +716,51 @@ internal sealed class TypeResolver
 
         return _sa._registry.GetOrCreateResolution(genericDef: genericDef,
             typeArguments: typeArgs);
+    }
+
+    /// <summary>
+    /// Handles <c>None</c> type arguments for a carrier generic: the carrier None-collapse identities
+    /// (<c>Maybe[None]</c> ≡ <c>Bool</c>, <c>Lookup[None]</c> ≡ <c>Check[None]</c>) and the rejection of
+    /// <c>None</c> as a type argument for any non-<c>Check</c> carrier. Returns the substitute/error type to
+    /// short-circuit with, or null when no <c>None</c>-specific handling applies.
+    /// </summary>
+    private TypeSymbol? ResolveNoneTypeArguments(TypeExpression typeExpr,
+        List<TypeSymbol> typeArgs, string? genericDefCarrierName)
+    {
+        // Carrier None-collapse (design invariant): a recovery carrier over the unit type None degenerates —
+        //   Maybe[None]  ≡ Bool          (present|absent with no payload = a 2-state = Bool)
+        //   Lookup[None] ≡ Check[None]   (Lookup's extra absent state is meaningless with no success payload)
+        // Check[None] is the canonical no-payload carrier and stays. These arise from `try`/`lookup` over a
+        // unit-returning call. Enforce the identity in resolution so the carrier type is uniform.
+        if (typeArgs.Count == 1 && typeArgs[index: 0] is { Name: "None" })
+        {
+            if (genericDefCarrierName == MaybeTypeName)
+            {
+                return LookupTypeWithImports(name: "Bool") ?? ErrorTypeSymbol.Instance;
+            }
+
+            if (genericDefCarrierName is "Lookup" &&
+                LookupTypeWithImports(name: "Check") is { IsGenericDefinition: true } checkDef)
+            {
+                return _sa._registry.GetOrCreateResolution(genericDef: checkDef, typeArguments: typeArgs);
+            }
+        }
+
+        foreach (TypeSymbol arg in typeArgs)
+        {
+            if (arg is not { Name: "None" } || genericDefCarrierName is "Check")
+            {
+                continue;
+            }
+
+            _sa.ReportError(code: SemanticDiagnosticCode.NoneAsTypeArgument,
+                message: "'None' cannot be used as a type argument. " +
+                         "'None' is a unit type with no value.",
+                location: typeExpr.Location);
+            return ErrorTypeSymbol.Instance;
+        }
+
+        return null;
     }
 
     /// <summary>

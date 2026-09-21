@@ -38,8 +38,8 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private TypeSymbol AnalyzeRecoveryExpression(RecoveryExpression recovery)
     {
-        // Analyze the inner expression first so every sub-call carries its ResolvedRoutine + ResolvedType;
-        // the decomposition below keys failable-ness off ResolvedRoutine.IsFailable.
+        // Analyze the inner expression first so every sub-call carries its ResolvedRoutine and ResolvedType.
+        // The decomposition below keys failable-ness off the ResolvedRoutine IsFailable flag.
         TypeSymbol innerType = AnalyzeExpression(expression: recovery.Inner);
         if (innerType is ErrorTypeSymbol)
         {

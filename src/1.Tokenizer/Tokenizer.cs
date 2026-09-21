@@ -287,9 +287,9 @@ public partial class Tokenizer
             [key: "d64"] = TokenType.D64Literal,
             [key: "d128"] = TokenType.D128Literal,
 
-            // Imaginary (for complex numbers): a single width-less `i` suffix (also spellable
-            // `_i`, via the underscore-before-suffix separator). Width/radix comes from context;
-            // with no context it defaults to C128. The old width-carrying j32/j64/j128/jn are gone.
+            // Imaginary (for complex numbers) uses a single width-less i suffix, also spellable
+            // with a leading underscore separator. Width and radix come from surrounding context.
+            // With no context it defaults to C128. The old width-carrying j suffixes are gone.
             [key: "i"] = TokenType.ImaginaryLiteral
         };
     }

@@ -340,7 +340,9 @@ public partial class LlvmEmitter
     /// <summary>
     /// Gets the type of a literal expression from its token type.
     /// </summary>
-    // TODO: Kill this method
+    // NOTE: this fallback token-type-to-type mapping remains only because stdlib bodies bypass SA, so a
+    // bare literal reaches the emitter with no SA-resolved type. It is intended to be retired once every
+    // literal carries a resolved type before codegen, but that is not yet the case.
     private TypeSymbol? GetLiteralType(LiteralExpression literal)
     {
         string? typeName = literal.LiteralType switch
@@ -442,7 +444,9 @@ public partial class LlvmEmitter
     /// <summary>
     /// Gets the type bit width needed by this compiler phase.
     /// </summary>
-    // TODO: Kill this method
+    // NOTE: this derives the bit width by matching on the rendered LLVM type STRING, which the conversion
+    // emitters currently rely on. It is intended to be retired in favour of carrying the width structurally
+    // from the source TypeSymbol, but the conversion paths do not thread that through yet.
     private int GetTypeBitWidth(string llvmType)
     {
         return llvmType switch
