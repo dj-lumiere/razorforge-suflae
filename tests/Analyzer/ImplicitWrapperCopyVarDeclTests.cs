@@ -12,9 +12,10 @@ using static TestHelpers;
 /// </summary>
 public class ImplicitWrapperCopyVarDeclTests
 {
-    /// <summary>Bare `var b = a` where `a: Retained[T]` is rejected.</summary>
+    /// <summary>Bare `var b = a` where `a: Retained[T]` is ALLOWED (2026-09-21): an RC copy is an implicit
+    /// `share` (refcount bump), so no explicit verb is required.</summary>
     [Fact]
-    public void Analyze_VarDecl_BareRetainedCopy_IsError()
+    public void Analyze_VarDecl_BareRetainedCopy_IsAllowed()
     {
         string source = """
                         entity Node
@@ -28,17 +29,14 @@ public class ImplicitWrapperCopyVarDeclTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
-                e.Message.Contains(value: "Implicit copy",
-                    comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                e.Message.Contains(value: "a.share()",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>`var b = obj.field` where the field is `Retained[T]` is rejected.</summary>
+    /// <summary>`var b = obj.field` where the field is `Retained[T]` is ALLOWED (implicit share).</summary>
     [Fact]
-    public void Analyze_VarDecl_BorrowedMemberRetainedCopy_IsError()
+    public void Analyze_VarDecl_BorrowedMemberRetainedCopy_IsAllowed()
     {
         string source = """
                         entity Node
@@ -55,9 +53,8 @@ public class ImplicitWrapperCopyVarDeclTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "Implicit copy",
-                comparisonType: StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
     /// <summary>Explicit `.retain()` at the copy site is accepted.</summary>
@@ -211,9 +208,10 @@ public class ImplicitWrapperCopyVarDeclTests
                 e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>Bare copy of a `Retained[T]` variable into a second var is rejected even inside a record field read.</summary>
+    /// <summary>Copy of a value transitively owning `Retained[T]` (a record field read two levels deep) is
+    /// ALLOWED — the nested RC field is implicitly shared on copy.</summary>
     [Fact]
-    public void Analyze_VarDecl_RetainedFromTwoLevels_IsError()
+    public void Analyze_VarDecl_RetainedFromTwoLevels_IsAllowed()
     {
         string source = """
                         entity Node
@@ -234,7 +232,7 @@ public class ImplicitWrapperCopyVarDeclTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
                 e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }

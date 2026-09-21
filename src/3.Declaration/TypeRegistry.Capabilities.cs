@@ -323,11 +323,12 @@ public sealed partial class TypeRegistry
             return false;
         }
 
-        // NOTE: an RC-handle field makes the containing record NON-Assignable — the RC wrappers no longer
-        // obey `Assignable` and are NOT recognised structurally here. This is intended: `var b = rc` is
-        // rejected (explicit `.share()` only), so a record HOLDING an RC must likewise not be implicitly
-        // copied (that would silently share the handle). Reconstruct it explicitly instead
-        // (WithBaseNotAssignable / RF-S420).
+        // A field is copyable if it derives Assignable trivially/by-walk, OR obeys Assignable — the RC
+        // wrappers (Retained/Guarded/Tracked/Witnessed/Roamed) now obey it (copy = an implicit retain/share),
+        // so a record holding one is freely copyable via this TypeObeysProtocol path. An `entity` field does
+        // NOT obey Assignable → the containing record is entity-kind (move-only), not copyable. A raw
+        // `Hijacked`/`CPtr` field is left as-is (it opts into `assign` manually, or the record stays
+        // non-Assignable) — the raw-pointer escape hatch is the user's responsibility.
         bool MemberVariableAssignable(TypeSymbol f)
         {
             return CanAutoDeriveAssignable(type: f) || CanMemberVariableWalkAssignable(type: f) ||
@@ -341,15 +342,65 @@ public sealed partial class TypeRegistry
             RecordTypeSymbol { IsGenericDefinition: false } r => r.MemberVariables is { Count: > 0 }
                 ? r.MemberVariables.All(predicate: m => MemberVariableAssignable(f: m.Type))
                 // No AST member variables: an `@llvm` inline-storage record (Array[T,N], Vector[T,N])
-                // stores its type-KIND generic args INLINE — cascade storability to them so
-                // Array[Text] is Assignable (Text is) but Array[SomeEntity] is NOT (entity has no
-                // store). A const-generic VALUE arg (N) stores nothing → filtered out. Wrapper
-                // records are excluded above. A field-less record with no type args ⇒ vacuously
-                // Assignable (All over empty).
+                // stores its type-KIND generic args INLINE — cascade storability to them so Array[Text] is
+                // Assignable (Text is) but Array[SomeEntity] is NOT (entity has no store). A const-generic
+                // VALUE arg (N) stores nothing → filtered out. A field-less record ⇒ vacuously Assignable.
                 : (r.TypeArguments ?? []).Where(predicate: a =>
                                               a.Category != TypeModel.Enums.TypeCategory
                                                  .ConstGenericValue)
                                          .All(predicate: MemberVariableAssignable),
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// The induced-KIND predicate: true iff <paramref name="type"/> behaves as an ENTITY — it is a declared
+    /// <c>entity</c>, OR a value aggregate (record / tuple / variant / inline <c>@llvm</c> record like
+    /// <c>Array[T,N]</c>) that TRANSITIVELY OWNS an entity by value. Ownership is the test: a bare entity
+    /// field/element propagates; a WRAPPER field (Retained/Guarded/Roamed/Viewing/… — a copyable handle or a
+    /// scope-bound door, never an inline owner) does NOT propagate and STOPS the walk, so a record holding a
+    /// <c>Retained[Entity]</c> stays a record. This is the single source of truth for the identity axis
+    /// ("move-only + owns its teardown" vs "freely-copyable value"): a type for which this is true must be
+    /// moved (<c>steal</c>), not copied, and is responsible for its transitive entities' teardown. An
+    /// unresolved generic parameter (or a generic DEFINITION) answers false — kind is decided per concrete
+    /// instantiation. Mirrors the structural walk of <see cref="CanMemberVariableWalkAssignable"/> (the dual:
+    /// that predicate is blocked BY an entity field; this one detects it).
+    /// </summary>
+    public bool IsEntityKind(TypeSymbol type)
+    {
+        // A declared entity is the base case — the walk stops here (no need to descend into its fields).
+        if (type is EntityTypeSymbol)
+        {
+            return true;
+        }
+
+        // A wrapper (RC handle / access token / raw pointer) is a DOOR to an entity, not an inline owner: it
+        // is itself freely copyable (or scope-bound), so it never confers entity-kind on its holder. Stop.
+        string? wrapperBase = type switch
+        {
+            RecordTypeSymbol { GenericDefinition: { } gd } => gd.Name,
+            RecordTypeSymbol r => r.Name,
+            _ => null
+        };
+        if (wrapperBase != null && RuntimeContract.WrapperTypes.Contains(item: wrapperBase))
+        {
+            return false;
+        }
+
+        return type switch
+        {
+            TupleTypeSymbol t => t.ElementTypes.Any(predicate: IsEntityKind),
+            // A variant is entity-kind iff any member arm (transitively) owns an entity. Checked before the
+            // RecordTypeSymbol arm below because VariantTypeSymbol derives from it.
+            VariantTypeSymbol v => v.Members.Any(predicate: m =>
+                m.Type != null && IsEntityKind(type: m.Type)),
+            // A record owns its member variables by value; an @llvm inline-storage record (Array[T,N],
+            // Vector[T,N]) owns its type-KIND args inline (a const-generic VALUE arg like N stores nothing).
+            RecordTypeSymbol { IsGenericDefinition: false } r => r.MemberVariables is { Count: > 0 }
+                ? r.MemberVariables.Any(predicate: m => IsEntityKind(type: m.Type))
+                : (r.TypeArguments ?? []).Where(predicate: a =>
+                                              a.Category != TypeModel.Enums.TypeCategory.ConstGenericValue)
+                                         .Any(predicate: IsEntityKind),
             _ => false
         };
     }

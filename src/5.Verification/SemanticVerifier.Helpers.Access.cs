@@ -210,7 +210,7 @@ public sealed partial class SemanticVerifier
 
         (string Wrapper, string Path)? offender = isEntity
             ? null
-            : FindNonTriviallyAssignableWrapper(type: type);
+            : FindThreadUnsafeWrapper(type: type);
         if (!isEntity && offender == null)
         {
             return;

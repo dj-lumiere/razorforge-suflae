@@ -121,10 +121,15 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region Auto-derivation: negative cases (ownership-bearing wrappers block derivation)
+    #region RC-field copy: allowed as an implicit share (2026-09-21 — was rejected)
+
+    // A record/tuple owning an RC handle (Retained/Tracked) is now freely copyable: `var c = b` shares the
+    // handle (a refcount bump), release is automatic at teardown. Thread-boundary crossing stays barred
+    // separately (ThreadArgShareabilityTests). These were the former "ownership-bearing wrappers block
+    // derivation" negative cases, now inverted.
 
     [Fact]
-    public void Analyze_RecordWithRetainedField_DoesNotAutoDerive_VarCopyRejected()
+    public void Analyze_RecordWithRetainedField_CopyAllowed()
     {
         string source = """
                         entity Node
@@ -141,12 +146,12 @@ public class AssignableProtocolTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
     [Fact]
-    public void Analyze_RecordWithTrackedField_DoesNotAutoDerive_VarCopyRejected()
+    public void Analyze_RecordWithTrackedField_CopyAllowed()
     {
         string source = """
                         entity Node
@@ -163,12 +168,12 @@ public class AssignableProtocolTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
     [Fact]
-    public void Analyze_TupleContainingRetained_DoesNotAutoDerive_VarCopyRejected()
+    public void Analyze_TupleContainingRetained_CopyAllowed()
     {
         string source = """
                         entity Node
@@ -182,7 +187,7 @@ public class AssignableProtocolTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
@@ -316,10 +321,10 @@ public class AssignableProtocolTests
 
     #endregion
 
-    #region Call-arg / return enforcement still works via the Assignable check
+    #region Call-arg / return enforcement (access tokens still rejected; RC now shares)
 
     [Fact]
-    public void Analyze_CallArg_RecordWithRetained_BareIdentifier_IsRejected()
+    public void Analyze_CallArg_RecordWithRetained_BareIdentifier_IsAllowed()
     {
         string source = """
                         entity Node
@@ -339,7 +344,7 @@ public class AssignableProtocolTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 

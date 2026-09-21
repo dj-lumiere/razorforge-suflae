@@ -2697,11 +2697,13 @@ public sealed partial class TypeRegistry
         // storing a Roamed element (`List[Roamed[E]].add_last`'s `poke(value)`) then aliases without a
         // refcount bump → the element dangles when the caller's handle releases (the List[entity] UAF).
         // Resolve the copy verb through the redirect so instantiated generic bodies get a real retaining
-        // copy — checked BEFORE the RecordTypeSymbol branch (RC wrappers ARE records). SUFLAE-ONLY: in SF an
-        // `entity` is a `Roamed` and containers hold `Roamed[E]` elements that MUST auto-retain on store; in
-        // RazorForge `Roamed`/RC handles are managed MANUALLY (`.roam()`/`.release()` in danger blocks, e.g.
-        // roamed_cycle_api), so auto-retain here would double-count and leak. Gate to the SF compile.
-        if (Language == Language.Suflae && GetRcWrapperBaseName(type: type) is not null)
+        // copy — checked BEFORE the RecordTypeSymbol branch (RC wrappers ARE records). AUTO-RETAIN IN BOTH
+        // REALMS (2026-09-21): an RC copy IS an implicit `share` (a refcount bump), so `var b = rc` is allowed
+        // and copy-lowering injects the retain here; release is already automatic (`destroy` at teardown IS
+        // the decrement — see Retained.rf). This is the store side of the copy-policy decoupling; thread-
+        // boundary crossing stays barred separately via `IsThreadUnsafeReferenceWrapper`. (SF already relied on
+        // this for `Roamed[E]` container elements; RazorForge now shares the retaining-copy path.)
+        if (GetRcWrapperBaseName(type: type) is not null)
         {
             // RC copy verb is `share` (the refcount-bump co-owner mint) — renamed from the STEP-3 unified
             // `store` so it reads as the explicit-share op and is distinct from value-record `store`.

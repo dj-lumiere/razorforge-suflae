@@ -821,13 +821,13 @@ public sealed partial class SemanticVerifier
                                     Object.ResolvedType: not TupleTypeSymbol
                                 };
         if (_registry.Language == Language.RazorForge && isEntityViewInit &&
-            varType is EntityTypeSymbol)
+            _registry.IsEntityKind(type: varType))
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
                 message:
-                $"You are keeping a '{varType.Name}', but a '{varType.Name}' has no copy of its own — it " +
-                $"is single-owner, so 'var {varDecl.Name} = …' would make two owners of one value. Move it " +
-                "out with 'steal' (e.g. 'remove_at'), or keep a shareable handle instead.",
+                $"You are keeping a '{varType.Name}', but it owns a single-owner entity (no copy of its " +
+                $"own), so 'var {varDecl.Name} = …' would make two owners of one value. Move it out with " +
+                "'steal' (e.g. 'remove_at'), or keep a shareable handle instead.",
                 location: varDecl.Location);
         }
 

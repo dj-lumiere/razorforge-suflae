@@ -11,9 +11,10 @@ using static TestHelpers;
 /// </summary>
 public class ImplicitWrapperCopyCallArgTests
 {
-    /// <summary>Passing a Retained variable by name to a Retained-typed parameter is rejected.</summary>
+    /// <summary>Passing a Retained variable by name to a Retained-typed parameter is ALLOWED (2026-09-21):
+    /// the pass-by-copy is an implicit share.</summary>
     [Fact]
-    public void Analyze_CallArg_BareRetained_IsError()
+    public void Analyze_CallArg_BareRetained_IsAllowed()
     {
         string source = """
                         entity Node
@@ -30,11 +31,9 @@ public class ImplicitWrapperCopyCallArgTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
-                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "in call",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
     /// <summary>Passing via `.retain()` at the call site is accepted.</summary>
@@ -106,11 +105,11 @@ public class ImplicitWrapperCopyCallArgTests
     }
 
     /// <summary>
-    /// In a multi-argument call, a bare Retained argument is still flagged even when other
-    /// arguments are trivially copyable.
+    /// In a multi-argument call, a bare Retained argument is ALLOWED (implicit share) alongside
+    /// trivially-copyable arguments.
     /// </summary>
     [Fact]
-    public void Analyze_CallArg_MultiArg_BareRetained_IsError()
+    public void Analyze_CallArg_MultiArg_BareRetained_IsAllowed()
     {
         string source = """
                         entity Node
@@ -127,7 +126,7 @@ public class ImplicitWrapperCopyCallArgTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
                 e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }

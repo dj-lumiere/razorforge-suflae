@@ -149,6 +149,31 @@ public class ThreadArgShareabilityTests
     }
 
     [Fact]
+    public void Analyze_RecordOwningGuardedThreadArg_Ok()
+    {
+        // A record owning a `Guarded` field crosses fine: Guarded carries its own atomic
+        // synchronization, so the record's interior is sound across parallel workers — exactly as a
+        // BARE `Guarded` param crosses (Analyze_SharedThreadArg_Ok). The thread-unsafe offender set is
+        // DERIVED from the thread-shareable classification, so a thread-safe wrapper is never barred
+        // just because a record wraps it. (The old hand-maintained set wrongly rejected this.)
+        string source = Prelude + """
+                                  record Holder
+                                    posted node: Guarded[Node, ReadOnly]
+
+                                  threaded routine work(h: Holder) -> S64
+                                    return 0_s64
+
+                                  routine start()
+                                    var h = Holder(node: Guarded[Node, ReadOnly](from: Node(value: 1)))
+                                    var t = work(h: h)
+                                    discard t.retrieve!()
+                                    return
+                                  """;
+
+        AssertAnalyzesSa(source: source);
+    }
+
+    [Fact]
     public void Analyze_StealBareEntityThreadArg_Ok()
     {
         // A `steal`-moved bare entity is an EXCLUSIVE transfer — the caller loses access, so exactly

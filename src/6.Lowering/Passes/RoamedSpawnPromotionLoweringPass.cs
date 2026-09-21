@@ -16,10 +16,12 @@ namespace Builder.Lowering.Passes;
 /// <para>Previously codegen inserted this <c>call void @promote(handle)</c> itself right before the
 /// spawn. This pass makes it a REAL AST rewrite instead: for every statement that contains a spawn
 /// call, a <c>arg.promote()</c> <see cref="ExpressionStatement"/> is inserted immediately BEFORE that
-/// statement, one per <c>Roamed[T]</c> argument. Because <c>promote</c> mutates the shared controller
-/// in place (the handle pointer is unchanged and returns void), evaluating <c>arg.promote()</c> and
-/// then spawning with the same handle is identical to the old codegen — codegen now just translates
-/// the real call.</para>
+/// statement — one per <c>Roamed[T]</c> argument, AND one per <c>Roamed[T]</c> transitively owned by a
+/// record/tuple argument (reached as <c>arg.field.promote()</c>; see
+/// <see cref="AppendPromotesForValue"/>). Because <c>promote</c> mutates the shared controller in place
+/// (the handle pointer is unchanged and returns void), evaluating <c>arg.promote()</c> and then
+/// spawning with the same handle is identical to the old codegen — codegen now just translates the real
+/// call.</para>
 ///
 /// <para>Reachability already seeds <c>promote</c> for every live <c>Roamed[T]</c> via
 /// <c>ImplicitCallContract.ForLiveType</c>, so the target is live/monomorphized. Mirrors
@@ -99,13 +101,13 @@ internal sealed class RoamedSpawnPromotionLoweringPass(PostprocessingContext ctx
             rewritten.AddRange(collection: CollectPromotes(stmt: stmt));
             rewritten.Add(item: stmt);
 
-            // A Suflae `global` whose storage is a Roamed[T] handle is reachable from every task, so it
-            // must be ESCAPED (armed lock) for the per-statement access-lock brackets to serialize
-            // concurrent mutation. Promote it right AFTER its init assignment. Idempotent + void.
-            if (stmt is AssignmentStatement { IsGlobalInit: true } gi &&
-                TryMakePromote(handle: gi.Target) is { } gpromote)
+            // A Suflae `global` whose storage (transitively) owns a Roamed[T] handle is reachable from
+            // every task, so it must be ESCAPED (armed lock) for the per-statement access-lock brackets
+            // to serialize concurrent mutation. Promote it right AFTER its init assignment — descending
+            // into a record/tuple global the same way spawn args do. Idempotent + void.
+            if (stmt is AssignmentStatement { IsGlobalInit: true } gi)
             {
-                rewritten.Add(item: gpromote);
+                AppendPromotesForValue(root: gi.Target, promotes: rewritten);
             }
         }
 
@@ -113,8 +115,9 @@ internal sealed class RoamedSpawnPromotionLoweringPass(PostprocessingContext ctx
         block.Statements.AddRange(collection: rewritten);
     }
 
-    // Gathers one `arg.promote()` statement per Roamed[T] argument of every spawn call that appears
-    // in `stmt`'s OWN expressions. Spawns nested inside child statements/blocks are handled when the
+    // Gathers a promote() statement for every Roamed[T] transitively owned by an argument of every
+    // spawn call that appears in `stmt`'s OWN expressions (see AppendPromotesForValue for the descent).
+    // Spawns nested inside child statements/blocks are handled when the
     // recursion reaches those blocks, so this only walks expression nodes and does NOT descend into
     // nested Statements (which would double-count them).
     private List<Statement> CollectPromotes(Statement stmt)
@@ -173,12 +176,96 @@ internal sealed class RoamedSpawnPromotionLoweringPass(PostprocessingContext ctx
     {
         foreach (Expression arg in spawn.Arguments)
         {
-            Expression handle = Unwrap(arg: arg);
-            if (TryMakePromote(handle: handle) is { } promote)
-            {
-                promotes.Add(item: promote);
-            }
+            AppendPromotesForValue(root: Unwrap(arg: arg), promotes: promotes);
         }
+    }
+
+    // Emits a `promote()` for `root` if it is itself a Roamed[T], otherwise DESCENDS into its record
+    // fields / tuple elements to promote every transitively-owned Roamed[T]. Crossing a spawn boundary
+    // by copy shares the SAME controller for each nested handle (the copy is a refcount bump, not a
+    // deep clone), so promoting a nested handle ONCE on the owner side — via `root.field.promote()` —
+    // arms the shared controller for the callee's copy too, identical to a top-level Roamed arg. The
+    // walk STOPS at a Roamed leaf (its inner value lives behind an opaque controller, not inline) and
+    // at any OTHER wrapper (a non-Roamed handle is copied by its own share/refcount semantics and its
+    // payload is not `.field`-reachable). @llvm inline-storage records (Array[Roamed[E],N]) have no AST
+    // fields to address, so an owned Roamed there is NOT reached — a known gap, not silently claimed.
+    private void AppendPromotesForValue(Expression root, List<Statement> promotes)
+    {
+        if (TryMakePromote(handle: root) is { } promote)
+        {
+            promotes.Add(item: promote);
+            return;
+        }
+
+        // A non-Roamed wrapper is an opaque leaf — do not descend into its internal fields (which a
+        // RecordTypeSymbol match below would otherwise do, since wrappers ARE records).
+        if (root.ResolvedType is { } rt &&
+            LlvmEmitter.GetGenericBaseNameStatic(type: rt) is { } rtBase &&
+            RuntimeContract.WrapperTypes.Contains(item: rtBase))
+        {
+            return;
+        }
+
+        switch (root.ResolvedType)
+        {
+            case RecordTypeSymbol { IsGenericDefinition: false } record
+                when record.MemberVariables is { Count: > 0 }:
+                foreach (MemberVariableInfo field in record.MemberVariables)
+                {
+                    if (!OwnsRoamed(type: field.Type))
+                    {
+                        continue;
+                    }
+
+                    var access = new MemberExpression(Object: root, MemberName: field.Name,
+                        Location: root.Location) { ResolvedType = field.Type };
+                    AppendPromotesForValue(root: access, promotes: promotes);
+                }
+
+                break;
+            case TupleTypeSymbol tuple:
+                for (int i = 0; i < tuple.ElementTypes.Count; i++)
+                {
+                    if (!OwnsRoamed(type: tuple.ElementTypes[index: i]))
+                    {
+                        continue;
+                    }
+
+                    var access = new MemberExpression(Object: root, MemberName: $"item{i}",
+                        Location: root.Location) { ResolvedType = tuple.ElementTypes[index: i] };
+                    AppendPromotesForValue(root: access, promotes: promotes);
+                }
+
+                break;
+        }
+    }
+
+    // True iff `type` transitively owns a Roamed[T] REACHABLE by field/element access from a copied
+    // value: it IS a Roamed, or a plain record (with AST fields) / tuple that owns one. STOPS at a
+    // non-Roamed wrapper (opaque, copied by its own semantics) — mirrors the descent in
+    // AppendPromotesForValue exactly, so the prune never skips a path the descent could promote nor
+    // admits one it cannot. Cannot cycle: record fields / tuple elements are owned BY VALUE (finite
+    // size), and the walk stops at every wrapper.
+    private static bool OwnsRoamed(TypeSymbol type)
+    {
+        string? baseName = LlvmEmitter.GetGenericBaseNameStatic(type: type);
+        if (baseName == RuntimeContract.Roamed)
+        {
+            return true;
+        }
+
+        if (baseName is not null && RuntimeContract.WrapperTypes.Contains(item: baseName))
+        {
+            return false;
+        }
+
+        return type switch
+        {
+            TupleTypeSymbol t => t.ElementTypes.Any(predicate: OwnsRoamed),
+            RecordTypeSymbol { IsGenericDefinition: false } r when r.MemberVariables is { Count: > 0 }
+                => r.MemberVariables.Any(predicate: m => OwnsRoamed(type: m.Type)),
+            _ => false
+        };
     }
 
     private static Expression Unwrap(Expression arg)

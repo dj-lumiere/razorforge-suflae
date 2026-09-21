@@ -12,7 +12,6 @@ public sealed partial class SemanticVerifier
     private const string ViewingWrapperName = Declaration.RuntimeContract.Viewing;
     private const string ConsultingWrapperName = Declaration.RuntimeContract.Consulting;
     private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
-    private const string ShareVerb = "a.share()";
 
     private bool IsNestedModifying(Expression source)
     {
@@ -215,10 +214,11 @@ public sealed partial class SemanticVerifier
     private static readonly Dictionary<string, string> NonTriviallyAssignableWrappers =
         new(comparer: StringComparer.Ordinal)
         {
-            [key: Declaration.RuntimeContract.Retained] = ShareVerb,
-            [key: Declaration.RuntimeContract.Tracked] = ShareVerb,
-            [key: Declaration.RuntimeContract.Guarded] = ShareVerb,
-            [key: Declaration.RuntimeContract.Witnessed] = ShareVerb,
+            // RC wrappers (Retained/Tracked/Guarded/Witnessed) are NOT here (2026-09-21): an RC copy is an
+            // implicit `share` (a refcount bump), so `var b = rc` is allowed — copy-lowering injects the
+            // retain (ResolveStoreHook → share), teardown auto-releases. Only the scope-bound access tokens
+            // stay non-implicitly-copyable (copying one would let a borrow escape its scope). Thread-boundary
+            // crossing is a SEPARATE axis — see `IsThreadUnsafeReferenceWrapper`.
             [key: ViewingWrapperName] = ScopedNoEscapeHint,
             [key: ModifyingWrapperName] = ScopedNoEscapeHint,
             [key: ConsultingWrapperName] = ScopedNoEscapeHint,
@@ -248,9 +248,41 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsThreadShareable(TypeSymbol type)
     {
-        return type.BareName is Declaration.RuntimeContract.Atomic
+        return IsThreadShareableName(bareName: type.BareName);
+    }
+
+    /// <summary>
+    /// The SINGLE source of truth for the thread-safe classification: true when a wrapper carries its own
+    /// cross-thread synchronization (an atomic refcount — <c>Atomic</c>/<c>Guarded</c>/<c>Witnessed</c> — or
+    /// a multi-threaded lock — <c>Consulting</c>/<c>Amending</c>) and may therefore cross an async spawn
+    /// boundary by reference. Both <see cref="IsThreadShareable"/> and the thread-crossing offender check
+    /// (<see cref="IsThreadUnsafeReferenceWrapper"/>) derive from this, so the safe and unsafe sets can never
+    /// disagree — the bug the old hand-maintained <c>ThreadUnsafeReferenceWrappers</c> set had, where it
+    /// listed Guarded/Witnessed/Consulting/Amending as unsafe while this predicate called them safe.
+    /// </summary>
+    private static bool IsThreadShareableName(string bareName)
+    {
+        return bareName is Declaration.RuntimeContract.Atomic
             or Declaration.RuntimeContract.Guarded or Declaration.RuntimeContract.Witnessed
             or Declaration.RuntimeContract.Consulting or Declaration.RuntimeContract.Amending;
+    }
+
+    /// <summary>
+    /// True when <paramref name="bareName"/> is an aliasing reference wrapper (an RC handle or a scope token —
+    /// it points INTO shared interior state) that lacks its own cross-thread synchronization, so a value
+    /// transitively owning one cannot cross an async spawn boundary by copy (a non-atomic refcount / a
+    /// single-thread borrow raced across parallel workers). DERIVED from <see cref="IsThreadShareableName"/>
+    /// (the single thread-safe source): it is exactly the forwarding wrappers MINUS the thread-shareable ones
+    /// MINUS <c>Roamed</c> (which crosses via <c>promote()</c>, handled at the call site in
+    /// <c>ValidateAsyncRoutineParameter</c>). The raw-ptr <c>Hijacked</c> escape hatch is excluded by
+    /// <see cref="Declaration.RuntimeContract.ForwardingWrapperTypes"/> (the user owns that unsafety). Resolves to
+    /// {Retained, Tracked, Viewing, Modifying}.
+    /// </summary>
+    private static bool IsThreadUnsafeReferenceWrapper(string bareName)
+    {
+        return Declaration.RuntimeContract.ForwardingWrapperTypes.Contains(item: bareName) &&
+               bareName != Declaration.RuntimeContract.Roamed &&
+               !IsThreadShareableName(bareName: bareName);
     }
 
     private static bool IsTriviallyAssignable(TypeSymbol type)
@@ -313,16 +345,36 @@ public sealed partial class SemanticVerifier
     private static (string Wrapper, string Path)? FindNonTriviallyAssignableWrapper(
         TypeSymbol type)
     {
-        return FindNonTriviallyAssignableWrapperCore(type: type,
+        return FindOffendingWrapperCore(type: type,
             prefix: "",
-            visited: new HashSet<string>(comparer: StringComparer.Ordinal));
+            visited: new HashSet<string>(comparer: StringComparer.Ordinal),
+            isOffender: static n => NonTriviallyAssignableWrappers.ContainsKey(key: n));
     }
 
-    private static (string, string)? FindNonTriviallyAssignableWrapperCore(TypeSymbol type,
-        string prefix, HashSet<string> visited)
+    /// <summary>
+    /// Like <see cref="FindNonTriviallyAssignableWrapper"/> but keyed on the THREAD-unsafe reference
+    /// wrappers (single-thread RC handles + single-thread scoped tokens) — a value transitively owning one
+    /// cannot cross an async spawn boundary by copy (a non-atomic refcount / a single-thread borrow raced
+    /// across parallel workers). DECOUPLED from the copy-policy dict so the two axes move independently: RC is
+    /// now implicitly copyable (<c>var b = rc</c>) yet a value owning single-thread RC is still barred from
+    /// crossing a boundary. The offender set is DERIVED from <see cref="IsThreadUnsafeReferenceWrapper"/>, so
+    /// the thread-SAFE wrappers (Guarded/Witnessed atomic, Consulting/Amending lock-backed) that cross fine as
+    /// a bare param ALSO cross fine when merely OWNED by a record — the former hand-maintained set wrongly
+    /// barred those.
+    /// </summary>
+    private static (string Wrapper, string Path)? FindThreadUnsafeWrapper(TypeSymbol type)
+    {
+        return FindOffendingWrapperCore(type: type,
+            prefix: "",
+            visited: new HashSet<string>(comparer: StringComparer.Ordinal),
+            isOffender: static n => IsThreadUnsafeReferenceWrapper(bareName: n));
+    }
+
+    private static (string, string)? FindOffendingWrapperCore(TypeSymbol type,
+        string prefix, HashSet<string> visited, Func<string, bool> isOffender)
     {
         string baseName = type.BareName;
-        if (NonTriviallyAssignableWrappers.ContainsKey(key: baseName))
+        if (isOffender(arg: baseName))
         {
             return (baseName, prefix.Length == 0
                 ? "<value>"
@@ -332,19 +384,19 @@ public sealed partial class SemanticVerifier
         if (type is RecordTypeSymbol record && !(record is
                 { IsGenericDefinition: true, TypeArguments: not { Count: > 0 } }))
         {
-            return FindInRecord(record: record, prefix: prefix, visited: visited);
+            return FindInRecord(record: record, prefix: prefix, visited: visited, isOffender: isOffender);
         }
 
         if (type is TupleTypeSymbol tuple)
         {
-            return FindInTuple(tuple: tuple, prefix: prefix, visited: visited);
+            return FindInTuple(tuple: tuple, prefix: prefix, visited: visited, isOffender: isOffender);
         }
 
         return null;
     }
 
     private static (string, string)? FindInRecord(RecordTypeSymbol record, string prefix,
-        HashSet<string> visited)
+        HashSet<string> visited, Func<string, bool> isOffender)
     {
         if (!visited.Add(item: record.FullName))
         {
@@ -356,9 +408,10 @@ public sealed partial class SemanticVerifier
             string childPath = prefix.Length == 0
                 ? member.Name
                 : $"{prefix}.{member.Name}";
-            (string, string)? found = FindNonTriviallyAssignableWrapperCore(type: member.Type,
+            (string, string)? found = FindOffendingWrapperCore(type: member.Type,
                 prefix: childPath,
-                visited: visited);
+                visited: visited,
+                isOffender: isOffender);
             if (found != null)
             {
                 return found;
@@ -369,7 +422,7 @@ public sealed partial class SemanticVerifier
     }
 
     private static (string, string)? FindInTuple(TupleTypeSymbol tuple, string prefix,
-        HashSet<string> visited)
+        HashSet<string> visited, Func<string, bool> isOffender)
     {
         if (!visited.Add(item: tuple.FullName))
         {
@@ -381,10 +434,11 @@ public sealed partial class SemanticVerifier
             string childPath = prefix.Length == 0
                 ? $".{i}"
                 : $"{prefix}.{i}";
-            (string, string)? found = FindNonTriviallyAssignableWrapperCore(
+            (string, string)? found = FindOffendingWrapperCore(
                 type: tuple.ElementTypes[index: i],
                 prefix: childPath,
-                visited: visited);
+                visited: visited,
+                isOffender: isOffender);
             if (found != null)
             {
                 return found;

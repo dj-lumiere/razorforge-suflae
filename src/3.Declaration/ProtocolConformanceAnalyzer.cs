@@ -35,9 +35,10 @@ internal sealed class ProtocolConformanceAnalyzer
 
         // SPLIT (2026-08-23) — structural vs semantic:
         // * Assignable/Copyable are STRUCTURAL (memory/value semantics): a record is assignable by default,
-        //   EXCLUDING the 9 non-assignable wrapper/token types (Viewing/Modifying/Amending/Consulting/
-        //   Retained/Roamed/Guarded/Tracked/Witnessed) and any record transitively containing one. Entities are
-        //   NEVER assignable (identity). This is auto-conferred (no `obeys` needed) by the two passes below.
+        //   EXCLUDING entities (identity, NEVER assignable). Auto-conferred (no `obeys` needed) by the two
+        //   passes below. (The RC wrappers' `var b = rc` permission and the 4 scope-bound access tokens'
+        //   rejection are enforced by the COPY-POLICY path — SemanticVerifier's `NonTriviallyAssignableWrappers`
+        //   + `ResolveStoreHook` — not by an `Assignable` protocol stamp here; see those for RC = implicit share.)
         // * Equatable/Comparable/Hashable are SEMANTIC (opt-in): equality/ordering is an assertion, so they
         //   are NOT auto-conferred — the generic `ApplyEverywhereConformance` is deliberately NOT run, so a
         //   plain value record does not silently gain `==`/`<`. The everywhere-derive loop registers their
@@ -301,12 +302,12 @@ internal sealed class ProtocolConformanceAnalyzer
         }
     }
 
-    // RC wrappers (Retained/Tracked/Guarded/Witnessed/Roamed) deliberately do NOT obey `Assignable` — an RC
-    // handle is not implicitly copyable (that would silently mint a co-owner). Duplication is the explicit
-    // `.share()` member routine, and a bare `var b = rc` is rejected (RF-S420). A record that HOLDS an RC
-    // field is likewise NON-Assignable (its MemberVariableAssignable fails on the RC field) — copying it would silently
-    // share the handle, so it must be reconstructed explicitly (WithBaseNotAssignable). (The former
-    // `ApplyAutoAssignableConformance` that stamped `Assignable` on the 5 RC wrappers is removed.)
+    // RC wrappers (Retained/Tracked/Guarded/Witnessed/Roamed) now permit `var b = rc` (2026-09-21): an RC
+    // copy is an implicit `share` (refcount bump), release is automatic (`destroy` at teardown IS the
+    // decrement). This is enforced by the COPY-POLICY path — the analyzer no longer lists them in
+    // `NonTriviallyAssignableWrappers`, and the retaining copy is injected via `ResolveStoreHook` (→ `share`).
+    // No `Assignable` protocol stamp is needed on the wrappers themselves for this. Thread-boundary crossing
+    // stays barred separately (`IsThreadUnsafeReferenceWrapper`) — the two axes are decoupled.
 
     /// <summary>
     /// Recursively collects all transitive parent protocols from a protocol's obeys chain.

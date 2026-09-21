@@ -2443,7 +2443,13 @@ public sealed partial class SemanticVerifier
         if (member.Object is IdentifierExpression letTarget && !memberRoutine.IsReadOnly)
         {
             VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
-            if (targetVar is { IsModifiable: false })
+            // A record is a VALUE type: a method receives a COPY of the receiver, so calling it can
+            // never mutate the caller's binding in place. In-place mutation (and therefore this
+            // immutable-binding guard) is an ENTITY concern — records are exempt. This also removes a
+            // false positive: numeric value methods (e.g. B64.truediv_unchecked) are categorized
+            // "modifying" only because mutation inference floors at Writable and never demotes to
+            // Readonly, so without this skip they wrongly reject `SOME_PRESET.method(x)`.
+            if (targetVar is { IsModifiable: false } && targetVar.Type is not RecordTypeSymbol)
             {
                 ReportError(code: SemanticDiagnosticCode.ModifyingCallOnImmutable,
                     message:

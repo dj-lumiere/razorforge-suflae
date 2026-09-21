@@ -115,6 +115,12 @@ internal static class LazyJitPlanner
                     SynthesizedBodies = r.SynthesizedBodies,
                     InstantiatedGenericBodies =
                         new Dictionary<string, MonomorphizedBody> { [key: name] = body },
+                    // Pass the live set so this per-routine module takes the on-demand type-emission path
+                    // (LlvmEmitter.GenerateTypeDeclarations skips the broad registry sweep when reachability
+                    // ran). Without it the sweep emits EVERY registered stdlib record — including unreachable
+                    // ones whose field types the warm registry left unmonomorphized (e.g. Matrix4R4C's
+                    // Vector[B32,4] field surfacing as the generic-def Vector) — which hard-errors in codegen.
+                    LiveRoutineKeys = r.LiveRoutineKeys,
                     ResidentSymbols = resident,
                     ForExternalJitModule = true
                 }).Generate();

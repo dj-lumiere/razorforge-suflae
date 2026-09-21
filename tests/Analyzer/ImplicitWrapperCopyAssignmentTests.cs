@@ -11,9 +11,9 @@ using static TestHelpers;
 /// </summary>
 public class ImplicitWrapperCopyAssignmentTests
 {
-    /// <summary>`b = a` where `a: Retained[T]` is rejected.</summary>
+    /// <summary>`b = a` where `a: Retained[T]` is ALLOWED (2026-09-21): an RC copy is an implicit share.</summary>
     [Fact]
-    public void Analyze_Assignment_BareRetainedCopy_IsError()
+    public void Analyze_Assignment_BareRetainedCopy_IsAllowed()
     {
         string source = """
                         entity Node
@@ -28,11 +28,9 @@ public class ImplicitWrapperCopyAssignmentTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
-                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "in assignment",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+                e.Code == Builder.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
     /// <summary>`b = a.retain()` at the assignment site is accepted.</summary>

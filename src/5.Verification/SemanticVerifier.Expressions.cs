@@ -1286,12 +1286,14 @@ public sealed partial class SemanticVerifier
         TypeSymbol targetType, TypeSymbol valueType, SourceLocation location)
     {
         // RazorForge: Entity bare assignment prohibition.
-        // `b = a` where `a` is a bare identifier of entity type is a build error.
+        // `b = a` where `a` is a bare identifier of entity-KIND type (a bare entity, or a record/tuple that
+        // transitively owns one) is a build error — copying it would make two owners of the single-owner
+        // entity inside. Move it (`steal`) or hold a shareable handle.
         if (_registry.Language == Language.RazorForge && value is IdentifierExpression &&
-            valueType is EntityTypeSymbol)
+            _registry.IsEntityKind(type: valueType))
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                message: $"Cannot directly assign entity of type '{valueType.Name}'. " +
+                message: $"Cannot directly assign '{valueType.Name}': it owns a single-owner entity. " +
                          "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
                 location: location);
         }
