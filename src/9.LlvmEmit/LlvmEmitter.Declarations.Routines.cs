@@ -667,6 +667,11 @@ public partial class LlvmEmitter
             effectiveBody = synthStub;
         }
 
+        // Hand the routine's ever-stolen set (SA-computed, on the declaration) to ResetPerRoutineState,
+        // which runs nested inside GenerateRoutineBody and owns the per-routine guard-set reset. Drives
+        // the use-after-steal null-guard in EmitIdentifier; null → no guards (synthesized/other paths).
+        _pendingEverStolen = routine.EverStolenVariableNames;
+
         if (effectiveBody != null)
         {
             GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: info);
@@ -719,6 +724,11 @@ public partial class LlvmEmitter
         _localRetainedVars.Clear();
         _currentRoutineEntryAllocas.Clear();
         _emittedAllocaNames.Clear();
+
+        // Use-after-steal guard set for this routine (from the declaration via _pendingEverStolen; empty
+        // for synthesized bodies that never went through EmitDefinitionBody). Consume-and-reset.
+        _everStolenInCurrentRoutine = _pendingEverStolen ?? [];
+        _pendingEverStolen = null;
 
         // Set current function return type for use in EmitReturn
         _currentRoutineReturnType = routine.ReturnType;

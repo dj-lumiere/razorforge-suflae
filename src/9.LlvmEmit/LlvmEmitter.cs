@@ -134,6 +134,16 @@ public partial class LlvmEmitter
     /// <summary>Counter for generating unique label names.</summary>
     private int _labelCounter;
 
+    /// <summary>Names stolen ANYWHERE in the routine currently being emitted — every entity (`ptr`) load
+    /// of such a name gets a use-after-steal null-guard. Reset per routine from the declaration's
+    /// <c>EverStolenVariableNames</c>; empty (no guards) for synthesized bodies with no declaration.</summary>
+    private HashSet<string> _everStolenInCurrentRoutine = [];
+
+    /// <summary>Carries the current routine declaration's ever-stolen set into <c>ResetPerRoutineState</c>
+    /// (which runs nested inside body emission and owns the per-routine reset). Set by
+    /// <c>EmitDefinitionBody</c> before body emission; null for synthesized bodies (→ no guards).</summary>
+    private HashSet<string>? _pendingEverStolen;
+
     /// <summary>Set of already-generated type declarations to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedTypes = [];
 

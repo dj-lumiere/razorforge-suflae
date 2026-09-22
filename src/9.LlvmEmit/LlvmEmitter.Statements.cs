@@ -202,7 +202,7 @@ public partial class LlvmEmitter
         // teardown return-spill `var __td_ret = Retained[T](ctrl)` (a CreatorExpression) as a copy,
         // injecting a spurious retain → strong 1→2 → double-free at scope exit. Removed.
 
-        ConsumeTransferredLocalOwnership(expr: varDecl.Initializer);
+        ConsumeTransferredLocalOwnership(sb: sb, expr: varDecl.Initializer);
     }
 
     /// <summary>Builds the diagnostic thrown when a variable's type cannot be determined.</summary>
@@ -524,7 +524,7 @@ public partial class LlvmEmitter
                     GetGenericBaseName(type: memberType) is not { } targetBase ||
                     targetBase != Declaration.RuntimeContract.Roamed)
                 {
-                    ConsumeTransferredLocalOwnership(expr: assign.Value);
+                    ConsumeTransferredLocalOwnership(sb: sb, expr: assign.Value);
                 }
 
                 break;
@@ -542,7 +542,7 @@ public partial class LlvmEmitter
     /// <summary>
     /// Performs the consume transferred local ownership step for this compiler phase.
     /// </summary>
-    private void ConsumeTransferredLocalOwnership(Expression expr)
+    private void ConsumeTransferredLocalOwnership(StringBuilder sb, Expression expr)
     {
         // Borrowed-reference values reach here as bare identifiers / member accesses or
         // wrapped in a steal expression. Named arguments also wrap their inner value, so
@@ -570,6 +570,25 @@ public partial class LlvmEmitter
         if (expr is StealExpression)
         {
             _localRetainedVars.RemoveAll(match: e => e.Name == sourceName);
+        }
+
+        // Runtime use-after-steal net: NULL-STAMP the moved-out entity's slot so any later USE of the
+        // binding (loop/aliased/indirect — beyond what static analysis proves dead) loads null and hits
+        // the EmitIdentifier null-guard → a loud rf_crash instead of a silent stale-pointer use. Keyed on
+        // the routine's ever-stolen set (NOT `expr is StealExpression`): ExpressionLoweringPass strips the
+        // `steal` wrapper before codegen, so the wrapper is gone here — the SA-computed ever-stolen set is
+        // the robust signal, and it also matches EmitIdentifier's guard-elision key exactly. Only entity-
+        // repr locals (heap `ptr` in an alloca) get nulled; record/value locals do not. `rf_invalidate(null)`
+        // is already a no-op, so the exit-cleanup over the nulled slot is safe.
+        if (_everStolenInCurrentRoutine.Contains(item: sourceName) &&
+            _localVariables.TryGetValue(key: sourceName, value: out TypeSymbol? stolenType) &&
+            GetLlvmType(type: stolenType) == "ptr")
+        {
+            string llvmName =
+                _localVarLlvmNames.TryGetValue(key: sourceName, value: out string? unique)
+                    ? unique
+                    : sourceName;
+            EmitLine(sb: sb, line: $"  store ptr null, ptr %{llvmName}.addr");
         }
     }
 

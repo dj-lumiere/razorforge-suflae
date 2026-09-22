@@ -373,6 +373,7 @@ public sealed partial class SemanticVerifier
         if (steal.Operand is IdentifierExpression stolenId)
         {
             _deadrefVariables.Add(item: stolenId.Name);
+            _everStolenVariables.Add(item: stolenId.Name);
         }
 
         // `steal T` unwraps to bare T — T is a binding-only ownership marker,

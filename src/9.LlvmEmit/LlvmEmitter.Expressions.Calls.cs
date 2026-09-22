@@ -816,7 +816,7 @@ public partial class LlvmEmitter
             argValues.Insert(index: 0, item: sretPtr);
             string sretArgs = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({sretArgs})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             string sretResult = NextTemp();
             EmitLine(sb: sb, line: $"  {sretResult} = load {returnType}, ptr {sretPtr}");
             return sretResult;
@@ -831,7 +831,7 @@ public partial class LlvmEmitter
             string args = BuildCallArgs(types: argTypes, values: argValues);
             string r = NextTemp();
             EmitLine(sb: sb, line: $"  {r} = call {memberRoutineCoerce} @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             return CoerceAbiToStruct(sb: sb,
                 abiValue: r,
                 abiType: memberRoutineCoerce,
@@ -842,7 +842,7 @@ public partial class LlvmEmitter
         {
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             return "undef";
         }
         else
@@ -850,7 +850,7 @@ public partial class LlvmEmitter
             string result = NextTemp();
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             return result;
         }
     }
@@ -1059,7 +1059,7 @@ public partial class LlvmEmitter
             argValues.Insert(index: 0, item: sretPtr);
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             string result = NextTemp();
             EmitLine(sb: sb, line: $"  {result} = load {returnType}, ptr {sretPtr}");
             return result;
@@ -1073,7 +1073,7 @@ public partial class LlvmEmitter
             string result = NextTemp();
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  {result} = call {calleeCoerce} @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             return CoerceAbiToStruct(sb: sb,
                 abiValue: result,
                 abiType: calleeCoerce,
@@ -1084,14 +1084,14 @@ public partial class LlvmEmitter
         {
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
-            ConsumeTransferredCallOwnership(arguments: arguments);
+            ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
             return "undef";
         }
 
         string callResult = NextTemp();
         string argsStr = BuildCallArgs(types: argTypes, values: argValues);
         EmitLine(sb: sb, line: $"  {callResult} = call {callReturnType} @{mangledName}({argsStr})");
-        ConsumeTransferredCallOwnership(arguments: arguments);
+        ConsumeTransferredCallOwnership(sb: sb, arguments: arguments);
         if (isCExtern && returnType == "half" && callReturnType == "i16")
         {
             string halfResult = NextTemp();
@@ -1619,11 +1619,11 @@ public partial class LlvmEmitter
     /// <summary>
     /// Performs the consume transferred call ownership step for this compiler phase.
     /// </summary>
-    private void ConsumeTransferredCallOwnership(IEnumerable<Expression> arguments)
+    private void ConsumeTransferredCallOwnership(StringBuilder sb, IEnumerable<Expression> arguments)
     {
         foreach (Expression argument in arguments)
         {
-            ConsumeTransferredLocalOwnership(expr: argument);
+            ConsumeTransferredLocalOwnership(sb: sb, expr: argument);
         }
     }
 

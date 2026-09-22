@@ -158,6 +158,7 @@ public sealed partial class SemanticVerifier
         RoutineInfo? previousRoutine = _currentRoutine;
         _currentRoutine = routineInfo;
         _deadrefVariables.Clear();
+        _everStolenVariables.Clear();
 
         _registry.EnterScope(kind: ScopeKind.Function, name: routine.Name);
         DeclareParametersInScope(routine: routine, routineInfo: routineInfo);
@@ -303,6 +304,7 @@ public sealed partial class SemanticVerifier
         // Snapshot the per-routine "out of scope via steal/consumption" set onto the declaration so
         // the scope-exit teardown pass can exclude these bindings from `destroy`.
         routine.StolenVariableNames = [.. _deadrefVariables];
+        routine.EverStolenVariableNames = [.. _everStolenVariables];
     }
 
     /// <summary>

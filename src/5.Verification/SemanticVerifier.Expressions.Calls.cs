@@ -2514,6 +2514,7 @@ public sealed partial class SemanticVerifier
             objectType.BareName == "Channel")
         {
             _deadrefVariables.Add(item: sendSource.Name);
+            _everStolenVariables.Add(item: sendSource.Name);
         }
     }
 

@@ -176,6 +176,9 @@ public sealed partial class SemanticVerifier
     /// <summary>Tracks variables invalidated by steal/ownership transfer (#11).</summary>
     private readonly HashSet<string> _deadrefVariables = [];
 
+    /// <summary>Ever-stolen-anywhere set (never cleared per-branch) — drives the codegen UAS guard-elision.</summary>
+    private readonly HashSet<string> _everStolenVariables = [];
+
     /// <summary>Flags-context stack: while a flags type is on top, bare identifiers are resolved
     /// against the flag members of that type.</summary>
     private readonly Stack<TypeSymbol> _flagsContextStack = new();

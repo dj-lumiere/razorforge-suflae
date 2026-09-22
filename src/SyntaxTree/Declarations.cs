@@ -249,6 +249,13 @@ public record RoutineDeclaration(
     public HashSet<string>? StolenVariableNames { get; set; }
 
     /// <summary>
+    /// Superset of <see cref="StolenVariableNames"/>: every variable stolen ANYWHERE in this routine
+    /// (accumulated across all branches, never cleared per-branch). Drives the codegen use-after-steal
+    /// null-guard elision — a variable absent here is never stolen, so its loads emit no guard.
+    /// </summary>
+    public HashSet<string>? EverStolenVariableNames { get; set; }
+
+    /// <summary>
     /// The <see cref="RoutineInfo"/> this declaration was registered as, attached at registration time
     /// (SignatureResolver for user code, StdlibLoader for the stdlib). Codegen reads this DIRECTLY
     /// instead of re-deriving the binding by parsing the name string and looking the owner type up by

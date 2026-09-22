@@ -254,7 +254,7 @@ public partial class LlvmEmitter
         // any bare source local — matching every other moved field.
         foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
         {
-            ConsumeTransferredLocalOwnership(expr: fieldExpr);
+            ConsumeTransferredLocalOwnership(sb: sb, expr: fieldExpr);
         }
 
         // Allocate and initialize
@@ -312,7 +312,7 @@ public partial class LlvmEmitter
         // the new entity. Drop the source locals from the cleanup set so the function-exit
         // rf_invalidate pass doesn't free the same allocation now held by the field. (Roamed fields
         // are excluded — they were retained above, and their arg keeps its own reference.)
-        ConsumeTransferredCallOwnership(arguments: argsToConsume);
+        ConsumeTransferredCallOwnership(sb: sb, arguments: argsToConsume);
 
         return entityPtr;
     }
