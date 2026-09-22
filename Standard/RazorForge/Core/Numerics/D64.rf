@@ -580,6 +580,56 @@ routine D64.diagnose() -> Text
 # ============================================================================
 
 # ============================================================================
+# Comparison selectors and convenience (min / max / clamp / recip / powi / midpoint)
+# ============================================================================
+
+### Returns the smaller of `me` and `you` under decimal ordering.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`, otherwise `you`.
+routine D64.min(you: D64) -> D64
+  return if me <= you then me else you
+
+### Returns the larger of `me` and `you` under decimal ordering.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`, otherwise `you`.
+routine D64.max(you: D64) -> D64
+  return if me >= you then me else you
+
+### Restricts `me` to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound.
+### :param max_val: The upper bound.
+### :returns: The clamped value.
+@positional
+routine D64.clamp(min_val: D64, max_val: D64) -> D64
+  return me.min(max_val).max(min_val)
+
+### Returns the reciprocal `1 / me`.
+### :returns: The multiplicative inverse.
+routine D64.recip() -> D64
+  return D64_ONE.truediv_unchecked(me)
+
+### Returns `me` raised to the integer power `n` via exponentiation by squaring.
+### A negative `n` inverts the result.
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine D64.powi(n: S32) -> D64
+  var base = if n < 0_s32 then D64_ONE.truediv_unchecked(me) else me
+  var count = n.unsigned_abs()
+  var result = D64_ONE
+  while count > 0_u32
+    if count.bitand(1_u32) == 1_u32
+      result = result.mul_unchecked(base)
+    base = base.mul_unchecked(base)
+    count = count.lshr(1_u32)
+  return result
+
+### Returns `(me + you) / 2`.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine D64.midpoint(you: D64) -> D64
+  return me.add_unchecked(you).truediv_unchecked(2.0_d64)
+
+# ============================================================================
 # Constants
 # ============================================================================
 

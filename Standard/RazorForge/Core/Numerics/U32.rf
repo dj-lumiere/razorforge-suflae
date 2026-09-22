@@ -241,6 +241,20 @@ routine U32.mod!(you: U32) -> U32
   return LLVM::unsigned_rem(a: me, b: you)
 
 # ============================================================================
+# Negation (wrapping)
+# ============================================================================
+
+### Returns the two's-complement negation `(2³² - me) mod 2³²`.
+### :returns: The wrapped negation.
+routine U32.neg_wrap() -> U32
+  return LLVM::sub(a: 0_u32, b: me)
+
+### Returns `(wrapping negation, overflowed)`. Overflow occurs for any non-zero value.
+### :returns: A tuple of `(wrapped negation, overflow flag)`.
+routine U32.neg_with_overflow() -> (U32, Bool)
+  return (LLVM::sub(a: 0_u32, b: me), me != 0_u32)
+
+# ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
@@ -320,6 +334,58 @@ routine U32.mul_clamp(you: U32) -> U32
   if LLVM::unsigned_gt(wide, 4294967295_u64)
     return U32_MAX
   return LLVM::int_truncate[U64, U32](wide)
+
+# ============================================================================
+# Widening / Carrying Arithmetic (multi-word building blocks)
+# ============================================================================
+
+### Returns `me + you + carry` as `(wrapped_sum, carry_out)`.
+### Chains across words to add integers wider than `U32`: feed each word's
+### `carry_out` in as the next higher word's `carry`.
+### :param you: The right operand.
+### :param carry: The incoming carry bit from the lower word.
+### :returns: A tuple of `(wrapped sum, outgoing carry)`.
+routine U32.carrying_add(you: U32, carry: Bool) -> (U32, Bool)
+  var carry_val: U32 = if carry then 1_u32 else 0_u32
+  var first = me.add_with_overflow(you)
+  var second = first.item0.add_with_overflow(carry_val)
+  return (second.item0, first.item1 or second.item1)
+
+### Returns `me - you - borrow` as `(wrapped_difference, borrow_out)`.
+### Chains across words to subtract integers wider than `U32`.
+### :param you: The value to subtract.
+### :param borrow: The incoming borrow bit from the lower word.
+### :returns: A tuple of `(wrapped difference, outgoing borrow)`.
+routine U32.borrowing_sub(you: U32, borrow: Bool) -> (U32, Bool)
+  var borrow_val: U32 = if borrow then 1_u32 else 0_u32
+  var first = me.sub_with_overflow(you)
+  var second = first.item0.sub_with_overflow(borrow_val)
+  return (second.item0, first.item1 or second.item1)
+
+### Returns the full `me * you` product as `(low, high)` halves.
+### The product of two `U32` values needs 64 bits; this splits it into the low
+### and high `U32` words without loss.
+### :param you: The right operand.
+### :returns: A tuple of `(low 32 bits, high 32 bits)`.
+routine U32.widening_mul(you: U32) -> (U32, U32)
+  var wide = LLVM::mul(LLVM::zero_extend[U32, U64](me), LLVM::zero_extend[U32, U64](you))
+  var lo = LLVM::int_truncate[U64, U32](wide)
+  var hi = LLVM::int_truncate[U64, U32](LLVM::shift_right_unsigned(wide, 32_u64))
+  return (lo, hi)
+
+### Returns `me * you + carry` as `(low, high)` halves.
+### Never overflows: the largest result is `(2³²-1)² + (2³²-1) < 2⁶⁴`. The
+### workhorse of schoolbook multiplication — `carry` accumulates the high word
+### carried out of the previous column.
+### :param you: The right operand.
+### :param carry: The value to add to the product.
+### :returns: A tuple of `(low 32 bits, high 32 bits)`.
+routine U32.carrying_mul(you: U32, carry: U32) -> (U32, U32)
+  var wide = LLVM::mul(LLVM::zero_extend[U32, U64](me), LLVM::zero_extend[U32, U64](you))
+  wide = LLVM::add(wide, LLVM::zero_extend[U32, U64](carry))
+  var lo = LLVM::int_truncate[U64, U32](wide)
+  var hi = LLVM::int_truncate[U64, U32](LLVM::shift_right_unsigned(wide, 32_u64))
+  return (lo, hi)
 
 # ============================================================================
 # Power Operations (**)
@@ -483,6 +549,106 @@ routine U32.max(you: U32) -> U32
 @positional
 routine U32.clamp(min_val: U32, max_val: U32) -> U32
   return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Integer Math (roots, logs, rounding)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋ — the largest value whose square is ≤ me.
+### :returns: The floor of the square root of `me`.
+routine U32.isqrt() -> U32
+  var x = me
+  var result = 0_u32
+  var bit = 1_u32 << 30_u32
+  while bit > x
+    bit = bit.lshr(2_u32)
+  while bit != 0_u32
+    var next = result.add_wrap(bit)
+    if x >= next
+      x = x.sub_wrap(next)
+      result = result.lshr(1_u32).add_wrap(bit)
+    else
+      result = result.lshr(1_u32)
+    bit = bit.lshr(2_u32)
+  return result
+
+### Returns ⌊log₂ me⌋. Throws if `me` is zero (the logarithm of zero is undefined).
+### :returns: The floor of the base-2 logarithm.
+### :throws: {NumericDomainError} if `me == 0`.
+routine U32.ilog2() -> U32
+  if me == 0_u32
+    throw NumericDomainError(description: "ilog2 of zero is undefined")
+  return 31_u32 - me.leading_zeros()
+
+### Returns ⌊log₁₀ me⌋. Throws if `me` is zero.
+### :returns: The floor of the base-10 logarithm.
+### :throws: {NumericDomainError} if `me == 0`.
+routine U32.ilog10() -> U32
+  if me == 0_u32
+    throw NumericDomainError(description: "ilog10 of zero is undefined")
+  var n = me
+  var count = 0_u32
+  while n >= 10_u32
+    n = n // 10_u32
+    count = count + 1_u32
+  return count
+
+### Returns ⌊log_base me⌋. Throws if `me` is zero or `base < 2`.
+### :param base: The logarithm base (must be ≥ 2).
+### :returns: The floor of the base-`base` logarithm.
+### :throws: {NumericDomainError} if `me == 0` or `base < 2`.
+routine U32.ilog(base: U32) -> U32
+  if me == 0_u32 or base < 2_u32
+    throw NumericDomainError(description: "ilog domain: me must be > 0 and base >= 2")
+  var n = me
+  var count = 0_u32
+  while n >= base
+    n = n // base
+    count = count + 1_u32
+  return count
+
+### Returns the absolute difference |me - you| without overflow.
+### :param you: The other value.
+### :returns: The non-negative distance between `me` and `you`.
+routine U32.abs_diff(you: U32) -> U32
+  return if me >= you then me.sub_wrap(you) else you.sub_wrap(me)
+
+### Returns ⌈me / you⌉ (division rounding toward positive infinity).
+### :param you: The divisor.
+### :returns: The ceiling of `me / you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U32.div_ceil(you: U32) -> U32
+  var q = me.floordiv!(you)
+  var r = me.mod!(you)
+  return if r == 0_u32 then q else q.add_wrap(1_u32)
+
+### Returns the smallest power of two that is ≥ me. Both `0` and `1` map to `1`.
+### :returns: The next power of two at or above `me`.
+### :throws: {IntegerOverflowError} if the next power of two exceeds `U32_MAX`.
+routine U32.next_power_of_two() -> U32
+  if me <= 1_u32
+    return 1_u32
+  var shift = 32_u32 - me.sub_wrap(1_u32).leading_zeros()
+  if shift >= 32_u32
+    throw IntegerOverflowError()
+  return LLVM::shift_left(1_u32, shift)
+
+### Returns the smallest multiple of `you` that is ≥ me.
+### :param you: The base to round up to.
+### :returns: The next multiple of `you` at or above `me`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
+routine U32.next_multiple_of(you: U32) -> U32
+  var r = me.mod!(you)
+  if r == 0_u32
+    return me
+  return me.add!(you.sub_wrap(r))
+
+### Returns ⌊(me + you) / 2⌋ computed without overflow.
+### :param you: The other value.
+### :returns: The midpoint of `me` and `you`, rounding toward negative infinity.
+routine U32.midpoint(you: U32) -> U32
+  return me.bitand(you).add_wrap(me.bitxor(you).lshr(1_u32))
 
 # ============================================================================
 # Bit Manipulation

@@ -252,6 +252,58 @@ routine Decimal.truediv!(you: Decimal) -> Decimal
   return dec_of_d128(x: dec_to_d128(x: me).truediv(you: dec_to_d128(x: you)))
 
 # ============================================================================
+# Comparison selectors and convenience (min / max / clamp / recip / powi / midpoint)
+# ============================================================================
+
+### Returns the smaller of `me` and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`, otherwise `you`.
+routine Decimal.min(you: Decimal) -> Decimal
+  return if me <= you then me else you
+
+### Returns the larger of `me` and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`, otherwise `you`.
+routine Decimal.max(you: Decimal) -> Decimal
+  return if me >= you then me else you
+
+### Restricts `me` to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound.
+### :param max_val: The upper bound.
+### :returns: The clamped value.
+@positional
+routine Decimal.clamp(min_val: Decimal, max_val: Decimal) -> Decimal
+  return me.min(max_val).max(min_val)
+
+### Returns the reciprocal `1 / me`. Crashes if `me` is zero (no finite inverse), as for all
+### `Decimal` arithmetic.
+### :returns: The multiplicative inverse.
+routine Decimal.recip() -> Decimal
+  return DECIMAL_ONE.truediv!(me)
+
+### Returns `me` raised to the integer power `n` via exponentiation by squaring.
+### A negative `n` inverts the result. A non-finite intermediate crashes, as for all `Decimal`
+### arithmetic.
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine Decimal.powi(n: S32) -> Decimal
+  var base = if n < 0_s32 then DECIMAL_ONE.truediv!(me) else me
+  var count = n.unsigned_abs()
+  var result = DECIMAL_ONE
+  while count > 0_u32
+    if count.bitand(1_u32) == 1_u32
+      result = result.mul!(base)
+    base = base.mul!(base)
+    count = count.lshr(1_u32)
+  return result
+
+### Returns `(me + you) / 2`. A non-finite intermediate crashes, as for all `Decimal` arithmetic.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine Decimal.midpoint(you: Decimal) -> Decimal
+  return me.add!(you).truediv!(2dn)
+
+# ============================================================================
 # Formatting — canonical decimal text (fractional trailing zeros stripped)
 # ============================================================================
 

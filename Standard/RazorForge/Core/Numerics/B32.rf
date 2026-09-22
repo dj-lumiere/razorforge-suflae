@@ -399,6 +399,56 @@ routine B32.copysign(sign: B32) -> B32
   return LLVM::copysign[B32](me, sign)
 
 # ============================================================================
+# Convenience (recip / angle conversion / integer power / midpoint)
+# ============================================================================
+
+### Returns the reciprocal `1 / me` (`±∞` for `±0`, following IEEE rules).
+### :returns: The multiplicative inverse.
+routine B32.recip() -> B32
+  return B32_ONE.truediv_unchecked(me)
+
+### Returns `me` converted from radians to degrees (`me × 180 / π`).
+### :returns: The angle in degrees.
+routine B32.to_degrees() -> B32
+  return me.mul_unchecked(180.0_b32).truediv_unchecked(B32_PI)
+
+### Returns `me` converted from degrees to radians (`me × π / 180`).
+### :returns: The angle in radians.
+routine B32.to_radians() -> B32
+  return me.mul_unchecked(B32_PI).truediv_unchecked(180.0_b32)
+
+### Returns `me` raised to the integer power `n` via exponentiation by squaring.
+### A negative `n` inverts the result. Exact for small exponents, unlike `pow` with a float exponent.
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine B32.powi(n: S32) -> B32
+  var base = if n < 0_s32 then B32_ONE.truediv_unchecked(me) else me
+  var count = n.unsigned_abs()
+  var result = B32_ONE
+  while count > 0_u32
+    if count.bitand(1_u32) == 1_u32
+      result = result.mul_unchecked(base)
+    base = base.mul_unchecked(base)
+    count = count.lshr(1_u32)
+  return result
+
+### Returns `(me + you) / 2`, computed without intermediate overflow.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine B32.midpoint(you: B32) -> B32
+  var lo = B32_MIN_POSITIVE.mul_unchecked(2.0_b32)
+  var hi = B32_MAX.truediv_unchecked(2.0_b32)
+  var aa = me.abs()
+  var ab = you.abs()
+  if aa <= hi and ab <= hi
+    return me.add_unchecked(you).truediv_unchecked(2.0_b32)
+  if aa < lo
+    return me.add_unchecked(you.truediv_unchecked(2.0_b32))
+  if ab < lo
+    return me.truediv_unchecked(2.0_b32).add_unchecked(you)
+  return me.truediv_unchecked(2.0_b32).add_unchecked(you.truediv_unchecked(2.0_b32))
+
+# ============================================================================
 # Utility Methods
 # ============================================================================
 

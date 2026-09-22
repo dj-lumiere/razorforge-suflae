@@ -1781,6 +1781,56 @@ routine B128.int_truncate() -> B128
 # ============================================================================
 
 # ============================================================================
+# Convenience (recip / angle conversion / integer power / midpoint)
+# ============================================================================
+
+### Returns the reciprocal `1 / me` (`±∞` for `±0`, following IEEE rules).
+### :returns: The multiplicative inverse.
+routine B128.recip() -> B128
+  return B128_ONE.truediv_unchecked(me)
+
+### Returns `me` converted from radians to degrees (`me × 180 / π`).
+### :returns: The angle in degrees.
+routine B128.to_degrees() -> B128
+  return me.mul_unchecked(180.0_b128).truediv_unchecked(B128_PI)
+
+### Returns `me` converted from degrees to radians (`me × π / 180`).
+### :returns: The angle in radians.
+routine B128.to_radians() -> B128
+  return me.mul_unchecked(B128_PI).truediv_unchecked(180.0_b128)
+
+### Returns `me` raised to the integer power `n` via exponentiation by squaring.
+### A negative `n` inverts the result. Exact for small exponents, unlike `pow` with a float exponent.
+### :param n: The integer exponent.
+### :returns: `me ** n`.
+routine B128.powi(n: S32) -> B128
+  var base = if n < 0_s32 then B128_ONE.truediv_unchecked(me) else me
+  var count = n.unsigned_abs()
+  var result = B128_ONE
+  while count > 0_u32
+    if count.bitand(1_u32) == 1_u32
+      result = result.mul_unchecked(base)
+    base = base.mul_unchecked(base)
+    count = count.lshr(1_u32)
+  return result
+
+### Returns `(me + you) / 2`, computed without intermediate overflow.
+### :param you: The other value.
+### :returns: The arithmetic midpoint of `me` and `you`.
+routine B128.midpoint(you: B128) -> B128
+  var lo = B128_MIN_POSITIVE.mul_unchecked(2.0_b128)
+  var hi = B128_MAX.truediv_unchecked(2.0_b128)
+  var aa = me.abs()
+  var ab = you.abs()
+  if aa <= hi and ab <= hi
+    return me.add_unchecked(you).truediv_unchecked(2.0_b128)
+  if aa < lo
+    return me.add_unchecked(you.truediv_unchecked(2.0_b128))
+  if ab < lo
+    return me.truediv_unchecked(2.0_b128).add_unchecked(you)
+  return me.truediv_unchecked(2.0_b128).add_unchecked(you.truediv_unchecked(2.0_b128))
+
+# ============================================================================
 # Utility Methods
 # ============================================================================
 

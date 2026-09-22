@@ -230,6 +230,10 @@ routine S64.floordiv!(you: S64) -> S64
 routine S64.mod!(you: S64) -> S64
   if you == 0
     throw DivisionByZeroError()
+  # S64_MIN % -1 is mathematically 0, but signed_rem(S64_MIN, -1) is undefined at the
+  # hardware level (same trap as S64_MIN / -1). Return the exact euclidean result directly.
+  if me == S64_MIN and you == -1_s64
+    return 0_s64
   var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
@@ -243,6 +247,82 @@ routine S64.neg!() -> S64
   if me == -9223372036854775808_s64
     throw IntegerOverflowError()
   return LLVM::sub(a: 0_s64, b: me)
+
+# ============================================================================
+# Overflow-mode variants (neg / abs / div / mod)
+# ============================================================================
+
+### Returns `-me` in two's complement, wrapping `S64_MIN` to itself.
+### :returns: The wrapped negation.
+routine S64.neg_wrap() -> S64
+  return LLVM::sub(a: 0_s64, b: me)
+
+### Returns `(-me, overflowed)`. Overflow occurs only for `S64_MIN`.
+### :returns: A tuple of `(wrapped negation, overflow flag)`.
+routine S64.neg_with_overflow() -> (S64, Bool)
+  return (LLVM::sub(a: 0_s64, b: me), me == S64_MIN)
+
+### Returns `-me`, clamped to `S64_MAX` when `me == S64_MIN`.
+### :returns: The saturating negation.
+routine S64.neg_clamp() -> S64
+  return if me == S64_MIN then S64_MAX else LLVM::sub(a: 0_s64, b: me)
+
+### Returns |me| in two's complement, wrapping `|S64_MIN|` back to `S64_MIN`.
+### :returns: The wrapped absolute value.
+routine S64.abs_wrap() -> S64
+  return if me < 0_s64 then LLVM::sub(a: 0_s64, b: me) else me
+
+### Returns `(|me|, overflowed)`. Overflow occurs only for `S64_MIN`.
+### :returns: A tuple of `(wrapped absolute value, overflow flag)`.
+routine S64.abs_with_overflow() -> (S64, Bool)
+  return (me.abs_wrap(), me == S64_MIN)
+
+### Returns |me|, clamped to `S64_MAX` when `me == S64_MIN`.
+### :returns: The saturating absolute value.
+routine S64.abs_clamp() -> S64
+  return if me == S64_MIN then S64_MAX else me.abs_wrap()
+
+### Returns |me| as an unsigned value; `|S64_MIN|` is represented exactly.
+### :returns: The absolute value as `U64`.
+routine S64.unsigned_abs() -> U64
+  var w = if me < 0_s64 then LLVM::sub(a: 0_s64, b: me) else me
+  return LLVM::reinterpret_bits[S64, U64](w)
+
+### Returns euclidean `me // you`, wrapping the `S64_MIN // -1` overflow to `S64_MIN`.
+### :param you: The divisor.
+### :returns: The wrapped euclidean quotient.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S64.floordiv_wrap(you: S64) -> S64
+  if me == S64_MIN and you == -1_s64
+    return S64_MIN
+  return me.floordiv!(you)
+
+### Returns `(euclidean quotient, overflowed)`; overflow only for `S64_MIN // -1`.
+### :param you: The divisor.
+### :returns: A tuple of `(quotient, overflow flag)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S64.floordiv_with_overflow(you: S64) -> (S64, Bool)
+  if me == S64_MIN and you == -1_s64
+    return (S64_MIN, true)
+  return (me.floordiv!(you), false)
+
+### Returns euclidean `me % you`, wrapping the `S64_MIN % -1` overflow to `0`.
+### :param you: The divisor.
+### :returns: The wrapped euclidean remainder.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S64.mod_wrap(you: S64) -> S64
+  if me == S64_MIN and you == -1_s64
+    return 0_s64
+  return me.mod!(you)
+
+### Returns `(euclidean remainder, overflowed)`; overflow only for `S64_MIN % -1`.
+### :param you: The divisor.
+### :returns: A tuple of `(remainder, overflow flag)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S64.mod_with_overflow(you: S64) -> (S64, Bool)
+  if me == S64_MIN and you == -1_s64
+    return (0_s64, true)
+  return (me.mod!(you), false)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -337,6 +417,36 @@ routine S64.mul_clamp(you: S64) -> S64
   if LLVM::signed_lt(wide, -9223372036854775808_s128)
     return S64_MIN
   return LLVM::int_truncate[S128, S64](wide)
+
+# ============================================================================
+# Carrying Arithmetic (multi-word building blocks)
+# ============================================================================
+
+### Returns `me + you + carry` as `(wrapped_sum, overflowed)`.
+### Chains across words to add integers wider than `S64`: feed each word's carry
+### bit up the chain. Unlike the unsigned form, the flag reports SIGNED overflow
+### (the two internal overflows cancel via XOR), so it is only meaningful on the
+### most-significant word of a multi-word signed value.
+### :param you: The right operand.
+### :param carry: The incoming carry bit from the lower word.
+### :returns: A tuple of `(wrapped sum, signed-overflow flag)`.
+routine S64.carrying_add(you: S64, carry: Bool) -> (S64, Bool)
+  var carry_val: S64 = if carry then 1_s64 else 0_s64
+  var first = me.add_with_overflow(you)
+  var second = first.item0.add_with_overflow(carry_val)
+  return (second.item0, not first.item1.eq(second.item1))
+
+### Returns `me - you - borrow` as `(wrapped_difference, overflowed)`.
+### Chains across words to subtract integers wider than `S64`; the flag reports
+### SIGNED overflow, meaningful only on the most-significant word.
+### :param you: The value to subtract.
+### :param borrow: The incoming borrow bit from the lower word.
+### :returns: A tuple of `(wrapped difference, signed-overflow flag)`.
+routine S64.borrowing_sub(you: S64, borrow: Bool) -> (S64, Bool)
+  var borrow_val: S64 = if borrow then 1_s64 else 0_s64
+  var first = me.sub_with_overflow(you)
+  var second = first.item0.sub_with_overflow(borrow_val)
+  return (second.item0, not first.item1.eq(second.item1))
 
 # ============================================================================
 # Power Operations (**)
@@ -522,6 +632,73 @@ routine S64.max(you: S64) -> S64
 @positional
 routine S64.clamp(min_val: S64, max_val: S64) -> S64
   return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Integer Math (roots, logs)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋. Throws for a negative `me`.
+### :returns: The floor of the square root of `me`.
+### :throws: {NumericDomainError} if `me < 0`.
+routine S64.isqrt() -> S64
+  if me < 0_s64
+    throw NumericDomainError(description: "isqrt of a negative value has no real result")
+  var x = me
+  var result = 0_s64
+  var bit = 1_s64 << 62_u32
+  while bit > x
+    bit = bit.lshr(2_u32)
+  while bit != 0_s64
+    var next = result.add_wrap(bit)
+    if x >= next
+      x = x.sub_wrap(next)
+      result = result.lshr(1_u32).add_wrap(bit)
+    else
+      result = result.lshr(1_u32)
+    bit = bit.lshr(2_u32)
+  return result
+
+### Returns ⌊log₂ me⌋. Throws if `me <= 0`.
+### :returns: The floor of the base-2 logarithm.
+### :throws: {NumericDomainError} if `me <= 0`.
+routine S64.ilog2() -> S64
+  if me <= 0_s64
+    throw NumericDomainError(description: "ilog2 domain: me must be > 0")
+  return 63_s64 - me.leading_zeros()
+
+### Returns ⌊log₁₀ me⌋. Throws if `me <= 0`.
+### :returns: The floor of the base-10 logarithm.
+### :throws: {NumericDomainError} if `me <= 0`.
+routine S64.ilog10() -> S64
+  if me <= 0_s64
+    throw NumericDomainError(description: "ilog10 domain: me must be > 0")
+  var n = me
+  var count = 0_s64
+  while n >= 10_s64
+    n = n // 10_s64
+    count = count + 1_s64
+  return count
+
+### Returns ⌊log_base me⌋. Throws if `me <= 0` or `base < 2`.
+### :param base: The logarithm base (must be ≥ 2).
+### :returns: The floor of the base-`base` logarithm.
+### :throws: {NumericDomainError} if `me <= 0` or `base < 2`.
+routine S64.ilog(base: S64) -> S64
+  if me <= 0_s64 or base < 2_s64
+    throw NumericDomainError(description: "ilog domain: me must be > 0 and base >= 2")
+  var n = me
+  var count = 0_s64
+  while n >= base
+    n = n // base
+    count = count + 1_s64
+  return count
+
+### Returns the absolute difference |me - you| as an unsigned value (no overflow).
+### :param you: The other value.
+### :returns: The non-negative distance between `me` and `you`.
+routine S64.abs_diff(you: S64) -> U64
+  var d = if me >= you then me.sub_wrap(you) else you.sub_wrap(me)
+  return LLVM::reinterpret_bits[S64, U64](d)
 
 # ============================================================================
 # Bit Manipulation

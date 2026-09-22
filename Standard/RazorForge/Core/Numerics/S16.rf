@@ -246,6 +246,10 @@ routine S16.floordiv!(you: S16) -> S16
 routine S16.mod!(you: S16) -> S16
   if you == 0
     throw DivisionByZeroError()
+  # S16_MIN % -1 is mathematically 0, but signed_rem(S16_MIN, -1) is undefined at the
+  # hardware level (same trap as S16_MIN / -1). Return the exact euclidean result directly.
+  if me == S16_MIN and you == -1_s16
+    return 0_s16
   var remainder = LLVM::signed_rem(a: me, b: you)
   if remainder < 0_s16
     if you > 0_s16
@@ -260,6 +264,82 @@ routine S16.neg!() -> S16
   if me == -32768_s16
     throw IntegerOverflowError()
   return LLVM::sub(a: 0_s16, b: me)
+
+# ============================================================================
+# Overflow-mode variants (neg / abs / div / mod)
+# ============================================================================
+
+### Returns `-me` in two's complement, wrapping `S16_MIN` to itself.
+### :returns: The wrapped negation.
+routine S16.neg_wrap() -> S16
+  return LLVM::sub(a: 0_s16, b: me)
+
+### Returns `(-me, overflowed)`. Overflow occurs only for `S16_MIN`.
+### :returns: A tuple of `(wrapped negation, overflow flag)`.
+routine S16.neg_with_overflow() -> (S16, Bool)
+  return (LLVM::sub(a: 0_s16, b: me), me == S16_MIN)
+
+### Returns `-me`, clamped to `S16_MAX` when `me == S16_MIN`.
+### :returns: The saturating negation.
+routine S16.neg_clamp() -> S16
+  return if me == S16_MIN then S16_MAX else LLVM::sub(a: 0_s16, b: me)
+
+### Returns |me| in two's complement, wrapping `|S16_MIN|` back to `S16_MIN`.
+### :returns: The wrapped absolute value.
+routine S16.abs_wrap() -> S16
+  return if me < 0_s16 then LLVM::sub(a: 0_s16, b: me) else me
+
+### Returns `(|me|, overflowed)`. Overflow occurs only for `S16_MIN`.
+### :returns: A tuple of `(wrapped absolute value, overflow flag)`.
+routine S16.abs_with_overflow() -> (S16, Bool)
+  return (me.abs_wrap(), me == S16_MIN)
+
+### Returns |me|, clamped to `S16_MAX` when `me == S16_MIN`.
+### :returns: The saturating absolute value.
+routine S16.abs_clamp() -> S16
+  return if me == S16_MIN then S16_MAX else me.abs_wrap()
+
+### Returns |me| as an unsigned value; `|S16_MIN|` is represented exactly.
+### :returns: The absolute value as `U16`.
+routine S16.unsigned_abs() -> U16
+  var w = if me < 0_s16 then LLVM::sub(a: 0_s16, b: me) else me
+  return LLVM::reinterpret_bits[S16, U16](w)
+
+### Returns euclidean `me // you`, wrapping the `S16_MIN // -1` overflow to `S16_MIN`.
+### :param you: The divisor.
+### :returns: The wrapped euclidean quotient.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S16.floordiv_wrap(you: S16) -> S16
+  if me == S16_MIN and you == -1_s16
+    return S16_MIN
+  return me.floordiv!(you)
+
+### Returns `(euclidean quotient, overflowed)`; overflow only for `S16_MIN // -1`.
+### :param you: The divisor.
+### :returns: A tuple of `(quotient, overflow flag)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S16.floordiv_with_overflow(you: S16) -> (S16, Bool)
+  if me == S16_MIN and you == -1_s16
+    return (S16_MIN, true)
+  return (me.floordiv!(you), false)
+
+### Returns euclidean `me % you`, wrapping the `S16_MIN % -1` overflow to `0`.
+### :param you: The divisor.
+### :returns: The wrapped euclidean remainder.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S16.mod_wrap(you: S16) -> S16
+  if me == S16_MIN and you == -1_s16
+    return 0_s16
+  return me.mod!(you)
+
+### Returns `(euclidean remainder, overflowed)`; overflow only for `S16_MIN % -1`.
+### :param you: The divisor.
+### :returns: A tuple of `(remainder, overflow flag)`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S16.mod_with_overflow(you: S16) -> (S16, Bool)
+  if me == S16_MIN and you == -1_s16
+    return (0_s16, true)
+  return (me.mod!(you), false)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -354,6 +434,36 @@ routine S16.mul_clamp(you: S16) -> S16
   if LLVM::signed_lt(wide, -32768_s32)
     return S16_MIN
   return LLVM::int_truncate[S32, S16](wide)
+
+# ============================================================================
+# Carrying Arithmetic (multi-word building blocks)
+# ============================================================================
+
+### Returns `me + you + carry` as `(wrapped_sum, overflowed)`.
+### Chains across words to add integers wider than `S16`: feed each word's carry
+### bit up the chain. Unlike the unsigned form, the flag reports SIGNED overflow
+### (the two internal overflows cancel via XOR), so it is only meaningful on the
+### most-significant word of a multi-word signed value.
+### :param you: The right operand.
+### :param carry: The incoming carry bit from the lower word.
+### :returns: A tuple of `(wrapped sum, signed-overflow flag)`.
+routine S16.carrying_add(you: S16, carry: Bool) -> (S16, Bool)
+  var carry_val: S16 = if carry then 1_s16 else 0_s16
+  var first = me.add_with_overflow(you)
+  var second = first.item0.add_with_overflow(carry_val)
+  return (second.item0, not first.item1.eq(second.item1))
+
+### Returns `me - you - borrow` as `(wrapped_difference, overflowed)`.
+### Chains across words to subtract integers wider than `S16`; the flag reports
+### SIGNED overflow, meaningful only on the most-significant word.
+### :param you: The value to subtract.
+### :param borrow: The incoming borrow bit from the lower word.
+### :returns: A tuple of `(wrapped difference, signed-overflow flag)`.
+routine S16.borrowing_sub(you: S16, borrow: Bool) -> (S16, Bool)
+  var borrow_val: S16 = if borrow then 1_s16 else 0_s16
+  var first = me.sub_with_overflow(you)
+  var second = first.item0.sub_with_overflow(borrow_val)
+  return (second.item0, not first.item1.eq(second.item1))
 
 # ============================================================================
 # Power Operations (**)
@@ -535,6 +645,73 @@ routine S16.max(you: S16) -> S16
 @positional
 routine S16.clamp(min_val: S16, max_val: S16) -> S16
   return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Integer Math (roots, logs)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋. Throws for a negative `me`.
+### :returns: The floor of the square root of `me`.
+### :throws: {NumericDomainError} if `me < 0`.
+routine S16.isqrt() -> S16
+  if me < 0_s16
+    throw NumericDomainError(description: "isqrt of a negative value has no real result")
+  var x = me
+  var result = 0_s16
+  var bit = 1_s16 << 14_u32
+  while bit > x
+    bit = bit.lshr(2_u32)
+  while bit != 0_s16
+    var next = result.add_wrap(bit)
+    if x >= next
+      x = x.sub_wrap(next)
+      result = result.lshr(1_u32).add_wrap(bit)
+    else
+      result = result.lshr(1_u32)
+    bit = bit.lshr(2_u32)
+  return result
+
+### Returns ⌊log₂ me⌋. Throws if `me <= 0`.
+### :returns: The floor of the base-2 logarithm.
+### :throws: {NumericDomainError} if `me <= 0`.
+routine S16.ilog2() -> S16
+  if me <= 0_s16
+    throw NumericDomainError(description: "ilog2 domain: me must be > 0")
+  return 15_s16 - me.leading_zeros()
+
+### Returns ⌊log₁₀ me⌋. Throws if `me <= 0`.
+### :returns: The floor of the base-10 logarithm.
+### :throws: {NumericDomainError} if `me <= 0`.
+routine S16.ilog10() -> S16
+  if me <= 0_s16
+    throw NumericDomainError(description: "ilog10 domain: me must be > 0")
+  var n = me
+  var count = 0_s16
+  while n >= 10_s16
+    n = n // 10_s16
+    count = count + 1_s16
+  return count
+
+### Returns ⌊log_base me⌋. Throws if `me <= 0` or `base < 2`.
+### :param base: The logarithm base (must be ≥ 2).
+### :returns: The floor of the base-`base` logarithm.
+### :throws: {NumericDomainError} if `me <= 0` or `base < 2`.
+routine S16.ilog(base: S16) -> S16
+  if me <= 0_s16 or base < 2_s16
+    throw NumericDomainError(description: "ilog domain: me must be > 0 and base >= 2")
+  var n = me
+  var count = 0_s16
+  while n >= base
+    n = n // base
+    count = count + 1_s16
+  return count
+
+### Returns the absolute difference |me - you| as an unsigned value (no overflow).
+### :param you: The other value.
+### :returns: The non-negative distance between `me` and `you`.
+routine S16.abs_diff(you: S16) -> U16
+  var d = if me >= you then me.sub_wrap(you) else you.sub_wrap(me)
+  return LLVM::reinterpret_bits[S16, U16](d)
 
 # ============================================================================
 # Bit Manipulation
