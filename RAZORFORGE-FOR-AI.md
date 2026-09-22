@@ -325,6 +325,21 @@ show(r1 === r2)              # true  — same object
 show(a === make_other())    # false — different objects
 ```
 
+> **Decided direction (2026-09-22, NOT yet built — do not assume the builder does this today).**
+> Full rationale in `internal-wiki/record-entity-finite-representation.md`.
+> - **A recursive record is a compile error; recursion belongs to entity.** Surface rule: *a record is a
+>   copied value, an infinitely-sized value cannot be copied, so a record cannot contain itself.*
+>   `record Node { next: Node }` → error (make it `entity Node`, whose `next: Node?` auto-indirects to a
+>   nullable pointer; unique ownership makes the structure a tree = acyclic = deterministic teardown).
+> - **`bundle`** = a third declaration keyword for a generic aggregate whose kind is INDUCED per
+>   instantiation (all-value fields → record; any entity field or self-reference → entity). `record`/`entity`
+>   stay the explicit poles.
+> - Generic param kinds: bare `[T, U]` = `AnyType`; annotate `T: record` / `T: entity` only to constrain.
+>   No `Assignable`/`Copyable` bound (record ⟺ copyable). No `Boxed`/`Owned`/`Unique` wrapper — the ownership
+>   wrappers below name only *departures* from the bare-entity default (unique ownership is unnamed).
+> - Entity allocation is stack/inline by default; heap is induced by a wrapper (`Retained`/…) or recursion,
+>   not a marked concern.
+
 ## 8. Generics and protocols
 
 ```razorforge
