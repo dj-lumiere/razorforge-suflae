@@ -184,8 +184,12 @@ internal sealed class AutoWiredRegistrationPass
                 existingMemberRoutines: existingMemberRoutines);
         }
 
-        // Unified destructor: every non-wrapper type gets a dangerous destroy().
-        if (bundle.NoneType != null && !IsWrapperType(type: type))
+        // Unified destructor: every type without a hand-written destroy gets the derived one. The wrappers
+        // that own something (Retained, Roamed, the access tokens, ...) hand-write theirs, so
+        // MaybeRegisterDestroy skips them; `Hijacked` owns nothing and has no fields, so it takes the record
+        // derive, whose field walk is empty. Only the parallel WrapperTypeSymbol form is left out: it does not
+        // list the hand-written destroy of its record form.
+        if (bundle.NoneType != null && type is not WrapperTypeSymbol)
         {
             MaybeRegisterDestroy(owner: type,
                 noneType: bundle.NoneType,
@@ -926,8 +930,8 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// True for RC wrapper types (Retained/Tracked/Viewing/Modifying/Hijacked/...) — they
-    /// supply their own custom destructor / forwarders and are excluded from generated `destroy`.
+    /// True for the wrapper types (Retained/Tracked/Viewing/Modifying/Hijacked/...), which hand-write their
+    /// cycle-collector hooks and are excluded from the generated ones.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)
     {

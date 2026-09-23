@@ -531,19 +531,31 @@ public sealed partial class SemanticVerifier
     private static (string Source, string Verb)? TokenMintSource(Expression resource,
         TypeSymbol? resourceType)
     {
-        if (resourceType == null || !IsInlineOnlyTokenType(type: resourceType))
+        Expression mint = resource is NamedArgumentExpression named
+            ? named.Value
+            : resource;
+        if (mint is not CallExpression
+            {
+                Callee: MemberExpression { Object: var receiver } callee, Arguments.Count: 0
+            } || BuildAccessPath(expr: receiver) is not { } path)
         {
             return null;
         }
 
-        Expression mint = resource is NamedArgumentExpression named
-            ? named.Value
-            : resource;
-        return mint is CallExpression { Callee: MemberExpression { Object: var receiver } callee } &&
-               BuildAccessPath(expr: receiver) is { } path
+        // A resolved call counts when it yields a token. An unresolved one (its receiver was already
+        // stolen, say) still counts when it is spelled as a token mint, so the steal it collides with is
+        // reported as the RF-S639 conflict it is.
+        bool mintsToken = resourceType is null or ErrorTypeSymbol
+            ? TokenMintVerbs.Contains(item: callee.MemberName)
+            : IsInlineOnlyTokenType(type: resourceType);
+        return mintsToken
             ? (path, callee.MemberName)
             : null;
     }
+
+    /// <summary>The routines that hand out an access token on their receiver.</summary>
+    private static readonly HashSet<string> TokenMintVerbs =
+        new(comparer: StringComparer.Ordinal) { "view", "modify", "consult", "amend" };
 
     /// <summary>
     /// RF-S639: reports <paramref name="target"/> when it names the source of a live access token or a

@@ -1,0 +1,27 @@
+module Tests/Stdlib/WrapperCountForwarding
+
+import IO/Console
+
+# `count` is both a List routine and the name of the choice/flags case-count derive. A call through a
+# wrapper (`Retained`, `Viewing`) must be forwarded to the list's own `count`, and must not bind the
+# choice/flags derive, whose body can never be built for a wrapper (it linked to an undefined symbol).
+# A choice still gets its case count.
+
+choice Color
+  RED
+  GREEN
+  BLUE
+
+routine viewed(xs: Viewing[List[S64]]) -> U64
+  return xs.count()
+
+routine start()
+  var nums = List[S64]()
+  nums.add_last(value: 1)
+  nums.add_last(value: 2)
+  show(f"viewed = {viewed(xs: nums.view())}")
+  var r = Retained[List[S64]](from: steal nums)
+  show(f"retained = {r.count()} {r.is_empty()}")
+  show(f"choice = {Color.count()}")
+  show("DONE")
+  return

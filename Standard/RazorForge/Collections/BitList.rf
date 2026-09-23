@@ -405,7 +405,8 @@ routine BitList.bitxor(other: Accessing[BitList]) -> BitList
   while i < max_count
     var a = if i < me.count then me.get_bit_internal(i) else false
     var b = if i < other.count then other.get_bit_internal(i) else false
-    result.add_last(a ^ b)
+    # Two Bools differ exactly when their xor is set.
+    result.add_last(a != b)
     i = i +% 1u64
   return steal result
 

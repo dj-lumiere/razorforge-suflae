@@ -96,7 +96,7 @@ routine Address.max(you: Address) -> Address
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Address.is_power_of_two() -> Bool
-  return me != 0_addr and (me & (me -% 1_addr)) == 0_addr
+  return me != 0_addr and LLVM::bit_and(a: me, b: me -% 1_addr) == 0_addr
 
 # ============================================================================
 # ByteSize Arithmetic

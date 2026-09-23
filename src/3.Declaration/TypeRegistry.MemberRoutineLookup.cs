@@ -932,14 +932,45 @@ public sealed partial class TypeRegistry
     /// generic-param owner (`routine T.m()`), or null. Found under the canonical GenericOwnerKey in
     /// _routinesByOwner — the by-name resolution path that replaced the old separate _universalMemberRoutines index.
     /// First overload wins (matching the prior first-registration-wins TryAdd).</summary>
-    private RoutineInfo? DefaultMemberRoutine(string memberRoutineName)
+    private RoutineInfo? DefaultMemberRoutine(string memberRoutineName, TypeSymbol forType)
     {
-        return _routinesByOwner.TryGetValue(key: GenericOwnerKey,
-                   value: out Dictionary<string, List<RoutineInfo>>? byName) &&
-               byName.TryGetValue(key: memberRoutineName, value: out List<RoutineInfo>? list) &&
-               list.Count > 0
-            ? list[index: 0]
-            : null;
+        if (!_routinesByOwner.TryGetValue(key: GenericOwnerKey,
+                value: out Dictionary<string, List<RoutineInfo>>? byName) ||
+            !byName.TryGetValue(key: memberRoutineName, value: out List<RoutineInfo>? list) ||
+            list.Count == 0)
+        {
+            return null;
+        }
+
+        // A receiver whose kind is still open (a generic parameter, a protocol or its self type, whose
+        // implementer may be any kind) cannot be checked against the kind gates yet; it takes the first
+        // default, as before.
+        if (forType is GenericParameterTypeSymbol or ProtocolTypeSymbol or ProtocolSelfTypeSymbol
+            or TypeParameterPlaceholder)
+        {
+
+            return list[index: 0];
+        }
+
+        // A derive name (`represent`, `destroy`, `count`, ...): the registered default is only a stub, and the
+        // body is chosen per receiver from the derive templates by kind. It applies when one of those
+        // templates fits the receiver. `count` has only the choice and flags templates, so it is not a
+        // `count` of a `Retained[List[S64]]`, whose call must be forwarded to the list instead; binding it
+        // anyway called a routine whose body can never be built for that receiver (declared, called, never
+        // defined). A field-less record such as `Hijacked` does fit the record `destroy` template.
+        if (HasDeriveTemplate(name: memberRoutineName))
+        {
+            return list.FirstOrDefault(predicate: candidate =>
+                GetDeriveTemplate(name: memberRoutineName,
+                    arity: candidate.Parameters.Count,
+                    forType: forType) != null);
+        }
+
+        // Any other default takes a concrete receiver only when its own kind gates allow it
+        // (`routine T.modify() needs EntityType T` is not a routine of a record).
+        return list.FirstOrDefault(predicate: candidate =>
+            DeriveKindGates(constraints: candidate.GenericConstraints)
+               .All(predicate: gate => ImplementerSatisfiesConstraint(implementer: forType, constraint: gate)));
     }
 
     /// <summary>The free-function (owner-less) overload list for <paramref name="baseName"/>, or null —
@@ -1197,7 +1228,10 @@ public sealed partial class TypeRegistry
 
         // Fallback: a default-impl member routine on a bare generic-param owner (routine T.m()),
         // found under the canonical GenericOwnerKey and substituted onto the concrete receiver.
-        if (DefaultMemberRoutine(memberRoutineName: memberRoutineName) is { } defaultMember)
+        // The default is judged against the concrete implementer when there is one: a lookup that walks an
+        // implementer's protocols (`Sized` of a `Viewing[List[S64]]`) is still about that implementer.
+        if (DefaultMemberRoutine(memberRoutineName: memberRoutineName,
+                forType: forImplementer ?? type) is { } defaultMember)
         {
             return SubstituteMemberRoutineForOwner(memberRoutine: defaultMember,
                 resolvedOwner: type);
@@ -2224,7 +2258,7 @@ public sealed partial class TypeRegistry
     }
 
     internal void CollectMemberRoutineCandidates(TypeSymbol type, string memberRoutineName,
-        List<RoutineInfo> candidates)
+        List<RoutineInfo> candidates, TypeSymbol? forImplementer = null)
     {
         if (_routinesByOwner.TryGetValue(key: RealmRegistryKey(type: type),
                 value: out Dictionary<string, List<RoutineInfo>>? byName) &&
@@ -2260,8 +2294,10 @@ public sealed partial class TypeRegistry
         // — can win over the correct `Hijacked[ListEmittable[S32]]`, link-failing on the bare symbol. The
         // concrete instance collects the default itself (with the right `T -> ListEmittable[S32]`), so skipping
         // it for the generic-def pass loses nothing.
+        // Judged against the concrete implementer while walking its protocols (see LookupMemberRoutine).
         if (!type.IsGenericDefinition &&
-            DefaultMemberRoutine(memberRoutineName: memberRoutineName) is { } defaultMember)
+            DefaultMemberRoutine(memberRoutineName: memberRoutineName,
+                forType: forImplementer ?? type) is { } defaultMember)
         {
             candidates.Add(item: SubstituteMemberRoutineForOwner(memberRoutine: defaultMember,
                 resolvedOwner: type)!);
@@ -2280,7 +2316,8 @@ public sealed partial class TypeRegistry
             {
                 CollectMemberRoutineCandidates(type: protocol,
                     memberRoutineName: memberRoutineName,
-                    candidates: candidates);
+                    candidates: candidates,
+                    forImplementer: forImplementer ?? type);
             }
         }
     }
