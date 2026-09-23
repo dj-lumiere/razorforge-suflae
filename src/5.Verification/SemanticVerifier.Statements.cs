@@ -197,9 +197,9 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// A <c>@reshaping</c> routine can move a container's elements. On a container that keeps a pin
-    /// count (it declares <c>require_unpinned</c>), the routine therefore starts with
-    /// <c>me.require_unpinned()</c>, which crashes while an <c>each</c> loop over the container or a call
+    /// A <c>@reshaping</c> routine can move a container's elements. On a container that counts the uses
+    /// of its shape (it declares <c>require_shape_free</c>), the routine therefore starts with
+    /// <c>me.require_shape_free()</c>, which crashes while an <c>each</c> loop over the container or a call
     /// on one of its elements is running. The builder adds it so no <c>@reshaping</c> routine can leave it
     /// out. Adding it again to an already guarded body is a no-op.
     /// </summary>
@@ -208,7 +208,7 @@ public sealed partial class SemanticVerifier
         if (!routine.Annotations.Contains(item: "reshaping") ||
             routineInfo.OwnerType is not { } owner || routine.Body is not BlockStatement body ||
             _registry.LookupMemberRoutine(type: owner,
-                memberRoutineName: Declaration.RuntimeContract.Pinning.RequireUnpinned) == null)
+                memberRoutineName: Declaration.RuntimeContract.ShapeUse.RequireFree) == null)
         {
             return;
         }
@@ -221,7 +221,7 @@ public sealed partial class SemanticVerifier
                     {
                         Callee: MemberExpression
                         {
-                            MemberName: Declaration.RuntimeContract.Pinning.RequireUnpinned
+                            MemberName: Declaration.RuntimeContract.ShapeUse.RequireFree
                         }
                     }
                 },
@@ -234,7 +234,7 @@ public sealed partial class SemanticVerifier
         SourceLocation loc = body.Location;
         var guard = new CallExpression(
             Callee: new MemberExpression(Object: new IdentifierExpression(Name: "me", Location: loc),
-                MemberName: Declaration.RuntimeContract.Pinning.RequireUnpinned,
+                MemberName: Declaration.RuntimeContract.ShapeUse.RequireFree,
                 Location: loc),
             Arguments: [],
             Location: loc);

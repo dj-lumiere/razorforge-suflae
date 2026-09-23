@@ -3,12 +3,12 @@ module Core
 ### Represents the crashable raised when a container is changed in a way that can move its elements (an
 ### add, a remove, a resize) while an `each` loop over it, or a call on one of its elements, is still
 ### running.
-crashable ReshapingWhilePinnedError
+crashable ReshapingWhileInUseError
   ### Names the kind of container, such as "list" or "dict".
   container: Text
 
 ### Returns the default message for a container changed while its elements were in use.
 ### :returns: The resulting `Text` value.
 @override
-routine ReshapingWhilePinnedError.crash_message() -> Text
+routine ReshapingWhileInUseError.crash_message() -> Text
   return f"You are adding to or removing from this {me.container} while an `each` loop over it, or a call on one of its elements, is still running. The loop or the call could no longer trust where the elements are. Make the change after the loop or the call finishes."

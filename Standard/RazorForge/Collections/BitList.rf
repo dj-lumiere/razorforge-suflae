@@ -40,8 +40,8 @@ relates BitListEmittable as Iter
   ### Capacity is tracked in bits rather than words.
   secret capacity: U64           # Total bit capacity (in bits, not words)
   ### How many `each` loops and in-place element accesses are using the element positions right now.
-  ### Kept by the builder through `pin`/`unpin`, checked by `require_unpinned`.
-  secret pinned: U64
+  ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
+  secret shape_users: U64
 
 # ============================================================================
 # Creators
@@ -56,7 +56,7 @@ routine BitList() -> BitList
     data: hijacked_none[U64](),
     count: 0u64,
     capacity: 0u64,
-    pinned: 0u64
+    shape_users: 0u64
   )
 
 ### Creates a bit list containing exactly the given `elements`, in order. Variadic constructor behind the
@@ -87,7 +87,7 @@ routine BitList(capacity: U64) -> BitList
       data: data_ptr,
       count: 0u64,
       capacity: capacity,
-      pinned: 0u64
+      shape_users: 0u64
     )
 
 # ============================================================================
@@ -672,25 +672,25 @@ dangerous routine BitList.roam_free()
   return
 
 # ============================================================================
-# Pinning (keeps element positions still for `each` loops and in-place element access)
+# Shape use (keeps the element positions still for `each` loops and in-place element access)
 # ============================================================================
 
 ### Crashes when an `each` loop over this bit list, or a call on one of its elements, is still running. The
 ### builder calls this at the start of every `@reshaping` routine (one that can add, remove, or move
 ### elements), because such a change would leave that loop or call unsure where the elements are.
 @readonly
-routine BitList.require_unpinned()
-  if me.pinned != 0u64
-    throw ReshapingWhilePinnedError(container: "bit list")
+routine BitList.require_shape_free()
+  if me.shape_users != 0u64
+    throw ReshapingWhileInUseError(container: "bit list")
   return
 
 ### Marks one more `each` loop or element call as using this bit list's element positions. Only the builder
-### calls this, paired with `unpin` when that use ends.
-dangerous routine BitList.pin()
-  me.pinned = me.pinned +% 1u64
+### calls this, paired with `end_shape_use` when that use ends.
+dangerous routine BitList.begin_shape_use()
+  me.shape_users = me.shape_users +% 1u64
   return
 
-### Ends one use started by `pin`.
-dangerous routine BitList.unpin()
-  me.pinned = me.pinned -% 1u64
+### Ends one use started by `begin_shape_use`.
+dangerous routine BitList.end_shape_use()
+  me.shape_users = me.shape_users -% 1u64
   return

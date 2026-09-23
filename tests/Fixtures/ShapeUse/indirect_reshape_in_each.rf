@@ -1,7 +1,7 @@
-module Tests/Pinning/IndirectReshapeInEach
+module Tests/ShapeUse/IndirectReshapeInEach
 
 # `grow` adds to the list the loop is visiting. The build cannot see it (the add is inside another
-# routine), so the pin taken for the loop makes `add_last` crash with ReshapingWhilePinnedError.
+# routine), so the shape use the loop opens makes `add_last` crash with ReshapingWhileInUseError.
 
 import IO/Console
 

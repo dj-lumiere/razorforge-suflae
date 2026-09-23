@@ -1,10 +1,11 @@
-module Tests/Stdlib/ContainerPinning
+module Tests/Stdlib/ContainerShapeUse
 
 import IO/Console
 
-# An `each` loop and a call on an entity element pin their container, and every @reshaping routine of it
-# checks the pin. These are the paths that must NOT crash: a change after a loop, after `break`, after a
-# `return` out of a loop (the return releases the pin), and after statements that reach elements.
+# An `each` loop and a call on an entity element open a shape use of their container, and every @reshaping
+# routine of it checks for open uses. These are the paths that must NOT crash: a change after a loop, after
+# `break`, after a `return` out of a loop (the return closes the use), and after statements that reach
+# elements.
 
 entity Box
   n: S64

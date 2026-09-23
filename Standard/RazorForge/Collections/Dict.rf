@@ -51,8 +51,8 @@ relates V as Value
   secret k0: U64
   secret k1: U64
   ### How many `each` loops and in-place element accesses are using the element positions right now.
-  ### Kept by the builder through `pin`/`unpin`, checked by `require_unpinned`.
-  secret pinned: U64
+  ### Kept by the builder through `begin_shape_use`/`end_shape_use`, checked by `require_shape_free`.
+  secret shape_users: U64
 
 # ============================================================================
 # Creators
@@ -91,7 +91,7 @@ routine Dict[K, V](key: SecureHashKey) -> Dict[K, V]
     entries_cap: ecap,
     k0: key.k0,
     k1: key.k1,
-    pinned: 0u64
+    shape_users: 0u64
   )
   danger
     dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
@@ -122,7 +122,7 @@ routine Dict[K, V](key: SecureHashKey, capacity: U64) -> Dict[K, V]
     entries_cap: ecap,
     k0: key.k0,
     k1: key.k1,
-    pinned: 0u64
+    shape_users: 0u64
   )
   danger
     dict.ctrl = Hijacked[U8](C::rf_allocate_dynamic_uninit(cap))
@@ -610,25 +610,25 @@ routine Dict[K, V].serialize() -> SerialValue
   return SerialValue(steal __sv)
 
 # ============================================================================
-# Pinning (keeps element positions still for `each` loops and in-place element access)
+# Shape use (keeps the element positions still for `each` loops and in-place element access)
 # ============================================================================
 
 ### Crashes when an `each` loop over this dict, or a call on one of its elements, is still running. The
 ### builder calls this at the start of every `@reshaping` routine (one that can add, remove, or move
 ### elements), because such a change would leave that loop or call unsure where the elements are.
 @readonly
-routine Dict[K, V].require_unpinned()
-  if me.pinned != 0u64
-    throw ReshapingWhilePinnedError(container: "dict")
+routine Dict[K, V].require_shape_free()
+  if me.shape_users != 0u64
+    throw ReshapingWhileInUseError(container: "dict")
   return
 
 ### Marks one more `each` loop or element call as using this dict's element positions. Only the builder
-### calls this, paired with `unpin` when that use ends.
-dangerous routine Dict[K, V].pin()
-  me.pinned = me.pinned +% 1u64
+### calls this, paired with `end_shape_use` when that use ends.
+dangerous routine Dict[K, V].begin_shape_use()
+  me.shape_users = me.shape_users +% 1u64
   return
 
-### Ends one use started by `pin`.
-dangerous routine Dict[K, V].unpin()
-  me.pinned = me.pinned -% 1u64
+### Ends one use started by `begin_shape_use`.
+dangerous routine Dict[K, V].end_shape_use()
+  me.shape_users = me.shape_users -% 1u64
   return

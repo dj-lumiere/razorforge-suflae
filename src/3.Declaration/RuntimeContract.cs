@@ -69,22 +69,23 @@ public static class RuntimeContract
         public const string Share = "share";
     }
 
-    /// <summary>Container pinning (the IterGuard): while an `each` loop over a container or a call on one
-    /// of its elements runs, the builder brackets it with <see cref="Pin"/>/<see cref="Unpin"/>, and every
-    /// `@reshaping` routine of the container starts with <see cref="RequireUnpinned"/>, which crashes with
-    /// ReshapingWhilePinnedError while the pin count is not zero.</summary>
-    /// <remarks>Sites: PinLoweringPass (pin/unpin), SemanticVerifier.InjectReshapingGuard
-    /// (require_unpinned).</remarks>
-    public static class Pinning
+    /// <summary>Container shape use (the IterGuard): while an `each` loop over a container or a call on one
+    /// of its elements runs, the container's shape (its element count and positions) must stay as it is.
+    /// The builder brackets such a use with <see cref="Begin"/>/<see cref="End"/>, and every `@reshaping`
+    /// routine of the container starts with <see cref="RequireFree"/>, which crashes with
+    /// ReshapingWhileInUseError while any use is open.</summary>
+    /// <remarks>Sites: ShapeUseLoweringPass (begin/end), SemanticVerifier.InjectReshapingGuard
+    /// (require_shape_free).</remarks>
+    public static class ShapeUse
     {
-        /// <summary>Marks one more use of the container's element positions.</summary>
-        public const string Pin = "pin";
+        /// <summary>Opens one more use of the container's shape.</summary>
+        public const string Begin = "begin_shape_use";
 
-        /// <summary>Ends one use started by <see cref="Pin"/>.</summary>
-        public const string Unpin = "unpin";
+        /// <summary>Closes one use opened by <see cref="Begin"/>.</summary>
+        public const string End = "end_shape_use";
 
-        /// <summary>Crashes when the container is pinned; injected at the start of `@reshaping` routines.</summary>
-        public const string RequireUnpinned = "require_unpinned";
+        /// <summary>Crashes while a use is open; injected at the start of `@reshaping` routines.</summary>
+        public const string RequireFree = "require_shape_free";
     }
 
     /// <summary><c>Roamed[T]</c> memberRoutines that codegen inserts implicitly (no surface AST call),

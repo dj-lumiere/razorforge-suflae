@@ -4,14 +4,14 @@ using System.Text;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// End-to-end check of container pinning (the IterGuard): an `each` loop pins its list, and a change that
-/// could move the elements, hidden behind a call where the build-time checks cannot see it, crashes with
-/// ReshapingWhilePinnedError instead of leaving the loop reading moved memory. Builds and runs
-/// <c>tests/Fixtures/Pinning/*.rf</c> through <c>buildandrun</c>. The paths that must NOT crash (after a
+/// End-to-end check of container shape use (the IterGuard): an `each` loop opens a shape use of its list,
+/// and a change that could move the elements, hidden behind a call where the build-time checks cannot see
+/// it, crashes with ReshapingWhileInUseError instead of leaving the loop reading moved memory. Builds and
+/// runs <c>tests/Fixtures/ShapeUse/*.rf</c> through <c>buildandrun</c>. The paths that must NOT crash (after a
 /// loop, after <c>break</c>, after a <c>return</c> out of a loop, around element calls) are covered by the
-/// Stdlib fixture <c>container_pinning.rf</c>.
+/// Stdlib fixture <c>container_shape_use.rf</c>.
 /// </summary>
-public sealed class ContainerPinningTests
+public sealed class ContainerShapeUseTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
 
@@ -19,7 +19,7 @@ public sealed class ContainerPinningTests
         Path.Combine(path1: AppContext.BaseDirectory, path2: "RazorForge.dll");
 
     [Fact]
-    public void IndirectReshapeDuringEach_CrashesWithReshapingWhilePinned()
+    public void IndirectReshapeDuringEach_CrashesWithReshapingWhileInUse()
     {
         (int exit, string stdout, string stderr) = RunFixture(fixture: "indirect_reshape_in_each.rf");
 
@@ -27,12 +27,12 @@ public sealed class ContainerPinningTests
             userMessage: $"expected a crash, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
         Assert.Contains(expectedSubstring: "visiting 1", actualString: stdout);
         Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
-        Assert.Contains(expectedSubstring: "ReshapingWhilePinnedError", actualString: stderr);
+        Assert.Contains(expectedSubstring: "ReshapingWhileInUseError", actualString: stderr);
     }
 
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
-        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "Pinning", fixture]);
+        string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ShapeUse", fixture]);
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",

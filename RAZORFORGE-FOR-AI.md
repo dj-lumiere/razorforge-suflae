@@ -434,8 +434,9 @@ that differ from other languages:
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate.
 A mutation hidden behind a call (`each x in xs { grow(xs: xs.modify()) }`) is
-not visible at build time; the loop pins `xs` instead, and the mutator crashes
-with `ReshapingWhilePinnedError` (List, CircularList, Dict, Set, BitList).
+not visible at build time; the loop marks the shape of `xs` (its element count
+and positions) as in use instead, and the mutator crashes with
+`ReshapingWhileInUseError` (List, CircularList, Dict, Set, BitList).
 
 **Writes into an element land in the container.** A call, field write, or index
 write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,
