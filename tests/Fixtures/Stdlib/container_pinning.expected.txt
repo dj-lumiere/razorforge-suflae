@@ -1,0 +1,4 @@
+loops: total=11 count=5
+after return in loop: big=7 count=6
+element access: seen=5 count=3
+DONE

@@ -1,0 +1,20 @@
+module Tests/Pinning/IndirectReshapeInEach
+
+# `grow` adds to the list the loop is visiting. The build cannot see it (the add is inside another
+# routine), so the pin taken for the loop makes `add_last` crash with ReshapingWhilePinnedError.
+
+import IO/Console
+
+routine grow(xs: Modifying[List[S64]])
+  xs.add_last(value: 99)
+  return
+
+routine start()
+  var nums = List[S64]()
+  nums.add_last(value: 1)
+  nums.add_last(value: 2)
+  each x in nums
+    show(f"visiting {x}")
+    grow(xs: nums.modify())
+  show("not reached")
+  return

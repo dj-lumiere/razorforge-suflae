@@ -747,20 +747,8 @@ public sealed partial class SemanticVerifier
     /// <summary>Every expression inside <paramref name="expr"/>, itself included.</summary>
     private static List<Expression> CollectSubexpressions(Expression expr)
     {
-        var collector = new SubexpressionCollector();
-        collector.VisitExpression(expr: expr);
-        return collector.Seen;
-    }
-
-    /// <summary>Records every expression the structural rewrite walk passes through.</summary>
-    private sealed class SubexpressionCollector : AstRewriter
-    {
-        public List<Expression> Seen { get; } = [];
-
-        public override Expression VisitExpression(Expression expr)
-        {
-            Seen.Add(item: expr);
-            return base.VisitExpression(expr: expr);
-        }
+        var seen = new List<Expression>();
+        AstWalker.WalkExpressions(root: expr, visit: seen.Add);
+        return seen;
     }
 }

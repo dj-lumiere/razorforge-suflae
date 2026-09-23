@@ -41,6 +41,9 @@ relates ListEmittable[T] as Iter
   secret count: U64
   ### Stores the total number of elements that fit without reallocating.
   secret capacity: U64
+  ### How many `each` loops and in-place element accesses are using the element positions right now.
+  ### Kept by the builder through `pin`/`unpin`, checked by `require_unpinned`.
+  secret pinned: U64
 
 # Creators
 
@@ -48,7 +51,8 @@ routine List[T]() -> List[T]
   return List[T](
     data: hijacked_none[T](),
     count: 0u64,
-    capacity: 0u64
+    capacity: 0u64,
+    pinned: 0u64
   )
 
 ### Creates an empty list with storage reserved for at least `capacity` elements.
@@ -62,7 +66,8 @@ routine List[T](capacity: U64) -> List[T]
     return List[T](
       data: hijacked_from[T](ptr),
       count: 0u64,
-      capacity: capacity
+      capacity: capacity,
+      pinned: 0u64
     )
 
 ### Creates a list of `count` copies of `fill_value`. The backing buffer is sized
@@ -88,7 +93,8 @@ needs T obeys Copyable
     return List[T](
       data: data,
       count: count,
-      capacity: count
+      capacity: count,
+      pinned: 0u64
     )
 
 ### Builds a list containing exactly the given `elements`, in order. This static routine is the mechanism
@@ -853,4 +859,28 @@ dangerous routine List[T].roam_trace()
 dangerous routine List[T].roam_free()
   me.data.invalidate()
   me.hijack().invalidate()
+  return
+
+# ============================================================================
+# Pinning (keeps element positions still for `each` loops and in-place element access)
+# ============================================================================
+
+### Crashes when an `each` loop over this list, or a call on one of its elements, is still running. The
+### builder calls this at the start of every `@reshaping` routine (one that can add, remove, or move
+### elements), because such a change would leave that loop or call unsure where the elements are.
+@readonly
+routine List[T].require_unpinned()
+  if me.pinned != 0u64
+    throw ReshapingWhilePinnedError(container: "list")
+  return
+
+### Marks one more `each` loop or element call as using this list's element positions. Only the builder
+### calls this, paired with `unpin` when that use ends.
+dangerous routine List[T].pin()
+  me.pinned = me.pinned +% 1u64
+  return
+
+### Ends one use started by `pin`.
+dangerous routine List[T].unpin()
+  me.pinned = me.pinned -% 1u64
   return

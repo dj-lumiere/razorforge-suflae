@@ -1,0 +1,46 @@
+module Tests/Stdlib/ContainerPinning
+
+import IO/Console
+
+# An `each` loop and a call on an entity element pin their container, and every @reshaping routine of it
+# checks the pin. These are the paths that must NOT crash: a change after a loop, after `break`, after a
+# `return` out of a loop (the return releases the pin), and after statements that reach elements.
+
+entity Box
+  n: S64
+
+routine first_big(xs: Modifying[List[S64]]) -> S64
+  each x in xs
+    if x > 5
+      return x
+  return 0
+
+routine start()
+  var nums = List[S64]()
+  nums.add_last(value: 1)
+  nums.add_last(value: 7)
+  nums.add_last(value: 3)
+  var total = 0
+  each x in nums
+    total = total + x
+  nums.add_last(value: 10)
+  each x in nums
+    if x == 7
+      break
+  nums.add_last(value: 11)
+  show(f"loops: total={total} count={nums.count()}")
+
+  var big = first_big(xs: nums.modify())
+  nums.add_last(value: 12)
+  show(f"after return in loop: big={big} count={nums.count()}")
+
+  var boxes = List[Box]()
+  boxes.add_last(value: Box(n: 1))
+  boxes[0].n = 5
+  var seen = boxes[0].n
+  if boxes[0].n > 3
+    boxes.add_last(value: Box(n: 2))
+  boxes.add_last(value: Box(n: 3))
+  show(f"element access: seen={seen} count={boxes.count()}")
+  show("DONE")
+  return

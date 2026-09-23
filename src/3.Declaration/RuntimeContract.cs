@@ -69,6 +69,24 @@ public static class RuntimeContract
         public const string Share = "share";
     }
 
+    /// <summary>Container pinning (the IterGuard): while an `each` loop over a container or a call on one
+    /// of its elements runs, the builder brackets it with <see cref="Pin"/>/<see cref="Unpin"/>, and every
+    /// `@reshaping` routine of the container starts with <see cref="RequireUnpinned"/>, which crashes with
+    /// ReshapingWhilePinnedError while the pin count is not zero.</summary>
+    /// <remarks>Sites: PinLoweringPass (pin/unpin), SemanticVerifier.InjectReshapingGuard
+    /// (require_unpinned).</remarks>
+    public static class Pinning
+    {
+        /// <summary>Marks one more use of the container's element positions.</summary>
+        public const string Pin = "pin";
+
+        /// <summary>Ends one use started by <see cref="Pin"/>.</summary>
+        public const string Unpin = "unpin";
+
+        /// <summary>Crashes when the container is pinned; injected at the start of `@reshaping` routines.</summary>
+        public const string RequireUnpinned = "require_unpinned";
+    }
+
     /// <summary><c>Roamed[T]</c> memberRoutines that codegen inserts implicitly (no surface AST call),
     /// so RoutineReachabilityPass must anticipate them via the ImplicitCallContract.</summary>
     /// <remarks>Sites: LlvmEmitter (promote at spawn boundary, lock_enter/lock_exit around
