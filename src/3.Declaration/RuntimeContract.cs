@@ -226,6 +226,17 @@ public static class RuntimeContract
             RawPointer.Poke, "store_element_ref", "store"
         };
 
+    /// <summary>Index-store verbs: an index assignment <c>a[i] = v</c> lowers to a call of one of these,
+    /// which stores its VALUE argument into the receiver. The call keeps the assignment's ownership: it is
+    /// a destination like a constructor (a managed value arg is retained at the call site, a fresh rvalue
+    /// arg is not torn down at the caller), and a bare binding passed as the value is moved.</summary>
+    /// <remarks>Sites: RecordCopyLoweringPass, TemporaryTeardownPass, ScopeTeardownLoweringPass.</remarks>
+    public static readonly IReadOnlySet<string> IndexStoreVerbs =
+        new HashSet<string>(comparer: StringComparer.Ordinal)
+        {
+            "setitem"
+        };
+
     /// <summary>Reference primitives whose result BORROWS a referent owned elsewhere — a binding or
     /// temporary initialized by one owns nothing and must not be torn down.</summary>
     /// <remarks>Sites: ScopeTeardownLoweringPass.ViewVerbs, TemporaryTeardownPass.ViewVerbs.</remarks>

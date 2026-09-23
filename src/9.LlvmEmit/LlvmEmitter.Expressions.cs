@@ -1356,7 +1356,8 @@ public partial class LlvmEmitter
     /// </summary>
     private string EmitBinaryAssign(StringBuilder sb, BinaryExpression binary)
     {
-        // Index-assignment is handled inline here rather than via a member routine call.
+        // An index assignment left here has no setitem (a raw store). Every other one was lowered to a
+        // setitem call by OperatorLoweringPass.
         if (binary.Left is IndexExpression idxLhs)
         {
             EmitIndexAssignment(sb: sb, index: idxLhs, rhs: binary.Right);

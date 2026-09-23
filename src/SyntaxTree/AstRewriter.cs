@@ -475,11 +475,10 @@ public abstract class AstRewriter
             return e;
         }
 
-        // IndexExpression carries a resolved setitem routine alongside its type; preserve both on the
-        // rebuilt node (the convention every hand-rolled index rewrite in the lowering passes follows).
+        // Preserve the resolved type on the rebuilt node (the convention every hand-rolled index rewrite
+        // in the lowering passes follows).
         IndexExpression rewritten = e with { Object = o, Index = i };
         rewritten.ResolvedType = e.ResolvedType;
-        rewritten.ResolvedSetItem = e.ResolvedSetItem;
         return rewritten;
     }
 

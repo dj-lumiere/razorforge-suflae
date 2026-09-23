@@ -26,14 +26,15 @@ namespace Builder.Lowering.Passes;
 ///         <c>operand.neg()</c> / <c>operand.bitnot()</c> when the memberRoutine is resolved.</item>
 /// </list>
 ///
-/// <para>Only the <em>value</em> side of <see cref="AssignmentStatement"/> is lowered.
-/// Indexed-assignment targets (<c>arr[i] = val</c>) remain as <see cref="IndexExpression"/>
-/// so codegen's <c>EmitAssignment</c> can dispatch to <c>setitem!</c>.</para>
+/// <para>An indexed assignment <c>arr[i] = val</c> becomes the statement <c>arr.setitem(i, val)</c>
+/// (the receiver keeps its lvalue shape so a record is written in place). Any other assignment
+/// target is left as is and only the value side is lowered.</para>
 /// </summary>
 internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewriter
 {
     /// <summary>The bare name of the element-access member routine (no failable suffix).</summary>
     private const string GetItemMemberRoutine = "getitem";
+    private const string SetItemMemberRoutine = "setitem";
 
     /// <summary>Ordered set of signed integer widths used for upcasting arithmetic results.</summary>
     private static readonly int[] SignedWidths = [8, 16, 32, 64, 128];
@@ -81,17 +82,143 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     }
 
     /// <summary>
-    /// Lowers an <see cref="AssignmentStatement"/> — ONLY the value, not the target. Unlike the base
-    /// hook (which lowers both sides), an indexed-assignment target (<c>arr[i] = val</c>) must stay an
-    /// <see cref="IndexExpression"/> so codegen's <c>EmitAssignment</c> can dispatch to <c>setitem!</c>;
-    /// lowering the target would convert it to a <c>getitem!</c> call.
+    /// Lowers an <see cref="AssignmentStatement"/>: an indexed target becomes a <c>setitem</c> call
+    /// (see <see cref="LowerIndexAssignment"/>). Otherwise only the value is lowered, since lowering a
+    /// target as an expression would turn it into a read.
     /// </summary>
     protected override Statement VisitAssignment(AssignmentStatement s)
     {
         Expression val = VisitExpression(expr: s.Value);
+        if (s.Target is IndexExpression idx &&
+            LowerIndexAssignment(idx: idx, value: val) is { } setItemCall)
+        {
+            return new ExpressionStatement(Expression: setItemCall, Location: s.Location);
+        }
+
         return ReferenceEquals(objA: val, objB: s.Value)
             ? s
             : s with { Value = val };
+    }
+
+    /// <summary>
+    /// Lowers <c>obj[i] = v</c> to the call <c>obj.setitem(i, v)</c>, symmetric with the
+    /// <c>getitem</c> read. The receiver keeps its lvalue shape (a named binding or a field chain), so
+    /// the call passes a by-ref record receiver as the address of the caller's storage and the write
+    /// lands in place. Returns null when no <c>setitem</c> resolves (a raw pointer store, left to the
+    /// emitter).
+    /// </summary>
+    private CallExpression? LowerIndexAssignment(IndexExpression idx, Expression value)
+    {
+        TypeSymbol? targetType = idx.Object.ResolvedType;
+        if (targetType == null)
+        {
+            return null;
+        }
+
+        // An indexed receiver (`a[i][j] = v`) has no storage address of its own, so it is read with
+        // `getitem`. Any other receiver keeps its shape and only its interior is lowered.
+        Expression receiver = idx.Object is IndexExpression
+            ? VisitExpression(expr: idx.Object)
+            : LowerAssignTarget(target: idx.Object);
+        Expression loweredIdx = LowerBackIndexBounds(loweredObj: receiver,
+            loweredIdx: VisitExpression(expr: idx.Index),
+            targetType: targetType,
+            location: idx.Location);
+
+        TypeSymbol? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
+        TypeSymbol? valueType = value.ResolvedType;
+        RoutineInfo? setItem = ResolveSetItemRoutine(targetType: targetType,
+            indexType: indexType,
+            valueType: valueType);
+        if (setItem == null)
+        {
+            return null;
+        }
+
+        var member = new MemberExpression(Object: receiver,
+            MemberName: SetItemMemberRoutine,
+            Location: idx.Location);
+        var call = new CallExpression(Callee: member,
+            Arguments: [loweredIdx, value],
+            Location: idx.Location)
+        {
+            ResolvedRoutine = setItem,
+            ResolvedType = setItem.ReturnType,
+            LoweringKind = ClassifyCallLoweringKind(routine: setItem, receiverType: targetType)
+        };
+        return call;
+    }
+
+    /// <summary>
+    /// Resolves the <c>setitem</c> overload for an index assignment, mirroring
+    /// <see cref="ResolveGetItemRoutine"/>: look through a marker borrow protocol
+    /// (<c>Controlling[X]</c>) and a Suflae <c>Roamed</c> container to the real owner, then bind any
+    /// member-routine generics from the argument types.
+    /// </summary>
+    private RoutineInfo? ResolveSetItemRoutine(TypeSymbol targetType, TypeSymbol? indexType,
+        TypeSymbol? valueType)
+    {
+        TypeSymbol owner = MarkerProtocolInner(type: targetType) ?? targetType;
+        RoutineInfo? setItem = ResolveSetItemOn(targetType: owner,
+            indexType: indexType,
+            valueType: valueType);
+        if (setItem == null && UnwrapRoamedInner(type: owner) is { } innerTarget)
+        {
+            setItem = ResolveSetItemOn(targetType: innerTarget,
+                indexType: indexType,
+                valueType: valueType);
+        }
+
+        if (setItem != null && indexType != null && valueType != null)
+        {
+            setItem = ResolveMemberRoutineGenericRoutine(routine: setItem,
+                argTypes: [indexType, valueType]);
+        }
+
+        return setItem;
+    }
+
+    /// <summary>
+    /// Resolves the <c>setitem</c> overload on one owner by (index, value) argument types, retrying
+    /// with a <c>U64</c> index for a scalar subscript (see <see cref="ResolveGetItemOn"/>). Falls back
+    /// to a name-only lookup, which only succeeds for a single-overload container.
+    /// </summary>
+    private RoutineInfo? ResolveSetItemOn(TypeSymbol targetType, TypeSymbol? indexType,
+        TypeSymbol? valueType)
+    {
+        if (indexType != null && valueType != null)
+        {
+            RoutineInfo? byArgs = ctx.Registry.LookupMemberRoutineOverload(type: targetType,
+                memberRoutineName: SetItemMemberRoutine,
+                argTypes: [indexType, valueType]);
+            if (byArgs != null)
+            {
+                return byArgs;
+            }
+
+            if (ctx.Registry.LookupType(name: "U64") is { } u64 &&
+                ctx.Registry.LookupMemberRoutineOverload(type: targetType,
+                    memberRoutineName: SetItemMemberRoutine,
+                    argTypes: [u64, valueType]) is { } byU64)
+            {
+                return byU64;
+            }
+        }
+
+        return ctx.Registry.LookupMemberRoutine(type: targetType,
+            memberRoutineName: SetItemMemberRoutine);
+    }
+
+    /// <summary>
+    /// The inner type X of a marker borrow protocol <c>Accessing[X]</c>/<c>Controlling[X]</c>, else
+    /// null. A marker is representation-transparent: an index write through it targets X.
+    /// </summary>
+    private static TypeSymbol? MarkerProtocolInner(TypeSymbol type)
+    {
+        return type is ProtocolTypeSymbol { TypeArguments: [{ } inner] } proto &&
+               Builder.Declaration.RuntimeContract.IsMarkerProtocol(baseName: (proto.GenericDefinition ?? proto).BareName)
+            ? inner
+            : null;
     }
 
     //  Expression lowering
@@ -831,18 +958,25 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
 
     /// <summary>
     /// Lowers a non-overloadable <see cref="BinaryExpression"/> (one whose operator has no member-routine
-    /// name): for <see cref="BinaryOperator.Assign"/>, lowers the RHS and the interior of the LHS
-    /// (preserving the outer LHS shape so codegen can dispatch setitem); for all others, lowers both
+    /// name): for <see cref="BinaryOperator.Assign"/>, an indexed LHS becomes a <c>setitem</c> call and any
+    /// other LHS keeps its outer shape with only its interior lowered; for all others, lowers both
     /// operands normally. Extracted from <see cref="LowerBinaryExpression"/>.
     /// </summary>
     private Expression LowerNonOverloadableBinary(Expression expr, BinaryExpression bin)
     {
         if (bin.Operator == BinaryOperator.Assign)
         {
-            // For assignment: lower the RHS and the INTERIOR of the LHS. The outermost LHS node
-            // must stay as-is so EmitBinaryAssign can dispatch on its type (MemberExpression →
-            // field write, IndexExpression → setitem!). Lowering the entire LHS would convert an
-            // IndexExpression to a getitem! call, breaking setitem dispatch.
+            // The expression form of an index assignment lowers to the same `setitem` call.
+            if (bin.Left is IndexExpression idxLhs &&
+                LowerIndexAssignment(idx: idxLhs, value: VisitExpression(expr: bin.Right)) is
+                    { } setItemCall)
+            {
+                return setItemCall;
+            }
+
+            // Any other assignment: lower the RHS and the INTERIOR of the LHS. The outermost LHS node
+            // stays as-is so EmitBinaryAssign can dispatch on it (MemberExpression -> field write).
+            // Lowering the whole LHS would turn it into a read.
             Expression rhs = VisitExpression(expr: bin.Right);
             Expression lhs = LowerAssignTarget(target: bin.Left);
             return ReferenceEquals(objA: rhs, objB: bin.Right) &&

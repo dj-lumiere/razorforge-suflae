@@ -583,9 +583,11 @@ internal sealed class TemporaryTeardownPass(PostprocessingContext ctx)
         // A CONSTRUCTOR/conversion call (ConstructedType != null) persists its args into the new
         // value's fields (a destination that RETAINS via RecordCopyLoweringPass), and a store
         // primitive MOVES its value into storage — in both cases the arg lives on, so it must NOT
-        // be torn down at the caller. Only a plain routine/memberRoutine borrows a fresh rvalue arg.
+        // be torn down at the caller. An index store (`a[i] = v` as `a.setitem(i, v)`) is the same kind
+        // of destination. Only a plain routine/memberRoutine borrows a fresh rvalue arg.
         bool argsOwned = call.ConstructedType is null &&
-                         !IsStorePrimitiveCall(calleeName: m.MemberName);
+                         !IsStorePrimitiveCall(calleeName: m.MemberName) &&
+                         !RuntimeContract.IndexStoreVerbs.Contains(item: m.MemberName);
         var newArgs = call.Arguments
                           .Select(selector: a => Visit(e: a, objectPos: argsOwned, spills: spills))
                           .ToList();

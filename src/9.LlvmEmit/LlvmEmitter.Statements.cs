@@ -1113,146 +1113,26 @@ public partial class LlvmEmitter
 
 
     /// <summary>
-    /// Emits a store to an indexed location.
+    /// Emits an index assignment that has no <c>setitem</c>: a raw GEP + store into contiguous
+    /// storage. Every <c>a[i] = v</c> on a type with a <c>setitem</c> was already lowered to that call
+    /// by OperatorLoweringPass, so reaching here with one is a lowering bug, reported loudly.
     /// </summary>
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs)
     {
-        // Note: the inline record setitem path below is a known workaround — the receiver must be the
-        // alloca pointer so mutations persist, whereas EmitMemberRoutineCall would load a value copy.
-        // Both paths are intentional; the inline path is tracked for future cleanup.
         TypeSymbol? targetType = GetExpressionType(expr: index.Object);
-        targetType = MarkerProtocolInner(type: targetType) ?? targetType;
-
-        RoutineInfo? setItem = LookupSetItemMemberRoutine(index: index);
-
-        // Record setitem!: the receiver must be the alloca pointer so mutations persist in the
-        // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
-        // discard writes -> so keep the pointer-based dispatch inline for this case.
-        if (IsInlineRecordSetItem(setItem: setItem, targetType: targetType))
+        if (targetType != null &&
+            _registry.LookupMemberRoutine(type: targetType, memberRoutineName: "setitem") != null)
         {
-            EmitInlineRecordSetItem(sb: sb,
-                index: index,
-                rhs: rhs,
-                setItem: setItem!,
-                targetType: targetType!);
-            return;
-        }
-
-        // Entity/generic dispatch: synthesize `obj.setitem[!](index, rhs)` and delegate to
-        // EmitMemberRoutineCall, reusing the owner-/memberRoutine-level generic monomorphization machinery.
-        // OperatorLoweringPass annotates `index.ResolvedSetItem`; prefer it over a fresh lookup so
-        // codegen bypasses the generic-definition guard.
-        RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
-        if (dispatchSetItem != null)
-        {
-            // Failability is a property, not part of the name — use the bare `setitem`. Codegen
-            // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
-            var member = new MemberExpression(Object: index.Object,
-                MemberName: "setitem",
-                Location: index.Location);
-            var call = new CallExpression(Callee: member,
-                Arguments: [index.Index, rhs],
-                Location: index.Location) { ResolvedRoutine = dispatchSetItem };
-            // Result is void -> discard
-            EmitExpression(sb: sb, expr: call);
-            return;
+            throw new InvalidOperationException(
+                message: $"Index assignment on '{targetType.Name}' reached the emitter unlowered " +
+                         $"(at {index.Location}); OperatorLoweringPass should have turned it into a " +
+                         "setitem call.");
         }
 
         EmitRawIndexStore(sb: sb,
             index: index,
             rhs: rhs,
             targetType: targetType);
-    }
-
-    /// <summary>
-    /// Whether an index assignment should use the inline pointer-based record <c>setitem</c> path
-    /// (a resolved record setitem that isn't a wrapper forwarder and is concretely instantiable).
-    /// </summary>
-    private static bool IsInlineRecordSetItem(RoutineInfo? setItem, TypeSymbol? targetType)
-    {
-        if (setItem == null || targetType is not RecordTypeSymbol ||
-            !setItem.Name.Contains(value: "setitem") ||
-            setItem.IsGenericDefinition && !targetType.IsGenericResolution)
-        {
-            return false;
-        }
-
-        // Wrapper-record detection: if the resolved setitem's value-param type doesn't match the
-        // target's last type-argument, the lookup unwrapped through a wrapper (e.g.
-        // Owned[List[S64]] -> inner List[S64].setitem!(i64)) — that symbol doesn't exist inline, so
-        // escape to the standard memberRoutine-dispatch path. Skipped for const-generic owners (never
-        // wrapper forwarders).
-        bool isWrapperForwardingSetItem = setItem.Parameters.Count >= 2 &&
-                                          targetType.TypeArguments is
-                                              [not ConstGenericValueTypeSymbol] &&
-                                          setItem.Parameters[^1].Type.FullName !=
-                                          targetType.TypeArguments[^1].FullName;
-        return !isWrapperForwardingSetItem;
-    }
-
-    /// <summary>Emits the inline pointer-based record <c>setitem</c> call (receiver = lvalue address).</summary>
-    private void EmitInlineRecordSetItem(StringBuilder sb, IndexExpression index, Expression rhs,
-        RoutineInfo setItem, TypeSymbol targetType)
-    {
-        string value = EmitExpression(sb: sb, expr: rhs);
-        // The receiver must be the storage address so the element write persists in the caller's
-        // frame. EmitLvalueAddress recurses through arbitrary lvalue chains (`coll[i]`, `a.b[i]`, …).
-        string receiver = EmitLvalueAddress(sb: sb, expr: index.Object);
-        string indexValue = EmitExpression(sb: sb, expr: index.Index);
-        TypeSymbol? indexType = GetExpressionType(expr: index.Index);
-
-        string mangledName = MangleRoutineName(routine: setItem);
-        GenerateRoutineDeclaration(routine: setItem);
-
-        string indexLlvm = indexType != null
-            ? GetLlvmType(type: indexType)
-            : "i64";
-        string valueLlvm = ResolveSetItemValueLlvm(setItem: setItem, targetType: targetType);
-        // ABI-Indirect value: a record value param (e.g. `value: Point`) is passed as `ptr byval(%T)`
-        // on the callee side (Win64 passes a >8-byte record indirectly). This inline path emits the
-        // call by hand, so it must apply the SAME byval coercion the normal call path does — otherwise
-        // the raw struct SSA value lands where the callee expects a pointer and the callee dereferences
-        // garbage (AV). Scalar value params (i64, …) fall through unchanged.
-        TypeSymbol? rhsType = GetExpressionType(expr: rhs);
-        if (rhsType != null &&
-            setItem.Parameters is [.., { Type: not GenericParameterTypeSymbol } valueParam] &&
-            TryCoerceArgToByval(sb: sb,
-                argValue: value,
-                actualType: rhsType,
-                parameterType: valueParam.Type,
-                callee: setItem,
-                newValue: out string byvalValue,
-                newType: out string byvalType))
-        {
-            value = byvalValue;
-            valueLlvm = byvalType;
-        }
-
-        EmitLine(sb: sb,
-            line:
-            $"  call void @{mangledName}(ptr {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value})");
-    }
-
-    /// <summary>
-    /// Resolves the LLVM type of a record <c>setitem</c>'s value parameter — preferring the resolved
-    /// param type, falling back to the target's last type-argument only when the param is still an
-    /// unresolved generic parameter.
-    /// </summary>
-    private string ResolveSetItemValueLlvm(RoutineInfo setItem, TypeSymbol targetType)
-    {
-        if (setItem.Parameters is [.., _, { Type: not GenericParameterTypeSymbol }])
-        {
-            return GetLlvmType(type: setItem.Parameters[^1].Type);
-        }
-
-        // Wrong for single-arg wrappers like Owned[List[S64]] (last type-arg is List[S64], not S64),
-        // but those take the wrapper-forwarding path — this only fires for unresolved generic params.
-        if (targetType.TypeArguments is { Count: > 0 })
-        {
-            return GetLlvmType(type: targetType.TypeArguments[^1]);
-        }
-
-        return "i64";
     }
 
     /// <summary>
@@ -1281,22 +1161,6 @@ public partial class LlvmEmitter
         EmitLine(sb: sb,
             line: $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
         EmitLine(sb: sb, line: $"  store {elemType} {rawValue}, ptr {elemPtr}");
-    }
-
-    /// <summary>
-    /// Looks up the setitem memberRoutine for an indexed target, handling failable names and generic types.
-    /// </summary>
-    private RoutineInfo? LookupSetItemMemberRoutine(IndexExpression index)
-    {
-        TypeSymbol? targetType = GetExpressionType(expr: index.Object);
-        targetType = MarkerProtocolInner(type: targetType) ?? targetType;
-        if (targetType == null)
-        {
-            return null;
-        }
-
-
-        return _registry.LookupMemberRoutine(type: targetType, memberRoutineName: "setitem");
     }
 
     #endregion

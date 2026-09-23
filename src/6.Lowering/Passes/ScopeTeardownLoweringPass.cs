@@ -807,6 +807,14 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                                           StorePrimitives.Contains(item: n):
                 HandleStorePrimitiveMove(call: call);
                 break;
+            // An index store `a.setitem(i, v)` is the lowered `a[i] = v`: like that assignment, a bare
+            // binding passed as the VALUE moves into the receiver. The index is only read.
+            case CallExpression { Arguments: [.., var storedValue] } indexStore
+                when CalleeName(callee: indexStore.Callee) is { } isn &&
+                     RuntimeContract.IndexStoreVerbs.Contains(item: isn) &&
+                     Unwrap(e: storedValue) is IdentifierExpression storedName:
+                _movedNames.Add(item: storedName.Name);
+                break;
             // `target = source` / `me.field = source` moves `source` into the target.
             case AssignmentStatement assign
                 when Unwrap(e: assign.Value) is IdentifierExpression rhs:

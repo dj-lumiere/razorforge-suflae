@@ -603,7 +603,11 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         // borrowed-ref args must be retained (a bare struct copy would alias the source and
         // double-free at teardown). A store primitive is likewise a destination (writes raw
         // storage). Only a plain routine/memberRoutine call borrows its args.
-        bool isDestination = isStorePrimitive || call.ConstructedType is not null;
+        // An index store (`a[i] = v` lowered to `a.setitem(i, v)`) persists its value into the receiver,
+        // so it is a destination too, retaining exactly as the assignment it came from did.
+        bool isIndexStore = CalleeName(callee: call.Callee) is { } isn &&
+                            RuntimeContract.IndexStoreVerbs.Contains(item: isn);
+        bool isDestination = isStorePrimitive || isIndexStore || call.ConstructedType is not null;
         var args = new List<Expression>(capacity: call.Arguments.Count);
         foreach (Expression arg in call.Arguments)
         {

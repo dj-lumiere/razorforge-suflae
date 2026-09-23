@@ -1433,10 +1433,6 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     continue;
                 }
 
-                // NOTE: `setitem` is NOT excluded (unlike the call-driven `getitem`). An index assignment
-                // `a[i] = x` is lowered to a `setitem` CALL by CODEGEN at emission, not to an AST call the
-                // demand walk can follow, so setitem is never reached call-driven and must be force-seeded per
-                // reached owner or it links undefined (Array[S64,4]/Vector[B32,4]/BitArray/SplitArray/List).
                 // The OPERATOR family is call-driven too. Skip every call-driven operator kind; the genuinely
                 // non-discoverable framework hook (cyclic_visit / CycleTrace) and the denylist names above stay.
                 if (WiredRoutineCatalog.TryGet(name: wiredName, entry: out WiredEntry seedEntry) &&
@@ -1460,7 +1456,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         {
             return wiredName is RepresentMemberRoutineName or "diagnose" or "hash" or "serialize"
                 or "duplicate" or "assign" or "eq" or "ne" or "cmp" or "lt" or "le" or "gt" or "ge"
-                or "contains" or "notcontains" or "getitem" or "iter";
+                or "contains" or "notcontains" or "getitem" or "setitem" or "iter";
         }
 
         // Returns true for wired operator kinds that are reached call-driven (force-seeding them over-approximates).

@@ -642,7 +642,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         IndexExpression rewritten = idx with { Object = loweredObj, Index = loweredIdx };
         rewritten.ResolvedType = idx.ResolvedType;
-        rewritten.ResolvedSetItem = idx.ResolvedSetItem;
         return (hoisted, rewritten);
     }
 

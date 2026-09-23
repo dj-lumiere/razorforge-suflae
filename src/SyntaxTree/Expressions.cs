@@ -699,15 +699,6 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
     {
         return visitor.VisitIndexExpression(node: this);
     }
-
-    /// <summary>
-    /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
-    /// to the memberRoutine-generic-resolved <c>setitem</c>/<c>setitem!</c> routine. Codegen uses
-    /// this in place of a fresh registry lookup so memberRoutine-level generics (e.g.
-    /// <c>BitList.setitem![I]</c> -> <c>BitList.setitem![S64]</c>) dispatch to the
-    /// monomorphized entry.
-    /// </summary>
-    public RoutineInfo? ResolvedSetItem { get; set; }
 }
 
 /// <summary>

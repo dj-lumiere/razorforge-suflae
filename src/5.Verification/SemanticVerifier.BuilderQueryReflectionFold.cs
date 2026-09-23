@@ -426,7 +426,6 @@ public partial class SemanticVerifier
 
         IndexExpression rw = ix with { Object = o, Index = i };
         rw.ResolvedType = ix.ResolvedType;
-        rw.ResolvedSetItem = ix.ResolvedSetItem;
         return rw;
     }
 
