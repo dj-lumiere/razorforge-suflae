@@ -571,6 +571,9 @@ public sealed partial class StdlibLoader
             Location = external.Location,
             IsDangerous = external.IsDangerous,
             GenericParameters = external.GenericParameters,
+            // Carried like SA's external registration does: a bodyless `@llvm_ir` intrinsic's
+            // `needs U64 N` is what marks N as a const parameter, so its template renders the number.
+            GenericConstraints = external.GenericConstraints,
             Annotations = external.Annotations ?? []
         };
 

@@ -722,7 +722,7 @@ routine LLVM::atomic_compare_and_exchange[T](ptr: Hijacked[T], expected: T, desi
 ### :param index: The zero-based byte offset.
 ### :returns: The byte stored at `index`.
 @llvm_ir("{result} = alloca [{N} x i8]\nstore [{N} x i8] {array}, ptr {prev}\n{result} = getelementptr [{N} x i8], ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
-routine LLVM::byte_at[N](array: Array[Byte, N], index: U64) -> U8
+routine LLVM::byte_at[N](array: Array[Byte, N], index: U64) -> U8 needs U64 N
 
 ### Sets the byte at component.
 ### :param array: The `array` value.
@@ -730,7 +730,7 @@ routine LLVM::byte_at[N](array: Array[Byte, N], index: U64) -> U8
 ### :param value: The value to use.
 ### :returns: The resulting `Array[Byte, N]` value.
 @llvm_ir("{result} = alloca [{N} x i8]\nstore [{N} x i8] {array}, ptr {prev}\n{result} = getelementptr [{N} x i8], ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load [{N} x i8], ptr {first}")
-routine LLVM::set_byte_at[N](array: Array[Byte, N], index: U64, value: U8) -> Array[Byte, N]
+routine LLVM::set_byte_at[N](array: Array[Byte, N], index: U64, value: U8) -> Array[Byte, N] needs U64 N
 
 ### Returns the element at `index` from an aggregate value.
 ### Like `byte_at`, this helper materializes the aggregate in temporary storage

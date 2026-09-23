@@ -451,11 +451,11 @@ routine UnpackedFloat[N, N2].div(you: UnpackedFloat[N, N2]) -> UnpackedFloat[N, 
   var wm1 = LLVM::sub(a: wb, b: 1_s64)
   var sign = (me.sign()).xor(you: you.sign())
   var num = wide_resize[N, N2](a: me.mant).wide_shl(n: wb)
-  var den = wide_resize[N, N2](a: you.mant)
-  # One Knuth-D divide gives both the quotient and the remainder (needed only as a sticky flag).
-  var qr = num.wide_divmod(you: den)
+  # One fixed-length Knuth-D divide gives the quotient and the remainder's sticky flag. The divisor is
+  # the normalized mantissa itself (top limb nonzero), N limbs against the N2-limb numerator.
+  var qr = wide_div_sticky[N, N2](a: num, b: you.mant)
   var quo = qr.quo
-  var remnz = not qr.rem.wide_is_zero()
+  var remnz = qr.remnz
   # msbq = index of the quotient's top set bit; s = how many low bits to drop to nbmant.
   var msbq = LLVM::sub(a: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64), b: quo.wide_clz())
   var s = LLVM::sub(a: msbq, b: nbm)
@@ -808,20 +808,18 @@ routine UnpackedFloat[N, N2].rint() -> UnpackedFloat[N, N2]
 common routine UnpackedFloat[N, N2].from_u64(v: U64) -> UnpackedFloat[N, N2]
   if v == 0_u64
     return UnpackedFloat[N, N2].zero(sign: false)
-  var wb = UnpackedFloat[N, N2].width()
-  var x = LLVM::sub(a: 64_s64, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(v)))
-  var s = LLVM::sub(a: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64), b: x)
-  var u = wide_from_u64[N2](v: v).wide_shl(n: s)
-  var rb = wide_low_mask[N2](n: LLVM::sub(a: wb, b: 1_s64))
-  if u.wide_bit(pos: wb)
-    rb = rb.wide_add_u64(v: 1_u64)
-  u = u.wide_add(you: rb)
-  if u.wide_bit(pos: LLVM::sub(a: LLVM::mul(a: 2_s64, b: wb), b: 1_s64))
-    u = u.wide_shl(n: -1_s64)
-    x = LLVM::add(a: x, b: 1_s64)
-  u = u.wide_shl(n: LLVM::sub(a: 0_s64, b: wb))
-  var m = wide_resize[N2, N](a: u)
-  return UnpackedFloat[N, N2].make(mant: m, exp: LLVM::sub[S64](a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: false, iszero: m.wide_is_zero(), isinf: false, isnan: false))
+  # 64 bits always fit the W-2 >= 126-bit significand exactly, so there is nothing to round.
+  # Normalize v so bit 63 is set, then place its leading bit at W-2 (bit 62 of the top limb): the
+  # top limb takes nv >> 1, the limb below takes the one bit shifted out.
+  var lz = LLVM::leading_zeros(v)
+  var nv = LLVM::shift_left(v, lz)
+  var m = Array[U64, N]()
+  var top = LLVM::sub(a: N, b: 1_u64)
+  danger
+    var mp = m.hijack()
+    LLVM::store_element_ref[Array[U64, N], U64](mp, top, LLVM::shift_right_unsigned(nv, 1_u64))
+    LLVM::store_element_ref[Array[U64, N], U64](mp, LLVM::sub(a: top, b: 1_u64), LLVM::shift_left(nv, 63_u64))
+  return UnpackedFloat[N, N2].make(mant: m, exp: LLVM::sub(a: 62_s64, b: LLVM::reinterpret_bits[U64, S64](lz)), fpclass: POSITIVE_NORMAL)
 
 ### Builds an unpacked value from a signed 64-bit integer.
 common routine UnpackedFloat[N, N2].from_s64(src: S64) -> UnpackedFloat[N, N2]

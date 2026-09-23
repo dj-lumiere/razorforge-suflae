@@ -2737,6 +2737,11 @@ public sealed partial class TypeRegistry
                 m.Name == "assign" && m.Parameters.Count == 0 && !m.IsSynthesized &&
                 OwnerConstraintsSatisfied(memberRoutine: m, ownerType: type));
 
+            if (store is not null && !HandWrittenStoreRetains(record: rec))
+            {
+                store = null;
+            }
+
             // The synthesized record store is field-delegating (WiredRoutinePass.
             // BuildRecordCopyBody) — symmetric with the field-delegating synthesized destroy.
             // Treat it as a retaining copy iff some field itself needs one, so it gets injected
@@ -2794,6 +2799,20 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// Whether a record's hand-written <c>assign</c> really retains. A non-generic one does (the managed
+    /// leaf hook of <c>Text</c>/<c>Decimal</c>). A generic record's hand-written store only retains through
+    /// its type arguments: <c>Array[T, N]</c> stores element by element, <c>Hijacked[T]</c> copies the
+    /// pointer. When no argument itself needs a retaining copy (<c>Array[U64, 6]</c>,
+    /// <c>Hijacked[Array[U64, 6]]</c>) the store is a bitwise duplicate, so no call is injected and the
+    /// value is trivially Assignable.
+    /// </summary>
+    private bool HandWrittenStoreRetains(RecordTypeSymbol record)
+    {
+        return record.TypeArguments is not { Count: > 0 } typeArgs ||
+               typeArgs.Any(predicate: arg => GetLifecycle(type: arg).Store is not null);
+    }
+
+    /// <summary>
     /// Whether a record transitively contains a field that needs a retaining copy — i.e. a
     /// field whose type has a hand-written <c>store</c> (a managed leaf such as <c>Text</c> or
     /// <c>Decimal</c>), or a composite record that itself contains one. Drives whether the
@@ -2823,7 +2842,8 @@ public sealed partial class TypeRegistry
             var fieldOwn = GetOwnMemberRoutinesResolved(type: fieldRec)
                .ToList();
             if (fieldOwn.Any(predicate: m =>
-                    m.Name == "assign" && m.Parameters.Count == 0 && !m.IsSynthesized))
+                    m.Name == "assign" && m.Parameters.Count == 0 && !m.IsSynthesized) &&
+                HandWrittenStoreRetains(record: fieldRec))
             {
                 return true;
             }

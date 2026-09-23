@@ -880,13 +880,15 @@ public partial class LlvmEmitter
 
     /// <summary>
     /// Emits the stack-trace push (and records whether to emit the matching pop). Synthesized
-    /// routines, and @inline helpers in Release, are skipped.
+    /// routines and @inline routines are skipped in every build mode: an inline routine has no frame
+    /// of its own (a crash inside it reports its caller's position, as a native backtrace would), and
+    /// tracing one costs a push/pop plus a location update per call inside its loops, which made -O0
+    /// limb kernels an order of magnitude slower than the straight-line code they replaced.
     /// </summary>
     private void EmitTracePush(StringBuilder sb, RoutineInfo routine)
     {
         bool isInline = routine.Annotations.Contains(value: "inline");
-        _traceCurrentRoutine = ShouldEmitTrace && !routine.IsSynthesized &&
-                               !(_buildMode is RfBuildMode.Release && isInline);
+        _traceCurrentRoutine = ShouldEmitTrace && !routine.IsSynthesized && !isInline;
         if (!_traceCurrentRoutine)
         {
             return;
