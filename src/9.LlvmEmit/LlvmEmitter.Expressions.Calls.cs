@@ -1971,7 +1971,7 @@ public partial class LlvmEmitter
                     memberVariableName: member.MemberName);
                 return recIdx < 0
                     ? (-1, null, null)
-                    : (recIdx, GetRecordTypeName(record: recordParent),
+                    : (recIdx, EnsureRecordTypeDeclared(record: recordParent),
                         EmitLvalueAddress(sb: sb, expr: member.Object));
             case CrashableTypeSymbol crashableParent:
                 int crIdx = IndexOfMemberVariable(memberVariables: crashableParent.MemberVariables,

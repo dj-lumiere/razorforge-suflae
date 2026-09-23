@@ -290,7 +290,7 @@ public partial class LlvmEmitter
         RecordTypeSymbol? textRecord = _registry.LookupType(name: "Text") as RecordTypeSymbol ??
                                      _registry.LookupType(name: "Core.Text") as RecordTypeSymbol;
         string textLlvm = textRecord != null
-            ? GetRecordTypeName(record: textRecord)
+            ? EnsureRecordTypeDeclared(record: textRecord)
             : "%Record.Core.Text";
         int dataIdx = textRecord != null
             ? ResolveRecordFieldIndex(record: textRecord, memberVariableName: "data")

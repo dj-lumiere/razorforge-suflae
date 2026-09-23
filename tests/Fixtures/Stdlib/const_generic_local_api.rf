@@ -1,0 +1,51 @@
+module Tests/Stdlib/ConstGenericLocalApi
+
+import IO/Console
+
+# A local initialized from a const-generic parameter (`var i = K`) is a RUNTIME integer of the
+# parameter's declared type: it must be reassignable and advance a loop (it once froze to the
+# constant, so every read of `i` was the literal K).
+routine count_down[K]() -> S64
+needs U64 K
+  var i = K
+  var steps = 0_s64
+  while i > 0
+    i = i - 1
+    steps = steps + 1
+  return steps
+
+routine sum_below[K]() -> U64
+needs U64 K
+  var n = K
+  var total = 0_u64
+  while n > 0
+    n = n - 1
+    total = total + n
+  return total
+
+# An index whose expression is a generic call (`a[f[T](x)]`) is an INDEX, not a generic
+# instantiation — read and write (it once dropped the index and loaded the whole array).
+routine pick(a: Array[U64, 3], i: S64) -> U64
+  return a[LLVM::reinterpret_bits[S64, U64](i)]
+
+routine reversed(a: Array[U64, 3]) -> Array[U64, 3]
+  var r = Array[U64, 3]()
+  var i = 0_s64
+  while i < 3
+    r[LLVM::reinterpret_bits[S64, U64](2 - i)] = a[LLVM::reinterpret_bits[S64, U64](i)]
+    i = i + 1
+  return r
+
+routine start()
+  show(f"count_down[3] = {count_down[3]()}")
+  show(f"count_down[5] = {count_down[5]()}")
+  show(f"sum_below[4] = {sum_below[4]()}")
+  var a = Array[U64, 3]()
+  a[0] = 10
+  a[1] = 11
+  a[2] = 12
+  show(f"pick = {pick(a: a, i: 0)} {pick(a: a, i: 2)}")
+  var r = reversed(a: a)
+  show(f"reversed = {r[0]} {r[1]} {r[2]}")
+  show("DONE")
+  return

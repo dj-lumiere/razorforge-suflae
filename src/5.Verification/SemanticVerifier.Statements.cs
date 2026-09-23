@@ -689,7 +689,8 @@ public sealed partial class SemanticVerifier
         else if (varDecl.Initializer != null)
         {
             // Type inference from initializer
-            varType = AnalyzeExpression(expression: varDecl.Initializer);
+            varType = RuntimeTypeOfConstGeneric(type: AnalyzeExpression(expression: varDecl.Initializer),
+                initializer: varDecl.Initializer);
 
             // Collection literals analyze to the bare entity type (List[T] / Set[T] / Dict[K,V]),
             // which can't be stored bare per the entity-ownership rule (S413). At binding sites,
@@ -760,6 +761,53 @@ public sealed partial class SemanticVerifier
 
 
         TrackSpecialVariableRegistrations(varDecl: varDecl, varType: varType);
+    }
+
+    /// <summary>
+    /// A local never takes a build-time constant AS its type. `var i = K` (K a const-generic parameter
+    /// such as `needs U64 K`, or its monomorphized <see cref="ConstGenericValueTypeSymbol"/>) binds a
+    /// RUNTIME value of the constant's underlying integer type. Codegen emits every identifier typed
+    /// <see cref="ConstGenericValueTypeSymbol"/> as the literal, so a local typed that way would freeze
+    /// to the constant: `i = i - 1` would never be read back and a loop over `i` would never advance.
+    /// Returns <paramref name="type"/> unchanged for anything that is not a const-generic value.
+    /// </summary>
+    private TypeSymbol RuntimeTypeOfConstGeneric(TypeSymbol type, Expression initializer)
+    {
+        if (type is not (GenericParameterTypeSymbol or ConstGenericValueTypeSymbol))
+        {
+            return type;
+        }
+
+        // The declared value type comes from the parameter's `needs <Type> K` constraint — on the
+        // routine/owner in scope, or on the generic definition of a monomorphized body.
+        string? paramName = type switch
+        {
+            GenericParameterTypeSymbol gp => gp.Name,
+            _ => (initializer as IdentifierExpression)?.Name
+        };
+        string? boundName = null;
+        if (paramName != null)
+        {
+            IEnumerable<GenericConstraintDeclaration> constraints = ActiveConstraintsFor(paramName: paramName)
+               .Concat(second: _currentRoutine?.GenericDefinition?.GenericConstraints?.Where(predicate: c =>
+                    c.ParameterName == paramName) ?? []);
+            boundName = constraints
+                       .FirstOrDefault(predicate: c => c is
+                        {
+                            ConstraintType: ConstraintKind.ConstGeneric, ConstraintTypes.Count: > 0
+                        })
+                      ?.ConstraintTypes![index: 0].Name;
+        }
+
+        if (boundName == null && type is ConstGenericValueTypeSymbol constVal)
+        {
+            boundName = constVal.ExplicitTypeName ?? "U64";
+        }
+
+        return boundName != null &&
+               LookupTypeWithImports(name: boundName) is { Category: not TypeCategory.Protocol } underlying
+            ? underlying
+            : type;
     }
 
     /// <summary>

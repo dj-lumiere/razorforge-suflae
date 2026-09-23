@@ -277,7 +277,7 @@ public partial class LlvmEmitter
         if (carrier is RecordTypeSymbol record &&
             record.MemberVariables.Count == expectedMemberVariables)
         {
-            structTypeName = GetRecordTypeName(record: record);
+            structTypeName = EnsureRecordTypeDeclared(record: record);
             IEnumerable<string> fieldTypes =
                 record.MemberVariables.Select(selector: mv =>
                     GetFieldStorageLlvmType(type: mv.Type));

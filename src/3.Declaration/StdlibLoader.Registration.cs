@@ -927,7 +927,9 @@ public sealed partial class StdlibLoader
             IsFailable = routine.IsFailable,
             IsWiredMemberRoutine = routine.IsWiredMemberRoutine,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
-            GenericParameters = routine.GenericParameters,
+            GenericParameters = RoutineOwnGenericParameters(registry: registry,
+                routine: routine,
+                moduleName: moduleName),
             GenericConstraints = routine.GenericConstraints,
             AsyncStatus = routine.Async,
             Annotations = routine.Annotations,
@@ -1022,6 +1024,34 @@ public sealed partial class StdlibLoader
 
         return genericContext.Count > 0
             ? genericContext
+            : null;
+    }
+
+    /// <summary>
+    /// The routine's genuine generic parameters: <c>routine.GenericParameters</c> minus the RECEIVER leaves
+    /// that name real types. The parser collects every leaf of a member routine's receiver
+    /// (<c>Array[U64, K]</c> → <c>U64</c>, <c>K</c>) into GenericParameters; a leaf that resolves to a type
+    /// is a concrete binding, not a parameter. Left in, <c>U64</c> survived owner instantiation
+    /// (<c>K</c> binds to Array's <c>N</c> slot) as a phantom method-level parameter, so the member was
+    /// never monomorphized and reached codegen "unresolved". Mirrors SignatureResolver's filter for
+    /// user routines. Returns null when no parameter remains.
+    /// </summary>
+    private static List<string>? RoutineOwnGenericParameters(TypeRegistry registry,
+        RoutineDeclaration routine, string moduleName)
+    {
+        if (routine.GenericParameters == null)
+        {
+            return null;
+        }
+
+        HashSet<string> receiverLeaves = CollectReceiverLeafParamNames(receiver: routine.ReceiverType);
+        var own = routine.GenericParameters
+                         .Where(predicate: gp => !receiverLeaves.Contains(item: gp) ||
+                                                 registry.LookupType(name: gp) is null &&
+                                                 registry.LookupType(name: $"{moduleName}.{gp}") is null)
+                         .ToList();
+        return own.Count > 0
+            ? own
             : null;
     }
 

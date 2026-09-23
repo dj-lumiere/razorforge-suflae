@@ -200,8 +200,15 @@ public partial class LlvmEmitter
     {
         if (routine.TypeArguments is { Count: > 0 })
         {
+            List<string>? declaredParams =
+                routine.GenericParameters ?? routine.GenericDefinition?.GenericParameters;
             return routine.TypeArguments
-                          .Select(selector: GetLlvmIntrinsicTypeArgument)
+                          .Select(selector: (ta, i) =>
+                               ta is ConstGenericValueTypeSymbol constArg &&
+                               !IsConstIntrinsicParam(routine: routine,
+                                   paramName: declaredParams is { } dp && i < dp.Count ? dp[index: i] : null)
+                                   ? GetLlvmType(type: ResolveConstGenericUnderlyingType(constVal: constArg))
+                                   : GetLlvmIntrinsicTypeArgument(type: ta))
                           .ToList();
         }
 
@@ -217,6 +224,15 @@ public partial class LlvmEmitter
         for (int i = 0; i < routine.Parameters.Count && i < arguments.Count; i++)
         {
             TypeSymbol? argType = GetExpressionType(expr: arguments[index: i]);
+            // A const-generic VALUE passed as an argument (`LLVM::unsigned_lt(a: K, b: 2_u64)`) is a runtime
+            // integer of the constant's underlying type. Binding the intrinsic's `T` to the constant itself
+            // rendered the LLVM type as the literal (`icmp ult 3 3, 2`). A constant is only a type argument
+            // when written explicitly (`[K]`), which the routine.TypeArguments path above handles.
+            if (argType is ConstGenericValueTypeSymbol constArg)
+            {
+                argType = ResolveConstGenericUnderlyingType(constVal: constArg);
+            }
+
             if (argType != null)
             {
                 InferGenericBindings(pattern: routine.Parameters[index: i].Type,
@@ -260,6 +276,24 @@ public partial class LlvmEmitter
         }
 
         return llvmTypeArgs;
+    }
+
+    /// <summary>True when the intrinsic declares <paramref name="paramName"/> as a CONST-generic parameter
+    /// (`needs U64 N`) — its argument renders as the number. Any other type parameter (`unsigned_lt[T]`)
+    /// bound to a constant is a runtime value of the constant's underlying type. An unknown name keeps the
+    /// old number rendering.</summary>
+    private static bool IsConstIntrinsicParam(RoutineInfo routine, string? paramName)
+    {
+        if (paramName == null)
+        {
+            return true;
+        }
+
+        IEnumerable<GenericConstraintDeclaration> constraints =
+            (routine.GenericConstraints ?? []).Concat(
+                second: routine.GenericDefinition?.GenericConstraints ?? []);
+        return constraints.Any(predicate: c =>
+            c.ParameterName == paramName && c.ConstraintType == ConstraintKind.ConstGeneric);
     }
 
     private string GetLlvmIntrinsicTypeArgument(TypeSymbol type)

@@ -976,7 +976,7 @@ public partial class LlvmEmitter
         }
 
         string structAddr = EmitLvalueAddress(sb: sb, expr: member.Object);
-        string structTypeName = GetRecordTypeName(record: structRecord);
+        string structTypeName = EnsureRecordTypeDeclared(record: structRecord);
         string sFieldPtr = NextTemp();
         EmitLine(sb: sb,
             line:
@@ -1009,7 +1009,7 @@ public partial class LlvmEmitter
                 $"Member '{member.MemberName}' not found on inner record '{innerRecord.Name}'");
         }
 
-        string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
+        string innerRecordTypeName = EnsureRecordTypeDeclared(record: innerRecord);
         string fieldPtr = NextTemp();
         EmitLine(sb: sb,
             line:
@@ -1102,7 +1102,7 @@ public partial class LlvmEmitter
         }
 
         // Struct wrapper: extract the Hijacked[T] field that holds the inner entity pointer.
-        string recordTypeName = GetRecordTypeName(record: wrapperRecord);
+        string recordTypeName = EnsureRecordTypeDeclared(record: wrapperRecord);
         string innerPtr = NextTemp();
         int dataFieldIndex =
             FindHijackedFieldIndex(wrapperRecord: wrapperRecord, innerEntity: innerEntity);

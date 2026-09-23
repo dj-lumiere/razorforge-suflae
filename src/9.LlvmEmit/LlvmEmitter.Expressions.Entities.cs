@@ -417,7 +417,7 @@ public partial class LlvmEmitter
     private string EmitInlineCarrierConstruction(StringBuilder sb, RecordTypeSymbol record,
         CreatorExpression expr)
     {
-        string carrier = GetRecordTypeName(record: record);
+        string carrier = EnsureRecordTypeDeclared(record: record);
         string slot = NextTemp();
         EmitLine(sb: sb, line: $"  {slot} = alloca {carrier}");
         EmitLine(sb: sb, line: $"  store {carrier} zeroinitializer, ptr {slot}");
@@ -483,7 +483,7 @@ public partial class LlvmEmitter
     private string EmitMemberwiseRecordStruct(StringBuilder sb, RecordTypeSymbol record,
         Func<int, MemberVariableInfo, string?> valueForField)
     {
-        string typeName = GetRecordTypeName(record: record);
+        string typeName = EnsureRecordTypeDeclared(record: record);
         string result = "zeroinitializer";
         for (int i = 0; i < record.MemberVariables.Count; i++)
         {
@@ -744,7 +744,7 @@ public partial class LlvmEmitter
             return null;
         }
 
-        string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
+        string innerRecordTypeName = EnsureRecordTypeDeclared(record: innerRecord);
         string fieldPtr = NextTemp();
         EmitLine(sb: sb,
             line:
@@ -818,7 +818,7 @@ public partial class LlvmEmitter
         }
         else
         {
-            string recordTypeName = GetRecordTypeName(record: wrapperRecord);
+            string recordTypeName = EnsureRecordTypeDeclared(record: wrapperRecord);
             innerPtr = NextTemp();
             int dataFieldIndex = FindHijackedFieldIndex(wrapperRecord: wrapperRecord,
                 innerEntity: innerEntity);
@@ -1036,7 +1036,7 @@ public partial class LlvmEmitter
                 $"Member variable '{memberVariableName}' not found on record '{record.FullName}'");
         }
 
-        string typeName = GetRecordTypeName(record: record);
+        string typeName = EnsureRecordTypeDeclared(record: record);
 
         // A Bool field is stored as i8 in the aggregate — trunc back to the i1 register form.
         string value = NextTemp();
