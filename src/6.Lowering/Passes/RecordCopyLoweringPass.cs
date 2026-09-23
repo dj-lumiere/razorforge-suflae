@@ -519,14 +519,17 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             return steal;
         }
 
-        // TemporaryTeardownPass move-temps (`__rv_*` = a spilled reassignment RHS, `__tt_*` = a
-        // spilled owned receiver) hold a FRESH single-use owned value that is moved, never shared, so
-        // it must NOT be retaining-copied. Normally that pass runs after this one, but instantiated
-        // generic bodies are re-lowered here post-monomorphization (after the def already grew the
-        // temps), and copying `target = __rv` would leak the un-freed `__rv` every iteration.
+        // Move temps hold a FRESH single-use owned value that is moved, never shared, so they must NOT
+        // be retaining-copied: TemporaryTeardownPass's `__rv_*` (a spilled reassignment RHS) and `__tt_*`
+        // (a spilled owned receiver), and OperatorLoweringPass's `__wb_*` (the element copy a nested value
+        // write stores back, `m[i] = __wb` in `{ var __wb = m[i]; __wb[j] = v; m[i] = __wb }`). Normally
+        // TemporaryTeardownPass runs after this one, but instantiated generic bodies are re-lowered here
+        // post-monomorphization (after the def already grew the temps), and copying `target = __rv` would
+        // leak the un-freed `__rv` every iteration.
         if (expr is IdentifierExpression { Name: var tn } &&
             (tn.StartsWith(value: "__rv_", comparisonType: StringComparison.Ordinal) ||
-             tn.StartsWith(value: "__tt_", comparisonType: StringComparison.Ordinal)))
+             tn.StartsWith(value: "__tt_", comparisonType: StringComparison.Ordinal) ||
+             tn.StartsWith(value: "__wb_", comparisonType: StringComparison.Ordinal)))
         {
             return expr;
         }

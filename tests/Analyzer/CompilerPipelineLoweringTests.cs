@@ -712,6 +712,47 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
+    /// A write into a value element (`grid[1][0] = v`) goes through a copy of the element that is stored
+    /// back. The copy lives in a variable made after scope teardown was inserted, so it is never destroyed:
+    /// storing it back must MOVE it, not copy it again, or each write leaks one reference of every managed
+    /// field. Of the two `Array[Text, 2].assign` copies left, one is the write-back read and one is the
+    /// later `grid[1][0]` read, none is the store.
+    /// </summary>
+    [Fact]
+    public void LlvmEmitter_NestedValueWrite_StoresTheCopyBackWithoutCopyingAgain()
+    {
+        string source = """
+                        import IO/Console
+
+                        routine start()
+                          var grid = Array[Array[Text, 2], 2]()
+                          grid[1][0] = "hi"
+                          show(grid[1][0])
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        var generator = new LlvmEmitter(program: program,
+            registry: result.Registry,
+            options: new LlvmEmitterOptions
+            {
+                StdlibPrograms = result.Registry.StdlibPrograms,
+                SynthesizedBodies = result.SynthesizedBodies,
+                InstantiatedGenericBodies = result.InstantiatedGenericBodies
+            });
+
+        string llvmIr = generator.Generate();
+        string body = ExtractFunctionDefinition(llvmIr: llvmIr, functionMarker: "start()\"");
+        int copies = body.Split(separator: "Array[Core.Text, 2].assign()").Length - 1;
+        Assert.Equal(expected: 2, actual: copies);
+    }
+
+    /// <summary>
     /// Verifies code generation behavior for bit list to U8 uses concrete hijacked U64 extract.
     /// </summary>
     [Fact]

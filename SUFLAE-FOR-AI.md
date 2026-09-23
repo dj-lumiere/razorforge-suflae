@@ -224,8 +224,11 @@ altitude the explanation is human, not "iterator invalidation": after an
 add/remove the loop can no longer trust that its next element is really the next
 one. Direct mutation (`each x in xs { xs.add_last(...) }`) is a build-time error
 (shared with RF, RF-S625). Indirect mutation (mutation hidden behind a called
-routine) is designed to become a runtime `ActiveLoopReshaping` crash (a runtime
-"IterGuard" — **designed, not yet built**). The marker that drives this
+routine) is meant to be a runtime `ReshapingWhilePinnedError` crash. The builder
+already does this for RazorForge (container pinning: the loop pins its container,
+and every `@reshaping` routine checks the pin), but **Suflae is not wired yet**:
+an SF container is a `Roamed` handle, which the builder does not pin, so an
+indirect add during a loop is not caught today. The marker that drives this
 (`@reshaping`) is RF-facing only; SF users never see it.
 
 ## 6. Failure taxonomy (recoverable vs fatal walls)
@@ -359,7 +362,8 @@ Suflae is at v0.1, and the core is now standing end-to-end:
 - **Verified:** the `StdlibSf/*.sf` fixtures run in the main harness (StdlibApiTests)
   with an RF-twin output-equivalence lock.
 
-**Not yet real:** the runtime `IterGuard` backstop for indirect loop-mutation;
+**Not yet real:** the runtime pinning backstop for indirect loop-mutation in
+Suflae (built for RazorForge, not yet applied to `Roamed` containers);
 `BitList` (its SF wrapper hits a non-generic-wrapper codegen bug — deferred);
 literal-suffix number gating; `ObjectHacker` runtime reflection; hot reload; the
 REPL / fast-rebuild loop. When generating Suflae, prefer the closest

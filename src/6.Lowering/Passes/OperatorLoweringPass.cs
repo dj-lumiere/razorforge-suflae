@@ -282,7 +282,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         }
 
         TypeSymbol elementType = steps[index: cut].ResolvedType!;
-        string copyName = NextTempName(prefix: "wb");
+        string copyName = $"__wb_{_tempCount++}";
         block.Add(item: MakeTempDeclaration(name: copyName,
             type: elementType,
             initializer: RebuildPath(root: root, steps: steps, from: 0, to: cut,
@@ -298,6 +298,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
             to: steps.Count - 1,
             hoistedIndices: hoistedIndices);
         block.Add(item: new AssignmentStatement(Target: innerTarget, Value: value, Location: location));
+        // The copy is MOVED back into the container, not copied again: this pass runs after scope teardown
+        // was inserted, so the copy variable is never destroyed, and a second copy of a managed element
+        // (Text, Retained, ...) would leak one reference per write. Its `__wb_` name marks it as a move
+        // temp, which RecordCopyLoweringPass stores without a retaining copy.
         block.Add(item: new AssignmentStatement(
             Target: RebuildPath(root: root, steps: steps, from: 0, to: cut,
                 hoistedIndices: hoistedIndices),

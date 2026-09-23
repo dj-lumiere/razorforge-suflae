@@ -275,6 +275,9 @@ consume(r: steal b)   # ownership moves; using b afterwards = compile error
 - **Access tokens** (RF's answer to "borrow" — never call them borrows). They are
   scope-bound: they cannot be returned, stored, or bound with `var x = a.view()`.
   Use them inline for a single call, or `using ... as` when a name is needed.
+  While a token is in use (its `using` block, or the one call it is passed to),
+  the entity it was taken from cannot be reassigned or `steal`-moved (RF-S639):
+  that would leave the token pointing at freed memory.
   - **`Viewing[T]` / `Modifying[T]`** — read / write intent on a directly-owned
     entity. Produced by `a.view()` / `a.modify()`.
   - **`Consulting[T]` / `Amending[T]`** — read / write intent on the inner value of
@@ -430,6 +433,19 @@ that differ from other languages:
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate.
+A mutation hidden behind a call (`each x in xs { grow(xs: xs.modify()) }`) is
+not visible at build time; the loop pins `xs` instead, and the mutator crashes
+with `ReshapingWhilePinnedError` (List, CircularList, Dict, Set, BitList).
+
+**Writes into an element land in the container.** A call, field write, or index
+write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,
+`grid[0][1] = 20`) acts on the element inside the container, not on a copy: the
+builder reaches it through the container's `modify_at`/`view_at` token (List,
+CircularList, Dict). In that same statement the container may not be stolen,
+passed along, or given a non-`@readonly` call (RF-S639), since that could move
+the element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
+the builder writes through a copy and stores it back. Binding an entity element
+to a name (`var x = grid[0]`) still makes a copy.
 
 ## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
 
