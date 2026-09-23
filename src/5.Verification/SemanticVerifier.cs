@@ -575,6 +575,7 @@ public sealed partial class SemanticVerifier
     private void RunPhase5SemanticAnalysis(Program program)
     {
         AnalyzeBodies(program: program);
+        CheckShapeEffects(programs: [program]);
         AnalyzeSynthesizedBodies();
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
@@ -2055,6 +2056,8 @@ public sealed partial class SemanticVerifier
 
             AnalyzeBodies(program: program);
         }
+
+        CheckShapeEffects(programs: files.Select(selector: f => f.Program));
 
         // Per-file resolution realm is a body-analysis convenience only; global passes (synthesis,
         // instantiation, GMP) re-resolve concrete instantiations and must run at the ambient realm so

@@ -602,16 +602,11 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// RF-S639 for tokens that live for exactly one call. Two kinds:
-    /// <list type="bullet">
-    /// <item>a token passed inline (<c>f(m: a.modify(), x: steal a)</c>, <c>a.modify().absorb(x: steal a)</c>):
-    /// a <c>steal</c> of its source elsewhere in the same call is rejected;</item>
-    /// <item>a call on an entity element (<c>grid[0].add_last(value: v)</c>), which the builder runs through
-    /// a token on that element: while the call runs, the container must keep the element where it is, so
-    /// the same call may not steal the container, pass it along, or call a non-<c>@readonly</c> routine on it
-    /// (any of which could move or free the element).</item>
-    /// </list>
-    /// Runs after the call is analyzed, when argument types are known.
+    /// RF-S639 for a token passed inline to one call (<c>f(m: a.modify(), x: steal a)</c>,
+    /// <c>a.modify().absorb(x: steal a)</c>): the token lives for that call, so a <c>steal</c> of its source
+    /// elsewhere in the same call is rejected. (A statement working on an entity element in place is
+    /// checked after all bodies are analyzed, see <c>CheckShapeEffects</c>.) Runs after the call is
+    /// analyzed, when argument types are known.
     /// </summary>
     private void CheckInlineTokenSourceSteals(CallExpression call)
     {
@@ -650,93 +645,6 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        if (call.Callee is MemberExpression { Object: var elementReceiver } &&
-            EntityElementContainerPath(expr: elementReceiver) is { } container)
-        {
-            CheckElementContainerUse(container: container,
-                scanned: call.Arguments,
-                argumentsPassedToCall: true);
-        }
-    }
-
-    /// <summary>
-    /// When <paramref name="expr"/> reaches an entity ELEMENT of a named container (<c>grid[0]</c>, or a
-    /// field chain on one such as <c>grid[0].inner</c>), returns the container's path (<c>grid</c>). The
-    /// builder runs a call or field write on such a receiver through a token on the element.
-    /// </summary>
-    private static string? EntityElementContainerPath(Expression expr)
-    {
-        Expression cur = expr;
-        while (cur is MemberExpression member)
-        {
-            cur = member.Object;
-        }
-
-        return cur is IndexExpression { ResolvedType: EntityTypeSymbol } element
-            ? BuildAccessPath(expr: element.Object)
-            : null;
-    }
-
-    /// <summary>
-    /// RF-S639 for an element token on <paramref name="container"/>: reports a use in
-    /// <paramref name="scanned"/> that could move or free the element while the token is in use: a
-    /// <c>steal</c> of the container (or what owns it), a call on it that is not <c>@readonly</c>, or,
-    /// when the expressions are the arguments of the call itself, passing it as an argument.
-    /// </summary>
-    private void CheckElementContainerUse(string container, IEnumerable<Expression> scanned,
-        bool argumentsPassedToCall)
-    {
-        foreach (Expression top in scanned)
-        {
-            Expression topValue = top is NamedArgumentExpression named
-                ? named.Value
-                : top;
-            if (argumentsPassedToCall && BuildAccessPath(expr: topValue) is { } passed &&
-                IsPathPrefixOrEqual(prefix: passed, path: container))
-            {
-                ReportElementContainerUse(container: container,
-                    attempt: $"pass '{passed}' along",
-                    location: topValue.Location);
-                continue;
-            }
-
-            foreach (Expression node in CollectSubexpressions(expr: top))
-            {
-                switch (node)
-                {
-                    case StealExpression steal
-                        when BuildAccessPath(expr: steal.Operand) is { } stolen &&
-                             IsPathPrefixOrEqual(prefix: stolen, path: container):
-                        ReportElementContainerUse(container: container,
-                            attempt: $"steal '{stolen}'",
-                            location: steal.Location);
-                        break;
-                    case CallExpression
-                    {
-                        Callee: MemberExpression { Object: var callReceiver } callee
-                    } inner when BuildAccessPath(expr: callReceiver) is { } receiverPath &&
-                                 IsPathPrefixOrEqual(prefix: receiverPath, path: container) &&
-                                 inner.ResolvedRoutine?.MutationCategory !=
-                                 MutationCategory.Readonly:
-                        ReportElementContainerUse(container: container,
-                            attempt: $"call '{receiverPath}.{callee.MemberName}()'",
-                            location: inner.Location);
-                        break;
-                }
-            }
-        }
-    }
-
-    private void ReportElementContainerUse(string container, string attempt,
-        SourceLocation location)
-    {
-        ReportError(code: SemanticDiagnosticCode.TokenSourceReplaced,
-            message:
-            $"You are trying to {attempt} while this statement changes or reads an element of " +
-            $"'{container}' in place. That element is reached through a token that points into " +
-            $"'{container}', and this could move or free the element under it. Do it in a separate " +
-            "statement before or after.",
-            location: location);
     }
 
     private static bool IsPathPrefixOrEqual(string prefix, string path)

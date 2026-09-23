@@ -1072,20 +1072,6 @@ public sealed partial class SemanticVerifier
         }
 
         CheckFrozenTokenSource(target: target, attempt: "reassign", location: location);
-        // A write into an entity element (`grid[0].n = v`, `grid[0][j] = v`) goes through a token on
-        // that element, so the value may not move or free it (RF-S639).
-        Expression? writeOwner = target switch
-        {
-            MemberExpression member => member.Object,
-            IndexExpression index => index.Object,
-            _ => null
-        };
-        if (writeOwner != null && EntityElementContainerPath(expr: writeOwner) is { } elementContainer)
-        {
-            CheckElementContainerUse(container: elementContainer,
-                scanned: [value],
-                argumentsPassedToCall: false);
-        }
 
         switch (target)
         {

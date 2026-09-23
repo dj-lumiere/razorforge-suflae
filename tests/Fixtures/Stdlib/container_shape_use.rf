@@ -2,10 +2,10 @@ module Tests/Stdlib/ContainerShapeUse
 
 import IO/Console
 
-# An `each` loop and a call on an entity element open a shape use of their container, and every @reshaping
-# routine of it checks for open uses. These are the paths that must NOT crash: a change after a loop, after
-# `break`, after a `return` out of a loop (the return closes the use), and after statements that reach
-# elements.
+# While an `each` loop goes through a container, or a statement works on one of its entity elements, the
+# builder rejects anything that could add to or remove from that container (RF-S625, RF-S639). These are
+# the paths that must still build and run: a change after a loop, after `break`, after a `return` out of a
+# loop, a loop handing its list to a routine that only reads it, and statements that reach elements.
 
 entity Box
   n: S64

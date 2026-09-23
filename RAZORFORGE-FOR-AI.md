@@ -433,18 +433,20 @@ that differ from other languages:
 `@reshaping` mutator (`add`/`remove`/…) on the variable being iterated is a
 build-time error — after a structural change the loop can no longer trust its
 next element. Finish the loop, then mutate.
-A mutation hidden behind a call (`each x in xs { grow(xs: xs.modify()) }`) is
-not visible at build time; the loop marks the shape of `xs` (its element count
-and positions) as in use instead, and the mutator crashes with
-`ReshapingWhileInUseError` (List, CircularList, Dict, Set, BitList).
+The ban also covers a mutation hidden behind a call
+(`each x in xs { grow(xs: xs.modify()) }`): the builder works out which
+parameters each routine can add to or remove from, following its calls, and
+rejects handing `xs` to one. Handing `xs` to a routine value, or changing another
+`Retained`/`Tracked` handle to the same kind of container, is rejected too,
+because the builder cannot tell whether it is the same container.
 
 **Writes into an element land in the container.** A call, field write, or index
 write on an ENTITY element (`grid[0].add_last(value: 1)`, `boxes[0].n = 5`,
 `grid[0][1] = 20`) acts on the element inside the container, not on a copy: the
 builder reaches it through the container's `modify_at`/`view_at` token (List,
-CircularList, Dict). In that same statement the container may not be stolen,
-passed along, or given a non-`@readonly` call (RF-S639), since that could move
-the element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
+CircularList, Dict). In that same statement nothing may add to or remove from
+the container, directly or through a call (RF-S639), since that could move the
+element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
 the builder writes through a copy and stores it back. Binding an entity element
 to a name (`var x = grid[0]`) still makes a copy.
 

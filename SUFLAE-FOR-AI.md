@@ -224,11 +224,12 @@ altitude the explanation is human, not "iterator invalidation": after an
 add/remove the loop can no longer trust that its next element is really the next
 one. Direct mutation (`each x in xs { xs.add_last(...) }`) is a build-time error
 (shared with RF, RF-S625). Indirect mutation (mutation hidden behind a called
-routine) is meant to be a runtime `ReshapingWhileInUseError` crash. The builder
-already does this for RazorForge (the loop marks its container's shape as in use,
-and every `@reshaping` routine checks that mark), but **Suflae is not wired
-yet**: an SF container is a `Roamed` handle, which the builder does not mark, so
-an indirect add during a loop is not caught today. The marker that drives this
+routine) cannot be traced at build time in Suflae, because an SF container is a
+shared `Roamed` handle, so it is meant to be a runtime `ReshapingWhileInUseError`
+crash. (RazorForge rejects the same mutation at build time by following calls.)
+**The Suflae runtime check is not wired yet**: the builder does not mark a
+`Roamed` container as in use, so an indirect add during a loop is not caught
+today. The marker that drives this
 (`@reshaping`) is RF-facing only; SF users never see it.
 
 ## 6. Failure taxonomy (recoverable vs fatal walls)
