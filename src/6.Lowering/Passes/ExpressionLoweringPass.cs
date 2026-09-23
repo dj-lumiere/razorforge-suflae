@@ -3181,7 +3181,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// Converts a <see cref="TypeSymbol"/> to a <see cref="TypeExpression"/> suitable for
     /// use as a variable type annotation in a synthetic <see cref="VariableDeclaration"/>.
     /// </summary>
-    private static TypeExpression TypeInfoToExpr(TypeSymbol type, SourceLocation loc)
+    internal static TypeExpression TypeInfoToExpr(TypeSymbol type, SourceLocation loc)
     {
         // For generic resolutions, use the base definition name (not the resolved "Maybe[S64]").
         string baseName = type switch

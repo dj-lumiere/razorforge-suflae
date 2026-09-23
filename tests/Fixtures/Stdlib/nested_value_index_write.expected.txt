@@ -1,0 +1,7 @@
+2d = 0 6 5 0
+3d = 9 0
+pts = 0 3 6
+once = 1 11
+field path = 8
+copy is independent = 0 42
+DONE

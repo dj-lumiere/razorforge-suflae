@@ -88,6 +88,12 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     /// </summary>
     protected override Statement VisitAssignment(AssignmentStatement s)
     {
+        if (LowerValueWriteBack(target: s.Target, value: s.Value, location: s.Location) is
+            { } writeBack)
+        {
+            return writeBack;
+        }
+
         Expression val = VisitExpression(expr: s.Value);
         if (s.Target is IndexExpression idx &&
             LowerIndexAssignment(idx: idx, value: val) is { } setItemCall)
@@ -98,6 +104,184 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         return ReferenceEquals(objA: val, objB: s.Value)
             ? s
             : s with { Value = val };
+    }
+
+    /// <summary>
+    /// The expression form of an assignment (<c>target = v</c> as a statement) gets the same
+    /// write-back lowering as <see cref="VisitAssignment"/>.
+    /// </summary>
+    protected override Statement VisitExpressionStatement(ExpressionStatement s)
+    {
+        if (s.Expression is BinaryExpression { Operator: BinaryOperator.Assign } assign &&
+            LowerValueWriteBack(target: assign.Left, value: assign.Right, location: s.Location) is
+                { } writeBack)
+        {
+            return writeBack;
+        }
+
+        return base.VisitExpressionStatement(s: s);
+    }
+
+    /// <summary>
+    /// Lowers a write into a value that lives inside another value's element, such as
+    /// <c>m[i][j] = v</c> or <c>pts[k].x = v</c>. An element read out of a value-type container is a
+    /// copy with no storage of its own, so a write into it would be lost. A record assignment is
+    /// rebinding (<c>x.f = v</c> means <c>x = x with f: v</c>), so the write goes through a copy that is
+    /// stored back: <c>{ var t = m[i]; t[j] = v; m[i] = t }</c>. The block is lowered again, so the read
+    /// becomes <c>getitem</c>, the writes become <c>setitem</c> or field stores, and a further value
+    /// element closer to the root is written back the same way. Index expressions on the copied path
+    /// that are not plain names or literals are bound to temporaries first so each runs once.
+    /// Returns null when the target needs no write-back.
+    /// </summary>
+    private Statement? LowerValueWriteBack(Expression target, Expression value,
+        SourceLocation location)
+    {
+        // The target path from the root outward: root.s0.s1...s(n-1), where s(n-1) is the target itself.
+        var steps = new List<Expression>();
+        Expression root = target;
+        while (root is MemberExpression or IndexExpression)
+        {
+            steps.Insert(index: 0, item: root);
+            root = root is MemberExpression m
+                ? m.Object
+                : ((IndexExpression)root).Object;
+        }
+
+        if (root is not IdentifierExpression || steps.Count < 2)
+        {
+            return null;
+        }
+
+        // The value element closest to the target: a non-final index step yielding a value record.
+        int cut = -1;
+        for (int k = steps.Count - 2; k >= 0; k--)
+        {
+            if (steps[index: k] is IndexExpression { ResolvedType: { } elemType } &&
+                IsWriteBackValue(type: elemType))
+            {
+                cut = k;
+                break;
+            }
+        }
+
+        if (cut < 0)
+        {
+            return null;
+        }
+
+        var block = new List<Statement>();
+        var hoistedIndices = new Dictionary<int, Expression>();
+        for (int k = 0; k <= cut; k++)
+        {
+            if (steps[index: k] is IndexExpression { Index: var ix } && !IsPureOperand(expr: ix))
+            {
+                string ixName = NextTempName(prefix: "wbi");
+                block.Add(item: MakeTempDeclaration(name: ixName,
+                    type: ix.ResolvedType,
+                    initializer: ix,
+                    location: location));
+                hoistedIndices[key: k] = new IdentifierExpression(Name: ixName, Location: ix.Location)
+                {
+                    ResolvedType = ix.ResolvedType
+                };
+            }
+        }
+
+        TypeSymbol elementType = steps[index: cut].ResolvedType!;
+        string copyName = NextTempName(prefix: "wb");
+        block.Add(item: MakeTempDeclaration(name: copyName,
+            type: elementType,
+            initializer: RebuildPath(root: root, steps: steps, from: 0, to: cut,
+                hoistedIndices: hoistedIndices),
+            location: location));
+        Expression innerTarget = RebuildPath(
+            root: new IdentifierExpression(Name: copyName, Location: location)
+            {
+                ResolvedType = elementType
+            },
+            steps: steps,
+            from: cut + 1,
+            to: steps.Count - 1,
+            hoistedIndices: hoistedIndices);
+        block.Add(item: new AssignmentStatement(Target: innerTarget, Value: value, Location: location));
+        block.Add(item: new AssignmentStatement(
+            Target: RebuildPath(root: root, steps: steps, from: 0, to: cut,
+                hoistedIndices: hoistedIndices),
+            Value: new IdentifierExpression(Name: copyName, Location: location)
+            {
+                ResolvedType = elementType
+            },
+            Location: location));
+        return VisitStatement(stmt: new BlockStatement(Statements: block, Location: location));
+    }
+
+    /// <summary>
+    /// Rebuilds path steps <paramref name="from"/>..<paramref name="to"/> on top of
+    /// <paramref name="root"/>, substituting hoisted index temporaries. Each step keeps its resolved type.
+    /// </summary>
+    private static Expression RebuildPath(Expression root, List<Expression> steps, int from, int to,
+        Dictionary<int, Expression> hoistedIndices)
+    {
+        Expression acc = root;
+        for (int k = from; k <= to; k++)
+        {
+            acc = steps[index: k] switch
+            {
+                MemberExpression m => m with { Object = acc },
+                IndexExpression ix => ix with
+                {
+                    Object = acc,
+                    Index = hoistedIndices.TryGetValue(key: k, value: out Expression? h)
+                        ? h
+                        : ix.Index
+                },
+                _ => acc
+            };
+        }
+
+        return acc;
+    }
+
+    /// <summary>
+    /// Whether an element of this type is a value copied out on read, so a write into it must be
+    /// stored back: a record that is not a handle (an entity, or a wrapper such as
+    /// <c>Hijacked</c>/<c>Roamed</c>/<c>Retained</c>, is written through the handle it already is).
+    /// </summary>
+    private static bool IsWriteBackValue(TypeSymbol type)
+    {
+        if (type is not RecordTypeSymbol record)
+        {
+            return false;
+        }
+
+        string baseName = (record.GenericDefinition ?? record).BareName;
+        return !Builder.Declaration.RuntimeContract.WrapperTypes.Contains(item: baseName);
+    }
+
+    /// <summary>A name or literal: evaluating it twice is the same as evaluating it once.</summary>
+    private static bool IsPureOperand(Expression expr)
+    {
+        return expr is IdentifierExpression or LiteralExpression;
+    }
+
+    private int _tempCount;
+
+    private string NextTempName(string prefix)
+    {
+        return $"_{prefix}_{_tempCount++}";
+    }
+
+    private static DeclarationStatement MakeTempDeclaration(string name, TypeSymbol? type,
+        Expression initializer, SourceLocation location)
+    {
+        var declaration = new VariableDeclaration(Name: name,
+            Type: type != null
+                ? ExpressionLoweringPass.TypeInfoToExpr(type: type, loc: location)
+                : null,
+            Initializer: initializer,
+            Visibility: VisibilityModifier.Secret,
+            Location: location);
+        return new DeclarationStatement(Declaration: declaration, Location: location);
     }
 
     /// <summary>

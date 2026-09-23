@@ -1,0 +1,51 @@
+module Tests/Stdlib/NestedValueIndexWrite
+
+import IO/Console
+
+# A write into a value that lives inside another value's element (`m[i][j] = v`, `pts[k].x = v`)
+# must land in the container. The element read is a copy, so the builder writes through that copy
+# and stores it back (a record assignment is rebinding). It once wrote into a discarded temporary.
+
+record Pt
+  x: S64
+  y: S64
+
+record Holder
+  rows: Array[Array[S64, 2], 2]
+
+entity Counter
+  hits: S64
+
+routine Counter.bump() -> U64
+  me.hits = me.hits + 1
+  return 1u64
+
+routine start()
+  var m = Array[Array[S64, 2], 2]()
+  m[1][0] = 5
+  m[0][1] = m[1][0] + 1
+  show(f"2d = {m[0][0]} {m[0][1]} {m[1][0]} {m[1][1]}")
+
+  var cube = Array[Array[Array[S64, 2], 2], 2]()
+  cube[1][1][0] = 9
+  show(f"3d = {cube[1][1][0]} {cube[0][1][0]}")
+
+  var pts = Array[Pt, 2]()
+  pts[1].x = 3
+  pts[1].y = pts[1].x * 2
+  show(f"pts = {pts[0].x} {pts[1].x} {pts[1].y}")
+
+  # The index runs once even though the element is read and then stored back.
+  var c = Counter(hits: 0)
+  m[c.bump()][0] = 11
+  show(f"once = {c.hits} {m[1][0]}")
+
+  var h = Holder(rows: Array[Array[S64, 2], 2]())
+  h.rows[0][1] = 8
+  show(f"field path = {h.rows[0][1]}")
+
+  var copy = m
+  copy[0][0] = 42
+  show(f"copy is independent = {m[0][0]} {copy[0][0]}")
+  show("DONE")
+  return
