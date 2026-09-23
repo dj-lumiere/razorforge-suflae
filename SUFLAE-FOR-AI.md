@@ -225,12 +225,12 @@ add/remove the loop can no longer trust that its next element is really the next
 one. Direct mutation (`each x in xs { xs.add_last(...) }`) is a build-time error
 (shared with RF, RF-S625). Indirect mutation (mutation hidden behind a called
 routine) cannot be traced at build time in Suflae, because an SF container is a
-shared `Roamed` handle, so it is meant to be a runtime `ReshapingWhileInUseError`
-crash. (RazorForge rejects the same mutation at build time by following calls.)
-**The Suflae runtime check is not wired yet**: the builder does not mark a
-`Roamed` container as in use, so an indirect add during a loop is not caught
-today. The marker that drives this
-(`@reshaping`) is RF-facing only; SF users never see it.
+shared `Roamed` handle, so it is a runtime crash instead: the loop marks its
+list's shape as in use, and an add or remove during the loop, even inside
+another routine, stops the program with `ReshapingWhileInUseError`. (RazorForge
+rejects the same mutation at build time by following calls.) A change after the
+loop, after `break`, or after a `return` out of the loop is fine. The marker
+that drives this (`@reshaping`) is RF-facing only; SF users never see it.
 
 ## 6. Failure taxonomy (recoverable vs fatal walls)
 
@@ -363,9 +363,7 @@ Suflae is at v0.1, and the core is now standing end-to-end:
 - **Verified:** the `StdlibSf/*.sf` fixtures run in the main harness (StdlibApiTests)
   with an RF-twin output-equivalence lock.
 
-**Not yet real:** the runtime shape-in-use backstop for indirect loop-mutation
-in Suflae (built for RazorForge, not yet applied to `Roamed` containers);
-`BitList` (its SF wrapper hits a non-generic-wrapper codegen bug — deferred);
+**Not yet real:** `BitList` (its SF wrapper hits a non-generic-wrapper codegen bug — deferred);
 literal-suffix number gating; `ObjectHacker` runtime reflection; hot reload; the
 REPL / fast-rebuild loop. When generating Suflae, prefer the closest
 `tests/Fixtures/StdlibSf/*.sf` fixture, keep arguments named, use bare `Integer`

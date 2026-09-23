@@ -290,9 +290,27 @@ internal sealed class ShapeUseLoweringPass(PostprocessingContext ctx)
 
     private bool HasShapeUse(Expression container)
     {
-        return container.ResolvedType is { } type &&
-               ctx.Registry.LookupMemberRoutine(type: type,
+        return container.ResolvedType is { } type && ShapeOwner(type: type) is { } owner &&
+               ctx.Registry.LookupMemberRoutine(type: owner,
                    memberRoutineName: RuntimeContract.ShapeUse.Begin) != null;
+    }
+
+    /// <summary>
+    /// The type that counts the shape uses: the container itself, or for a Suflae <c>Roamed[C]</c> handle
+    /// the inner container <c>C</c>, reached through the handle's <c>control()</c> projection.
+    /// </summary>
+    private static TypeSymbol? ShapeOwner(TypeSymbol type)
+    {
+        return IsRoamed(type: type)
+            ? type.TypeArguments is [{ } inner]
+                ? inner
+                : null
+            : type;
+    }
+
+    private static bool IsRoamed(TypeSymbol type)
+    {
+        return TypeRegistry.GetRcWrapperBaseName(type: type) == RuntimeContract.Roamed;
     }
 
     private static bool IsNamedPath(Expression expr)
@@ -311,11 +329,15 @@ internal sealed class ShapeUseLoweringPass(PostprocessingContext ctx)
         foreach (Expression container in containers)
         {
             TypeSymbol type = container.ResolvedType!;
+            TypeSymbol owner = ShapeOwner(type: type)!;
+            Expression receiver = IsRoamed(type: type)
+                ? ProjectRoamed(handle: container, handleType: type, inner: owner)
+                : container;
             RoutineInfo routine =
-                ctx.Registry.LookupMemberRoutine(type: type, memberRoutineName: verb)!;
-            var callee = new MemberExpression(Object: container,
+                ctx.Registry.LookupMemberRoutine(type: owner, memberRoutineName: verb)!;
+            var callee = new MemberExpression(Object: receiver,
                 MemberName: verb,
-                Location: container.Location) { ResolvedType = type };
+                Location: container.Location) { ResolvedType = owner };
             var call = new CallExpression(Callee: callee, Arguments: [], Location: container.Location)
             {
                 ResolvedRoutine = routine,
@@ -326,6 +348,30 @@ internal sealed class ShapeUseLoweringPass(PostprocessingContext ctx)
         }
 
         return calls;
+    }
+
+    /// <summary>
+    /// <c>handle.control()</c>: the inner container of a Suflae <c>Roamed</c> handle, the same projection
+    /// RoamedProjectionLoweringPass puts on a call through the handle (this pass runs after it). The
+    /// access lock around the statement comes from RoamedLockBracketLoweringPass, which recognizes it.
+    /// </summary>
+    private Expression ProjectRoamed(Expression handle, TypeSymbol handleType, TypeSymbol inner)
+    {
+        RoutineInfo? control = ctx.Registry.LookupMemberRoutine(type: handleType,
+            memberRoutineName: RuntimeContract.Control);
+        if (control is null)
+        {
+            return handle;
+        }
+
+        var callee = new MemberExpression(Object: handle,
+            MemberName: RuntimeContract.Control,
+            Location: handle.Location) { ResolvedType = inner };
+        return new CallExpression(Callee: callee, Arguments: [], Location: handle.Location)
+        {
+            ResolvedRoutine = control,
+            ResolvedType = inner
+        };
     }
 
     private (DeclarationStatement Declaration, IdentifierExpression Reference) MakeTemporary(

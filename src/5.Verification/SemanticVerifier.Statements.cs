@@ -201,12 +201,14 @@ public sealed partial class SemanticVerifier
     /// of its shape (it declares <c>require_shape_free</c>), the routine therefore starts with
     /// <c>me.require_shape_free()</c>, which crashes while an <c>each</c> loop over the container or a call
     /// on one of its elements is running. The builder adds it so no <c>@reshaping</c> routine can leave it
-    /// out. Adding it again to an already guarded body is a no-op. Suflae only: RazorForge rejects the same
-    /// changes at build time (CheckShapeEffects), so its containers never pay for the runtime check.
+    /// out. Adding it again to an already guarded body is a no-op. Suflae builds only (the stdlib is
+    /// analyzed in RazorForge mode either way, so this keys on the build's target language): RazorForge
+    /// rejects the same changes at build time (CheckShapeEffects), so its containers never pay for it.
     /// </summary>
     private void InjectReshapingGuard(RoutineDeclaration routine, RoutineInfo routineInfo)
     {
-        if (_registry.Language != Language.Suflae || !routine.Annotations.Contains(item: "reshaping") ||
+        if (_registry.CompilationLanguage != Language.Suflae ||
+            !routine.Annotations.Contains(item: "reshaping") ||
             routineInfo.OwnerType is not { } owner || routine.Body is not BlockStatement body ||
             _registry.LookupMemberRoutine(type: owner,
                 memberRoutineName: Declaration.RuntimeContract.ShapeUse.RequireFree) == null)

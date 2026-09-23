@@ -1,0 +1,19 @@
+module Tests/ShapeUse/IndirectReshapeInEach
+import IO/Console
+
+# `grow` adds to the list the loop is visiting. Suflae cannot trace that at build time (its list is a shared
+# handle), so the loop marks the list's shape as in use and `add_last` crashes with ReshapingWhileInUseError.
+
+routine grow(xs: List[Integer])
+  xs.add_last(value: 99)
+  return
+
+routine start()
+  var nums = List[Integer]()
+  nums.add_last(value: 1)
+  nums.add_last(value: 2)
+  each x in nums
+    show(f"visiting {x}")
+    grow(xs: nums)
+  show("not reached")
+  return
