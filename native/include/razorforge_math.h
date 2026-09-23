@@ -353,63 +353,6 @@ int32_t rf_d128_gt(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_h
 int32_t rf_d128_ge(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high);
 
 // ============================================================================
-// LibTomMath - Arbitrary precision integer arithmetic
-// https://github.com/libtom/libtommath (Public Domain)
-// ============================================================================
-
-// Forward declaration for LibTomMath's mp_int type
-// When using LibTomMath, include <tommath.h> directly
-typedef struct rf_bigint {
-    int used, alloc, sign;
-    void* dp; // mp_digit array
-} rf_bigint;
-
-// RazorForge wrappers for LibTomMath operations
-// Lifecycle management
-rf_bigint* rf_bigint_new(void);
-void rf_bigint_clear(rf_bigint* a);
-int rf_bigint_copy(rf_bigint* dest, rf_bigint* src);
-int rf_bigint_init(rf_bigint* a);
-
-// Initialization from primitives
-int rf_bigint_set_s64(rf_bigint* a, int64_t val);
-int rf_bigint_set_u64(rf_bigint* a, uint64_t val);
-int rf_bigint_set_str(rf_bigint* a, const char* str, int radix);
-
-// Conversion to primitives
-int64_t rf_bigint_get_s64(rf_bigint* a);
-uint64_t rf_bigint_get_u64(rf_bigint* a);
-char* rf_bigint_get_str(rf_bigint* a, int radix);
-
-// Arithmetic operations
-int rf_bigint_add(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_sub(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_mul(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_div(rf_bigint* quotient, rf_bigint* remainder, rf_bigint* a, rf_bigint* b);
-int rf_bigint_mod(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_neg(rf_bigint* result, rf_bigint* a);
-int rf_bigint_abs(rf_bigint* result, rf_bigint* a);
-
-// Comparison
-int rf_bigint_cmp(rf_bigint* a, rf_bigint* b); // -1, 0, 1
-int rf_bigint_cmp_s64(rf_bigint* a, int64_t b);
-int rf_bigint_is_zero(rf_bigint* a);
-int rf_bigint_is_neg(rf_bigint* a);
-
-// Bitwise operations
-int rf_bigint_and(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_or(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_xor(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_shl(rf_bigint* result, rf_bigint* a, int bits);
-int rf_bigint_shr(rf_bigint* result, rf_bigint* a, int bits);
-
-// Advanced operations
-int rf_bigint_pow(rf_bigint* result, rf_bigint* base, uint32_t exp);
-int rf_bigint_sqrt(rf_bigint* result, rf_bigint* a);
-int rf_bigint_gcd(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-int rf_bigint_lcm(rf_bigint* result, rf_bigint* a, rf_bigint* b);
-
-// ============================================================================
 // Arbitrary precision decimal (rf_bigdecimal)
 // Backed by decNumber (the same library that provides D32/D64/D128 above).
 // ============================================================================

@@ -1,23 +1,56 @@
 module Numerics
 
-### Represents an arbitrary-precision signed integer backed by LibTomMath.
+### Represents an arbitrary-precision signed integer, computed by a pure-RazorForge limb engine.
 ### `Integer` is the unbounded integer type for workloads where fixed-width overflow is not acceptable.
 ### It preserves exact integer semantics across arithmetic, parsing, and formatting operations.
 ###
-### Layout:
-###   handle: CPtr                                  — LibTomMath bigint handle
-###   ctrl:   Hijacked[FrozenController]   — atomic strong-count cell (or null)
-###
-### `Integer` is a record (value semantics from the user's view) backed by an
-### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
-### via SeqCst atomic; the last drop frees the handle + controller.
+### `Integer` is a record (value semantics from the user's view): its magnitude limbs live in one heap
+### buffer shared by copies under an atomic refcount. Copying bumps the refcount (no number data is
+### copied), and the last drop frees the buffer + controller. Division is Euclidean: `a // b` and
+### `a % b` satisfy `a == b * (a // b) + a % b` with `0 <= a % b < |b|`. The bitwise operators act on
+### the two's-complement form.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
 record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Ordered, Hashable
-  ### Stores the native big-integer handle managed by the runtime.
-  secret handle: CPtr
-  ### Atomic strong-count controller (null for transient stack values is not
-  ### permitted — every Integer either owns or shares a live handle).
+  ### True when the value is negative (never true for zero).
+  secret neg: Bool
+  ### The number of 64-bit magnitude limbs (0 for zero).
+  secret len: U64
+  ### The magnitude limbs, little-endian, with a nonzero top limb.
+  secret tab: Hijacked[U64]
+  ### Atomic strong-count cell governing the limb buffer's lifetime (none for zero).
   secret ctrl: Hijacked[FrozenController]
+
+# ============================================================================
+# Bridge to the engine
+# ============================================================================
+
+# Borrows this value's limbs as an engine value (no copy). The engine never writes an input's limbs.
+secret routine integer_view(v: Integer) -> IntV
+  return IntV(neg: v.neg, len: v.len, tab: v.tab)
+
+# Copies an engine result into a new owned `Integer`. The engine's buffers live in the scratch region,
+# so the limbs are copied out before the caller releases it.
+secret routine integer_from_view(x: IntV) -> Integer
+  danger
+    if x.len == 0u64
+      return Integer(neg: false, len: 0u64, tab: hijacked_none[U64](), ctrl: hijacked_none[FrozenController]())
+    var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% x.len))
+    var i = 0u64
+    while i < x.len
+      tab.stride(count: S64(from: i)).poke(value: x.tab.stride(count: S64(from: i)).peek())
+      i = i +% 1u64
+    return Integer(neg: x.neg, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
+
+# a + b computed straight into a new owned buffer. Addition needs no scratch memory, so this skips the
+# region and the copy-out that the other operations pay.
+secret routine integer_sum(a: IntV, b: IntV) -> Integer
+  danger
+    var tab = Hijacked[U64](from: C::rf_allocate_dynamic_uninit(size: 8u64 *% bigint_add_capacity(a: a, b: b)))
+    var x = bigint_add_into(a: a, b: b, r: tab)
+    if x.len == 0u64
+      tab.invalidate()
+      return Integer(neg: false, len: 0u64, tab: hijacked_none[U64](), ctrl: hijacked_none[FrozenController]())
+    return Integer(neg: x.neg, len: x.len, tab: tab, ctrl: fresh_frozen_controller())
 
 # ============================================================================
 # Lifecycle Management
@@ -28,18 +61,15 @@ record Integer obeys Assignable, Copyable, Integral, Divisible, Negatable, Order
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
 routine Integer() -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  return int
+  return integer_from_view(x: bigint_zero())
 
 ### Creates an `Integer` from a signed 64-bit source value.
-### The numeric payload is copied into the arbitrary-precision runtime handle,
+### The numeric payload is copied into the arbitrary-precision representation,
 ### so the result is no longer limited by `S64` range after construction.
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: S64) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_set_i64(handle: int.handle, value: value)
-  return int
+  return integer_of_s64(v: value)
 
 ### Creates an `Integer` from an unsigned 64-bit source value.
 ### This is the direct widening entry point for exact conversion from native
@@ -47,33 +77,32 @@ routine Integer(value: S64) -> Integer
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
 routine Integer(value: U64) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_set_u64(handle: int.handle, value: value)
-  return int
+  return integer_of_u64(v: value)
 
 # ============================================================================
-# Creators — fixed-width integer widenings. Pure RazorForge: every width is
-# composed from S64/U64 limbs via shift+add, so the native handle only ever
-# ingests 64-bit values — no new FFI entry point. All are total (any fixed-width
-# integer fits an unbounded Integer exactly).
+# Creators — fixed-width integer widenings. Every width is composed from S64/U64
+# limbs via shift+add. All are total (any fixed-width integer fits an unbounded
+# Integer exactly).
 # ============================================================================
 
-# Private 64-bit base builders. They reuse the EXISTING native setters (no new FFI) and
-# construct via the real handle/ctrl fields, so they avoid the `Integer(value:)` call form
-# (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
+# 64-bit base builders. They construct through the engine, so they avoid the `Integer(value:)` call
+# form (which mis-lowers) and don't collide with the `create(value: S64/U64)` overloads.
 routine integer_of_s64(v: S64) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_set_i64(handle: int.handle, value: v)
-  return int
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_from_s64(v: v))
+    C::rf_region_release(mark: mark)
+    return r
 routine integer_of_u64(v: U64) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_set_u64(handle: int.handle, value: v)
-  return int
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_from_u64(v: v, neg: false))
+    C::rf_region_release(mark: mark)
+    return r
 
 ### Widens a fixed-width integer into an `Integer` (exact). 64-bit limbs go through the
-### native setters; wider widths compose them with shift+add — no new FFI surface. (`S64`
-### and `U64` keep their existing `create(value:)` overloads, which a label-blind mangle
-### would collide with.)
+### base builders; wider widths compose them with shift+add. (`S64` and `U64` keep their
+### existing `create(value:)` overloads, which a label-blind mangle would collide with.)
 ### :param from: The signed source value.
 ### :returns: The equal `Integer` value.
 routine Integer(from: S8) -> Integer
@@ -113,18 +142,30 @@ routine Integer(from: U256) -> Integer
   var lo = Integer(from: LLVM::int_truncate[U256, U128](from))
   return hi.shl(bits: 128_s32).add(other: lo)
 
-### Parses an integer from text using the requested radix.
-### The input may include the sign and digits accepted by the selected base.
+# Parses `text` in `radix`, or returns (_, false). See `bigint_parse` for the accepted form.
+secret routine integer_parse(text: Text, radix: S32) -> (Integer, Bool)
+  danger
+    var mark = C::rf_region_mark()
+    var parsed = bigint_parse(text: text, radix: U64(from: S64(from: radix)))
+    var ok = parsed.item1
+    var r = integer_from_view(x: parsed.item0)
+    C::rf_region_release(mark: mark)
+    return (r, ok)
+
+### Parses an integer from text using the requested radix (2 to 64).
+### The input is an optional leading `-` followed by digits of the selected base (letters are
+### case-insensitive up to base 36). A trailing `\r` or `\n` ends the digits; empty digits read as 0.
 ### :param text: The textual integer representation.
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Integer` value.
 ### :throws: {ValueError} if `text` is not a valid integer in `radix`.
 routine Integer!(text: Text, radix: S32 = 10) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), radix)
-  if result != 0
+  if radix < 2_s32 or radix > 64_s32
     throw InvalidValueError(input: text, target: "Integer")
-  return int
+  var parsed = integer_parse(text: text, radix: radix)
+  if not parsed.item1
+    throw InvalidValueError(input: text, target: "Integer")
+  return parsed.item0
 
 ### Materializes an `Integer` from a tokenizer-validated decimal digit string.
 ### Used by literal lowering for `n` literals (e.g. `123n`); the input is guaranteed
@@ -132,30 +173,28 @@ routine Integer!(text: Text, radix: S32 = 10) -> Integer
 ### :param text: The decimal digit string (no suffix, no separators).
 ### :returns: The resulting `Integer` value.
 common routine Integer.from_literal(text: Text) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  discard C::rf_bigint_set_str(int.handle, text.to_cstr(), 10)
-  return int
+  return integer_parse(text: text, radix: 10_s32).item0
 
 ### Returns a copy of this value with the underlying refcount bumped.
-### The handle is shared; no big-integer data is copied. For values with a null
-### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
+### The limb buffer is shared; no big-integer data is copied. For zero (no
+### controller) the copy is a bitwise duplicate with no atomic op.
 ### :returns: The resulting `Integer` value.
 @[readonly, inline]
 routine Integer.assign() -> Integer
   danger
     if not me.ctrl.is_none()
       me.ctrl.as_entity().hold()
-  return Integer(handle: me.handle, ctrl: me.ctrl)
+  return Integer(neg: me.neg, len: me.len, tab: me.tab, ctrl: me.ctrl)
 
-### Releases this value's reference. Frees the handle + controller when this
-### was the last live ref. No-op when `ctrl` is null.
+### Releases this value's reference. Frees the limb buffer + controller when this
+### was the last live ref. No-op when `ctrl` is none.
 @override
 dangerous routine Integer.destroy()
   if me.ctrl.is_none()
     return
   var prev = me.ctrl.as_entity().unhold()
   if prev <= 1_u64
-    C::rf_bigint_clear(me.handle)
+    me.tab.invalidate()
     me.ctrl.invalidate()
   return
 
@@ -164,64 +203,63 @@ dangerous routine Integer.destroy()
 # ============================================================================
 
 ### Adds `other` to this value using exact integer arithmetic.
-### No overflow occurs; the runtime grows the backing storage as needed.
+### No overflow occurs; the storage grows as needed.
 ### :param other: The value to add.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.add(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_add(result.handle, me.handle, other.handle)
-  return result
+  return integer_sum(a: integer_view(v: me), b: integer_view(v: other))
 
 ### Subtracts `other` from this value using exact integer arithmetic.
 ### :param other: The value to subtract.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sub(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_sub(result.handle, me.handle, other.handle)
-  return result
+  return integer_sum(a: integer_view(v: me), b: bigint_neg(a: integer_view(v: other)))
 
 ### Multiplies this value by `other` using exact integer arithmetic.
 ### :param other: The value to multiply by.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.mul(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_mul(result.handle, me.handle, other.handle)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_mul(a: integer_view(v: me), b: integer_view(v: other)))
+    C::rf_region_release(mark: mark)
+    return r
 
-### Divides this value by `other` and returns the Euclidean quotient.
-### The remainder is computed internally and discarded.
+### Divides this value by `other` and returns the Euclidean quotient: the `q` for which
+### `me - other * q` lies in `[0, |other|)`.
 ### :param other: The non-zero divisor.
 ### :returns: The integer quotient.
 @readonly
 routine Integer.floordiv!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var remainder = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
-  return quotient
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_divmod(a: integer_view(v: me), b: integer_view(v: other)).item0)
+    C::rf_region_release(mark: mark)
+    return r
 
-### Divides this value by `other` and returns the Euclidean remainder.
+### Returns the Euclidean remainder of this value divided by `other`.
 ### :param other: The non-zero divisor.
-### :returns: The remainder value associated with `//`.
+### :returns: The remainder, always in `[0, |other|)`.
 @readonly
 routine Integer.mod!(other: Integer) -> Integer
   if other.is_zero()
     throw DivisionByZeroError()
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_mod(result.handle, me.handle, other.handle)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_mod(a: integer_view(v: me), b: integer_view(v: other)))
+    C::rf_region_release(mark: mark)
+    return r
 
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.neg() -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_neg(result: result.handle, a: me.handle)
-  return result
+  return integer_from_view(x: bigint_neg(a: integer_view(v: me)))
 
 # ============================================================================
 # Comparison Operations
@@ -232,17 +270,17 @@ routine Integer.neg() -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.eq(you: Integer) -> Bool
-  return C::rf_bigint_cmp(a: me.handle, b: you.handle) == 0
+  return bigint_cmp(a: integer_view(v: me), b: integer_view(v: you)) == 0s64
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Integer.cmp(you: Integer) -> ComparisonSign
-  var comparison_value = C::rf_bigint_cmp(a: me.handle, b: you.handle)
-  if comparison_value < 0
+  var comparison_value = bigint_cmp(a: integer_view(v: me), b: integer_view(v: you))
+  if comparison_value < 0s64
     return ME_SMALL
-  elseif comparison_value > 0
+  elseif comparison_value > 0s64
     return ME_LARGE
   else
     return SAME
@@ -251,51 +289,63 @@ routine Integer.cmp(you: Integer) -> ComparisonSign
 # Bitwise Operations
 # ============================================================================
 
-### Computes the bitwise AND of this value and `other`.
+# One two's-complement bitwise op (0 AND, 1 OR, 2 XOR).
+secret routine integer_bitop(a: Integer, b: Integer, op: U32) -> Integer
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_bitop(a: integer_view(v: a), b: integer_view(v: b), op: op))
+    C::rf_region_release(mark: mark)
+    return r
+
+### Computes the bitwise AND of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitand(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_and(result.handle, me.handle, other.handle)
-  return result
+  return integer_bitop(a: me, b: other, op: 0u32)
 
-### Computes the bitwise OR of this value and `other`.
+### Computes the bitwise OR of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitor(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_or(result.handle, me.handle, other.handle)
-  return result
+  return integer_bitop(a: me, b: other, op: 1u32)
 
-### Computes the bitwise XOR of this value and `other`.
+### Computes the bitwise XOR of this value and `other` (two's-complement form).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.bitxor(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_xor(result.handle, me.handle, other.handle)
-  return result
+  return integer_bitop(a: me, b: other, op: 2u32)
 
-### Shifts this value left by `bits` positions.
+# Shifts the magnitude by `bits` (left when `left`), keeping the sign.
+secret routine integer_shift(a: Integer, bits: U64, left: Bool) -> Integer
+  danger
+    var mark = C::rf_region_mark()
+    var view = integer_view(v: a)
+    var r = integer_from_view(x: if left then bigint_shl(a: view, bits: bits) else bigint_shr(a: view, bits: bits))
+    C::rf_region_release(mark: mark)
+    return r
+
+### Shifts this value left by `bits` positions (a negative count shifts right).
 ### Positive left shifts are equivalent to multiplication by powers of two.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shl(bits: S32) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_shl(result.handle, me.handle, bits)
-  return result
+  if bits < 0_s32
+    return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: false)
+  return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: true)
 
-### Shifts this value right by `bits` positions.
+### Shifts this value's magnitude right by `bits` positions, keeping the sign (the result
+### truncates toward zero). A negative count shifts left.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.shr(bits: S32) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_shr(result.handle, me.handle, bits)
-  return result
+  if bits < 0_s32
+    return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: true)
+  return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: false)
 
 # ============================================================================
 # Math Operations
@@ -305,45 +355,51 @@ routine Integer.shr(bits: S32) -> Integer
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.abs() -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_abs(result: result.handle, a: me.handle)
-  return result
+  return integer_from_view(x: bigint_abs(a: integer_view(v: me)))
 
 ### Raises this value to a non-negative integer exponent.
 ### :param exp: The exponent value.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.pow(exp: U32) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_pow(result.handle, me.handle, exp)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_pow(a: integer_view(v: me), e: U64(from: exp)))
+    C::rf_region_release(mark: mark)
+    return r
 
-### Returns the integer square root of this value.
+### Returns the integer square root of this value (0 for a negative value).
 ### The result is the greatest integer whose square does not exceed the input.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.sqrt() -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_sqrt(result: result.handle, a: me.handle)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_isqrt(a: integer_view(v: me)))
+    C::rf_region_release(mark: mark)
+    return r
 
-### Computes the greatest common divisor of this value and `other`.
+### Computes the greatest common divisor of this value and `other` (non-negative).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.gcd(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_gcd(result.handle, me.handle, other.handle)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_gcd(a: integer_view(v: me), b: integer_view(v: other)))
+    C::rf_region_release(mark: mark)
+    return r
 
-### Computes the least common multiple of this value and `other`.
+### Computes the least common multiple of this value and `other` (non-negative, 0 when either is 0).
 ### :param other: The other operand.
 ### :returns: The resulting `Integer` value.
 @readonly
 routine Integer.lcm(other: Integer) -> Integer
-  var result = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_lcm(result.handle, me.handle, other.handle)
-  return result
+  danger
+    var mark = C::rf_region_mark()
+    var r = integer_from_view(x: bigint_lcm(a: integer_view(v: me), b: integer_view(v: other)))
+    C::rf_region_release(mark: mark)
+    return r
 
 # ============================================================================
 # Utility Methods
@@ -353,13 +409,13 @@ routine Integer.lcm(other: Integer) -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_zero() -> Bool
-  return C::rf_bigint_is_zero(me.handle) != 0
+  return me.len == 0u64
 
 ### Returns `true` when this value is less than zero.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_negative() -> Bool
-  return C::rf_bigint_is_neg(me.handle) != 0
+  return me.neg
 
 ### Returns `true` when this value is greater than zero.
 ### :returns: The resulting `Bool` value.
@@ -380,7 +436,7 @@ routine Integer.signum() -> S32
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.is_even() -> Bool
-  return me.bitand(other: Integer.one()).is_zero()
+  return (bigint_low_u64(a: integer_view(v: me)) & 1u64) == 0u64
 
 ### Returns `true` when this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -408,7 +464,9 @@ routine Integer.bitnot() -> Integer
 routine Integer.bit_length() -> U64
   if me.is_zero()
     return 0_u64
-  return me.abs().represent_radix(radix: 2_s32).count()
+  danger
+    var top = me.tab.stride(count: S64(from: me.len -% 1u64)).peek()
+    return (me.len *% 64u64) -% LLVM::leading_zeros(top)
 
 ### Returns the smaller of this value and `other`.
 ### :param other: The value to compare against.
@@ -440,7 +498,8 @@ routine Integer.clamp(low: Integer, high: Integer) -> Integer
     return high.assign()
   return me.assign()
 
-### Divides by `other`, returning the Euclidean quotient and remainder together.
+### Divides by `other`, returning the Euclidean quotient and remainder together
+### (`me == other * q + r`, `0 <= r < |other|`).
 ### :param other: The non-zero divisor.
 ### :returns: A tuple `(quotient, remainder)`.
 ### :throws: {DivisionByZeroError} when `other` is zero.
@@ -448,10 +507,13 @@ routine Integer.clamp(low: Integer, high: Integer) -> Integer
 routine Integer.divmod!(other: Integer) -> (Integer, Integer)
   if other.is_zero()
     throw DivisionByZeroError()
-  var quotient = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var remainder = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  C::rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
-  return (quotient, remainder)
+  danger
+    var mark = C::rf_region_mark()
+    var qr = bigint_divmod(a: integer_view(v: me), b: integer_view(v: other))
+    var quotient = integer_from_view(x: qr.item0)
+    var remainder = integer_from_view(x: qr.item1)
+    C::rf_region_release(mark: mark)
+    return (quotient, remainder)
 
 ### Modular exponentiation `me^exp mod modulus` via right-to-left binary exponentiation
 ### (each step reduced modulo `modulus`, so intermediates never blow up).
@@ -488,7 +550,7 @@ routine S64!(from: Integer) -> S64
     throw IntegerOverflowError()
   if from.cmp(you: Integer(value: S64_MIN)) == ME_SMALL
     throw IntegerOverflowError()
-  return C::rf_bigint_get_i64(from.handle)
+  return bigint_low_s64(a: integer_view(v: from))
 
 ### Converts an arbitrary-precision integer to `U64`.
 ### :param from: The source value to convert.
@@ -499,7 +561,7 @@ routine U64!(from: Integer) -> U64
     throw IntegerOverflowError()
   if from.cmp(you: Integer(value: U64_MAX)) == ME_LARGE
     throw IntegerOverflowError()
-  return C::rf_bigint_get_u64(from.handle)
+  return bigint_low_u64(a: integer_view(v: from))
 
 ### Formats this value as base-10 text. Standard `represent` shape (no args)
 ### so the f-string machinery can dispatch without supplying a radix.
@@ -508,17 +570,19 @@ routine U64!(from: Integer) -> U64
 routine Integer.represent() -> Text
   return me.represent_radix(radix: 10_s32)
 
-### Formats this value as text in the requested radix.
-### Use when base-10 is not sufficient (e.g. hex/binary debugging).
+### Formats this value as text in the requested radix (2 to 64; digits past 9 are uppercase
+### letters up to base 36). An out-of-range radix renders an empty text.
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Integer.represent_radix(radix: S32) -> Text
-  var CStr = C::rf_bigint_get_str(handle: me.handle, radix: radix)
-  var text = Text(from: CStr)
+  if radix < 2_s32 or radix > 64_s32
+    return ""
   danger
-    rf_invalidate(LLVM::pointer_to_int[Byte, Address](CStr.ptr()))
-  return text
+    var mark = C::rf_region_mark()
+    var text = bigint_to_text(a: integer_view(v: me), radix: U64(from: S64(from: radix)))
+    C::rf_region_release(mark: mark)
+    return text
 
 # ============================================================================
 # Hashing
@@ -544,11 +608,10 @@ routine Integer.hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
 routine Integer!(text: Text) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 10)
-  if result != 0
+  var parsed = integer_parse(text: text, radix: 10_s32)
+  if not parsed.item1
     throw InvalidValueError(input: text, target: "Integer")
-  return int
+  return parsed.item0
 
 ### Parses a base-2 integer from text.
 ### :param text: The binary digits to parse.
@@ -556,11 +619,10 @@ routine Integer!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_binary!(text: Text) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 2)
-  if result != 0
+  var parsed = integer_parse(text: text, radix: 2_s32)
+  if not parsed.item1
     throw InvalidValueError(input: text, target: "Integer")
-  return int
+  return parsed.item0
 
 ### Parses a base-16 integer from text.
 ### :param text: The hexadecimal digits to parse.
@@ -568,11 +630,10 @@ common routine Integer.from_binary!(text: Text) -> Integer
 ### :throws: May throw {ParseError}.
 @readonly
 common routine Integer.from_hex!(text: Text) -> Integer
-  var int = Integer(handle: C::rf_bigint_new(), ctrl: fresh_frozen_controller())
-  var result = C::rf_bigint_set_str(int.handle, text.to_cstr(), 16)
-  if result != 0
+  var parsed = integer_parse(text: text, radix: 16_s32)
+  if not parsed.item1
     throw InvalidValueError(input: text, target: "Integer")
-  return int
+  return parsed.item0
 
 ### Returns the additive identity for `Integer`.
 ### :returns: The resulting `Integer` value.

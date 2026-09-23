@@ -31,11 +31,8 @@ include_directories(include)
 include(cmake/libbf.cmake)
 
 # (decNumber retired: D32/D64/D128 are now pure-RF software BID engines; the arbitrary
-#  Decimal was removed in favour of Integer + Real (libbf).)
-
-# LibTomMath - Arbitrary precision integer arithmetic
-# https://github.com/libtom/libtommath (Public Domain)
-include(cmake/libtommath.cmake)
+#  Decimal was removed in favour of Integer + Real. Integer and Real are now pure RF (a libbf port), libbf
+#  itself stays for B128.)
 
 # (TLFloat retired 2026-06-19: F128 arithmetic/libm/conversions are pure-RF software
 #  (SoftFloat/F128*.rf); F128 literals parse in managed C# (NumericLiteralParser.EncodeF128).
@@ -123,9 +120,7 @@ add_library(razorforge_runtime SHARED
     runtime/stacktrace.c
     runtime/moment.c
     runtime/math_functions.c
-    runtime/bignum_functions.c
     runtime/rf_divide.c
-    runtime/real_functions.c
     runtime/b128_functions.c
     runtime/text_functions.c
     runtime/csharp_interop.c
@@ -163,12 +158,6 @@ if(HAVE_LIBBF)
     if(WIN32)
         target_link_libraries(razorforge_runtime compiler_rt_shim)
     endif()
-endif()
-
-# Link LibTomMath if available
-if(HAVE_LIBTOMMATH)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBTOMMATH)
-    target_link_libraries(razorforge_runtime tommath)
 endif()
 
 # Link zlib if available
@@ -256,9 +245,7 @@ set_target_properties(razorforge_runtime PROPERTIES
 # ============================================================================
 add_library(razorforge_math STATIC
     runtime/math_functions.c
-    runtime/bignum_functions.c
     runtime/rf_divide.c
-    runtime/real_functions.c
     runtime/b128_functions.c
 )
 
@@ -275,11 +262,6 @@ if(HAVE_LIBBF)
     if(WIN32)
         target_link_libraries(razorforge_math compiler_rt_shim)
     endif()
-endif()
-
-if(HAVE_LIBTOMMATH)
-    target_compile_definitions(razorforge_math PRIVATE HAVE_LIBTOMMATH)
-    target_link_libraries(razorforge_math tommath)
 endif()
 
 set_target_properties(razorforge_math PROPERTIES
@@ -308,7 +290,6 @@ message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
 message(STATUS "  ── Core ──")
 message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
-message(STATUS "  LibTomMath (bigint):              ${HAVE_LIBTOMMATH}")
 message(STATUS "  ── Modules ──")
 message(STATUS "  zlib (compression):               ${HAVE_ZLIB}")
 message(STATUS "  zstd (compression):               ${HAVE_ZSTD}")

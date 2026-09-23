@@ -66,6 +66,20 @@ dangerous routine rf_invalidate(ptr: Address)
   C::rf_invalidate(ptr: CPtr(from: ptr))
   return
 
+### Returns the current top of this thread's scratch region. Every block allocated with
+### `C::rf_region_alloc` after this mark is freed by `C::rf_region_release(mark:)`. Marks nest in
+### stack order, and a computation must not suspend between its mark and its release.
+### :returns: The region mark.
+dangerous routine C::rf_region_mark() -> U64
+### Allocates zero-initialized scratch memory in this thread's region. It is freed in bulk by the
+### enclosing `C::rf_region_release`, never individually.
+### :param bytes: The number of bytes to allocate.
+### :returns: The resulting `CPtr` value.
+dangerous routine C::rf_region_alloc(bytes: U64) -> CPtr
+### Frees every scratch block allocated since `mark` was taken.
+### :param mark: A mark returned by `C::rf_region_mark`.
+dangerous routine C::rf_region_release(mark: U64)
+
 # ============================================================================
 # Threaded tasks (v0.1 concurrency)
 # ============================================================================
@@ -715,147 +729,6 @@ routine C::rf_console_ask_all() -> Hijacked[Byte]
 routine C::rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 
 # ============================================================================
-# Integer (Arbitrary Precision) - LibTomMath
-# All functions use opaque handles to mp_int structures
-# ============================================================================
-
-### Allocates and initializes a new arbitrary-precision integer handle.
-### :returns: A live `CPtr` ready for use with the bigint runtime.
-routine C::rf_bigint_new() -> CPtr
-### Releases the storage owned by an arbitrary-precision integer handle.
-### :param handle: The bigint handle to destroy.
-routine C::rf_bigint_clear(handle: CPtr)
-### Copies the value stored in `src` into `dest`.
-### :param dest: The destination bigint handle.
-### :param src: The source bigint handle.
-routine C::rf_bigint_copy(dest: CPtr, src: CPtr)
-
-### Replaces a bigint handle with the signed 64-bit value `value`.
-### :param handle: The bigint handle to update.
-### :param value: The signed integer value to assign.
-routine C::rf_bigint_set_i64(handle: CPtr, value: S64)
-### Replaces a bigint handle with the unsigned 64-bit value `value`.
-### :param handle: The bigint handle to update.
-### :param value: The unsigned integer value to assign.
-routine C::rf_bigint_set_u64(handle: CPtr, value: U64)
-### Parses `str` in the requested radix and stores the result in `handle`.
-### :param handle: The bigint handle to update.
-### :param str: The null-terminated integer text to parse.
-### :param radix: The numeric base used to interpret the digits.
-### :returns: A runtime status code indicating parse success or failure.
-routine C::rf_bigint_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
-
-### Converts a bigint handle to `S64`.
-### :param handle: The bigint handle to read.
-### :returns: The converted `S64` value.
-routine C::rf_bigint_get_i64(handle: CPtr) -> S64
-### Converts a bigint handle to `U64`.
-### :param handle: The bigint handle to read.
-### :returns: The converted `U64` value.
-routine C::rf_bigint_get_u64(handle: CPtr) -> U64
-### Formats a bigint handle as a null-terminated string in the requested radix.
-### :param handle: The bigint handle to render.
-### :param radix: The numeric base to use for formatting.
-### :returns: A pointer to the formatted C string.
-routine C::rf_bigint_get_str(handle: CPtr, radix: S32) -> CStr
-
-### Stores the sum of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_add(result: CPtr, a: CPtr, b: CPtr)
-### Stores the difference `a - b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_sub(result: CPtr, a: CPtr, b: CPtr)
-### Stores the product of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_mul(result: CPtr, a: CPtr, b: CPtr)
-### Divides `a` by `b` and writes both quotient and remainder.
-### :param quotient: The destination handle for the quotient.
-### :param remainder: The destination handle for the remainder.
-### :param a: The dividend.
-### :param b: The divisor.
-routine C::rf_bigint_div(quotient: CPtr, remainder: CPtr, a: CPtr, b: CPtr)
-### Stores the remainder of `a mod b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The dividend.
-### :param b: The divisor.
-routine C::rf_bigint_mod(result: CPtr, a: CPtr, b: CPtr)
-### Stores the arithmetic negation of `a` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The source operand.
-routine C::rf_bigint_neg(result: CPtr, a: CPtr)
-
-### Compares two bigint handles numerically.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-### :returns: A negative, zero, or positive comparison result.
-routine C::rf_bigint_cmp(a: CPtr, b: CPtr) -> S32
-
-### Stores the bitwise AND of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_and(result: CPtr, a: CPtr, b: CPtr)
-### Stores the bitwise OR of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_or(result: CPtr, a: CPtr, b: CPtr)
-### Stores the bitwise XOR of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_xor(result: CPtr, a: CPtr, b: CPtr)
-### Stores `a` shifted left by `bits` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The source operand.
-### :param bits: The shift amount in bits.
-routine C::rf_bigint_shl(result: CPtr, a: CPtr, bits: S32)
-### Stores `a` shifted right by `bits` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The source operand.
-### :param bits: The shift amount in bits.
-routine C::rf_bigint_shr(result: CPtr, a: CPtr, bits: S32)
-
-### Stores the absolute value of `a` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The source operand.
-routine C::rf_bigint_abs(result: CPtr, a: CPtr)
-### Raises `base` to the unsigned exponent `exp` and stores the result.
-### :param result: The destination bigint handle.
-### :param base: The base value.
-### :param exp: The exponent value.
-routine C::rf_bigint_pow(result: CPtr, base: CPtr, exp: U32)
-### Stores the integer square root of `a` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The source operand.
-routine C::rf_bigint_sqrt(result: CPtr, a: CPtr)
-### Stores the greatest common divisor of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_gcd(result: CPtr, a: CPtr, b: CPtr)
-### Stores the least common multiple of `a` and `b` into `result`.
-### :param result: The destination bigint handle.
-### :param a: The left-hand operand.
-### :param b: The right-hand operand.
-routine C::rf_bigint_lcm(result: CPtr, a: CPtr, b: CPtr)
-
-### Returns whether the bigint handle currently stores zero.
-### :param handle: The bigint handle to inspect.
-### :returns: A non-zero runtime truth value when the number is zero.
-routine C::rf_bigint_is_zero(handle: CPtr) -> S32
-### Returns whether the bigint handle currently stores a negative value.
-### :param handle: The bigint handle to inspect.
-### :returns: A non-zero runtime truth value when the number is negative.
-routine C::rf_bigint_is_neg(handle: CPtr) -> S32
-
-# ============================================================================
 # Text Parsing (CStr -> primitive values)
 # Native C functions that parse null-terminated UTF-8 strings
 # Integer parsing is pure RazorForge (in each type's .rf file)
@@ -1232,109 +1105,3 @@ routine C::rf_fs_touch(path: CStr, len: S32) -> S32
 ### :param size: The exact size in bytes.
 ### :returns: `0` on success, or `-1` on error.
 routine C::rf_fs_set_size(path: CStr, len: S32, size: U64) -> S32
-
-# ============================================================================
-# Real (arbitrary-precision binary float, libbf-backed) — handle lifecycle +
-# operations. Mirrors the rf_bigint_* surface; handles are heap bf_t pointers.
-# ============================================================================
-### Allocates a new zero-initialized Real handle.
-routine C::rf_real_new() -> CPtr
-### Frees a Real handle and its backing storage.
-routine C::rf_real_clear(handle: CPtr)
-### Sets the handle to a signed 64-bit integer value.
-routine C::rf_real_set_i64(handle: CPtr, value: S64)
-### Sets the handle to an B64 value (exact).
-routine C::rf_real_set_b64(handle: CPtr, value: B64)
-### Parses a decimal string into the handle (radix 10). Returns a libbf status.
-routine C::rf_real_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
-### Rounds the value to the nearest B64.
-routine C::rf_real_get_b64(handle: CPtr) -> B64
-### Formats the value as a freshly-allocated decimal C string (free with rf_invalidate).
-routine C::rf_real_to_str(handle: CPtr) -> CStr
-### Stores a + b (exact) into result.
-routine C::rf_real_add(result: CPtr, a: CPtr, b: CPtr)
-### Stores a - b (exact) into result.
-routine C::rf_real_sub(result: CPtr, a: CPtr, b: CPtr)
-### Stores a * b (exact) into result.
-routine C::rf_real_mul(result: CPtr, a: CPtr, b: CPtr)
-### Stores a / b (rounded to the working precision) into result.
-routine C::rf_real_div(result: CPtr, a: CPtr, b: CPtr)
-### Stores -a into result.
-routine C::rf_real_neg(result: CPtr, a: CPtr)
-### Stores sqrt(a) into result.
-routine C::rf_real_sqrt(result: CPtr, a: CPtr)
-### Stores exp(a) into result.
-routine C::rf_real_exp(result: CPtr, a: CPtr)
-### Stores log(a) into result.
-routine C::rf_real_log(result: CPtr, a: CPtr)
-### Stores a ** b into result.
-routine C::rf_real_pow(result: CPtr, a: CPtr, b: CPtr)
-### Stores sin(a) into result.
-routine C::rf_real_sin(result: CPtr, a: CPtr)
-### Stores cos(a) into result.
-routine C::rf_real_cos(result: CPtr, a: CPtr)
-### Stores tan(a) into result.
-routine C::rf_real_tan(result: CPtr, a: CPtr)
-### Stores asin(a) into result.
-routine C::rf_real_asin(result: CPtr, a: CPtr)
-### Stores acos(a) into result.
-routine C::rf_real_acos(result: CPtr, a: CPtr)
-### Stores atan(a) into result.
-routine C::rf_real_atan(result: CPtr, a: CPtr)
-### Stores atan2(y, x) into result.
-routine C::rf_real_atan2(result: CPtr, y: CPtr, x: CPtr)
-### Stores sinh(a) into result.
-routine C::rf_real_sinh(result: CPtr, a: CPtr)
-### Stores cosh(a) into result.
-routine C::rf_real_cosh(result: CPtr, a: CPtr)
-### Stores tanh(a) into result.
-routine C::rf_real_tanh(result: CPtr, a: CPtr)
-### Stores asinh(a) into result.
-routine C::rf_real_asinh(result: CPtr, a: CPtr)
-### Stores acosh(a) into result.
-routine C::rf_real_acosh(result: CPtr, a: CPtr)
-### Stores atanh(a) into result.
-routine C::rf_real_atanh(result: CPtr, a: CPtr)
-### Stores log2(a) into result.
-routine C::rf_real_log2(result: CPtr, a: CPtr)
-### Stores log10(a) into result.
-routine C::rf_real_log10(result: CPtr, a: CPtr)
-### Stores hypot(a, b) into result.
-routine C::rf_real_hypot(result: CPtr, a: CPtr, b: CPtr)
-### Stores cbrt(a) into result.
-routine C::rf_real_cbrt(result: CPtr, a: CPtr)
-### Stores floor(a) (round toward -inf) into result.
-routine C::rf_real_floor(result: CPtr, a: CPtr)
-### Stores ceil(a) (round toward +inf) into result.
-routine C::rf_real_ceil(result: CPtr, a: CPtr)
-### Stores trunc(a) (round toward zero) into result.
-routine C::rf_real_trunc(result: CPtr, a: CPtr)
-### Stores round(a) (round to nearest, ties away from zero) into result.
-routine C::rf_real_round(result: CPtr, a: CPtr)
-### Stores rint(a) (round to nearest, ties to even) into result.
-routine C::rf_real_rint(result: CPtr, a: CPtr)
-### Precision-aware variants (prec = decimal significant digits).
-routine C::rf_real_div_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-routine C::rf_real_sqrt_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_exp_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_log_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_pow_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-routine C::rf_real_sin_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_cos_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_tan_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_asin_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_acos_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_atan_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_atan2_p(result: CPtr, y: CPtr, x: CPtr, prec: S32)
-routine C::rf_real_sinh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_cosh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_tanh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_asinh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_acosh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_atanh_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_log2_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_log10_p(result: CPtr, a: CPtr, prec: S32)
-routine C::rf_real_hypot_p(result: CPtr, a: CPtr, b: CPtr, prec: S32)
-routine C::rf_real_cbrt_p(result: CPtr, a: CPtr, prec: S32)
-### Compares two Real handles: -1 / 0 / 1 (2 = unordered/NaN).
-routine C::rf_real_cmp(a: CPtr, b: CPtr) -> S32

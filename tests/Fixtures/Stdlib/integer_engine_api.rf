@@ -1,0 +1,100 @@
+module Tests/Stdlib/IntegerEngineApi
+
+import IO/Console
+import Numerics.[Integer]
+
+# Broad coverage of the Integer surface: widening constructors, parsing and radix rendering, exact
+# arithmetic across the schoolbook and NTT multiplication sizes, Euclidean division (remainder in
+# [0, |b|)), two's-complement bitwise operators, shifts, powers, roots, gcd/lcm and narrowing conversions.
+routine start()
+  var two = Integer(value: 2_s64)
+  var seven = Integer(value: 7_s64)
+  var ten = Integer(value: 10_s64)
+  var p20 = ten.pow(exp: 20_u32)
+  var prime = Integer(value: 1_000_000_007_s64)
+  var big3 = Integer(value: 3_s64).pow(exp: 5000_u32)
+  var big7 = seven.pow(exp: 5000_u32)
+
+  show("-- construction --")
+  show(f"s64 min/max: {Integer(value: S64_MIN)} {Integer(value: S64_MAX)}")
+  show(f"u64 max: {Integer(value: U64_MAX)}")
+  show(f"s8/u16/s32: {Integer(from: -128_s8)} {Integer(from: 65535_u16)} {Integer(from: -2147483648_s32)}")
+  show(f"u128 max: {Integer(from: U128_MAX)}")
+  show(f"s128 min: {Integer(from: S128_MIN)}")
+  show(f"s256 min: {Integer(from: S256_MIN)}")
+  show(f"u256 max: {Integer(from: U256_MAX)}")
+  show(f"literal: {123456789012345678901234567890n}")
+
+  show("-- parsing / rendering --")
+  show(f"parse big: {Integer!(text: "-123456789012345678901234567890123456789", radix: 10_s32)}")
+  show(f"parse ff/FF (16): {Integer!(text: "ff", radix: 16_s32)} {Integer!(text: "FF", radix: 16_s32)}")
+  show(f"parse zz (36): {Integer!(text: "zz", radix: 36_s32)}")
+  show(f"parse 101 (2): {Integer!(text: "101", radix: 2_s32)}")
+  show(f"parse -0 / empty: {Integer!(text: "-0", radix: 10_s32)} {Integer!(text: "", radix: 10_s32)}")
+  show(f"from_hex/from_binary: {Integer.from_hex(text: "DeadBeef")} {Integer.from_binary(text: "11111111")}")
+  show(f"radix 16: {Integer(value: -255_s64).represent_radix(radix: 16_s32)}")
+  show(f"radix 36: {Integer(value: 1295_s64).represent_radix(radix: 36_s32)}")
+  show(f"radix 2: {Integer(value: 10_s64).represent_radix(radix: 2_s32)}")
+  show(f"radix 16 big: {two.pow(exp: 130_u32).represent_radix(radix: 16_s32)}")
+
+  show("-- arithmetic --")
+  show(f"factorial 40: {factorial(n: Integer(value: 40_s64))}")
+  show(f"fib 300: {fibonacci_big(n: 300_s64)}")
+  var prod = big3 * big7
+  show(f"3^5000*7^5000 mod p: {prod % prime}")
+  show(f"3^5000*7^5000 low: {prod % p20}")
+  show(f"digits: {prod.represent().count()}")
+  show(f"21^5000 == prod: {Integer(value: 21_s64).pow(exp: 5000_u32) == prod}")
+  show(f"sub to negative: {Integer(value: 5_s64) - p20}")
+  show(f"neg/abs: {p20.neg()} {p20.neg().abs()}")
+
+  show("-- division --")
+  var n7 = Integer(value: -7_s64)
+  var n2 = Integer(value: -2_s64)
+  show(f"//: {seven // two} {n7 // two} {seven // n2} {n7 // n2}")
+  show(f"%: {seven % two} {n7 % two} {seven % n2} {n7 % n2}")
+  danger
+    var qr = n7.divmod(other: two)
+    show(f"divmod(-7,2): {qr.item0} {qr.item1}")
+    var qb = big7.divmod(other: big3)
+    show(f"big divmod q low: {qb.item0 % p20}")
+    show(f"big divmod check: {qb.item0 * big3 + qb.item1 == big7}")
+    show(f"big divmod r < d: {qb.item1 < big3}")
+    # ~4950 / ~2410 limbs: long enough on both sides for the Newton-reciprocal division path
+    var huge = Integer(value: 3_s64).pow(exp: 200000_u32)
+    var hd = seven.pow(exp: 55000_u32)
+    var qh = huge.divmod(other: hd)
+    show(f"newton divmod check: {qh.item0 * hd + qh.item1 == huge} {qh.item1 < hd} {qh.item0 % p20}")
+  show(f"big // small: {(big3 // prime) % p20}")
+  show(f"big % small: {big3 % prime}")
+
+  show("-- bitwise / shifts --")
+  var n12 = Integer(value: -12_s64)
+  show(f"and: {n12.bitand(other: ten)} {n12.bitand(other: Integer(value: -10_s64))}")
+  show(f"or: {n12.bitor(other: ten)} {n12.bitor(other: Integer(value: -10_s64))}")
+  show(f"xor: {n12.bitxor(other: ten)} {n12.bitxor(other: Integer(value: -10_s64))}")
+  show(f"not: {n12.bitnot()} {ten.bitnot()}")
+  show(f"big and: {(two.pow(exp: 200_u32) - Integer.one()).bitand(other: p20.neg())}")
+  show(f"shl: {Integer.one().shl(bits: 200_s32)}")
+  show(f"shr: {Integer(value: -5_s64).shr(bits: 1_s32)} {Integer(value: -1_s64).shr(bits: 1_s32)} {p20.shr(bits: 10_s32)} {p20.shr(bits: 100_s32)}")
+
+  show("-- powers / roots / gcd --")
+  show(f"pow: {two.pow(exp: 100_u32)} {Integer(value: -3_s64).pow(exp: 5_u32)} {Integer.zero().pow(exp: 0_u32)}")
+  show(f"sqrt: {(p20 * p20 + Integer.one()).sqrt()} {(two * ten.pow(exp: 100_u32)).sqrt()} {Integer.zero().sqrt()} {Integer(value: 99_s64).sqrt()}")
+  show(f"gcd: {Integer(value: -12_s64).gcd(other: Integer(value: 18_s64))} {Integer.zero().gcd(other: Integer.zero())} {big3.gcd(other: Integer(value: 3_s64).pow(exp: 40_u32) * seven)}")
+  var gx = two.pow(exp: 100_u32) * Integer(value: 3_s64).pow(exp: 200_u32) * Integer(value: 5_s64).pow(exp: 50_u32)
+  var gy = two.pow(exp: 90_u32) * Integer(value: 3_s64).pow(exp: 250_u32) * seven
+  show(f"gcd balanced: {gx.gcd(other: gy) == two.pow(exp: 90_u32) * Integer(value: 3_s64).pow(exp: 200_u32)} {gy.neg().gcd(other: gx)}")
+  show(f"lcm: {Integer(value: -4_s64).lcm(other: Integer(value: 6_s64))} {Integer.zero().lcm(other: Integer(value: 5_s64))}")
+  show(f"modpow: {Integer(value: 3_s64).modpow(exp: p20, modulus: prime)}")
+
+  show("-- predicates / conversions --")
+  show(f"bit_length: {Integer.zero().bit_length()} {Integer(value: -1024_s64).bit_length()} {big3.bit_length()}")
+  show(f"power of two: {two.pow(exp: 300_u32).is_power_of_two()} {p20.is_power_of_two()}")
+  show(f"even/odd: {big3.is_even()} {big3.is_odd()} {Integer(value: -4_s64).is_even()}")
+  show(f"signum: {n7.signum()} {Integer.zero().signum()} {p20.signum()}")
+  show(f"cmp: {n7 < two} {big7 > big3} {p20 == ten.pow(exp: 20_u32)} {n7.min(other: two)} {n7.max(other: two)}")
+  show(f"to s64: {S64!(from: Integer(value: S64_MIN))} {S64!(from: n7)}")
+  show(f"to u64: {U64!(from: Integer(value: U64_MAX))}")
+  show("DONE")
+  return

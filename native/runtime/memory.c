@@ -64,6 +64,51 @@ void rf_invalidate(void* ptr)
     }
 }
 
+// Scratch region: a per-OS-thread stack of zeroed temporary allocations released in bulk.
+// A caller takes a mark, allocates any number of blocks, and releases back to the mark, which frees
+// every block allocated since. Built for computations whose intermediates freely alias one another
+// (the Real engine shares limb buffers between temporaries), where per-block ownership would need
+// refcounting on every temporary. Marks nest in stack order. The region is thread-local, so a
+// computation must not suspend between its mark and release (the Real engine never does).
+typedef struct rf_region_block
+{
+    struct rf_region_block* prev;
+} rf_region_block;
+
+static _Thread_local rf_region_block* g_region_top = NULL;
+
+// Returns the current region top. Pass it to rf_region_release to free everything allocated after it.
+uint64_t rf_region_mark(void)
+{
+    return (uint64_t)(uintptr_t)g_region_top;
+}
+
+// Allocates `bytes` zeroed bytes in the current thread's scratch region.
+void* rf_region_alloc(uint64_t bytes)
+{
+    rf_region_block* block = (rf_region_block*)calloc(1, sizeof(rf_region_block) + bytes);
+    if (!block)
+    {
+        rf_oom("allocate scratch", bytes);
+        return NULL; // unreachable: rf_oom exits
+    }
+    block->prev = g_region_top;
+    g_region_top = block;
+    return (void*)(block + 1);
+}
+
+// Frees every scratch block allocated since `mark` was taken.
+void rf_region_release(uint64_t mark)
+{
+    rf_region_block* stop = (rf_region_block*)(uintptr_t)mark;
+    while (g_region_top != NULL && g_region_top != stop)
+    {
+        rf_region_block* prev = g_region_top->prev;
+        free(g_region_top);
+        g_region_top = prev;
+    }
+}
+
 /*
  * Dynamic memory reallocation with error handling
  */

@@ -1,0 +1,2801 @@
+module Numerics
+
+# The arbitrary-precision binary floating-point engine behind {Real}: a pure-RazorForge port of Fabrice
+# Bellard's libbf (MIT), in its 64-bit limb configuration (limb = U64, double limb = U128, LIMB_DIGITS 19).
+# Limb buffers are little-endian `Hijacked[U64]` arrays mirroring C's `limb_t*`. A pointer offset
+# `tab + i` is `tab.stride(count: S64(i))`. A 64x64 product is formed in U128, the low word taken with
+# `LLVM::int_truncate[U128, U64]` and the high word with `product >> 64`.
+#
+# Layers, bottom up: mp integer primitives (add/sub/mul-by-word/shift), NTT multiplication over five
+# ~2^62 primes, Newton-reciprocal division and square root, the `BfT` float value with libbf's rounding
+# core, decimal conversion, and the transcendentals (Chudnovsky pi, log 2, exp, log, sin/cos, tan,
+# atan, asin/acos, pow) with Ziv correct-rounding loops.
+#
+# Memory: every buffer the engine allocates comes from the calling thread's scratch region
+# (`C::rf_region_alloc`). Intermediate values freely share limb buffers with one another, so nothing is
+# freed individually. {Real} takes a region mark around each operation, copies the final result into a
+# buffer it owns, and releases the region. The engine is `secret` to the module, only {Real} calls it.
+
+# Low 64 bits of a 128-bit value (the stdlib only narrows U128->U64 via this intrinsic; U64(from: U128)
+# is a CHECKED conversion that throws on overflow, so it can't take a limb's low word).
+secret routine u128_lo(t: U128) -> U64
+  danger
+    return LLVM::int_truncate[U128, U64](t)
+
+# Low 64 bits of a signed 128-bit value (for the borrow arithmetic in mp_sub).
+secret routine s128_lo(t: S128) -> U64
+  danger
+    return LLVM::int_truncate[S128, U64](t)
+
+# Allocate `n` zeroed U64 limbs in the current scratch region (freed when {Real} releases the region).
+secret dangerous routine alloc_limbs(n: U64) -> Hijacked[U64]
+  var raw = C::rf_region_alloc(bytes: 8u64 *% n).get_address()
+  return Hijacked[U64](from: raw)
+
+# limb i of a buffer (pointer + element stride).
+secret dangerous routine limb(tab: Hijacked[U64], i: U64) -> U64
+  return tab.stride(count: S64(from: i)).peek()
+
+secret dangerous routine set_limb(tab: Hijacked[U64], i: U64, value: U64)
+  tab.stride(count: S64(from: i)).poke(value: value)
+  return
+
+# res[0..n) = op1 + op2 + carry_in. Returns the carry out (0 or 1). (libbf mp_add)
+secret dangerous routine limbs_add(res: Hijacked[U64], op1: Hijacked[U64], op2: Hijacked[U64], n: U64,
+    carry: U64) -> U64
+  var k = U128(from: carry)
+  var i = 0u64
+  while i < n
+    var a = U128(from: limb(tab: op1, i: i)) +% U128(from: limb(tab: op2, i: i)) +% k
+    set_limb(tab: res, i: i, value: u128_lo(t: a))
+    k = a >> 64
+    i = i +% 1u64
+  return u128_lo(t: k)
+
+# tab[0..n) += b, propagating carry; stop early once it dies. Returns the final carry. (libbf mp_add_ui)
+secret dangerous routine limbs_add_word(tab: Hijacked[U64], b: U64, n: U64) -> U64
+  var k = U128(from: b)
+  var i = 0u64
+  while i < n
+    if k == 0u128
+      return 0u64
+    var a = U128(from: limb(tab: tab, i: i)) +% k
+    set_limb(tab: tab, i: i, value: u128_lo(t: a))
+    k = a >> 64
+    i = i +% 1u64
+  return u128_lo(t: k)
+
+# res[0..n) = op1 - op2 - borrow_in. Returns the borrow out (0 or 1). (libbf mp_sub)
+secret dangerous routine limbs_sub(res: Hijacked[U64], op1: Hijacked[U64], op2: Hijacked[U64], n: U64,
+    borrow_in: U64) -> U64
+  var borrow = S128(from: borrow_in)
+  var i = 0u64
+  while i < n
+    var d = S128(from: limb(tab: op1, i: i)) -% S128(from: limb(tab: op2, i: i)) -% borrow
+    if d < 0s128
+      d = d +% 18446744073709551616s128
+      borrow = 1s128
+    else
+      borrow = 0s128
+    set_limb(tab: res, i: i, value: s128_lo(t: d))
+    i = i +% 1u64
+  return s128_lo(t: borrow)
+
+# tabr[0..n) = taba * b + l. Returns the high carry. (libbf mp_mul1)
+secret dangerous routine limbs_mul_word(tabr: Hijacked[U64], taba: Hijacked[U64], n: U64, b: U64, l: U64) -> U64
+  var carry = U128(from: l)
+  var i = 0u64
+  while i < n
+    var t = U128(from: limb(tab: taba, i: i)) *% U128(from: b) +% carry
+    set_limb(tab: tabr, i: i, value: u128_lo(t: t))
+    carry = t >> 64
+    i = i +% 1u64
+  return u128_lo(t: carry)
+
+# tabr[0..n) += taba * b. Returns the high word. (libbf mp_add_mul1)
+secret dangerous routine limbs_addmul_word(tabr: Hijacked[U64], taba: Hijacked[U64], n: U64, b: U64) -> U64
+  var l = U128(from: 0u64)
+  var i = 0u64
+  while i < n
+    var t = U128(from: limb(tab: taba, i: i)) *% U128(from: b) +% l +% U128(from: limb(tab: tabr, i: i))
+    set_limb(tab: tabr, i: i, value: u128_lo(t: t))
+    l = t >> 64
+    i = i +% 1u64
+  return u128_lo(t: l)
+
+# tab[0..n) -= b, propagating borrow; stop early once it dies. Returns the final borrow. (libbf mp_sub_ui)
+secret dangerous routine limbs_sub_word(tab: Hijacked[U64], b: U64, n: U64) -> U64
+  var k = b
+  var i = 0u64
+  while i < n
+    var v = limb(tab: tab, i: i)
+    var a = v -% k
+    k = if a > v then 1u64 else 0u64
+    set_limb(tab: tab, i: i, value: a)
+    if k == 0u64
+      return 0u64
+    i = i +% 1u64
+  return k
+
+# tab_r[0..n) = (tab + high*B^n) >> shift. Returns the shifted-out remainder (0 <= r < 2^shift).
+# 1 <= shift <= 63. (libbf mp_shr)
+secret dangerous routine limbs_shr(tab_r: Hijacked[U64], tab: Hijacked[U64], n: U64, shift: U32, high: U64) -> U64
+  var l = high
+  var i = n
+  while i > 0u64
+    i = i -% 1u64
+    var a = limb(tab: tab, i: i)
+    set_limb(tab: tab_r, i: i, value: (a >> shift) | (l << (64u32 -% shift)))
+    l = a
+  return l & ((1u64 << shift) -% 1u64)
+
+# tabr[0..n) -= taba * b. Returns the value to subtract from the high word (the borrow). (libbf mp_sub_mul1)
+secret dangerous routine limbs_submul_word(tabr: Hijacked[U64], taba: Hijacked[U64], n: U64, b: U64) -> U64
+  var l = 0u64
+  var i = 0u64
+  while i < n
+    var t = U128(from: limb(tab: tabr, i: i)) -% (U128(from: limb(tab: taba, i: i)) *% U128(from: b)) -% U128(from: l)
+    set_limb(tab: tabr, i: i, value: u128_lo(t: t))
+    l = 0u64 -% u128_lo(t: t >> 64)
+    i = i +% 1u64
+  return l
+
+# result[0..op1_size+op2_size) = op1 * op2 (schoolbook). result must hold op1_size+op2_size limbs.
+# (libbf mp_mul_basecase)
+secret dangerous routine limbs_mul_schoolbook(result: Hijacked[U64], op1: Hijacked[U64], op1_size: U64,
+    op2: Hijacked[U64], op2_size: U64)
+  set_limb(tab: result, i: op1_size,
+    value: limbs_mul_word(tabr: result, taba: op1, n: op1_size, b: limb(tab: op2, i: 0u64), l: 0u64))
+  var i = 1u64
+  while i < op2_size
+    var r = limbs_addmul_word(tabr: result.stride(count: S64(from: i)), taba: op1, n: op1_size,
+      b: limb(tab: op2, i: i))
+    set_limb(tab: result, i: i +% op1_size, value: r)
+    i = i +% 1u64
+  return
+
+# ── Phase 2a: NTT modular arithmetic primitives (libbf.c ~7421-7511) ──────────────────────────────────
+# 64-bit config: NB_MODS=5, NTT_MOD_LOG2_MIN=61, NTT_MOD_LOG2_MAX=62, NTT_PROOT_2EXP=51. The five
+# NTT-friendly primes (each ~2^62, = k*2^51 + 1 so 2^51 | (m-1), enough roots of unity for the FFT).
+secret routine ntt_mod(idx: U64) -> U64
+  if idx == 0u64
+    return 0x28d8000000000001u64
+  if idx == 1u64
+    return 0x2a88000000000001u64
+  if idx == 2u64
+    return 0x2ed8000000000001u64
+  if idx == 3u64
+    return 0x3508000000000001u64
+  return 0x3aa8000000000001u64
+
+# High 64 bits of a U128.
+secret routine u128_hi(t: U128) -> U64
+  danger
+    return u128_lo(t: t >> 64)
+
+# Arithmetic (sign-propagating) shift-right-by-1 of a limb, treating it as signed. Used by mod_fast to
+# turn the high word into an all-ones / all-zeros correction mask.
+secret routine asr1(x: U64) -> U64
+  danger
+    return LLVM::reinterpret_bits[S64, U64](LLVM::reinterpret_bits[U64, S64](x) >> 1u32)
+
+# add/sub modulo (a, b already reduced enough that one conditional fixup suffices). (libbf add_mod/sub_mod)
+secret routine add_mod(a: U64, b: U64, m: U64) -> U64
+  var r = a +% b
+  return if r >= m then r -% m else r
+
+secret routine sub_mod(a: U64, b: U64, m: U64) -> U64
+  var r = a -% b
+  return if r > a then r +% m else r
+
+# Reciprocal seed for mod_fast: floor(2^(64+61) / m). (libbf init_mul_mod_fast)
+secret routine init_mul_mod_fast(m: U64) -> U64
+  danger
+    return u128_lo(t: (1u128 << 125) // U128(from: m))
+
+# Reduce a 125-bit product r modulo m using the precomputed m_inv. Precondition 0 <= r < 2^125.
+# (libbf mod_fast — Barrett-style with two conditional add-backs of m via the sign mask.)
+secret routine mod_fast(r: U128, m: U64, m_inv: U64) -> U64
+  danger
+    var a1 = u128_lo(t: r >> 61)
+    var q = u128_lo(t: (U128(from: a1) *% U128(from: m_inv)) >> 64)
+    var rr = r -% (U128(from: q) *% U128(from: m)) -% (U128(from: m) << 1)
+    var r1 = u128_hi(t: rr)
+    var t0 = asr1(x: r1)
+    rr = rr +% U128(from: m & t0)
+    var r0 = u128_lo(t: rr)
+    r1 = u128_hi(t: rr)
+    r0 = r0 +% (m & r1)
+    return r0
+
+# (a * b) mod m via mod_fast. Precondition 0 <= a*b < 2^125 (holds for a, b < m ~ 2^62). (mul_mod_fast)
+secret routine mul_mod_fast(a: U64, b: U64, m: U64, m_inv: U64) -> U64
+  danger
+    return mod_fast(r: U128(from: a) *% U128(from: b), m: m, m_inv: m_inv)
+
+# Constant-multiplier reciprocal: floor(b * 2^64 / m). (libbf init_mul_mod_fast2)
+secret routine init_mul_mod_fast2(b: U64, m: U64) -> U64
+  danger
+    return u128_lo(t: (U128(from: b) << 64) // U128(from: m))
+
+# (a * b) mod m with b constant (b_inv = init_mul_mod_fast2(b, m)); result fully reduced. (mul_mod_fast2)
+secret routine mul_mod_fast2(a: U64, b: U64, m: U64, b_inv: U64) -> U64
+  danger
+    var q = u128_lo(t: (U128(from: a) *% U128(from: b_inv)) >> 64)
+    var r = (a *% b) -% (q *% m)
+    return if r >= m then r -% m else r
+
+# Like mul_mod_fast2 but returns r or r+m (one extra m allowed — the FFT butterflies tolerate it).
+secret routine mul_mod_fast3(a: U64, b: U64, m: U64, b_inv: U64) -> U64
+  danger
+    var q = u128_lo(t: (U128(from: a) *% U128(from: b_inv)) >> 64)
+    return (a *% b) -% (q *% m)
+
+# ── Phase 2b: radix repack + CRT (bf_get_fft_size, get_bits/put_bits, limb_to_ntt, ntt_to_limb) ────────
+# NTTLimb == limb_t == U64 in the scalar config; int_to_ntt_limb is the identity, so buffers are Hijacked[U64].
+
+# Zero n limbs.
+secret dangerous routine zero_limbs(tab: Hijacked[U64], n: U64)
+  var i = 0u64
+  while i < n
+    set_limb(tab: tab, i: i, value: 0u64)
+    i = i +% 1u64
+  return
+
+# ceil(log2(a)) = bit-length of (a-1); 0 for a <= 1. (libbf ceil_log2, clz-free)
+secret routine ceil_log2(a: U64) -> U64
+  if a <= 1u64
+    return 0u64
+  var v = a -% 1u64
+  var n = 0u64
+  while v > 0u64
+    v = v >> 1u32
+    n = n +% 1u64
+  return n
+
+# Bits [pos, pos+64) of a little-endian limb buffer (0 past the end). (libbf get_bits)
+secret dangerous routine get_bits(tab: Hijacked[U64], len: U64, pos: U64) -> U64
+  var i = pos >> 6u32
+  var p = U32(from: pos & 63u64)
+  var a0 = if i < len then limb(tab: tab, i: i) else 0u64
+  if p == 0u32
+    return a0
+  var i1 = i +% 1u64
+  var a1 = if i1 < len then limb(tab: tab, i: i1) else 0u64
+  return (a0 >> p) | (a1 << (64u32 -% p))
+
+# OR `val`'s bits into the buffer at bit position `pos`. (libbf put_bits)
+secret dangerous routine put_bits(tab: Hijacked[U64], len: U64, pos: U64, val: U64)
+  var i = pos >> 6u32
+  var p = U32(from: pos & 63u64)
+  if i < len
+    set_limb(tab: tab, i: i, value: limb(tab: tab, i: i) | (val << p))
+  if p != 0u32
+    var i1 = i +% 1u64
+    if i1 < len
+      set_limb(tab: tab, i: i1, value: limb(tab: tab, i: i1) | (val >> (64u32 -% p)))
+  return
+
+# NTT integer-bit budget per mod count (ntt_int_bits[5], 64-bit).
+secret routine ntt_int_bits(idx: U64) -> U64
+  if idx == 0u64
+    return 307u64
+  if idx == 1u64
+    return 246u64
+  if idx == 2u64
+    return 185u64
+  if idx == 3u64
+    return 123u64
+  return 61u64
+
+# m_inv for mod idx (= s->ntt_mods_div[idx]).
+secret routine ntt_mod_div(idx: U64) -> U64
+  danger
+    return init_mul_mod_fast(m: ntt_mod(idx: idx))
+
+# NTT-limb <-> int (scalar): int_to is identity; to_int reduces once.
+secret routine ntt_limb_to_int(a: U64, m: U64) -> U64
+  danger
+    return if a >= m then a -% m else a
+
+# The 10 CRT constants (ntt_mods_cr[10], 64-bit).
+secret routine ntt_mod_cr(l: U64) -> U64
+  if l == 0u64
+    return 0x08a9ed097b425eeau64
+  if l == 1u64
+    return 0x18a44aaaaaaaaab3u64
+  if l == 2u64
+    return 0x2493f57f57f57f5du64
+  if l == 3u64
+    return 0x126b8d0649a7f8d4u64
+  if l == 4u64
+    return 0x09d80ed7303b5cccu64
+  if l == 5u64
+    return 0x25b8bcf3cf3cf3d5u64
+  if l == 6u64
+    return 0x2ce6ce63398ce638u64
+  if l == 7u64
+    return 0x0e31fad40a57eb59u64
+  if l == 8u64
+    return 0x02a3529fd4a7f52fu64
+  return 0x3a5493e93e93e94au64
+
+# The mod index k paired with each CRT constant l in the (j,k) triangle over all 5 mods.
+secret routine cr_k(l: U64) -> U64
+  if l == 0u64
+    return 1u64
+  if l == 1u64
+    return 2u64
+  if l == 2u64
+    return 3u64
+  if l == 3u64
+    return 4u64
+  if l == 4u64
+    return 2u64
+  if l == 5u64
+    return 3u64
+  if l == 6u64
+    return 4u64
+  if l == 7u64
+    return 3u64
+  if l == 8u64
+    return 4u64
+  return 4u64
+
+# cr_inv[l] = init_mul_mod_fast2(cr[l], ntt_mods[cr_k(l)]). (ntt_static_init)
+secret routine ntt_mod_cr_inv(l: U64) -> U64
+  danger
+    return init_mul_mod_fast2(b: ntt_mod_cr(l: l), m: ntt_mod(idx: cr_k(l: l)))
+
+# Choose (fft_len_log2, dpl, nb_mods) minimizing FFT cost for a product of `len` limbs. (bf_get_fft_size)
+secret routine bf_get_fft_size(len: U64) -> (U64, U64, U64)
+  var min_cost = 0xFFFFFFFFFFFFFFFFu64
+  var dpl_found = 0u64
+  var nb_mods_found = 4u64
+  var fft_len_log2_found = 0u64
+  var nb_mods = 3u64
+  while nb_mods <= 5u64
+    var int_bits = ntt_int_bits(idx: 5u64 -% nb_mods)
+    var cap = (2u64 *% 64u64) +% (2u64 *% 61u64) -% 62u64        # 2*LIMB_BITS + 2*MIN - MAX = 188
+    var half = (int_bits -% 4u64) // 2u64
+    var dpl = if half < cap then half else cap
+    var brk = false
+    while not brk
+      var fll = ceil_log2(a: (len *% 64u64 +% dpl -% 1u64) // dpl)
+      if fll > 51u64                                              # NTT_PROOT_2EXP
+        brk = true
+      else
+        var n_bits = fll +% (2u64 *% dpl)
+        if n_bits <= int_bits
+          var cost = ((fll +% 1u64) << U32(from: fll)) *% nb_mods
+          if cost < min_cost
+            min_cost = cost
+            dpl_found = dpl
+            nb_mods_found = nb_mods
+            fft_len_log2_found = fll
+          brk = true
+        else
+          dpl = dpl -% 1u64
+          if dpl == 0u64
+            brk = true
+    nb_mods = nb_mods +% 1u64
+  if dpl_found > 125u64 and ((125u64 << U32(from: fft_len_log2_found)) >= len *% 64u64)
+    dpl_found = 125u64
+  return (fft_len_log2_found, dpl_found, nb_mods_found)
+
+# Repack `a_len` limbs of `taba` into dpl-bit digits, each reduced mod the top nb_mods primes, laid out
+# as tabr[i + j*fft_len]. (libbf limb_to_ntt)
+secret dangerous routine limb_to_ntt(tabr: Hijacked[U64], fft_len: U64, taba: Hijacked[U64], a_len: U64,
+    dpl: U64, first_m_idx: U64, nb_mods: U64)
+  zero_limbs(tab: tabr, n: fft_len *% nb_mods)
+  var shift = U32(from: dpl & 63u64)
+  var base_mask1 = if shift == 0u32 then 0xFFFFFFFFFFFFFFFFu64 else (1u64 << shift) -% 1u64
+  var ndig = (a_len *% 64u64 +% dpl -% 1u64) // dpl
+  var n = if fft_len < ndig then fft_len else ndig
+  var i = 0u64
+  while i < n
+    var a0 = get_bits(tab: taba, len: a_len, pos: i *% dpl)
+    var a = U128(from: 0u64)
+    if dpl <= 64u64
+      a0 = a0 & base_mask1
+      a = U128(from: a0)
+    else
+      var a1 = get_bits(tab: taba, len: a_len, pos: i *% dpl +% 64u64)
+      if dpl <= 125u64
+        a = U128(from: a0) | (U128(from: a1 & base_mask1) << 64)
+      else
+        var a2 = 0u64
+        if dpl > 128u64
+          a2 = get_bits(tab: taba, len: a_len, pos: i *% dpl +% 128u64) & base_mask1
+        else
+          a1 = a1 & base_mask1
+        a = U128(from: a0 >> 63u32) | (U128(from: a1) << 1) | (U128(from: a2) << 65)
+        a0 = a0 & ((1u64 << 63u32) -% 1u64)
+    var j = 0u64
+    while j < nb_mods
+      var m = ntt_mod(idx: first_m_idx +% j)
+      var m_inv = ntt_mod_div(idx: first_m_idx +% j)
+      var r = mod_fast(r: a, m: m, m_inv: m_inv)
+      if dpl > 125u64
+        var b = (U128(from: r) << 63) | U128(from: a0)
+        r = mod_fast(r: b, m: m, m_inv: m_inv)
+      set_limb(tab: tabr, i: i +% j *% fft_len, value: r)
+      j = j +% 1u64
+    i = i +% 1u64
+  return
+
+# CRT-combine the per-mod residues in `buf` back into `r_len` limbs. (libbf ntt_to_limb, scalar)
+secret dangerous routine ntt_to_limb(tabr: Hijacked[U64], r_len: U64, buf: Hijacked[U64], fft_len_log2: U64,
+    dpl: U64, nb_mods: U64)
+  var base_idx = 5u64 -% nb_mods
+  var cr_off = 10u64 -% ((nb_mods *% (nb_mods -% 1u64)) // 2u64)
+  var shift = U32(from: dpl & 63u64)
+  var base_mask1 = if shift == 0u32 then 0xFFFFFFFFFFFFFFFFu64 else (1u64 << shift) -% 1u64
+  var n_limb1 = (dpl -% 1u64) // 64u64
+  var y = alloc_limbs(n: 5u64)
+  var u = alloc_limbs(n: 5u64)
+  var carry = alloc_limbs(n: 5u64)
+  zero_limbs(tab: carry, n: 5u64)
+  zero_limbs(tab: tabr, n: r_len)
+  var fft_len = 1u64 << U32(from: fft_len_log2)
+  var ndig = (r_len *% 64u64 +% dpl -% 1u64) // dpl
+  var len = if fft_len < ndig then fft_len else ndig
+  var i = 0u64
+  while i < len
+    var j0 = 0u64
+    while j0 < nb_mods
+      var mj = ntt_mod(idx: base_idx +% j0)
+      set_limb(tab: y, i: j0, value: ntt_limb_to_int(a: limb(tab: buf, i: i +% fft_len *% j0), m: mj))
+      j0 = j0 +% 1u64
+    # CRT to mixed-radix
+    var l = 0u64
+    var jj = 0u64
+    while jj < nb_mods -% 1u64
+      var kk = jj +% 1u64
+      while kk < nb_mods
+        var m = ntt_mod(idx: base_idx +% kk)
+        var diff = (limb(tab: y, i: kk) -% limb(tab: y, i: jj)) +% m
+        set_limb(tab: y, i: kk, value: mul_mod_fast2(a: diff, b: ntt_mod_cr(l: cr_off +% l),
+          m: m, b_inv: ntt_mod_cr_inv(l: cr_off +% l)))
+        l = l +% 1u64
+        kk = kk +% 1u64
+      jj = jj +% 1u64
+    # mixed-radix -> normal
+    set_limb(tab: u, i: 0u64, value: limb(tab: y, i: nb_mods -% 1u64))
+    var ll = 1u64
+    var jd = nb_mods -% 2u64
+    while jd >= 1u64
+      var r = limb(tab: y, i: jd)
+      var mjd = ntt_mod(idx: base_idx +% jd)
+      var k2 = 0u64
+      while k2 < ll
+        var t = U128(from: limb(tab: u, i: k2)) *% U128(from: mjd) +% U128(from: r)
+        r = u128_hi(t: t)
+        set_limb(tab: u, i: k2, value: u128_lo(t: t))
+        k2 = k2 +% 1u64
+      set_limb(tab: u, i: ll, value: r)
+      ll = ll +% 1u64
+      jd = jd -% 1u64
+    # last step folds in the carry (uses mods[0])
+    var r2 = limb(tab: y, i: 0u64)
+    var m0 = ntt_mod(idx: base_idx)
+    var k3 = 0u64
+    while k3 < ll
+      var t2 = U128(from: limb(tab: u, i: k3)) *% U128(from: m0) +% U128(from: r2) +% U128(from: limb(tab: carry, i: k3))
+      r2 = u128_hi(t: t2)
+      set_limb(tab: u, i: k3, value: u128_lo(t: t2))
+      k3 = k3 +% 1u64
+    set_limb(tab: u, i: ll, value: r2 +% limb(tab: carry, i: ll))
+    # write dpl bits of the reconstructed digit
+    var pos = i *% dpl
+    var jw = 0u64
+    while jw < n_limb1
+      put_bits(tab: tabr, len: r_len, pos: pos, val: limb(tab: u, i: jw))
+      pos = pos +% 64u64
+      jw = jw +% 1u64
+    put_bits(tab: tabr, len: r_len, pos: pos, val: limb(tab: u, i: n_limb1) & base_mask1)
+    # shift out dpl digits into the carry for the next position
+    if shift == 0u32
+      var jc = n_limb1 +% 1u64
+      while jc < nb_mods
+        set_limb(tab: carry, i: jc -% (n_limb1 +% 1u64), value: limb(tab: u, i: jc))
+        jc = jc +% 1u64
+    else
+      var jc2 = n_limb1
+      while jc2 < nb_mods -% 1u64
+        set_limb(tab: carry, i: jc2 -% n_limb1,
+          value: (limb(tab: u, i: jc2) >> shift) | (limb(tab: u, i: jc2 +% 1u64) << (64u32 -% shift)))
+        jc2 = jc2 +% 1u64
+      set_limb(tab: carry, i: (nb_mods -% 1u64) -% n_limb1, value: limb(tab: u, i: nb_mods -% 1u64) >> shift)
+    i = i +% 1u64
+  return
+
+# ── Phase 2c: NTT FFT core (get_trig, ntt_fft, ntt_vec_mul, mul_trig, ntt_fft_partial, ntt_conv) ───────
+# BFNTTState is replaced by ON-THE-FLY accessors: the proot-power / len-inverse tables are recomputed by
+# state to thread. Trig tables are allocated fresh per call in the scratch region (no cache).
+# state to thread. Trig tables are allocated fresh per call (no cache) and leaked (short-lived playground).
+
+# The 5x2 primitive roots (ntt_proot[inverse][j]).
+secret routine ntt_proot(inverse: U64, j: U64) -> U64
+  if inverse == 0u64
+    if j == 0u64
+      return 0x1b8ea61034a2bea7u64
+    if j == 1u64
+      return 0x21a9762de58206fbu64
+    if j == 2u64
+      return 0x02ca782f0756a8eau64
+    if j == 3u64
+      return 0x278384537a3e50a1u64
+    return 0x106e13fee74ce0abu64
+  if j == 0u64
+    return 0x233513af133e13b8u64
+  if j == 1u64
+    return 0x1d13140d1c6f75f1u64
+  if j == 2u64
+    return 0x12cde57f97e3eedau64
+  if j == 3u64
+    return 0x0d6149e23cbe654fu64
+  return 0x36cd204f522a1379u64
+
+# ntt_proot_pow[j][inverse][k] = proot^(2^(51-k)) mod m (51-k repeated squarings). NTT_PROOT_2EXP=51.
+secret routine ntt_proot_pow(j: U64, inverse: U64, k: U64) -> U64
+  danger
+    var m = ntt_mod(idx: j)
+    var m_inv = ntt_mod_div(idx: j)
+    var c = ntt_proot(inverse: inverse, j: j)
+    var e = 51u64 -% k
+    var i = 0u64
+    while i < e
+      c = mul_mod_fast(a: c, b: c, m: m, m_inv: m_inv)
+      i = i +% 1u64
+    return c
+
+secret routine ntt_proot_pow_inv(j: U64, inverse: U64, k: U64) -> U64
+  danger
+    return init_mul_mod_fast2(b: ntt_proot_pow(j: j, inverse: inverse, k: k), m: ntt_mod(idx: j))
+
+# ntt_len_inv[j][k][0] = (1/2)^k mod m (inverse of 2^k); [1] = its init_mul_mod_fast2 reciprocal.
+secret routine ntt_len_inv0(j: U64, k: U64) -> U64
+  danger
+    var m = ntt_mod(idx: j)
+    var m_inv = ntt_mod_div(idx: j)
+    var half = (m +% 1u64) // 2u64
+    var c = 1u64
+    var i = 0u64
+    while i < k
+      c = mul_mod_fast(a: c, b: half, m: m, m_inv: m_inv)
+      i = i +% 1u64
+    return c
+
+secret routine ntt_len_inv1(j: U64, k: U64) -> U64
+  danger
+    return init_mul_mod_fast2(b: ntt_len_inv0(j: j, k: k), m: ntt_mod(idx: j))
+
+# Build the level-k twiddle table: pairs (c, init_mul_mod_fast2(c, m)) for c = w^0, w^1, ... where
+# w = the primitive 2^k-th root. Size 2^(k-1) pairs = 2^k limbs. (libbf get_trig, scalar)
+secret dangerous routine get_trig(k: U64, inverse: U64, m_idx: U64) -> Hijacked[U64]
+  var n2 = 1u64 << U32(from: k -% 1u64)
+  var m = ntt_mod(idx: m_idx)
+  var tab = alloc_limbs(n: n2 *% 2u64)
+  var c = 1u64
+  var c_mul = ntt_proot_pow(j: m_idx, inverse: inverse, k: k)
+  var c_mul_inv = ntt_proot_pow_inv(j: m_idx, inverse: inverse, k: k)
+  var i = 0u64
+  while i < n2
+    set_limb(tab: tab, i: 2u64 *% i, value: c)
+    set_limb(tab: tab, i: 2u64 *% i +% 1u64, value: init_mul_mod_fast2(b: c, m: m))
+    c = mul_mod_fast2(a: c, b: c_mul, m: m, b_inv: c_mul_inv)
+    i = i +% 1u64
+  return tab
+
+# In-place decimation FFT (or inverse) mod ntt_mods[m_idx]. Ping-pongs in_buf<->tmp_buf, final -> out_buf.
+# Values stay < 2m throughout. (libbf ntt_fft, scalar)
+secret dangerous routine ntt_fft(out_buf: Hijacked[U64], in_buf: Hijacked[U64], tmp_buf: Hijacked[U64],
+    fft_len_log2: U64, inverse: U64, m_idx: U64)
+  var m = ntt_mod(idx: m_idx)
+  var m2 = 2u64 *% m
+  var n = 1u64 << U32(from: fft_len_log2)
+  var nb_blocks = n
+  var fft_per_block = 1u64
+  var stride_in = n // 2u64
+  var tab_in = in_buf
+  var tab_out = tmp_buf
+  var l = fft_len_log2
+  while nb_blocks != 2u64
+    nb_blocks = nb_blocks >> 1u32
+    var p = 0u64
+    var kk = 0u64
+    var trig = get_trig(k: l, inverse: inverse, m_idx: m_idx)
+    var i = 0u64
+    while i < nb_blocks
+      var c = limb(tab: trig, i: 2u64 *% i)
+      var c_inv = limb(tab: trig, i: 2u64 *% i +% 1u64)
+      var jb = 0u64
+      while jb < fft_per_block
+        var a0 = limb(tab: tab_in, i: kk +% jb)
+        var a1 = limb(tab: tab_in, i: kk +% jb +% stride_in)
+        var b0 = add_mod(a: a0, b: a1, m: m2)
+        var b1 = (a0 -% a1) +% m2
+        b1 = mul_mod_fast3(a: b1, b: c, m: m, b_inv: c_inv)
+        set_limb(tab: tab_out, i: p +% jb, value: b0)
+        set_limb(tab: tab_out, i: p +% jb +% fft_per_block, value: b1)
+        jb = jb +% 1u64
+      kk = kk +% fft_per_block
+      p = p +% (2u64 *% fft_per_block)
+      i = i +% 1u64
+    fft_per_block = fft_per_block << 1u32
+    l = l -% 1u64
+    var tmp = tab_in
+    tab_in = tab_out
+    tab_out = tmp
+  # last butterfly level (no twiddle) writes to out_buf
+  tab_out = out_buf
+  var k2 = 0u64
+  while k2 < stride_in
+    var a0 = limb(tab: tab_in, i: k2)
+    var a1 = limb(tab: tab_in, i: k2 +% stride_in)
+    set_limb(tab: tab_out, i: k2, value: add_mod(a: a0, b: a1, m: m2))
+    set_limb(tab: tab_out, i: k2 +% stride_in, value: sub_mod(a: a0, b: a1, m: m2))
+    k2 = k2 +% 1u64
+  return
+
+# Pointwise multiply tab1 *= tab2 with 1/2^k_tot normalization, mod ntt_mods[m_idx]. (libbf ntt_vec_mul)
+secret dangerous routine ntt_vec_mul(tab1: Hijacked[U64], tab2: Hijacked[U64], fft_len_log2: U64,
+    k_tot: U64, m_idx: U64)
+  var m = ntt_mod(idx: m_idx)
+  var m_inv = ntt_mod_div(idx: m_idx)
+  var norm = ntt_len_inv0(j: m_idx, k: k_tot)
+  var norm_inv = ntt_len_inv1(j: m_idx, k: k_tot)
+  var n = 1u64 << U32(from: fft_len_log2)
+  var i = 0u64
+  while i < n
+    var a = limb(tab: tab1, i: i)
+    if a >= m
+      a = a -% m
+    a = mul_mod_fast(a: a, b: limb(tab: tab2, i: i), m: m, m_inv: m_inv)
+    a = mul_mod_fast3(a: a, b: norm, m: m, b_inv: norm_inv)
+    set_limb(tab: tab1, i: i, value: a)
+    i = i +% 1u64
+  return
+
+# buf[i] *= c_mul^i, mod m. (libbf mul_trig — used by the recursive strip FFT.)
+secret dangerous routine mul_trig(buf: Hijacked[U64], n: U64, c_mul: U64, m: U64, m_inv: U64)
+  var c0 = 1u64
+  var c_mul_inv = init_mul_mod_fast2(b: c_mul, m: m)
+  var i = 0u64
+  while i < n
+    set_limb(tab: buf, i: i, value: mul_mod_fast(a: limb(tab: buf, i: i), b: c0, m: m, m_inv: m_inv))
+    c0 = mul_mod_fast2(a: c0, b: c_mul, m: m, b_inv: c_mul_inv)
+    i = i +% 1u64
+  return
+
+# Six-step (recursive) FFT of a k1+k2 transform stored row-major as n1 x n2. k2==0 -> plain ntt_fft.
+# (libbf ntt_fft_partial; the k2!=0 path only triggers for k > NTT_TRIG_K_MAX=19, i.e. huge transforms.)
+secret dangerous routine ntt_fft_partial(buf1: Hijacked[U64], k1: U64, k2: U64, n1: U64, n2: U64,
+    inverse: U64, m_idx: U64)
+  var buf3 = alloc_limbs(n: n1)
+  if k2 == 0u64
+    ntt_fft(out_buf: buf1, in_buf: buf1, tmp_buf: buf3, fft_len_log2: k1, inverse: inverse, m_idx: m_idx)
+    return
+  var strip_len = 16u64
+  var buf2 = alloc_limbs(n: n1 *% strip_len)
+  var m = ntt_mod(idx: m_idx)
+  var m_inv = ntt_mod_div(idx: m_idx)
+  var c0 = ntt_proot_pow(j: m_idx, inverse: inverse, k: k1 +% k2)
+  var c_mul = 1u64
+  var j = 0u64
+  while j < n2
+    var i = 0u64
+    while i < n1
+      var l = 0u64
+      while l < strip_len
+        set_limb(tab: buf2, i: i +% l *% n1, value: limb(tab: buf1, i: i *% n2 +% (j +% l)))
+        l = l +% 1u64
+      i = i +% 1u64
+    var l2 = 0u64
+    while l2 < strip_len
+      if inverse != 0u64
+        mul_trig(buf: buf2.stride(count: S64(from: l2 *% n1)), n: n1, c_mul: c_mul, m: m, m_inv: m_inv)
+      ntt_fft(out_buf: buf2.stride(count: S64(from: l2 *% n1)),
+        in_buf: buf2.stride(count: S64(from: l2 *% n1)), tmp_buf: buf3, fft_len_log2: k1,
+        inverse: inverse, m_idx: m_idx)
+      if inverse == 0u64
+        mul_trig(buf: buf2.stride(count: S64(from: l2 *% n1)), n: n1, c_mul: c_mul, m: m, m_inv: m_inv)
+      c_mul = mul_mod_fast(a: c_mul, b: c0, m: m, m_inv: m_inv)
+      l2 = l2 +% 1u64
+    var i2 = 0u64
+    while i2 < n1
+      var l3 = 0u64
+      while l3 < strip_len
+        set_limb(tab: buf1, i: i2 *% n2 +% (j +% l3), value: limb(tab: buf2, i: i2 +% l3 *% n1))
+        l3 = l3 +% 1u64
+      i2 = i2 +% 1u64
+    j = j +% strip_len
+  return
+
+# Cyclic convolution buf1 = buf1 (*) buf2 mod ntt_mods[m_idx], via forward FFTs, pointwise mul, inverse FFT.
+# (libbf ntt_conv)
+secret dangerous routine ntt_conv(buf1: Hijacked[U64], buf2: Hijacked[U64], k: U64, k_tot: U64, m_idx: U64)
+  var k1 = 0u64
+  if k <= 19u64
+    k1 = k
+  else
+    var half = k // 2u64
+    k1 = if half < 19u64 then half else 19u64
+  var k2 = k -% k1
+  var n1 = 1u64 << U32(from: k1)
+  var n2 = 1u64 << U32(from: k2)
+  ntt_fft_partial(buf1: buf1, k1: k1, k2: k2, n1: n1, n2: n2, inverse: 0u64, m_idx: m_idx)
+  ntt_fft_partial(buf1: buf2, k1: k1, k2: k2, n1: n1, n2: n2, inverse: 0u64, m_idx: m_idx)
+  if k2 == 0u64
+    ntt_vec_mul(tab1: buf1, tab2: buf2, fft_len_log2: k, k_tot: k_tot, m_idx: m_idx)
+  else
+    var i = 0u64
+    while i < n1
+      ntt_conv(buf1: buf1.stride(count: S64(from: i *% n2)), buf2: buf2.stride(count: S64(from: i *% n2)),
+        k: k2, k_tot: k_tot, m_idx: m_idx)
+      i = i +% 1u64
+  ntt_fft_partial(buf1: buf1, k1: k1, k2: k2, n1: n1, n2: n2, inverse: 1u64, m_idx: m_idx)
+  return
+
+# ── Phase 2d: fft_mul + mp_mul dispatch ───────────────────────────────────────────────────────────────
+# result[0 .. a_len+b_len) = a * b via NTT. result must hold a_len+b_len limbs. (libbf fft_mul, stripped of
+# the bf_t/reduced-mem/overlap bookkeeping — the raw integer multiply.)
+secret dangerous routine limbs_mul_ntt(result: Hijacked[U64], a_tab: Hijacked[U64], a_len: U64,
+    b_tab: Hijacked[U64], b_len: U64)
+  var len = a_len +% b_len
+  var params = bf_get_fft_size(len: len)
+  var fft_len_log2 = params.item0
+  var dpl = params.item1
+  var nb_mods = params.item2
+  var fft_len = 1u64 << U32(from: fft_len_log2)
+  var first_m_idx = 5u64 -% nb_mods
+  var buf1 = alloc_limbs(n: fft_len *% nb_mods)
+  limb_to_ntt(tabr: buf1, fft_len: fft_len, taba: a_tab, a_len: a_len, dpl: dpl,
+    first_m_idx: first_m_idx, nb_mods: nb_mods)
+  var buf2 = alloc_limbs(n: fft_len *% nb_mods)
+  limb_to_ntt(tabr: buf2, fft_len: fft_len, taba: b_tab, a_len: b_len, dpl: dpl,
+    first_m_idx: first_m_idx, nb_mods: nb_mods)
+  var j = 0u64
+  while j < nb_mods
+    ntt_conv(buf1: buf1.stride(count: S64(from: fft_len *% j)),
+      buf2: buf2.stride(count: S64(from: fft_len *% j)),
+      k: fft_len_log2, k_tot: fft_len_log2, m_idx: first_m_idx +% j)
+    j = j +% 1u64
+  ntt_to_limb(tabr: result, r_len: len, buf: buf1, fft_len_log2: fft_len_log2, dpl: dpl, nb_mods: nb_mods)
+  return
+
+# result[0 .. op1_size+op2_size) = op1 * op2. Dispatches schoolbook <-> NTT at FFT_MUL_THRESHOLD=100
+# limbs of the smaller factor. (libbf mp_mul)
+secret dangerous routine limbs_mul(result: Hijacked[U64], op1: Hijacked[U64], op1_size: U64,
+    op2: Hijacked[U64], op2_size: U64)
+  var smaller = if op1_size < op2_size then op1_size else op2_size
+  if smaller >= 100u64
+    limbs_mul_ntt(result: result, a_tab: op1, a_len: op1_size, b_tab: op2, b_len: op2_size)
+  else
+    limbs_mul_schoolbook(result: result, op1: op1, op1_size: op1_size, op2: op2, op2_size: op2_size)
+  return
+
+# ── Phase 3: O(n log n) division via Newton reciprocal (mp_recip / mp_divnorm / mp_divnorm_large) ──────
+# Division is reduced to multiplication: r ~ B^(2n)/d is found by Newton iteration (precision doubles each
+# step), so divmod costs O(M(n)) = O(n log n) on top of the NTT multiply. (libbf mp_recip, Brent-Zimmermann
+# "Modern Computer Arithmetic" alg 3.5; mp_divnorm_large; mp_divnorm.)
+
+# res = 0 - op2 - carry (n limbs). Returns the final borrow. (libbf mp_neg)
+secret dangerous routine limbs_neg(res: Hijacked[U64], op2: Hijacked[U64], n: U64, carry: U64) -> U64
+  var k = carry
+  var i = 0u64
+  while i < n
+    var v = 0u64
+    var a = v -% limb(tab: op2, i: i)
+    var k1 = if a > v then 1u64 else 0u64
+    var vv = a -% k
+    k = (if vv > a then 1u64 else 0u64) | k1
+    set_limb(tab: res, i: i, value: vv)
+    i = i +% 1u64
+  return k
+
+# 1 if any of tab[0..n) is nonzero, else 0. (libbf mp_scan_nz)
+secret dangerous routine limbs_any_nonzero(tab: Hijacked[U64], n: U64) -> U64
+  var i = 0u64
+  while i < n
+    if limb(tab: tab, i: i) != 0u64
+      return 1u64
+    i = i +% 1u64
+  return 0u64
+
+# -1 / 0 / 1 comparing two n-limb magnitudes. (libbf mp_cmp)
+secret dangerous routine limbs_cmp(a: Hijacked[U64], b: Hijacked[U64], n: U64) -> S64
+  var i = n
+  while i > 0u64
+    i = i -% 1u64
+    var av = limb(tab: a, i: i)
+    var bv = limb(tab: b, i: i)
+    if av != bv
+      return if av < bv then -1s64 else 1s64
+  return 0s64
+
+# tabr[0..n) = taba / b, returning the remainder. b must be normalized. Uses the arch-gated Core word
+# division (reciprocal_word / div2by1) — hardware divq on x86-64, Möller-Granlund on arm64/wasm. (mp_div1norm)
+secret dangerous routine limbs_divmod_word(tabr: Hijacked[U64], taba: Hijacked[U64], n: U64, b: U64, r0: U64) -> U64
+  var r = r0
+  var b_inv = reciprocal_word(d: b)
+  var i = n
+  while i > 0u64
+    i = i -% 1u64
+    var qr = div2by1(u1: r, u0: limb(tab: taba, i: i), d: b, v: b_inv)
+    set_limb(tab: tabr, i: i, value: qr.q)
+    r = qr.r
+  return r
+
+# r = floor(B^(2n)/a), with a normalized (a[n-1] >= B/2) and n>=1. r has n+1 limbs (r[n]=1). Newton
+# doubling. (libbf mp_recip)
+secret dangerous routine limbs_reciprocal(tabr: Hijacked[U64], taba: Hijacked[U64], n: U64)
+  if n <= 2u64
+    var tabu = alloc_limbs(n: 2u64 *% n +% 1u64)
+    var tabt = alloc_limbs(n: n +% 2u64)
+    zero_limbs(tab: tabu, n: 2u64 *% n)
+    set_limb(tab: tabu, i: 2u64 *% n, value: 1u64)
+    limbs_divmod_norm(tabq: tabt, taba: tabu, na: 2u64 *% n +% 1u64, tabb: taba, nb: n)
+    var i = 0u64
+    while i < n +% 1u64
+      set_limb(tab: tabr, i: i, value: limb(tab: tabt, i: i))
+      i = i +% 1u64
+    if limbs_any_nonzero(tab: tabu, n: n) == 0u64
+      discard limbs_sub_word(tab: tabr, b: 1u64, n: n +% 1u64)
+    return
+  var l = (n -% 1u64) // 2u64
+  var h = n -% l
+  var tabt = alloc_limbs(n: n +% h +% 1u64)
+  var tabu = alloc_limbs(n: n +% 2u64 *% h -% l +% 2u64)
+  var tabxh = tabr.stride(count: S64(from: l))
+  limbs_reciprocal(tabr: tabxh, taba: taba.stride(count: S64(from: l)), n: h)
+  limbs_mul(result: tabt, op1: taba, op1_size: n, op2: tabxh, op2_size: h +% 1u64)
+  while limb(tab: tabt, i: n +% h) != 0u64
+    discard limbs_sub_word(tab: tabxh, b: 1u64, n: h +% 1u64)
+    var c = limbs_sub(res: tabt, op1: tabt, op2: taba, n: n, borrow_in: 0u64)
+    discard limbs_sub_word(tab: tabt.stride(count: S64(from: n)), b: c, n: h +% 1u64)
+  # T = B^(n+h) - T
+  discard limbs_neg(res: tabt, op2: tabt, n: n +% h +% 1u64, carry: 0u64)
+  set_limb(tab: tabt, i: n +% h, value: limb(tab: tabt, i: n +% h) +% 1u64)
+  limbs_mul(result: tabu, op1: tabt.stride(count: S64(from: l)), op1_size: n +% h +% 1u64 -% l,
+    op2: tabxh, op2_size: h +% 1u64)
+  var k = 2u64 *% h -% l
+  var i2 = 0u64
+  while i2 < l
+    set_limb(tab: tabr, i: i2, value: limb(tab: tabu, i: i2 +% k))
+    i2 = i2 +% 1u64
+  discard limbs_add(res: tabr.stride(count: S64(from: l)), op1: tabr.stride(count: S64(from: l)),
+    op2: tabu.stride(count: S64(from: 2u64 *% h)), n: h, carry: 0u64)
+  return
+
+# Subquadratic base-case division: taba (na) / tabb (nb, normalized) -> tabq (na-nb+1), remainder left in
+# taba[0..nb). nq = na-nb >= 1. (libbf mp_divnorm_large)
+secret dangerous routine limbs_divmod_newton(tabq: Hijacked[U64], taba: Hijacked[U64], na: U64,
+    tabb: Hijacked[U64], nb: U64)
+  var nq = na -% nb
+  var n = nq
+  if nq < nb
+    n = n +% 1u64
+  var tabb_inv = alloc_limbs(n: n +% 1u64)
+  var tabt = alloc_limbs(n: 2u64 *% (n +% 1u64))
+  var did_recip = false
+  if n >= nb
+    var i = 0u64
+    while i < n -% nb
+      set_limb(tab: tabt, i: i, value: 0u64)
+      i = i +% 1u64
+    var i2 = 0u64
+    while i2 < nb
+      set_limb(tab: tabt, i: i2 +% n -% nb, value: limb(tab: tabb, i: i2))
+      i2 = i2 +% 1u64
+  else
+    var i = 0u64
+    while i < n
+      set_limb(tab: tabt, i: i, value: limb(tab: tabb, i: i +% nb -% n))
+      i = i +% 1u64
+    if limbs_add_word(tab: tabt, b: 1u64, n: n) != 0u64
+      zero_limbs(tab: tabb_inv, n: n)
+      set_limb(tab: tabb_inv, i: n, value: 1u64)
+      did_recip = true
+  if not did_recip
+    limbs_reciprocal(tabr: tabb_inv, taba: tabt, n: n)
+  # Q = A * B^-1
+  limbs_mul(result: tabt, op1: tabb_inv, op1_size: n +% 1u64,
+    op2: taba.stride(count: S64(from: na -% (n +% 1u64))), op2_size: n +% 1u64)
+  var iq = 0u64
+  while iq < nq +% 1u64
+    set_limb(tab: tabq, i: iq, value: limb(tab: tabt, i: iq +% 2u64 *% (n +% 1u64) -% (nq +% 1u64)))
+    iq = iq +% 1u64
+  # R = A - B*Q
+  var tabt2 = alloc_limbs(n: na +% 1u64)
+  limbs_mul(result: tabt2, op1: tabq, op1_size: nq +% 1u64, op2: tabb, op2_size: nb)
+  discard limbs_sub(res: taba, op1: taba, op2: tabt2, n: nb +% 1u64, borrow_in: 0u64)
+  # the approximate quotient is <= exact; increment while the remainder is still >= B
+  var going = true
+  while going
+    if limb(tab: taba, i: nb) == 0u64 and limbs_cmp(a: taba, b: tabb, n: nb) < 0s64
+      going = false
+    else
+      var bw = limbs_sub(res: taba, op1: taba, op2: tabb, n: nb, borrow_in: 0u64)
+      set_limb(tab: taba, i: nb, value: limb(tab: taba, i: nb) -% bw)
+      discard limbs_add_word(tab: tabq, b: 1u64, n: nq +% 1u64)
+  return
+
+# Base-case division of a normalized divisor: taba(na)/tabb(nb) -> tabq(na-nb+1); remainder left in
+# taba[0..nb). Dispatches single-limb / subquadratic / quadratic. (libbf mp_divnorm)
+secret dangerous routine limbs_divmod_norm(tabq: Hijacked[U64], taba: Hijacked[U64], na: U64, tabb: Hijacked[U64],
+    nb: U64)
+  var b1 = limb(tab: tabb, i: nb -% 1u64)
+  if nb == 1u64
+    set_limb(tab: taba, i: 0u64, value: limbs_divmod_word(tabr: tabq, taba: taba, n: na, b: b1, r0: 0u64))
+    return
+  var n = na -% nb
+  # Newton only pays off once both the quotient and the divisor are long. libbf switches at 50 limbs, but
+  # measured here the quadratic path wins up to about 2000 x 2000 limbs (2x faster at 1000 limbs) and
+  # Newton wins from about 2500.
+  if (if n < nb then n else nb) >= 2300u64
+    limbs_divmod_newton(tabq: tabq, taba: taba, na: na, tabb: tabb, nb: nb)
+    return
+  var b1_inv = reciprocal_word(d: b1)
+  # first quotient limb is 0 or 1
+  var q = 1u64
+  var j = nb
+  while j > 0u64
+    j = j -% 1u64
+    if limb(tab: taba, i: n +% j) != limb(tab: tabb, i: j)
+      if limb(tab: taba, i: n +% j) < limb(tab: tabb, i: j)
+        q = 0u64
+      j = 0u64                                   # break
+    elseif j == 0u64
+      j = 0u64
+  set_limb(tab: tabq, i: n, value: q)
+  if q != 0u64
+    discard limbs_sub(res: taba.stride(count: S64(from: n)), op1: taba.stride(count: S64(from: n)),
+      op2: tabb, n: nb, borrow_in: 0u64)
+  var i = n
+  while i > 0u64
+    i = i -% 1u64
+    var qq = 0u64
+    if limb(tab: taba, i: i +% nb) >= b1
+      qq = 0xFFFFFFFFFFFFFFFFu64                 # q = -1
+    else
+      var qr = div2by1(u1: limb(tab: taba, i: i +% nb), u0: limb(tab: taba, i: i +% nb -% 1u64),
+        d: b1, v: b1_inv)
+      qq = qr.q
+    var r = limbs_submul_word(tabr: taba.stride(count: S64(from: i)), taba: tabb, n: nb, b: qq)
+    var v = limb(tab: taba, i: i +% nb)
+    var a = v -% r
+    var c = if a > v then 1u64 else 0u64
+    set_limb(tab: taba, i: i +% nb, value: a)
+    if c != 0u64
+      var neg = true
+      while neg
+        qq = qq -% 1u64
+        var cc = limbs_add(res: taba.stride(count: S64(from: i)), op1: taba.stride(count: S64(from: i)),
+          op2: tabb, n: nb, carry: 0u64)
+        if cc != 0u64
+          var t = limb(tab: taba, i: i +% nb) +% 1u64
+          set_limb(tab: taba, i: i +% nb, value: t)
+          if t == 0u64
+            neg = false
+    set_limb(tab: tabq, i: i, value: qq)
+  return
+
+# ── Integer square root (Karatsuba sqrt, Zimmermann): mp_sqrtrem1/2/rec/sqrtrem ───────────────────────
+# floor(sqrt(x)) for x < 2^16 (seeds mp_sqrtrem1, replacing libbf's 192-entry sqrt_table).
+secret routine isqrt_small(x: U64) -> U64
+  var s = 0u64
+  while (s +% 1u64) *% (s +% 1u64) <= x
+    s = s +% 1u64
+  return s
+
+# floor(sqrt(a)) and remainder for a single normalized limb (a >= 2^62). Returns (s, r), r = a - s^2.
+secret routine limbs_sqrt_word(a: U64) -> (U64, U64)
+  danger
+    var s1 = isqrt_small(x: (a >> 56u32) << 8u32)
+    var r1 = (a >> 48u32) -% (s1 *% s1)
+    if r1 > 2u64 *% s1
+      r1 = r1 -% (2u64 *% s1 +% 1u64)
+      s1 = s1 +% 1u64
+    # 32 -> 16 bit
+    var num = (r1 << 8u32) | ((a >> 40u32) & 0xFFu64)
+    var q = num // (2u64 *% s1)
+    var u = num -% q *% (2u64 *% s1)
+    var s = (s1 << 8u32) +% q
+    var r = (u << 8u32) | ((a >> 32u32) & 0xFFu64)
+    r = r -% q *% q
+    if (r >> 63u32) != 0u64
+      s = s -% 1u64
+      r = r +% (2u64 *% s +% 1u64)
+    # 64 -> 32 bit
+    s1 = s
+    r1 = r
+    num = (r1 << 16u32) | ((a >> 16u32) & 0xFFFFu64)
+    q = num // (2u64 *% s1)
+    u = num -% q *% (2u64 *% s1)
+    s = (s1 << 16u32) +% q
+    r = (u << 16u32) | (a & 0xFFFFu64)
+    r = r -% q *% q
+    if (r >> 63u32) != 0u64
+      s = s -% 1u64
+      r = r +% (2u64 *% s +% 1u64)
+    return (s, r)
+
+# floor(sqrt) of a 2-limb normalized value taba[0..1]; writes tabs[0]=s, taba[0]=low(r); returns hi(r).
+secret dangerous routine limbs_sqrt_2word(tabs: Hijacked[U64], taba: Hijacked[U64]) -> U64
+  var a0 = limb(tab: taba, i: 0u64)
+  var sr = limbs_sqrt_word(a: limb(tab: taba, i: 1u64))
+  var s1 = sr.item0
+  var r1 = sr.item1
+  var s1x2 = U128(from: 2u64 *% s1)
+  var num = (U128(from: r1) << 32) | U128(from: a0 >> 32u32)
+  var q = num // s1x2
+  var u = num -% q *% s1x2
+  var s = (U128(from: s1) << 32) +% q
+  var r = (u << 32) | U128(from: a0 & 0xFFFFFFFFu64)
+  if u128_lo(t: q >> 32) != 0u64
+    r = r -% (U128(from: 1u64) << 64)
+  else
+    r = r -% q *% q
+  if (u128_lo(t: r >> 64) >> 63u32) != 0u64
+    s = s -% U128(from: 1u64)
+    r = r +% ((U128(from: 2u64) *% s) +% U128(from: 1u64))
+  set_limb(tab: tabs, i: 0u64, value: u128_lo(t: s))
+  set_limb(tab: taba, i: 0u64, value: u128_lo(t: r))
+  return u128_lo(t: r >> 64)
+
+# Recursive Karatsuba sqrt: taba has 2n limbs (taba[2n-1] >= 2^(64-2)); writes tabs[0..n-1]=floor(sqrt(a)),
+# remainder into taba[0..n-1]; returns the remainder's high limb. tmp_buf has n/2+1 limbs. (mp_sqrtrem_rec)
+secret dangerous routine limbs_sqrt_rec(tabs: Hijacked[U64], taba: Hijacked[U64], n: U64,
+    tmp_buf: Hijacked[U64]) -> U64
+  if n == 1u64
+    return limbs_sqrt_2word(tabs: tabs, taba: taba)
+  var l = n // 2u64
+  var h = n -% l
+  var qh = limbs_sqrt_rec(tabs: tabs.stride(count: S64(from: l)),
+    taba: taba.stride(count: S64(from: 2u64 *% l)), n: h, tmp_buf: tmp_buf)
+  if qh != 0u64
+    discard limbs_sub(res: taba.stride(count: S64(from: 2u64 *% l)),
+      op1: taba.stride(count: S64(from: 2u64 *% l)), op2: tabs.stride(count: S64(from: l)),
+      n: h, borrow_in: 0u64)
+  limbs_divmod_norm(tabq: tmp_buf, taba: taba.stride(count: S64(from: l)), na: n,
+    tabb: tabs.stride(count: S64(from: l)), nb: h)
+  qh = qh +% limb(tab: tmp_buf, i: l)
+  var i = 0u64
+  while i < l
+    set_limb(tab: tabs, i: i, value: limb(tab: tmp_buf, i: i))
+    i = i +% 1u64
+  var ql = limbs_shr(tab_r: tabs, tab: tabs, n: l, shift: 1u32, high: qh & 1u64)
+  qh = qh >> 1u32
+  var rh = 0u64
+  if ql != 0u64
+    rh = limbs_add(res: taba.stride(count: S64(from: l)), op1: taba.stride(count: S64(from: l)),
+      op2: tabs.stride(count: S64(from: l)), n: h, carry: 0u64)
+  discard limbs_add_word(tab: tabs.stride(count: S64(from: l)), b: qh, n: h)
+  var c = 0u64
+  if qh != 0u64
+    c = qh
+  else
+    limbs_mul(result: taba.stride(count: S64(from: n)), op1: tabs, op1_size: l, op2: tabs, op2_size: l)
+    c = limbs_sub(res: taba, op1: taba, op2: taba.stride(count: S64(from: n)), n: 2u64 *% l, borrow_in: 0u64)
+  rh = rh -% limbs_sub_word(tab: taba.stride(count: S64(from: 2u64 *% l)), b: c, n: n -% 2u64 *% l)
+  if (rh >> 63u32) != 0u64
+    discard limbs_sub_word(tab: tabs, b: 1u64, n: n)
+    rh = rh +% limbs_addmul_word(tabr: taba, taba: tabs, n: n, b: 2u64)
+    rh = rh +% limbs_add_word(tab: taba, b: 1u64, n: n)
+  return rh
+
+# Top-level: taba has 2n limbs (normalized top); tabs gets floor(sqrt); returns remainder high limb.
+secret dangerous routine limbs_sqrt_rem(tabs: Hijacked[U64], taba: Hijacked[U64], n: U64) -> U64
+  var tmp_buf = alloc_limbs(n: n // 2u64 +% 1u64)
+  return limbs_sqrt_rec(tabs: tabs, taba: taba, n: n, tmp_buf: tmp_buf)
+
+# ── Integer engine wrappers: general divmod (normalize/denormalize around mp_divnorm) ─────────────────
+# dst[0..n) = src << shift bits; returns the bits shifted out of the top limb.
+secret dangerous routine limbs_shl(dst: Hijacked[U64], src: Hijacked[U64], n: U64, shift: U64) -> U64
+  if shift == 0u64
+    var i0 = 0u64
+    while i0 < n
+      set_limb(tab: dst, i: i0, value: limb(tab: src, i: i0))
+      i0 = i0 +% 1u64
+    return 0u64
+  var sh = U32(from: shift)
+  var carry = 0u64
+  var i = 0u64
+  while i < n
+    var v = limb(tab: src, i: i)
+    set_limb(tab: dst, i: i, value: (v << sh) | carry)
+    carry = v >> (64u32 -% sh)
+    i = i +% 1u64
+  return carry
+
+# q = a / b, r = a mod b, for a general (non-normalized) divisor. Requires na >= nb, b[nb-1] != 0.
+# q has na-nb+1 limbs, r has nb limbs. Normalizes b (top bit set), shifts a, divides, denormalizes r.
+secret dangerous routine limbs_divmod(q: Hijacked[U64], r: Hijacked[U64], a: Hijacked[U64], na: U64,
+    b: Hijacked[U64], nb: U64)
+  var shift = LLVM::leading_zeros(limb(tab: b, i: nb -% 1u64))
+  var bn = alloc_limbs(n: nb)
+  discard limbs_shl(dst: bn, src: b, n: nb, shift: shift)
+  var an = alloc_limbs(n: na +% 1u64)
+  set_limb(tab: an, i: na, value: limbs_shl(dst: an, src: a, n: na, shift: shift))
+  var qq = alloc_limbs(n: na +% 2u64 -% nb)
+  limbs_divmod_norm(tabq: qq, taba: an, na: na +% 1u64, tabb: bn, nb: nb)
+  var qi = 0u64
+  while qi < na +% 1u64 -% nb
+    set_limb(tab: q, i: qi, value: limb(tab: qq, i: qi))
+    qi = qi +% 1u64
+  if shift == 0u64
+    var ri = 0u64
+    while ri < nb
+      set_limb(tab: r, i: ri, value: limb(tab: an, i: ri))
+      ri = ri +% 1u64
+  else
+    discard limbs_shr(tab_r: r, tab: an, n: nb, shift: U32(from: shift), high: 0u64)
+  return
+
+# ── Phase 4a: bf_t float representation + normalize/round (libbf bf_normalize_and_round/__bf_round) ────
+# value = (tab as little-endian fraction with the binary point above tab[len-1]'s MSB) * 2^expn, mantissa
+# normalized so tab[len-1]'s top bit is set. zero/inf/nan carried in expn (len=0). Functional: ops return a
+# fresh BfT (matches RF's managed-value Integer/Real; NOT in-place/entity).
+record BfT obeys Assignable, Copyable
+  sign: Bool
+  expn: S64
+  len: U64
+  tab: Hijacked[U64]
+
+# Special exponents (BF_EXP_ZERO = S64_MIN, BF_EXP_INF = S64_MAX-1, BF_EXP_NAN = S64_MAX).
+secret routine bf_exp_zero() -> S64
+  return -9223372036854775807s64 -% 1s64
+secret routine bf_exp_inf() -> S64
+  return 9223372036854775806s64
+secret routine bf_exp_nan() -> S64
+  return 9223372036854775807s64
+# BF_PREC_INF = (1<<62) - 1.
+secret routine bf_prec_inf() -> U64
+  return (1u64 << 62u32) -% 1u64
+
+secret dangerous routine bf_none() -> Hijacked[U64]
+  return hijacked_none[U64]()
+
+routine BfT.is_finite() -> Bool
+  return me.expn < bf_exp_inf()
+routine BfT.is_zero() -> Bool
+  return me.expn == bf_exp_zero()
+routine BfT.is_nan() -> Bool
+  return me.expn == bf_exp_nan()
+
+secret routine bf_set_zero(is_neg: Bool) -> BfT
+  danger
+    return BfT(sign: is_neg, expn: bf_exp_zero(), len: 0u64, tab: bf_none())
+secret routine bf_set_nan() -> BfT
+  danger
+    return BfT(sign: false, expn: bf_exp_nan(), len: 0u64, tab: bf_none())
+secret routine bf_set_inf(is_neg: Bool) -> BfT
+  danger
+    return BfT(sign: is_neg, expn: bf_exp_inf(), len: 0u64, tab: bf_none())
+
+# r = a (normalized single-limb mantissa). (libbf bf_set_ui, 64-bit)
+secret routine bf_set_ui(a: U64) -> BfT
+  danger
+    if a == 0u64
+      return bf_set_zero(is_neg: false)
+    var shift = LLVM::leading_zeros(a)
+    var tab = alloc_limbs(n: 1u64)
+    set_limb(tab: tab, i: 0u64, value: a << U32(from: shift))
+    return BfT(sign: false, expn: S64(from: 64u64 -% shift), len: 1u64, tab: tab)
+
+secret routine bf_set_si(a: S64) -> BfT
+  danger
+    if a < 0s64
+      var mag = U64(from: 0s64 -% a)
+      var r = bf_set_ui(a: mag)
+      return BfT(sign: true, expn: r.expn, len: r.len, tab: r.tab)
+    return bf_set_ui(a: U64(from: a))
+
+# exponent field-width from fl (BF_EXP_BITS_MAX = 61).
+secret routine bf_get_exp_bits(fl: U32) -> S64
+  var e = (fl >> 5u32) & 0x3Fu32
+  if e == 0x3Fu32
+    return 62s64
+  return 61s64 -% S64(from: U64(from: e))
+
+# mask of bits [start, last] within a limb.
+secret routine limb_mask(start: U64, last: U64) -> U64
+  var n = (last -% start) +% 1u64
+  if n == 64u64
+    return 0xFFFFFFFFFFFFFFFFu64
+  return ((1u64 << U32(from: n)) -% 1u64) << U32(from: start)
+
+# bit at position pos (0 past the ends; pos may be negative). (libbf get_bit)
+secret dangerous routine bit_at(tab: Hijacked[U64], len: U64, pos: S64) -> U64
+  var i = pos >> 6u32
+  if i < 0s64 or i >= S64(from: len)
+    return 0u64
+  var bitpos = U32(from: U64(from: pos) & 63u64)
+  return (limb(tab: tab, i: U64(from: i)) >> bitpos) & 1u64
+
+# nonzero if any bit in [0, bit_pos] is set. (libbf scan_bit_nz)
+secret dangerous routine scan_bit_nz(tab: Hijacked[U64], len: U64, bit_pos: S64) -> U64
+  var pos = bit_pos >> 6u32
+  if pos < 0s64
+    return 0u64
+  var v = limb(tab: tab, i: U64(from: pos)) & limb_mask(start: 0u64, last: U64(from: bit_pos) & 63u64)
+  if v != 0u64
+    return 1u64
+  var p = pos -% 1s64
+  while p >= 0s64
+    if limb(tab: tab, i: U64(from: p)) != 0u64
+      return 1u64
+    p = p -% 1s64
+  return 0u64
+
+# rounding addend + inexact flag for the given mode. (libbf bf_get_rnd_add) Returns (add_one, ret).
+secret dangerous routine bf_get_rnd_add(ret0: U32, sign: Bool, l: U64, tab: Hijacked[U64], prec: S64,
+    rnd_mode: U32) -> (U64, U32)
+  var ret = ret0
+  var lb = S64(from: l *% 64u64)
+  var bit0 = 0u64
+  if rnd_mode == 6u32
+    bit0 = 1u64
+  else
+    var pp = if prec +% 1s64 > 0s64 then prec +% 1s64 else 0s64
+    bit0 = scan_bit_nz(tab: tab, len: l, bit_pos: (lb -% 1s64) -% pp)
+  var bit1 = bit_at(tab: tab, len: l, pos: (lb -% 1s64) -% prec)
+  var inexact = (bit1 | bit0) != 0u64
+  var add_one = 0u64
+  if rnd_mode == 1u32
+    add_one = 0u64
+  elseif rnd_mode == 0u32
+    if bit1 != 0u64
+      if bit0 != 0u64
+        add_one = 1u64
+      else
+        add_one = bit_at(tab: tab, len: l, pos: (lb -% 1s64) -% (prec -% 1s64))
+  elseif rnd_mode == 2u32 or rnd_mode == 3u32
+    var want = rnd_mode == 2u32
+    if sign == want
+      add_one = if inexact then 1u64 else 0u64
+  elseif rnd_mode == 5u32
+    add_one = if inexact then 1u64 else 0u64
+  else
+    add_one = bit1
+  if inexact
+    ret = ret | 0x10u32
+  return (add_one, ret)
+
+# round a normalized (sign, expn, l-limb tab) to prec1 bits with the given fl; returns a fresh BfT.
+# (libbf __bf_round; overflow -> inf/max, underflow -> zero/subnormal.) Mutates tab as scratch.
+secret dangerous routine bf_round_core(sign: Bool, expn0: S64, prec1: U64, fl: U32, l0: U64,
+    tab: Hijacked[U64]) -> BfT
+  var expn = expn0
+  var l = l0
+  var e_range = 1s64 << U32(from: U64(from: bf_get_exp_bits(fl: fl) -% 1s64))
+  var e_min = (0s64 -% e_range) +% 3s64
+  var e_max = e_range
+  var is_inf = prec1 == bf_prec_inf()
+  var prec = S64(from: prec1)
+  if (fl & 0x10u32) != 0u32
+    if not is_inf
+      prec = expn +% S64(from: prec1)
+  elseif expn < e_min and (fl & 0x08u32) != 0u32
+    prec = S64(from: prec1) -% (e_min -% expn)
+  var rnd_mode = fl & 0x7u32
+  var addr = bf_get_rnd_add(ret0: 0u32, sign: sign, l: l, tab: tab, prec: prec, rnd_mode: rnd_mode)
+  var add_one = addr.item0
+  if prec <= 0s64
+    if add_one != 0u64
+      set_limb(tab: tab, i: 0u64, value: 1u64 << 63u32)
+      expn = expn +% (1s64 -% prec)
+      return BfT(sign: sign, expn: expn, len: 1u64, tab: tab)
+    return bf_set_zero(is_neg: sign)
+  if add_one != 0u64
+    var bit_pos = S64(from: l *% 64u64) -% 1s64 -% (prec -% 1s64)
+    var pos = bit_pos >> 6u32
+    var carry = 1u64 << U32(from: U64(from: bit_pos) & 63u64)
+    var i = pos
+    while i < S64(from: l)
+      var v = limb(tab: tab, i: U64(from: i)) +% carry
+      var nc = if v < carry then 1u64 else 0u64
+      set_limb(tab: tab, i: U64(from: i), value: v)
+      carry = nc
+      if nc == 0u64
+        i = S64(from: l)
+      else
+        i = i +% 1s64
+    if carry != 0u64
+      var vv = 1u64
+      var j = S64(from: l) -% 1s64
+      while j >= pos
+        var a = limb(tab: tab, i: U64(from: j))
+        set_limb(tab: tab, i: U64(from: j), value: (a >> 1u32) | (vv << 63u32))
+        vv = a
+        j = j -% 1s64
+      expn = expn +% 1s64
+  if expn < e_min and (fl & 0x08u32) == 0u32
+    return bf_set_zero(is_neg: sign)
+  if expn > e_max
+    return bf_set_inf(is_neg: sign)
+  var bit_pos2 = S64(from: l *% 64u64) -% 1s64 -% (prec -% 1s64)
+  var ii = bit_pos2 >> 6u32
+  if ii >= 0s64
+    var shift = U64(from: bit_pos2) & 63u64
+    if shift != 0u64
+      set_limb(tab: tab, i: U64(from: ii),
+        value: limb(tab: tab, i: U64(from: ii)) & limb_mask(start: shift, last: 63u64))
+  else
+    ii = 0s64
+  var iz = U64(from: ii)
+  while limb(tab: tab, i: iz) == 0u64
+    iz = iz +% 1u64
+  var newlen = l -% iz
+  if iz > 0u64
+    var k = 0u64
+    while k < newlen
+      set_limb(tab: tab, i: k, value: limb(tab: tab, i: k +% iz))
+      k = k +% 1u64
+  return BfT(sign: sign, expn: expn, len: newlen, tab: tab)
+
+# normalize (shift MSB of top limb to bit 63) then round. (libbf bf_normalize_and_round) tab is scratch.
+secret dangerous routine bf_normalize_and_round(sign: Bool, expn0: S64, len0: U64, tab: Hijacked[U64],
+    prec1: U64, fl: U32) -> BfT
+  var expn = expn0
+  var l = len0
+  while l > 0u64 and limb(tab: tab, i: l -% 1u64) == 0u64
+    l = l -% 1u64
+  if l == 0u64
+    return bf_set_zero(is_neg: sign)
+  expn = expn -% S64(from: (len0 -% l) *% 64u64)
+  var v = limb(tab: tab, i: l -% 1u64)
+  var shift = LLVM::leading_zeros(v)
+  if shift != 0u64
+    var sh = U32(from: shift)
+    var carry = 0u64
+    var i = 0u64
+    while i < l
+      var a = limb(tab: tab, i: i)
+      set_limb(tab: tab, i: i, value: (a << sh) | (carry >> U32(from: 64u64 -% shift)))
+      carry = a
+      i = i +% 1u64
+    expn = expn -% S64(from: shift)
+  return bf_round_core(sign: sign, expn0: expn, prec1: prec1, fl: fl, l0: l, tab: tab)
+
+# round an existing finite BfT to prec bits (assumes already normalized). (libbf bf_round)
+# The rounding core rewrites its buffer in place, and `a.tab` may be shared with other values (or be a
+# {Real}'s owned buffer), so round a scratch copy.
+secret routine bf_round(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      return a
+    var cpy = alloc_limbs(n: a.len)
+    var i = 0u64
+    while i < a.len
+      set_limb(tab: cpy, i: i, value: limb(tab: a.tab, i: i))
+      i = i +% 1u64
+    return bf_round_core(sign: a.sign, expn0: a.expn, prec1: prec, fl: fl, l0: a.len, tab: cpy)
+
+# ── Phase 4b: bf_add / bf_sub (libbf bf_add_internal) ─────────────────────────────────────────────────
+# limb idx of a BfT mantissa, 0 out of range (idx may be negative). (libbf get_limbz)
+secret routine get_limbz(a: BfT, idx: S64) -> U64
+  danger
+    if idx < 0s64 or idx >= S64(from: a.len)
+      return 0u64
+    return limb(tab: a.tab, i: U64(from: idx))
+
+# LIMB_BITS at bit position pos (signed; two's-complement low bits for pos&63). (libbf get_bits, signed)
+secret dangerous routine get_bits_s(tab: Hijacked[U64], len: U64, pos: S64) -> U64
+  var i = pos >> 6u32
+  var p = U32(from: LLVM::reinterpret_bits[S64, U64](pos) & 63u64)
+  var a0 = if i >= 0s64 and i < S64(from: len) then limb(tab: tab, i: U64(from: i)) else 0u64
+  if p == 0u32
+    return a0
+  var i1 = i +% 1s64
+  var a1 = if i1 >= 0s64 and i1 < S64(from: len) then limb(tab: tab, i: U64(from: i1)) else 0u64
+  return (a0 >> p) | (a1 << (64u32 -% p))
+
+# compare magnitudes: -1/0/1 for |a| </==/> |b|. (libbf bf_cmpu; assumes both finite nonzero here)
+secret routine bf_cmpu(a: BfT, b: BfT) -> S64
+  danger
+    if a.expn != b.expn
+      return if a.expn < b.expn then -1s64 else 1s64
+    var len = if a.len > b.len then a.len else b.len
+    var i = S64(from: len) -% 1s64
+    while i >= 0s64
+      var v1 = get_limbz(a: a, idx: (S64(from: a.len) -% S64(from: len)) +% i)
+      var v2 = get_limbz(a: b, idx: (S64(from: b.len) -% S64(from: len)) +% i)
+      if v1 != v2
+        return if v1 < v2 then -1s64 else 1s64
+      i = i -% 1s64
+    return 0s64
+
+# leading bits that cancel in |a|-|b| (a>b, a.expn-b.expn in {0,1}). (libbf count_cancelled_bits)
+secret routine count_cancelled_bits(a: BfT, b: BfT) -> U64
+  danger
+    var bit_offset = S64(from: a.len *% 64u64) -% 1s64
+    var b_offset = (((S64(from: b.len) -% S64(from: a.len)) *% 64s64) -% 63s64) +% (a.expn -% b.expn)
+    var n = 0u64
+    var v1 = 0u64
+    var v2 = 0u64
+    var going = true
+    while going
+      v1 = get_limbz(a: a, idx: bit_offset >> 6u32)
+      v2 = get_bits_s(tab: b.tab, len: b.len, pos: bit_offset +% b_offset)
+      if v1 != v2
+        going = false
+      else
+        n = n +% 64u64
+        bit_offset = bit_offset -% 64s64
+    var p = LLVM::leading_zeros(v1 ^ v2) +% 1u64
+    n = n +% p
+    var pr = 64u64 -% p
+    var done = false
+    if pr > 0u64
+      var mask = limb_mask(start: 0u64, last: pr -% 1u64)
+      var c1 = LLVM::leading_zeros(v1 & mask)
+      var c2 = LLVM::leading_zeros((v2 ^ 0xFFFFFFFFFFFFFFFFu64) & mask)
+      var p1 = (if c1 < c2 then c1 else c2) -% (64u64 -% pr)
+      n = n +% p1
+      if p1 != pr
+        done = true
+    if not done
+      bit_offset = bit_offset -% 64s64
+      var going2 = true
+      while going2
+        v1 = get_limbz(a: a, idx: bit_offset >> 6u32)
+        v2 = get_bits_s(tab: b.tab, len: b.len, pos: bit_offset +% b_offset)
+        if v1 != 0u64 or v2 != 0xFFFFFFFFFFFFFFFFu64
+          var c1 = LLVM::leading_zeros(v1)
+          var c2 = LLVM::leading_zeros(v2 ^ 0xFFFFFFFFFFFFFFFFu64)
+          n = n +% (if c1 < c2 then c1 else c2)
+          going2 = false
+        else
+          n = n +% 64u64
+          bit_offset = bit_offset -% 64s64
+    return n
+
+# r = a + (b with sign flipped by b_neg), rounded to prec. (libbf bf_add_internal) Functional.
+secret routine bf_add_internal(a0: BfT, b0: BfT, prec: U64, fl: U32, b_neg: Bool) -> BfT
+  danger
+    var a = a0
+    var b = b0
+    var a_sign = a.sign
+    var b_sign = b.sign != b_neg
+    var is_sub = a_sign != b_sign
+    var cmp_res = bf_cmpu(a: a, b: b)
+    if cmp_res < 0s64
+      var tmp = a
+      a = b
+      b = tmp
+      a_sign = b_sign
+    # |a| >= |b|
+    if cmp_res == 0s64 and is_sub and a.expn < bf_exp_inf()
+      return bf_set_zero(is_neg: (fl & 7u32) == 2u32)
+    if a.len == 0u64 or b.len == 0u64
+      if a.expn >= bf_exp_inf()
+        if a.expn == bf_exp_nan()
+          return bf_set_nan()
+        if b.expn == bf_exp_inf() and is_sub
+          return bf_set_nan()
+        return bf_set_inf(is_neg: a_sign)
+      # a nonzero finite, b zero: result = a rounded
+      var cpy = alloc_limbs(n: a.len)
+      var ci = 0u64
+      while ci < a.len
+        set_limb(tab: cpy, i: ci, value: limb(tab: a.tab, i: ci))
+        ci = ci +% 1u64
+      return bf_normalize_and_round(sign: a_sign, expn0: a.expn, len0: a.len, tab: cpy, prec1: prec, fl: fl)
+    # both finite nonzero
+    var d = a.expn -% b.expn
+    var cancelled = 0u64
+    if is_sub
+      if d <= 1s64
+        cancelled = count_cancelled_bits(a: a, b: b)
+      else
+        cancelled = 1u64
+    var precl = ((((cancelled +% prec) +% 2u64) +% 63u64)) // 64u64
+    var d_limbs = (U64(from: d) +% 63u64) // 64u64
+    var tot_len = if a.len > (b.len +% d_limbs) then a.len else (b.len +% d_limbs)
+    var r_len = if precl < tot_len then precl else tot_len
+    var tab = alloc_limbs(n: r_len +% 1u64)
+    var a_offset = S64(from: a.len) -% S64(from: r_len)
+    var b_bit_offset = ((S64(from: b.len) -% S64(from: r_len)) *% 64s64) +% d
+    var is_sub_u = if is_sub then 1u64 else 0u64
+    var sub_mask = 0u64 -% is_sub_u
+    var carry = is_sub_u
+    var z = 0u64
+    # sticky bits below the result window (naive; only runs when precl < tot_len)
+    var i = S64(from: r_len) -% S64(from: tot_len)
+    while i < 0s64
+      var v1 = get_limbz(a: a, idx: a_offset +% i)
+      var v2 = get_bits_s(tab: b.tab, len: b.len, pos: b_bit_offset +% (i *% 64s64))
+      v2 = v2 ^ sub_mask
+      var u = v1 +% v2
+      var carry1 = if u < v1 then 1u64 else 0u64
+      u = u +% carry
+      carry = (if u < carry then 1u64 else 0u64) | carry1
+      z = z | u
+      i = i +% 1s64
+    # the result window
+    var k = 0u64
+    while k < r_len
+      var v1 = get_limbz(a: a, idx: a_offset +% S64(from: k))
+      var v2 = get_bits_s(tab: b.tab, len: b.len, pos: b_bit_offset +% (S64(from: k) *% 64s64))
+      v2 = v2 ^ sub_mask
+      var u = v1 +% v2
+      var carry1 = if u < v1 then 1u64 else 0u64
+      u = u +% carry
+      carry = (if u < carry then 1u64 else 0u64) | carry1
+      set_limb(tab: tab, i: k, value: u)
+      k = k +% 1u64
+    if z != 0u64
+      set_limb(tab: tab, i: 0u64, value: limb(tab: tab, i: 0u64) | 1u64)
+    var expn = a.expn
+    var mlen = r_len
+    if not is_sub and carry != 0u64
+      set_limb(tab: tab, i: r_len, value: 1u64)
+      expn = expn +% 64s64
+      mlen = r_len +% 1u64
+    return bf_normalize_and_round(sign: a_sign, expn0: expn, len0: mlen, tab: tab, prec1: prec, fl: fl)
+
+secret routine bf_add(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    return bf_add_internal(a0: a, b0: b, prec: prec, fl: fl, b_neg: false)
+secret routine bf_sub(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    return bf_add_internal(a0: a, b0: b, prec: prec, fl: fl, b_neg: true)
+
+# ── Phase 4c: bf_mul ──────────────────────────────────────────────────────────────────────────────────
+# r = a * b, rounded. mantissa = a*b (limbs_mul), expn = a.expn + b.expn. (libbf bf_mul)
+secret routine bf_mul(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    var aa = a
+    var bb = b
+    if aa.len < bb.len
+      var tmp = aa
+      aa = bb
+      bb = tmp
+    var r_sign = aa.sign != bb.sign
+    if bb.len == 0u64
+      if aa.expn == bf_exp_nan() or bb.expn == bf_exp_nan()
+        return bf_set_nan()
+      if aa.expn == bf_exp_inf() or bb.expn == bf_exp_inf()
+        if (aa.expn == bf_exp_inf() and bb.expn == bf_exp_zero()) or (aa.expn == bf_exp_zero() and bb.expn == bf_exp_inf())
+          return bf_set_nan()
+        return bf_set_inf(is_neg: r_sign)
+      return bf_set_zero(is_neg: r_sign)
+    var na = aa.len
+    var nb = bb.len
+    var tab = alloc_limbs(n: na +% nb)
+    limbs_mul(result: tab, op1: aa.tab, op1_size: na, op2: bb.tab, op2_size: nb)
+    return bf_normalize_and_round(sign: r_sign, expn0: aa.expn +% bb.expn, len0: na +% nb, tab: tab,
+      prec1: prec, fl: fl)
+
+# ── Phase 4d: bf_div / bf_sqrt / bf_cmp ───────────────────────────────────────────────────────────────
+# r = a / b, rounded. b's mantissa is already normalized, so limbs_divmod_norm applies directly. (libbf __bf_div)
+secret routine bf_div(a: BfT, b: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    var r_sign = a.sign != b.sign
+    if a.expn >= bf_exp_inf() or b.expn >= bf_exp_inf()
+      if a.expn == bf_exp_nan() or b.expn == bf_exp_nan()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf() and b.expn == bf_exp_inf()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf()
+        return bf_set_inf(is_neg: r_sign)
+      return bf_set_zero(is_neg: r_sign)
+    if a.expn == bf_exp_zero()
+      if b.expn == bf_exp_zero()
+        return bf_set_nan()
+      return bf_set_zero(is_neg: r_sign)
+    if b.expn == bf_exp_zero()
+      return bf_set_inf(is_neg: r_sign)
+    var precl = ((prec +% 2u64) +% 63u64) // 64u64
+    var nb = b.len
+    var n = if a.len > precl then a.len else precl
+    var na = n +% nb
+    var taba = alloc_limbs(n: na +% 1u64)
+    var d = na -% a.len
+    zero_limbs(tab: taba, n: d)
+    var ci = 0u64
+    while ci < a.len
+      set_limb(tab: taba, i: d +% ci, value: limb(tab: a.tab, i: ci))
+      ci = ci +% 1u64
+    var qtab = alloc_limbs(n: n +% 1u64)
+    limbs_divmod_norm(tabq: qtab, taba: taba, na: na, tabb: b.tab, nb: nb)
+    if limbs_any_nonzero(tab: taba, n: nb) != 0u64
+      set_limb(tab: qtab, i: 0u64, value: limb(tab: qtab, i: 0u64) | 1u64)
+    return bf_normalize_and_round(sign: r_sign, expn0: (a.expn -% b.expn) +% 64s64, len0: n +% 1u64,
+      tab: qtab, prec1: prec, fl: fl)
+
+# r = sqrt(a), rounded. Builds a 2n-limb integer (even effective exponent), runs limbs_sqrt_rem. (libbf bf_sqrt)
+secret routine bf_sqrt(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf() and a.sign
+        return bf_set_nan()
+      return a
+    if a.sign
+      return bf_set_nan()
+    var n = ((2u64 *% (prec +% 2u64)) +% ((2u64 *% 64u64) -% 1u64)) // (2u64 *% 64u64)
+    var a1 = alloc_limbs(n: 2u64 *% n)
+    var n1 = if (2u64 *% n) < a.len then 2u64 *% n else a.len
+    zero_limbs(tab: a1, n: (2u64 *% n) -% n1)
+    var ci = 0u64
+    while ci < n1
+      set_limb(tab: a1, i: ((2u64 *% n) -% n1) +% ci, value: limb(tab: a.tab, i: (a.len -% n1) +% ci))
+      ci = ci +% 1u64
+    var res = 0u64
+    if (a.expn & 1s64) != 0s64
+      res = limbs_shr(tab_r: a1, tab: a1, n: 2u64 *% n, shift: 1u32, high: 0u64)
+    var s = alloc_limbs(n: n)
+    var rh = limbs_sqrt_rem(tabs: s, taba: a1, n: n)
+    if res == 0u64
+      res = rh
+    if res == 0u64
+      res = limbs_any_nonzero(tab: a1, n: n)
+    if res == 0u64
+      res = limbs_any_nonzero(tab: a.tab, n: a.len -% n1)
+    if res != 0u64
+      set_limb(tab: s, i: 0u64, value: limb(tab: s, i: 0u64) | 1u64)
+    return bf_round(a: BfT(sign: false, expn: (a.expn +% 1s64) >> 1u32, len: n, tab: s), prec: prec, fl: fl)
+
+# floating comparison: 2 if NaN, else -1/0/1. (libbf bf_cmp)
+secret routine bf_cmp(a: BfT, b: BfT) -> S64
+  danger
+    if a.expn == bf_exp_nan() or b.expn == bf_exp_nan()
+      return 2s64
+    if a.sign != b.sign
+      if a.expn == bf_exp_zero() and b.expn == bf_exp_zero()
+        return 0s64
+      return if a.sign then -1s64 else 1s64
+    var res = bf_cmpu(a: a, b: b)
+    return if a.sign then 0s64 -% res else res
+
+# ── Phase 5: decimal radix conversion ────────────────────────────────────────────────────────────────
+# 10^e as an EXACT BfT. (libbf bf_pow_ui_ui specialized to radix 10)
+secret routine bf_pow10(e: U64) -> BfT
+  return bf_pow_radix(radix: 10u64, e: e)
+
+# T * 10^expn, rounded to prec: a mul for expn >= 0, a div for expn < 0. 10^|expn| is exact, so the one
+# operation rounds correctly. (libbf bf_mul_pow_radix, radix 10)
+secret routine bf_mul10exp(t: BfT, expn: S64, prec: U64, fl: U32) -> BfT
+  danger
+    if expn == 0s64
+      return bf_round(a: t, prec: prec, fl: fl)
+    if expn > 0s64
+      return bf_mul(a: t, b: bf_pow10(e: U64(from: expn)), prec: prec, fl: fl)
+    return bf_div(a: t, b: bf_pow10(e: U64(from: 0s64 -% expn)), prec: prec, fl: fl)
+
+# ── Phase 6: transcendentals — π via Chudnovsky binary splitting (libbf bf_const_pi) ──────────────────
+secret routine bf_mul_ui(a: BfT, n: U64, prec: U64, fl: U32) -> BfT
+  danger
+    return bf_mul(a: a, b: bf_set_ui(a: n), prec: prec, fl: fl)
+
+# Chudnovsky binary splitting: returns (P, Q, G) for the sub-series [a, b). (libbf chud_bs)
+secret routine chud_bs(a: S64, b: S64, need_g: Bool, prec: U64) -> (BfT, BfT, BfT)
+  danger
+    if a == b -% 1s64
+      var bu = U64(from: b)
+      var g = bf_set_ui(a: (2u64 *% bu) -% 1u64)
+      g = bf_mul_ui(a: g, n: (6u64 *% bu) -% 1u64, prec: prec, fl: 0u32)
+      g = bf_mul_ui(a: g, n: (6u64 *% bu) -% 5u64, prec: prec, fl: 0u32)
+      var t0 = bf_mul_ui(a: bf_set_ui(a: 545140134u64), n: bu, prec: prec, fl: 0u32)
+      t0 = bf_add(a: t0, b: bf_set_ui(a: 13591409u64), prec: prec, fl: 0u32)
+      var p = bf_mul(a: g, b: t0, prec: prec, fl: 0u32)
+      if (b & 1s64) != 0s64
+        p = BfT(sign: true, expn: p.expn, len: p.len, tab: p.tab)
+      var q = bf_mul_ui(a: bf_mul_ui(a: bf_set_ui(a: bu), n: bu, prec: prec, fl: 0u32), n: bu, prec: prec, fl: 0u32)
+      q = bf_mul_ui(a: q, n: 10939058860032000u64, prec: prec, fl: 0u32)          # CHUD_C^3 / 24
+      return (p, q, g)
+    var c = (a +% b) // 2s64
+    var left = chud_bs(a: a, b: c, need_g: true, prec: prec)
+    var right = chud_bs(a: c, b: b, need_g: need_g, prec: prec)
+    var p2 = bf_mul(a: right.item0, b: left.item2, prec: prec, fl: 0u32)          # P2 *= G1
+    var p = bf_add(a: bf_mul(a: left.item0, b: right.item1, prec: prec, fl: 0u32), b: p2, prec: prec, fl: 0u32)
+    var q = bf_mul(a: left.item1, b: right.item1, prec: prec, fl: 0u32)
+    var g = if need_g then bf_mul(a: left.item2, b: right.item2, prec: prec, fl: 0u32) else bf_set_ui(a: 0u64)
+    return (p, q, g)
+
+# π to `prec` bits via the Chudnovsky formula. (libbf bf_const_pi_internal)
+# pi to `prec` bits. Fast path: a PRESET 512-bit mantissa (baked literal, generated by this engine's own
+# Chudnovsky output — value-identical, so no runtime series). Falls back to live Chudnovsky above 480 bits.
+secret routine bf_const_pi(prec: U64) -> BfT
+  danger
+    if prec <= 480u64
+      var tab = alloc_limbs(n: 8u64)
+      set_limb(tab: tab, i: 0u64, value: 5755940542857986630u64)
+      set_limb(tab: tab, i: 1u64, value: 3470879405153129527u64)
+      set_limb(tab: tab, i: 2u64, value: 17263733006627652379u64)
+      set_limb(tab: tab, i: 3u64, value: 5857503583518590173u64)
+      set_limb(tab: tab, i: 4u64, value: 147421033984662306u64)
+      set_limb(tab: tab, i: 5u64, value: 2955010104097229940u64)
+      set_limb(tab: tab, i: 6u64, value: 14179128828124470481u64)
+      set_limb(tab: tab, i: 7u64, value: 14488038916154245684u64)
+      return bf_round(a: BfT(sign: false, expn: 2s64, len: 8u64, tab: tab), prec: prec, fl: 0u32)
+    # Ziv loop: compute a faithful approximation with extra bits until it rounds unambiguously. (libbf
+    # bf_const_get)
+    var extra = 32u64
+    var going = true
+    var r = bf_set_ui(a: 0u64)
+    while going
+      var prec1 = prec +% extra
+      r = bf_const_pi_internal(prec: prec1)
+      if bf_can_round(a: r, prec: S64(from: prec), rnd_mode: 0u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra +% (extra // 2u64)
+    return bf_round(a: r, prec: prec, fl: 0u32)
+
+# pi to `prec` bits, faithfully rounded (the Chudnovsky series with 32 guard bits). (libbf
+# bf_const_pi_internal)
+secret routine bf_const_pi_internal(prec: U64) -> BfT
+  danger
+    var n = (prec // 47u64) +% 1u64                                              # CHUD_BITS_PER_TERM = 47
+    var prec1 = prec +% 32u64
+    var r = chud_bs(a: 0s64, b: S64(from: n), need_g: false, prec: bf_prec_inf())
+    var q = r.item1
+    var p = bf_add(a: bf_mul_ui(a: q, n: 13591409u64, prec: prec1, fl: 0u32), b: r.item0, prec: prec1, fl: 0u32)
+    q = bf_div(a: q, b: p, prec: prec1, fl: 0u32)
+    var sc = bf_mul_ui(a: bf_sqrt(a: bf_set_ui(a: 640320u64), prec: prec1, fl: 0u32), n: 53360u64, prec: prec1, fl: 0u32)
+    return bf_mul(a: q, b: sc, prec: prec, fl: 0u32)
+
+# ── Phase 6b: log(2) constant, Ziv correct rounding, exp ──────────────────────────────────────────────
+# true if 'a' (accurate to k bits) can be correctly rounded to prec bits in rnd_mode. (libbf bf_can_round)
+secret routine bf_can_round(a: BfT, prec: S64, rnd_mode: U32, k: S64) -> Bool
+  danger
+    if a.expn == bf_exp_inf() or a.expn == bf_exp_nan()
+      return false
+    if rnd_mode == 6u32
+      return k >= (prec +% 1s64)
+    if a.expn == bf_exp_zero()
+      return false
+    var is_rndn = rnd_mode == 0u32 or rnd_mode == 4u32
+    if k < (prec +% 2s64)
+      return false
+    var bit_pos = (S64(from: a.len *% 64u64) -% 1s64) -% prec
+    var n = k -% prec
+    var bit = bit_at(tab: a.tab, len: a.len, pos: bit_pos)
+    bit_pos = bit_pos -% 1s64
+    n = n -% 1s64
+    if is_rndn
+      bit = bit ^ 1u64
+    while n != 0s64
+      if bit_at(tab: a.tab, len: a.len, pos: bit_pos) != bit
+        return true
+      bit_pos = bit_pos -% 1s64
+      n = n -% 1s64
+    return false
+
+# binary-splitting series for log(2). Returns (T, P, Q); log(2) ~ T/Q. (libbf bf_const_log2_rec)
+secret routine bf_const_log2_rec(n1: U64, n2: U64, need_p: Bool) -> (BfT, BfT, BfT)
+  danger
+    if (n2 -% n1) == 1u64
+      var p = bf_set_ui(a: 3u64)
+      if n1 != 0u64
+        var pn = bf_set_ui(a: n1)
+        p = BfT(sign: true, expn: pn.expn, len: pn.len, tab: pn.tab)
+      var q0 = bf_set_ui(a: (2u64 *% n1) +% 1u64)
+      var q = BfT(sign: q0.sign, expn: q0.expn +% 2s64, len: q0.len, tab: q0.tab)   # *4
+      return (p, p, q)
+    var m = n1 +% ((n2 -% n1) >> 1u32)
+    var l = bf_const_log2_rec(n1: n1, n2: m, need_p: true)
+    var r = bf_const_log2_rec(n1: m, n2: n2, need_p: need_p)
+    var t = bf_add(a: bf_mul(a: l.item0, b: r.item2, prec: bf_prec_inf(), fl: 0u32),
+      b: bf_mul(a: r.item0, b: l.item1, prec: bf_prec_inf(), fl: 0u32), prec: bf_prec_inf(), fl: 0u32)
+    var p = if need_p then bf_mul(a: l.item1, b: r.item1, prec: bf_prec_inf(), fl: 0u32) else l.item1
+    var q = bf_mul(a: l.item2, b: r.item2, prec: bf_prec_inf(), fl: 0u32)
+    return (t, p, q)
+
+# log(2) to `prec` bits. Fast path: PRESET 512-bit mantissa (baked literal from this engine's own output).
+# Falls back to live binary splitting above 480 bits.
+secret routine bf_const_log2(prec: U64, fl: U32) -> BfT
+  danger
+    if prec <= 480u64
+      var tab = alloc_limbs(n: 8u64)
+      set_limb(tab: tab, i: 0u64, value: 2834799538024855589u64)
+      set_limb(tab: tab, i: 1u64, value: 17090789181815791940u64)
+      set_limb(tab: tab, i: 2u64, value: 6166926504001936144u64)
+      set_limb(tab: tab, i: 3u64, value: 16697225500131306648u64)
+      set_limb(tab: tab, i: 4u64, value: 9947632833883994667u64)
+      set_limb(tab: tab, i: 5u64, value: 4680158270178506285u64)
+      set_limb(tab: tab, i: 6u64, value: 14547668686819489455u64)
+      set_limb(tab: tab, i: 7u64, value: 12786308645202655659u64)
+      return bf_round(a: BfT(sign: false, expn: 0s64, len: 8u64, tab: tab), prec: prec, fl: fl)
+    # Ziv loop, as for pi. (libbf bf_const_get)
+    var extra = 32u64
+    var going = true
+    var v = bf_set_ui(a: 0u64)
+    while going
+      var prec1 = prec +% extra
+      var w = prec1 +% 15u64
+      var nn = (w // 3u64) +% 1u64
+      var r = bf_const_log2_rec(n1: 0u64, n2: nn, need_p: false)
+      v = bf_div(a: r.item0, b: r.item2, prec: prec1, fl: 0u32)
+      if bf_can_round(a: v, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra +% (extra // 2u64)
+    return bf_round(a: v, prec: prec, fl: fl)
+
+# a * 2^e (just shift the exponent).
+secret routine bf_mul_2exp(a: BfT, e: S64, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      return a
+    return bf_round(a: BfT(sign: a.sign, expn: a.expn +% e, len: a.len, tab: a.tab), prec: prec, fl: fl)
+secret routine bf_mul_si(a: BfT, n: S64, prec: U64, fl: U32) -> BfT
+  danger
+    return bf_mul(a: a, b: bf_set_si(a: n), prec: prec, fl: fl)
+secret routine bf_add_si(a: BfT, n: S64, prec: U64, fl: U32) -> BfT
+  danger
+    return bf_add(a: a, b: bf_set_si(a: n), prec: prec, fl: fl)
+
+# integer (truncated-toward-zero) value of a small BfT (integer part < 2^63). 0 when |a| < 1.
+secret routine bf_get_si(a: BfT) -> S64
+  danger
+    if a.len == 0u64 or a.expn <= 0s64
+      return 0s64
+    var e = U64(from: a.expn)
+    var top = limb(tab: a.tab, i: a.len -% 1u64)
+    var mag = if e >= 64u64 then top else top >> U32(from: 64u64 -% e)
+    return if a.sign then 0s64 -% S64(from: mag) else S64(from: mag)
+
+secret routine bf_isqrt(x: U64) -> U64
+  var s = 0u64
+  while ((s +% 1u64) *% (s +% 1u64)) <= x
+    s = s +% 1u64
+  return s
+
+# exp(a) with faithful rounding at prec (MPFR-style: reduce a = n*log2 + t, |t|<log2, then t/2^K, Taylor,
+# square K times, scale 2^n). (libbf bf_exp_internal)
+secret routine bf_exp_internal(a: BfT, prec: U64) -> BfT
+  danger
+    var n = 0s64
+    if a.expn <= -1s64
+      n = if a.sign then -1s64 else 0s64
+    else
+      var lg = bf_const_log2(prec: 64u64, fl: 1u32)
+      n = bf_get_si(a: bf_div(a: a, b: lg, prec: 64u64, fl: 2u32))
+    var kk = bf_isqrt(x: (prec +% 1u64) // 2u64)
+    var l = ((prec -% 1u64) // kk) +% 1u64
+    var prec1 = (((prec +% (2u64 *% kk)) +% (2u64 *% l)) +% 26u64)
+    if a.expn > 0s64
+      prec1 = prec1 +% U64(from: a.expn)
+    var t = a
+    if n != 0s64
+      var lg2 = bf_const_log2(prec: prec1, fl: 6u32)
+      t = bf_sub(a: a, b: bf_mul_si(a: lg2, n: n, prec: prec1, fl: 0u32), prec: prec1, fl: 0u32)
+    t = bf_mul_2exp(a: t, e: 0s64 -% S64(from: kk), prec: bf_prec_inf(), fl: 1u32)
+    var r = bf_set_ui(a: 1u64)
+    var i = l
+    while i >= 1u64
+      var u = bf_div(a: t, b: bf_set_ui(a: i), prec: prec1, fl: 0u32)
+      r = bf_add_si(a: bf_mul(a: r, b: u, prec: prec1, fl: 0u32), n: 1s64, prec: prec1, fl: 0u32)
+      i = i -% 1u64
+    var j = 0u64
+    while j < kk
+      r = bf_mul(a: r, b: r, prec: prec1, fl: 0u32)
+      j = j +% 1u64
+    return bf_mul_2exp(a: r, e: n, prec: bf_prec_inf(), fl: 1u32)
+
+# exp(a), correctly rounded via Ziv's strategy. (libbf bf_exp + bf_ziv_rounding)
+secret routine bf_exp(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf()
+        return if a.sign then bf_set_zero(is_neg: false) else bf_set_inf(is_neg: false)
+      return bf_set_ui(a: 1u64)
+    var rnd_mode = fl & 7u32
+    var extra = 32u64
+    var r = bf_set_ui(a: 1u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_exp_internal(a: a, prec: prec1)
+      if bf_can_round(a: r, prec: S64(from: prec), rnd_mode: rnd_mode, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# ── Phase 6c: log, sin, cos ───────────────────────────────────────────────────────────────────────────
+# log(a), faithful. Reduce a=2^n·T (2/3<=T<=4/3), T=T/(1+sqrt(1+T)) K times, atanh series, undo. (bf_log_internal)
+secret routine bf_log_internal(a: BfT, prec: U64) -> BfT
+  danger
+    var n = a.expn
+    var t = BfT(sign: a.sign, expn: 0s64, len: a.len, tab: a.tab)
+    var u0 = bf_set_ui(a: 0xAAAAAAAAu64)
+    var u23 = BfT(sign: false, expn: 0s64, len: u0.len, tab: u0.tab)          # ~2/3
+    if bf_cmp(a: t, b: u23) < 0s64
+      t = BfT(sign: t.sign, expn: t.expn +% 1s64, len: t.len, tab: t.tab)
+      n = n -% 1s64
+    var kk = bf_isqrt(x: (prec +% 1u64) // 2u64)
+    var l = (prec // (2u64 *% kk)) +% 1u64
+    var prec1 = ((prec +% kk) +% (2u64 *% l)) +% 32u64
+    t = bf_add_si(a: t, n: -1s64, prec: bf_prec_inf(), fl: 0u32)
+    var i = 0u64
+    while i < kk
+      var v = bf_sqrt(a: bf_add_si(a: t, n: 1s64, prec: prec1, fl: 0u32), prec: prec1, fl: 6u32)
+      t = bf_div(a: t, b: bf_add_si(a: v, n: 1s64, prec: prec1, fl: 0u32), prec: prec1, fl: 0u32)
+      i = i +% 1u64
+    var y = bf_div(a: t, b: bf_add_si(a: t, n: 2s64, prec: prec1, fl: 0u32), prec: prec1, fl: 0u32)
+    var y2 = bf_mul(a: y, b: y, prec: prec1, fl: 0u32)
+    var r = bf_set_ui(a: 0u64)
+    var ii = l
+    while ii >= 1u64
+      var uu = bf_div(a: bf_set_ui(a: 1u64), b: bf_set_ui(a: (2u64 *% ii) +% 1u64), prec: prec1, fl: 0u32)
+      r = bf_mul(a: bf_add(a: r, b: uu, prec: prec1, fl: 0u32), b: y2, prec: prec1, fl: 0u32)
+      ii = ii -% 1u64
+    r = bf_mul(a: bf_add_si(a: r, n: 1s64, prec: prec1, fl: 0u32), b: y, prec: prec1, fl: 0u32)
+    r = bf_mul_2exp(a: r, e: S64(from: kk) +% 1s64, prec: bf_prec_inf(), fl: 1u32)
+    if n != 0s64
+      r = bf_add(a: r, b: bf_mul_si(a: bf_const_log2(prec: prec1, fl: 6u32), n: n, prec: prec1, fl: 0u32), prec: prec1, fl: 0u32)
+    return r
+
+secret routine bf_log(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf()
+        return if a.sign then bf_set_nan() else bf_set_inf(is_neg: false)
+      return bf_set_inf(is_neg: true)
+    if a.sign
+      return bf_set_nan()
+    var rnd_mode = fl & 7u32
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_log_internal(a: a, prec: prec1)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: rnd_mode, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# sin from cosm1: sqrt(-(2·cosm1 + cosm1^2)) = sqrt(1 - cos^2). (libbf bf_sqrt_sin)
+secret routine bf_sqrt_sin(x: BfT, prec1: U64) -> BfT
+  danger
+    var r = bf_mul(a: x, b: x, prec: prec1, fl: 0u32)
+    var t = bf_mul_2exp(a: x, e: 1s64, prec: bf_prec_inf(), fl: 1u32)
+    t = bf_add(a: t, b: r, prec: prec1, fl: 0u32)
+    t = BfT(sign: not t.sign, expn: t.expn, len: t.len, tab: t.tab)
+    return bf_sqrt(a: t, prec: prec1, fl: 6u32)
+
+# sin or cos of any argument. Range-reduce a = n·(pi/2) + T with T in [-pi/4, pi/4] and quadrant mod = n&3,
+# compute cosm1(T) by Taylor + doubling, then pick sin/cos per quadrant. (libbf bf_sincos, direct
+# round-to-nearest range reduction instead of bf_remquo.)
+secret routine bf_sincos(a: BfT, prec: U64, want_sin: Bool) -> BfT
+  danger
+    var kk = bf_isqrt(x: prec // 2u64)
+    var l = (prec // (2u64 *% kk)) +% 1u64
+    var prec1 = ((prec +% (2u64 *% kk)) +% l) +% 8u64
+    var mod = 0s64
+    var t = a
+    if a.expn > -1s64
+      var prec2 = if a.expn > 0s64 then (prec1 +% U64(from: a.expn)) +% 32u64 else prec1 +% 32u64
+      var pi2 = bf_mul_2exp(a: bf_const_pi(prec: prec2), e: -1s64, prec: bf_prec_inf(), fl: 1u32)
+      var n = bf_get_si(a: bf_round(a: bf_div(a: a, b: pi2, prec: prec2, fl: 0u32), prec: 0u64, fl: 0x10u32))
+      mod = n & 3s64
+      t = bf_sub(a: a, b: bf_mul_si(a: pi2, n: n, prec: prec2, fl: 0u32), prec: prec2, fl: 0u32)
+    var is_neg = t.sign
+    var t2 = bf_mul_2exp(a: bf_mul(a: t, b: t, prec: prec1, fl: 0u32),
+      e: 0s64 -% (2s64 *% S64(from: kk)), prec: bf_prec_inf(), fl: 1u32)
+    var r = bf_set_ui(a: 1u64)
+    var i = l
+    while i >= 1u64
+      var u = bf_mul_ui(a: bf_set_ui(a: (2u64 *% i) -% 1u64), n: 2u64 *% i, prec: bf_prec_inf(), fl: 1u32)
+      u = bf_div(a: t2, b: u, prec: prec1, fl: 0u32)
+      r = bf_neg(a: bf_mul(a: r, b: u, prec: prec1, fl: 0u32))
+      if i != 1u64
+        r = bf_add_si(a: r, n: 1s64, prec: prec1, fl: 0u32)
+      i = i -% 1u64
+    var j = 0u64
+    while j < kk
+      var sq = bf_mul(a: r, b: r, prec: prec1, fl: 0u32)
+      r = bf_mul_2exp(a: bf_add(a: bf_mul_2exp(a: r, e: 1s64, prec: bf_prec_inf(), fl: 1u32), b: sq, prec: prec1, fl: 0u32), e: 1s64, prec: bf_prec_inf(), fl: 1u32)
+      j = j +% 1u64
+    var res = bf_set_ui(a: 0u64)
+    if want_sin
+      if (mod & 1s64) == 0s64
+        var sn = bf_sqrt_sin(x: r, prec1: prec1)
+        res = BfT(sign: is_neg, expn: sn.expn, len: sn.len, tab: sn.tab)
+      else
+        res = bf_add_si(a: r, n: 1s64, prec: prec1, fl: 0u32)
+    else
+      if (mod & 1s64) == 0s64
+        res = bf_add_si(a: r, n: 1s64, prec: prec1, fl: 0u32)
+      else
+        var sn = bf_sqrt_sin(x: r, prec1: prec1)
+        res = BfT(sign: not is_neg, expn: sn.expn, len: sn.len, tab: sn.tab)
+    if (mod & 2s64) != 0s64
+      res = bf_neg(a: res)
+    return res
+
+secret routine bf_cos(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan() or a.expn == bf_exp_inf()
+        return bf_set_nan()
+      return bf_set_ui(a: 1u64)
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_sincos(a: a, prec: prec1, want_sin: false)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+secret routine bf_sin(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan() or a.expn == bf_exp_inf()
+        return bf_set_nan()
+      return a
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_sincos(a: a, prec: prec1, want_sin: true)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# ── Phase 6d: tan, atan, pow ──────────────────────────────────────────────────────────────────────────
+secret routine bf_neg(a: BfT) -> BfT
+  return BfT(sign: not a.sign, expn: a.expn, len: a.len, tab: a.tab)
+
+# tan(a) = sin(a)/cos(a), small argument. (libbf bf_tan_internal)
+secret routine bf_tan(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan() or a.expn == bf_exp_inf()
+        return bf_set_nan()
+      return bf_set_zero(is_neg: a.sign)
+    # Ziv loop over tan = sin/cos with 8 guard bits. (libbf bf_tan + bf_tan_internal)
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      var inner = prec1 +% 8u64
+      var sn = bf_sincos(a: a, prec: inner, want_sin: true)
+      var cs = bf_sincos(a: a, prec: inner, want_sin: false)
+      r = bf_div(a: sn, b: cs, prec: inner, fl: 6u32)
+      if bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# atan(a), faithful. |a|>=1 inverted (atan = ±pi/2 - atan(1/a)); reduce a=a/(1+sqrt(1+a^2)) K×; Taylor.
+# (libbf bf_atan_internal, add_pi2=false)
+secret routine bf_atan_internal(a: BfT, prec: U64, add_pi2: Bool) -> BfT
+  danger
+    var kk = bf_isqrt(x: (prec +% 1u64) // 2u64)
+    var l = (prec // (2u64 *% kk)) +% 1u64
+    var prec1 = ((prec +% kk) +% (2u64 *% l)) +% 32u64
+    var cmp_1 = a.expn >= 1s64
+    var t = if cmp_1 then bf_div(a: bf_set_ui(a: 1u64), b: a, prec: prec1, fl: 0u32) else a
+    var i = 0u64
+    while i < kk
+      var u = bf_add_si(a: bf_mul(a: t, b: t, prec: prec1, fl: 0u32), n: 1s64, prec: prec1, fl: 0u32)
+      var v = bf_add_si(a: bf_sqrt(a: u, prec: prec1, fl: 0u32), n: 1s64, prec: prec1, fl: 0u32)
+      t = bf_div(a: t, b: v, prec: prec1, fl: 0u32)
+      i = i +% 1u64
+    var x2 = bf_mul(a: t, b: t, prec: prec1, fl: 0u32)
+    var r = bf_set_ui(a: 0u64)
+    var ii = l
+    while ii >= 1u64
+      var uu = bf_div(a: bf_set_ui(a: 1u64), b: bf_set_ui(a: (2u64 *% ii) +% 1u64), prec: prec1, fl: 0u32)
+      r = bf_mul(a: bf_add(a: bf_neg(a: r), b: uu, prec: prec1, fl: 0u32), b: x2, prec: prec1, fl: 0u32)
+      ii = ii -% 1u64
+    r = bf_mul(a: bf_add_si(a: bf_neg(a: r), n: 1s64, prec: prec1, fl: 0u32), b: t, prec: prec1, fl: 0u32)
+    r = bf_mul_2exp(a: r, e: S64(from: kk), prec: bf_prec_inf(), fl: 1u32)
+    var iadd = if add_pi2 then 1s64 else 0s64
+    if cmp_1
+      r = bf_neg(a: r)
+      iadd = iadd +% (1s64 -% (2s64 *% (if a.sign then 1s64 else 0s64)))
+    if iadd != 0s64
+      var pt = bf_const_pi(prec: prec1)
+      if iadd != 2s64
+        pt = bf_mul_2exp(a: pt, e: -1s64, prec: bf_prec_inf(), fl: 1u32)
+      pt = BfT(sign: iadd < 0s64, expn: pt.expn, len: pt.len, tab: pt.tab)
+      r = bf_add(a: pt, b: r, prec: prec1, fl: 0u32)
+    return r
+
+secret routine bf_atan(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan()
+        return bf_set_nan()
+      if a.expn == bf_exp_inf()
+        var hp = bf_mul_2exp(a: bf_const_pi(prec: prec +% 8u64), e: -1s64, prec: prec, fl: fl)
+        return BfT(sign: a.sign, expn: hp.expn, len: hp.len, tab: hp.tab)
+      return bf_set_zero(is_neg: a.sign)
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_atan_internal(a: a, prec: prec1, add_pi2: false)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# asin(x) = atan(x/sqrt(1-x^2)); acos(x) = pi/2 - asin(x) (via add_pi2 + negated arg). (bf_asin_internal)
+secret routine bf_asin_internal(a: BfT, prec: U64, is_acos: Bool) -> BfT
+  danger
+    var prec1 = prec +% 8u64
+    var prec2 = if a.expn >= 0s64 then bf_prec_inf() else prec1
+    var t = bf_add_si(a: bf_neg(a: bf_mul(a: a, b: a, prec: prec2, fl: 0u32)), n: 1s64, prec: prec2, fl: 0u32)
+    var r = bf_sqrt(a: t, prec: prec1, fl: 0u32)
+    t = bf_div(a: a, b: r, prec: prec1, fl: 0u32)
+    if is_acos
+      t = bf_neg(a: t)
+    return bf_atan_internal(a: t, prec: prec1, add_pi2: is_acos)
+
+secret routine bf_asin(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan() or a.expn == bf_exp_inf()
+        return bf_set_nan()
+      return bf_set_zero(is_neg: a.sign)
+    if bf_cmpu(a: a, b: bf_set_ui(a: 1u64)) > 0s64
+      return bf_set_nan()
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_asin_internal(a: a, prec: prec1, is_acos: false)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+secret routine bf_acos(a: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if a.len == 0u64
+      if a.expn == bf_exp_nan() or a.expn == bf_exp_inf()
+        return bf_set_nan()
+      return bf_mul_2exp(a: bf_const_pi(prec: prec), e: -1s64, prec: prec, fl: fl)
+    if bf_cmpu(a: a, b: bf_set_ui(a: 1u64)) > 0s64
+      return bf_set_nan()
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_asin_internal(a: a, prec: prec1, is_acos: true)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# x^b for integer b >= 0, by binary exponentiation (square-and-multiply). (libbf bf_pow_ui)
+secret routine bf_pow_ui(a: BfT, b: U64, prec: U64, fl: U32) -> BfT
+  danger
+    if b == 0u64
+      return bf_set_ui(a: 1u64)
+    var r = a
+    var i = (S64(from: 64u64 -% LLVM::leading_zeros(b))) -% 2s64
+    while i >= 0s64
+      r = bf_mul(a: r, b: r, prec: prec, fl: fl)
+      if ((b >> U32(from: i)) & 1u64) != 0u64
+        r = bf_mul(a: r, b: a, prec: prec, fl: fl)
+      i = i -% 1s64
+    return r
+
+# Exponent of the lowest set bit: a finite nonzero `a` equals m * 2^e with m odd, and this returns e.
+# (libbf bf_get_exp_min)
+secret routine bf_get_exp_min(a: BfT) -> S64
+  danger
+    var i = 0u64
+    while i < a.len
+      var v = limb(tab: a.tab, i: i)
+      if v != 0u64
+        var k = LLVM::trailing_zeros(value: v)
+        return (a.expn -% S64(from: (a.len -% i) *% 64u64)) +% S64(from: k)
+      i = i +% 1u64
+    return 0s64
+
+# x^|y| for an integer y with |y| < 2^31, then 1/r when y < 0, at prec + 2*log2|y| + 8 bits. (libbf
+# bf_pow_int)
+secret routine bf_pow_int(x: BfT, y: BfT, prec: U64) -> BfT
+  danger
+    var yi = bf_get_si(a: y)
+    var mag = if yi < 0s64 then U64(from: 0s64 -% yi) else U64(from: yi)
+    var prec1 = (prec +% (ceil_log2(a: mag) *% 2u64)) +% 8u64
+    var r = bf_pow_ui(a: x, b: mag, prec: prec1, fl: 0u32)
+    if y.sign
+      r = bf_div(a: bf_set_ui(a: 1u64), b: r, prec: prec1, fl: 0u32)
+    return r
+
+# exp(y * log(x)) for finite x > 0, faithful at prec. (libbf bf_pow_generic)
+secret routine bf_pow_generic(x: BfT, y: BfT, prec: U64) -> BfT
+  danger
+    var prec1 = prec +% 32u64
+    var t = bf_mul(a: bf_log(a: x, prec: prec1, fl: 6u32), b: y, prec: prec1, fl: 6u32)
+    if t.is_nan()
+      return bf_set_nan()
+    return bf_exp_internal(a: t, prec: prec1)
+
+# Integer square root of a positive integer-valued `a` when it is a perfect square: (true, root), else
+# (false, _).
+secret routine bf_exact_isqrt(a: BfT) -> (Bool, BfT)
+  danger
+    var bits = U64(from: a.expn)
+    var s = bf_sqrt(a: a, prec: (bits // 2u64) +% 2u64, fl: 1u32)
+    if bf_cmp(a: bf_mul(a: s, b: s, prec: bf_prec_inf(), fl: 0u32), b: a) == 0s64
+      return (true, s)
+    return (false, s)
+
+# Is there a float r with x = r^(2^n)? Returns (true, r) if so. x finite, nonzero, positive. (libbf
+# check_exact_power2n)
+secret routine bf_exact_power2n(x: BfT, n: S64) -> (Bool, BfT)
+  danger
+    var e = bf_get_exp_min(a: x)
+    var er = 0s64
+    if n > 63s64
+      if e != 0s64
+        return (false, x)
+    else
+      if (e & ((1s64 << U32(from: U64(from: n))) -% 1s64)) != 0s64
+        return (false, x)
+      er = e >> U32(from: U64(from: n))
+    # every perfect odd square is 1 modulo 8
+    var v = get_bits_s(tab: x.tab, len: x.len, pos: (S64(from: x.len *% 64u64) -% x.expn) +% e)
+    if (v & 7u64) != 1u64
+      return (false, x)
+    var r = BfT(sign: false, expn: x.expn -% e, len: x.len, tab: x.tab)
+    var i = 0s64
+    while i < n
+      var sq = bf_exact_isqrt(a: r)
+      if not sq.item0
+        return (false, x)
+      r = sq.item1
+      i = i +% 1s64
+    return (true, BfT(sign: false, expn: r.expn +% er, len: r.len, tab: r.tab))
+
+# Ziv correct rounding around bf_pow_int (is_int) or bf_pow_generic. The extra precision is capped so
+# an exact result the generic path cannot recognize still terminates (it is then rounded as computed).
+secret routine bf_pow_ziv(x: BfT, y: BfT, prec: U64, fl: U32, is_int: Bool) -> BfT
+  danger
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = if is_int then bf_pow_int(x: x, y: y, prec: prec1) else bf_pow_generic(x: x, y: y, prec: prec1)
+      if r.len == 0u64 or extra > 65536u64
+        going = false
+      elseif bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# pow(x, y), correctly rounded. Special values follow IEEE pow. A negative base needs an integer
+# exponent (else NaN). Integer exponents use exact binary powering, a power of two base shifts the
+# exponent, and x = r^(2^n) with y = k/2^n reduces to an integer power. (libbf bf_pow, without the
+# overflow/underflow pre-check)
+secret routine bf_pow(x: BfT, y: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if x.len == 0u64 or y.len == 0u64
+      if y.expn == bf_exp_zero()
+        return bf_set_ui(a: 1u64)
+      if x.expn == bf_exp_nan()
+        return bf_set_nan()
+      var one = bf_set_ui(a: 1u64)
+      var cmp_x_abs_1 = bf_cmpu(a: x, b: one)
+      if cmp_x_abs_1 == 0s64 and (not x.sign or y.expn != bf_exp_nan())
+        return one
+      if y.expn == bf_exp_nan()
+        return bf_set_nan()
+      if y.expn == bf_exp_inf()
+        return if y.sign == (cmp_x_abs_1 > 0s64) then bf_set_zero(is_neg: false) else bf_set_inf(is_neg: false)
+      var y_odd = bf_get_exp_min(a: y) == 0s64
+      if y.sign == (x.expn == bf_exp_zero())
+        return bf_set_inf(is_neg: y_odd and x.sign)
+      return bf_set_zero(is_neg: y_odd and x.sign)
+    var t = BfT(sign: false, expn: x.expn, len: x.len, tab: x.tab)
+    var yy = y
+    var y_emin = bf_get_exp_min(a: y)
+    var y_is_int = y_emin >= 0s64
+    var r_sign = false
+    if x.sign
+      if not y_is_int
+        return bf_set_nan()
+      r_sign = y_emin == 0s64
+    var r = bf_set_ui(a: 1u64)
+    if bf_cmp(a: t, b: r) != 0s64
+      if not y_is_int
+        var ex = bf_exact_power2n(x: t, n: 0s64 -% y_emin)
+        if ex.item0
+          # the problem reduces to a power to the odd integer y * 2^-y_emin
+          t = ex.item1
+          yy = BfT(sign: y.sign, expn: y.expn -% y_emin, len: y.len, tab: y.tab)
+          y_is_int = true
+      if y_is_int
+        var t_bits = t.expn -% bf_get_exp_min(a: t)
+        if t_bits == 1s64 and yy.expn <= 62s64
+          # pow(2^b, y) = 2^(b*y)
+          var one = bf_set_ui(a: 1u64)
+          r = bf_mul_2exp(a: one, e: bf_get_si(a: yy) *% (t.expn -% 1s64), prec: prec, fl: fl)
+        elseif yy.expn <= 31s64
+          r = bf_pow_ziv(x: t, y: yy, prec: prec, fl: fl, is_int: true)
+        else
+          r = bf_pow_ziv(x: t, y: yy, prec: prec, fl: fl, is_int: false)
+      else
+        r = bf_pow_ziv(x: t, y: yy, prec: prec, fl: fl, is_int: false)
+    if r_sign
+      return bf_neg(a: r)
+    return r
+
+# ── Real support: working precision, rounding to integers, B64, atan2, composed functions, decimal text ──
+
+# Default working precision in bits for inexact {Real} operations (~308 decimal digits).
+secret routine real_prec() -> U64
+  return 1024u64
+
+# Decimal significant digits -> binary working precision (digits * log2(10) + 16 guard bits). A
+# non-positive digit count selects the default working precision.
+secret routine real_prec_bits(digits: S32) -> U64
+  if digits <= 0s32
+    return real_prec()
+  return ((U64(from: S64(from: digits)) *% 3402u64) // 1024u64) +% 16u64
+
+# The value of `a` with its sign replaced.
+secret routine bf_with_sign(a: BfT, sign: Bool) -> BfT
+  return BfT(sign: sign, expn: a.expn, len: a.len, tab: a.tab)
+
+# Round to an integer in the given rounding mode (0 nearest-even, 1 toward zero, 2 down, 3 up, 4
+# nearest-away). (libbf bf_rint)
+secret routine bf_rint(a: BfT, rnd: U32) -> BfT
+  return bf_round(a: a, prec: 0u64, fl: rnd | 0x10u32)
+
+# Nearest B64 (round to nearest even, gradual underflow to subnormals, overflow to infinity). (libbf
+# bf_get_float64)
+secret routine bf_get_b64(a: BfT) -> B64
+  danger
+    if a.expn == bf_exp_nan()
+      return B64.from_bits(bits: 0x7FF8000000000000u64)
+    var b = a
+    if a.is_finite()
+      # 53-bit mantissa, subnormals allowed, an 11-bit exponent field
+      b = bf_round(a: a, prec: 53u64, fl: 0x08u32 | (50u32 << 5u32))
+    var e = 0s64
+    var m = 0u64
+    if b.expn == bf_exp_inf()
+      e = 2047s64
+    elseif b.expn != bf_exp_zero()
+      e = b.expn +% 1022s64
+      m = limb(tab: b.tab, i: b.len -% 1u64)
+      if e <= 0s64
+        var shift = 12s64 -% e
+        m = if shift >= 64s64 then 0u64 else m >> U32(from: U64(from: shift))
+        e = 0s64
+      else
+        m = (m << 1u32) >> 12u32
+    var sgn = if b.sign then 0x8000000000000000u64 else 0u64
+    return B64.from_bits(bits: (m | (U64(from: e) << 52u32)) | sgn)
+
+# Exact value of a B64 (subnormals included). (libbf bf_set_float64)
+secret routine bf_set_b64(d: B64) -> BfT
+  danger
+    var u = d.to_bits()
+    var sgn = (u >> 63u32) != 0u64
+    var e = S64(from: (u >> 52u32) & 0x7FFu64)
+    var m = u & 0x000FFFFFFFFFFFFFu64
+    if e == 2047s64
+      if m != 0u64
+        return bf_set_nan()
+      return bf_set_inf(is_neg: sgn)
+    if e == 0s64
+      if m == 0u64
+        return bf_set_zero(is_neg: sgn)
+      m = m << 12u32
+      var shift = LLVM::leading_zeros(m)
+      m = m << U32(from: shift)
+      e = 0s64 -% S64(from: shift)
+    else
+      m = (m << 11u32) | 0x8000000000000000u64
+    var tab = alloc_limbs(n: 1u64)
+    set_limb(tab: tab, i: 0u64, value: m)
+    return BfT(sign: sgn, expn: e -% 1022s64, len: 1u64, tab: tab)
+
+# atan(y/x) placed in the quadrant of (x, y), faithful at prec. inf/inf counts as 1 and 0/0 as 0.
+# (libbf bf_atan2_internal)
+secret routine bf_atan2_internal(y: BfT, x: BfT, prec: U64) -> BfT
+  danger
+    var prec1 = prec +% 32u64
+    var t = bf_set_zero(is_neg: false)
+    if y.expn == bf_exp_inf() and x.expn == bf_exp_inf()
+      t = bf_with_sign(a: bf_set_ui(a: 1u64), sign: y.sign != x.sign)
+    elseif y.expn == bf_exp_zero() and x.expn == bf_exp_zero()
+      t = bf_set_zero(is_neg: y.sign != x.sign)
+    else
+      t = bf_div(a: y, b: x, prec: prec1, fl: 6u32)
+    var r = bf_atan(a: t, prec: prec1, fl: 6u32)
+    if x.sign
+      # x < 0 (including -0): sign(y) * pi + atan(y/x)
+      r = bf_add(a: r, b: bf_with_sign(a: bf_const_pi(prec: prec1), sign: y.sign), prec: prec1, fl: 0u32)
+    return r
+
+# atan2(y, x), correctly rounded. (libbf bf_atan2)
+secret routine bf_atan2(y: BfT, x: BfT, prec: U64, fl: U32) -> BfT
+  danger
+    if y.expn == bf_exp_nan() or x.expn == bf_exp_nan()
+      return bf_set_nan()
+    var extra = 32u64
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var prec1 = prec +% extra
+      r = bf_atan2_internal(y: y, x: x, prec: prec1)
+      if r.is_zero() or bf_can_round(a: r, prec: S64(from: prec), rnd_mode: fl & 7u32, k: S64(from: prec1))
+        going = false
+      else
+        extra = extra *% 2u64
+    return bf_round(a: r, prec: prec, fl: fl)
+
+# The functions below are composed from correctly rounded steps at `prec` (each step rounds to nearest),
+# exactly as the former native Real runtime composed them, so results match it bit for bit.
+
+# sinh(a) = (e^a - e^-a) / 2, cosh(a) = (e^a + e^-a) / 2.
+secret routine bf_sinhcosh(a: BfT, prec: U64, is_cosh: Bool) -> BfT
+  danger
+    var ex = bf_exp(a: a, prec: prec, fl: 0u32)
+    var enx = bf_exp(a: bf_neg(a: a), prec: prec, fl: 0u32)
+    var r = if is_cosh then bf_add(a: ex, b: enx, prec: prec, fl: 0u32) else bf_sub(a: ex, b: enx, prec: prec, fl: 0u32)
+    return bf_mul_2exp(a: r, e: -1s64, prec: prec, fl: 0u32)
+
+# tanh(a) = (e^2a - 1) / (e^2a + 1).
+secret routine bf_tanh(a: BfT, prec: U64) -> BfT
+  danger
+    var e2 = bf_exp(a: bf_mul_2exp(a: a, e: 1s64, prec: prec, fl: 0u32), prec: prec, fl: 0u32)
+    var one = bf_set_ui(a: 1u64)
+    var num = bf_sub(a: e2, b: one, prec: prec, fl: 0u32)
+    var den = bf_add(a: e2, b: one, prec: prec, fl: 0u32)
+    return bf_div(a: num, b: den, prec: prec, fl: 0u32)
+
+# asinh(a) = log(a + sqrt(a^2 + 1)), acosh(a) = log(a + sqrt(a^2 - 1)).
+secret routine bf_asinh_acosh(a: BfT, prec: U64, is_acosh: Bool) -> BfT
+  danger
+    var t = bf_mul(a: a, b: a, prec: prec, fl: 0u32)
+    var one = bf_set_ui(a: 1u64)
+    t = if is_acosh then bf_sub(a: t, b: one, prec: prec, fl: 0u32) else bf_add(a: t, b: one, prec: prec, fl: 0u32)
+    t = bf_sqrt(a: t, prec: prec, fl: 0u32)
+    t = bf_add(a: t, b: a, prec: prec, fl: 0u32)
+    return bf_log(a: t, prec: prec, fl: 0u32)
+
+# atanh(a) = log((1 + a) / (1 - a)) / 2.
+secret routine bf_atanh(a: BfT, prec: U64) -> BfT
+  danger
+    var one = bf_set_ui(a: 1u64)
+    var num = bf_add(a: one, b: a, prec: prec, fl: 0u32)
+    var den = bf_sub(a: one, b: a, prec: prec, fl: 0u32)
+    var r = bf_log(a: bf_div(a: num, b: den, prec: prec, fl: 0u32), prec: prec, fl: 0u32)
+    return bf_mul_2exp(a: r, e: -1s64, prec: prec, fl: 0u32)
+
+# log2(a) = log(a) / log(2), log10(a) = log(a) / log(10).
+secret routine bf_logbase(a: BfT, prec: U64, base10: Bool) -> BfT
+  danger
+    var l = bf_log(a: a, prec: prec, fl: 0u32)
+    var lb = if base10 then bf_log(a: bf_set_ui(a: 10u64), prec: prec, fl: 0u32) else bf_const_log2(prec: prec, fl: 0u32)
+    return bf_div(a: l, b: lb, prec: prec, fl: 0u32)
+
+# hypot(a, b) = sqrt(a^2 + b^2).
+secret routine bf_hypot(a: BfT, b: BfT, prec: U64) -> BfT
+  danger
+    var a2 = bf_mul(a: a, b: a, prec: prec, fl: 0u32)
+    var b2 = bf_mul(a: b, b: b, prec: prec, fl: 0u32)
+    return bf_sqrt(a: bf_add(a: a2, b: b2, prec: prec, fl: 0u32), prec: prec, fl: 0u32)
+
+# cbrt(a) = sign(a) * pow(|a|, 1/3) (pow rejects a negative base with a non-integer exponent).
+secret routine bf_cbrt(a: BfT, prec: U64) -> BfT
+  danger
+    var neg = bf_cmp(a: a, b: bf_set_zero(is_neg: false)) < 0s64
+    var third = bf_div(a: bf_set_ui(a: 1u64), b: bf_set_ui(a: 3u64), prec: prec, fl: 0u32)
+    var r = bf_pow(x: bf_with_sign(a: a, sign: false), y: third, prec: prec, fl: 0u32)
+    return if neg then bf_neg(a: r) else r
+
+# ── decimal text ────────────────────────────────────────────────────────────────────────────────────
+# log10(2) in 0.64 fixed point, rounded down.
+secret routine log10_2_fixed() -> U64
+  return 0x4D104D427DE7FBCCu64
+
+# A lower bound for floor(x * log10(2)), exact or one too small. It only seeds the decimal exponent
+# search, which corrects it.
+secret routine floor_mul_log10_2(x: S64) -> S64
+  if x >= 0s64
+    return S64(from: u128_lo(t: (U128(from: U64(from: x)) *% U128(from: log10_2_fixed())) >> 64))
+  var y = U64(from: 0s64 -% x)
+  return 0s64 -% (S64(from: u128_lo(t: (U128(from: y) *% U128(from: log10_2_fixed())) >> 64)) +% 1s64)
+
+# ceil(bits * log10(2)): the decimal digits that `bits` binary digits carry. (libbf bf_mul_log2_radix
+# with is_inv and is_ceil, radix 10)
+secret routine ceil_mul_log10_2(bits: U64) -> U64
+  return u128_lo(t: (U128(from: bits) *% U128(from: log10_2_fixed())) >> 64) +% 1u64
+
+# radix^e as an EXACT BfT (square and multiply).
+secret routine bf_pow_radix(radix: U64, e: U64) -> BfT
+  danger
+    var result = bf_set_ui(a: 1u64)
+    var base = bf_set_ui(a: radix)
+    var ee = e
+    while ee > 0u64
+      if (ee & 1u64) != 0u64
+        result = bf_mul(a: result, b: base, prec: bf_prec_inf(), fl: 0u32)
+      ee = ee >> 1u32
+      if ee > 0u64
+        base = bf_mul(a: base, b: base, prec: bf_prec_inf(), fl: 0u32)
+    return result
+
+# For finite a > 0 and a digit count p: (r, e) with r an integer, 10^(p-1) <= r < 10^p, and
+# a ~ r * 10^(e-p), r rounded to nearest even. (libbf bf_convert_to_radix)
+secret routine bf_to_decimal(a: BfT, p: U64) -> (BfT, S64)
+  danger
+    var big_e = 1s64 +% floor_mul_log10_2(x: a.expn -% 1s64)
+    var limit = bf_pow10(e: p)
+    var lower = bf_pow10(e: p -% 1u64)
+    var r = bf_set_ui(a: 0u64)
+    var going = true
+    while going
+      var s = S64(from: p) -% big_e
+      if s >= 0s64
+        r = bf_rint(a: bf_mul(a: a, b: bf_pow10(e: U64(from: s)), prec: bf_prec_inf(), fl: 0u32), rnd: 0u32)
+      else
+        var q = bf_div(a: a, b: bf_pow10(e: U64(from: 0s64 -% s)), prec: (p *% 4u64) +% 128u64, fl: 0u32)
+        r = bf_rint(a: q, rnd: 0u32)
+      if bf_cmpu(a: r, b: limit) >= 0s64
+        big_e = big_e +% 1s64
+      elseif bf_cmpu(a: r, b: lower) < 0s64
+        big_e = big_e -% 1s64
+      else
+        going = false
+    return (r, big_e)
+
+# The decimal digits of a positive integer-valued BfT, most significant first.
+secret routine bf_integer_digits(r: BfT) -> Text
+  danger
+    var n = (U64(from: r.expn) +% 63u64) // 64u64
+    var buf = alloc_limbs(n: n)
+    var base_pos = S64(from: r.len *% 64u64) -% r.expn
+    var k = 0u64
+    while k < n
+      set_limb(tab: buf, i: k, value: get_bits_s(tab: r.tab, len: r.len, pos: base_pos +% S64(from: k *% 64u64)))
+      k = k +% 1u64
+    # peel base-10^19 chunks off the bottom, least significant digit first
+    var rev = List[Character]()
+    var len = n
+    while len > 0u64 and limb(tab: buf, i: len -% 1u64) == 0u64
+      len = len -% 1u64
+    while len > 0u64
+      var chunk = limbs_divmod_word(tabr: buf, taba: buf, n: len, b: 10000000000000000000u64, r0: 0u64)
+      while len > 0u64 and limb(tab: buf, i: len -% 1u64) == 0u64
+        len = len -% 1u64
+      var c = 0u64
+      while c < 19u64 and (len > 0u64 or chunk != 0u64)
+        rev.add_last(value: Character(from: 48u32 +% U32(from: chunk % 10u64)))
+        chunk = chunk // 10u64
+        c = c +% 1u64
+    var digits = List[Character]()
+    var i = rev.count()
+    while i > 0u64
+      i = i -% 1u64
+      digits.add_last(value: rev[i])
+    return Text(from_list: steal digits)
+
+# The characters of `text` in [from_index, to_index).
+secret routine text_range(text: Text, from_index: U64, to_index: U64) -> Text
+  var chars = List[Character]()
+  var i = from_index
+  while i < to_index
+    chars.add_last(value: text[i])
+    i = i +% 1u64
+  return Text(from_list: steal chars)
+
+# `count` zero digits.
+secret routine zeros_text(count: S64) -> Text
+  var chars = List[Character]()
+  var i = 0s64
+  while i < count
+    chars.add_last(value: Character(from: 48u32))
+    i = i +% 1s64
+  return Text(from_list: steal chars)
+
+# Shortest decimal text that reads back (at `prec` bits, nearest) to exactly `a`. Plain notation unless
+# the decimal exponent is below -5 or beyond the digit budget, then `d.ddde<exp>`. NaN is "NaN" and
+# infinity "Inf". (libbf bf_ftoa, radix 10, BF_FTOA_FORMAT_FREE_MIN)
+secret routine bf_ftoa_free_min(a: BfT, prec: U64) -> Text
+  danger
+    if a.expn == bf_exp_nan()
+      return "NaN"
+    var sign = if a.sign then "-" else ""
+    if a.expn == bf_exp_inf()
+      return sign + "Inf"
+    if a.expn == bf_exp_zero()
+      return sign + "0"
+    var aa = bf_with_sign(a: a, sign: false)
+    var n_digits_budget = 1u64 +% ceil_mul_log10_2(bits: prec)
+    # the minimum digit count, by dichotomy
+    var lo = 1u64
+    var hi = n_digits_budget
+    while lo < hi
+      var mid = (lo +% hi) // 2u64
+      var probe = bf_to_decimal(a: aa, p: mid)
+      var back = bf_mul10exp(t: probe.item0, expn: probe.item1 -% S64(from: mid), prec: prec, fl: 0u32)
+      if bf_cmpu(a: back, b: aa) == 0s64
+        hi = mid
+      else
+        lo = mid +% 1u64
+    var nd = hi
+    var conv = bf_to_decimal(a: aa, p: nd)
+    var digits = bf_integer_digits(r: conv.item0)
+    var n = conv.item1
+    var n_max = S64(from: n_digits_budget) +% 4s64
+    var snd = S64(from: nd)
+    if n <= -6s64 or n > n_max
+      var mantissa = text_range(text: digits, from_index: 0u64, to_index: 1u64)
+      if nd > 1u64
+        mantissa = mantissa + "." + text_range(text: digits, from_index: 1u64, to_index: nd)
+      return sign + mantissa + f"e{n -% 1s64}"
+    if n <= 0s64
+      return sign + "0." + zeros_text(count: 0s64 -% n) + digits
+    if snd <= n
+      return sign + digits + zeros_text(count: n -% snd)
+    var dot = U64(from: n)
+    var int_part = text_range(text: digits, from_index: 0u64, to_index: dot)
+    var frac_part = text_range(text: digits, from_index: dot, to_index: nd)
+    return sign + int_part + "." + frac_part
+
+# Digit value of a codepoint in radices up to 36 (36 when it is not a digit).
+secret routine digit_value(cp: U32) -> U64
+  if cp >= 48u32 and cp <= 57u32
+    return U64(from: cp -% 48u32)
+  if cp >= 65u32 and cp <= 90u32
+    return U64(from: cp -% 55u32)
+  if cp >= 97u32 and cp <= 122u32
+    return U64(from: cp -% 87u32)
+  return 36u64
+
+# ASCII lowercase of a codepoint.
+secret routine lower_cp(cp: U32) -> U32
+  if cp >= 65u32 and cp <= 90u32
+    return cp +% 32u32
+  return cp
+
+# Does `text` from `at` to its end spell `word` (lowercase ASCII), ignoring case?
+secret routine rest_is_word(text: Text, at: U64, word: Text) -> Bool
+  var n = text.count()
+  var w = word.count()
+  if at > n or n -% at != w
+    return false
+  var i = 0u64
+  while i < w
+    if lower_cp(cp: text[at +% i].codepoint()) != word[i].codepoint()
+      return false
+    i = i +% 1u64
+  return true
+
+# Parse `text` in `radix` (2..36) to the nearest BfT at `prec` bits. Accepts an optional sign, "nan" /
+# "inf" / "infinity" (any case, radix <= 16), a "0x" prefix in radix 16, digits with at most one '.',
+# and an optional exponent of `radix` ('e'/'E' in radix 10, '@' in any radix) written in decimal. The
+# whole text must be consumed. Returns (value, ok), ok false for malformed text. (libbf bf_atof)
+secret routine bf_atof(text: Text, radix: U64, prec: U64) -> (BfT, Bool)
+  danger
+    var n = text.count()
+    var i = 0u64
+    if radix <= 16u64 and rest_is_word(text: text, at: 0u64, word: "nan")
+      return (bf_set_nan(), true)
+    var neg = false
+    if i < n and text[i].codepoint() == 45u32
+      neg = true
+      i = i +% 1u64
+    elseif i < n and text[i].codepoint() == 43u32
+      i = i +% 1u64
+    if radix <= 16u64 and (rest_is_word(text: text, at: i, word: "inf") or rest_is_word(text: text, at: i, word: "infinity"))
+      return (bf_set_inf(is_neg: neg), true)
+    if radix == 16u64 and i +% 1u64 < n and text[i].codepoint() == 48u32 and lower_cp(cp: text[i +% 1u64].codepoint()) == 120u32
+      i = i +% 2u64
+    # digits per chunk: the largest k with radix^k < 2^64
+    var chunk_pow_max = 1u64
+    var k_max = 0u64
+    while chunk_pow_max <= 0xFFFFFFFFFFFFFFFFu64 // radix
+      chunk_pow_max = chunk_pow_max *% radix
+      k_max = k_max +% 1u64
+    var mant = alloc_limbs(n: ((n *% 6u64) // 64u64) +% 2u64)
+    var mlen = 0u64
+    var cur = 0u64
+    var cur_pow = 1u64
+    var cnt = 0u64
+    var digit_count = 0u64
+    var frac_digits = 0s64
+    var seen_dot = false
+    var parsing = true
+    while parsing and i < n
+      var cp = text[i].codepoint()
+      if cp == 46u32 and not seen_dot
+        seen_dot = true
+        i = i +% 1u64
+      else
+        var d = digit_value(cp: cp)
+        if d >= radix
+          parsing = false
+        else
+          cur = (cur *% radix) +% d
+          cur_pow = cur_pow *% radix
+          cnt = cnt +% 1u64
+          digit_count = digit_count +% 1u64
+          if seen_dot
+            frac_digits = frac_digits +% 1s64
+          if cnt == k_max
+            var carry = limbs_mul_word(tabr: mant, taba: mant, n: mlen, b: cur_pow, l: cur)
+            if carry != 0u64
+              set_limb(tab: mant, i: mlen, value: carry)
+              mlen = mlen +% 1u64
+            cur = 0u64
+            cur_pow = 1u64
+            cnt = 0u64
+          i = i +% 1u64
+    if digit_count == 0u64
+      return (bf_set_nan(), false)
+    if cnt > 0u64
+      var carry = limbs_mul_word(tabr: mant, taba: mant, n: mlen, b: cur_pow, l: cur)
+      if carry != 0u64
+        set_limb(tab: mant, i: mlen, value: carry)
+        mlen = mlen +% 1u64
+    # exponent of the radix, in decimal
+    var expn = 0s64
+    if i < n
+      var ec = text[i].codepoint()
+      if (radix == 10u64 and (ec == 101u32 or ec == 69u32)) or ec == 64u32
+        i = i +% 1u64
+        var exp_neg = false
+        if i < n and text[i].codepoint() == 45u32
+          exp_neg = true
+          i = i +% 1u64
+        elseif i < n and text[i].codepoint() == 43u32
+          i = i +% 1u64
+        var exp_digits = 0u64
+        while i < n and digit_value(cp: text[i].codepoint()) < 10u64
+          if expn < 100000000000000s64
+            expn = (expn *% 10s64) +% S64(from: digit_value(cp: text[i].codepoint()))
+          exp_digits = exp_digits +% 1u64
+          i = i +% 1u64
+        if exp_digits == 0u64
+          return (bf_set_nan(), false)
+        if exp_neg
+          expn = 0s64 -% expn
+    if i != n
+      return (bf_set_nan(), false)
+    if mlen == 0u64
+      return (bf_set_zero(is_neg: neg), true)
+    var m = bf_normalize_and_round(sign: neg, expn0: S64(from: mlen *% 64u64), len0: mlen, tab: mant,
+      prec1: bf_prec_inf(), fl: 0u32)
+    var scale = expn -% frac_digits
+    if scale == 0s64
+      return (bf_round(a: m, prec: prec, fl: 0u32), true)
+    if scale > 0s64
+      return (bf_mul(a: m, b: bf_pow_radix(radix: radix, e: U64(from: scale)), prec: prec, fl: 0u32), true)
+    return (bf_div(a: m, b: bf_pow_radix(radix: radix, e: U64(from: 0s64 -% scale)), prec: prec, fl: 0u32), true)
+
