@@ -1,4 +1,5 @@
 using Builder.Diagnostics;
+using Builder.Verification.Enums;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
@@ -601,18 +602,24 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// RF-S639 for a token passed inline to one call (<c>f(m: a.modify(), x: steal a)</c>,
-    /// <c>a.modify().absorb(x: steal a)</c>): the token lives for that call, so a <c>steal</c> of its
-    /// source anywhere else in the same call's arguments is rejected. Runs after the call is analyzed,
-    /// when the token argument's type is known.
+    /// RF-S639 for tokens that live for exactly one call. Two kinds:
+    /// <list type="bullet">
+    /// <item>a token passed inline (<c>f(m: a.modify(), x: steal a)</c>, <c>a.modify().absorb(x: steal a)</c>):
+    /// a <c>steal</c> of its source elsewhere in the same call is rejected;</item>
+    /// <item>a call on an entity element (<c>grid[0].add_last(value: v)</c>), which the builder runs through
+    /// a token on that element: while the call runs, the container must keep the element where it is, so
+    /// the same call may not steal the container, pass it along, or call a non-<c>@readonly</c> routine on it
+    /// (any of which could move or free the element).</item>
+    /// </list>
+    /// Runs after the call is analyzed, when argument types are known.
     /// </summary>
     private void CheckInlineTokenSourceSteals(CallExpression call)
     {
-        var mints = new List<(Expression Node, string Source, string Verb)>();
+        var mints = new List<(string Source, string Verb, SourceLocation Opened)>();
         if (call.Callee is MemberExpression { Object: var receiver } &&
             TokenMintSource(resource: receiver, resourceType: receiver.ResolvedType) is { } recvMint)
         {
-            mints.Add(item: (receiver, recvMint.Source, recvMint.Verb));
+            mints.Add(item: (recvMint.Source, recvMint.Verb, receiver.Location));
         }
 
         foreach (Expression arg in call.Arguments)
@@ -622,69 +629,138 @@ public sealed partial class SemanticVerifier
                 : arg;
             if (TokenMintSource(resource: value, resourceType: value.ResolvedType) is { } argMint)
             {
-                mints.Add(item: (arg, argMint.Source, argMint.Verb));
+                mints.Add(item: (argMint.Source, argMint.Verb, arg.Location));
             }
-        }
-
-        if (mints.Count == 0)
-        {
-            return;
         }
 
         // Only this call's own tokens: a steal inside an enclosing `using` region was already
         // checked against that region's token when the steal was analyzed.
-        var inlineSources = mints.Select(selector: m => (m.Source, m.Verb, m.Node.Location))
-                                 .ToList();
-        foreach (Expression arg in call.Arguments)
+        if (mints.Count > 0)
         {
-            foreach (StealExpression steal in FindSteals(expr: arg))
+            foreach (Expression arg in call.Arguments)
             {
-                CheckFrozenTokenSource(target: steal.Operand,
-                    attempt: "steal",
-                    location: steal.Location,
-                    sources: inlineSources);
+                foreach (StealExpression steal in CollectSubexpressions(expr: arg)
+                            .OfType<StealExpression>())
+                {
+                    CheckFrozenTokenSource(target: steal.Operand,
+                        attempt: "steal",
+                        location: steal.Location,
+                        sources: mints);
+                }
+            }
+        }
+
+        if (call.Callee is MemberExpression { Object: var elementReceiver } &&
+            EntityElementContainerPath(expr: elementReceiver) is { } container)
+        {
+            CheckElementContainerUse(container: container,
+                scanned: call.Arguments,
+                argumentsPassedToCall: true);
+        }
+    }
+
+    /// <summary>
+    /// When <paramref name="expr"/> reaches an entity ELEMENT of a named container (<c>grid[0]</c>, or a
+    /// field chain on one such as <c>grid[0].inner</c>), returns the container's path (<c>grid</c>). The
+    /// builder runs a call or field write on such a receiver through a token on the element.
+    /// </summary>
+    private static string? EntityElementContainerPath(Expression expr)
+    {
+        Expression cur = expr;
+        while (cur is MemberExpression member)
+        {
+            cur = member.Object;
+        }
+
+        return cur is IndexExpression { ResolvedType: EntityTypeSymbol } element
+            ? BuildAccessPath(expr: element.Object)
+            : null;
+    }
+
+    /// <summary>
+    /// RF-S639 for an element token on <paramref name="container"/>: reports a use in
+    /// <paramref name="scanned"/> that could move or free the element while the token is in use: a
+    /// <c>steal</c> of the container (or what owns it), a call on it that is not <c>@readonly</c>, or,
+    /// when the expressions are the arguments of the call itself, passing it as an argument.
+    /// </summary>
+    private void CheckElementContainerUse(string container, IEnumerable<Expression> scanned,
+        bool argumentsPassedToCall)
+    {
+        foreach (Expression top in scanned)
+        {
+            Expression topValue = top is NamedArgumentExpression named
+                ? named.Value
+                : top;
+            if (argumentsPassedToCall && BuildAccessPath(expr: topValue) is { } passed &&
+                IsPathPrefixOrEqual(prefix: passed, path: container))
+            {
+                ReportElementContainerUse(container: container,
+                    attempt: $"pass '{passed}' along",
+                    location: topValue.Location);
+                continue;
+            }
+
+            foreach (Expression node in CollectSubexpressions(expr: top))
+            {
+                switch (node)
+                {
+                    case StealExpression steal
+                        when BuildAccessPath(expr: steal.Operand) is { } stolen &&
+                             IsPathPrefixOrEqual(prefix: stolen, path: container):
+                        ReportElementContainerUse(container: container,
+                            attempt: $"steal '{stolen}'",
+                            location: steal.Location);
+                        break;
+                    case CallExpression
+                    {
+                        Callee: MemberExpression { Object: var callReceiver } callee
+                    } inner when BuildAccessPath(expr: callReceiver) is { } receiverPath &&
+                                 IsPathPrefixOrEqual(prefix: receiverPath, path: container) &&
+                                 inner.ResolvedRoutine?.MutationCategory !=
+                                 MutationCategory.Readonly:
+                        ReportElementContainerUse(container: container,
+                            attempt: $"call '{receiverPath}.{callee.MemberName}()'",
+                            location: inner.Location);
+                        break;
+                }
             }
         }
     }
 
-    /// <summary>Every <c>steal</c> inside an argument expression (through nested calls, named
-    /// arguments, and member receivers).</summary>
-    private static IEnumerable<StealExpression> FindSteals(Expression expr)
+    private void ReportElementContainerUse(string container, string attempt,
+        SourceLocation location)
     {
-        switch (expr)
+        ReportError(code: SemanticDiagnosticCode.TokenSourceReplaced,
+            message:
+            $"You are trying to {attempt} while this statement changes or reads an element of " +
+            $"'{container}' in place. That element is reached through a token that points into " +
+            $"'{container}', and this could move or free the element under it. Do it in a separate " +
+            "statement before or after.",
+            location: location);
+    }
+
+    private static bool IsPathPrefixOrEqual(string prefix, string path)
+    {
+        return path == prefix || path.StartsWith(value: prefix + ".");
+    }
+
+    /// <summary>Every expression inside <paramref name="expr"/>, itself included.</summary>
+    private static List<Expression> CollectSubexpressions(Expression expr)
+    {
+        var collector = new SubexpressionCollector();
+        collector.VisitExpression(expr: expr);
+        return collector.Seen;
+    }
+
+    /// <summary>Records every expression the structural rewrite walk passes through.</summary>
+    private sealed class SubexpressionCollector : AstRewriter
+    {
+        public List<Expression> Seen { get; } = [];
+
+        public override Expression VisitExpression(Expression expr)
         {
-            case StealExpression steal:
-                yield return steal;
-                break;
-            case NamedArgumentExpression named:
-                foreach (StealExpression s in FindSteals(expr: named.Value))
-                {
-                    yield return s;
-                }
-
-                break;
-            case MemberExpression member:
-                foreach (StealExpression s in FindSteals(expr: member.Object))
-                {
-                    yield return s;
-                }
-
-                break;
-            case CallExpression inner:
-                foreach (StealExpression s in FindSteals(expr: inner.Callee))
-                {
-                    yield return s;
-                }
-
-                foreach (Expression a in inner.Arguments)
-                {
-                    foreach (StealExpression s in FindSteals(expr: a))
-                    {
-                        yield return s;
-                    }
-                }
-
-                break;
+            Seen.Add(item: expr);
+            return base.VisitExpression(expr: expr);
         }
     }
 }

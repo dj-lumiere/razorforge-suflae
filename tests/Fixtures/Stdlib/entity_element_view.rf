@@ -1,0 +1,56 @@
+module Tests/Stdlib/EntityElementView
+
+import IO/Console
+import Collections
+
+# A call, field write, or index write on an ENTITY element of a container acts on the element in place.
+# The builder reaches the element through a token (`modify_at` / `view_at`) instead of a `getitem` copy,
+# so `grid[0].add_last(value: 1)` grows the list stored in `grid`. It once changed a discarded copy.
+
+entity Box
+  n: S64
+
+routine Box.bump()
+  me.n = me.n + 1
+  return
+
+entity Holder
+  inner: Box
+
+routine start()
+  var grid = List[List[S64]]()
+  grid.add_last(value: List[S64]())
+  grid.add_last(value: List[S64]())
+  grid[0].add_last(value: 1)
+  grid[0].add_last(value: 2)
+  grid[1].add_last(value: 9)
+  grid[0][1] = 20
+  show(f"list of lists = {grid[0].count()} {grid[0][0]} {grid[0][1]} | {grid[1].count()} {grid[1][0]}")
+
+  var boxes = List[Box]()
+  boxes.add_last(value: Box(n: 1))
+  boxes[0].n = 5
+  boxes[0].bump()
+  show(f"field write and call = {boxes[0].n}")
+
+  var holders = List[Holder]()
+  holders.add_last(value: Holder(inner: Box(n: 10)))
+  holders[0].inner.bump()
+  holders[0].inner.n = holders[0].inner.n + 5
+  show(f"through an entity field = {holders[0].inner.n}")
+
+  var groups = Dict[Text, List[S64]]()
+  discard groups.add(key: "a", value: List[S64]())
+  groups["a"].add_last(value: 7)
+  groups["a"].add_last(value: 8)
+  show(f"dict value = {groups["a"].count()} {groups["a"][1]}")
+
+  var ring = CircularList[List[S64]]()
+  ring.add_last(value: List[S64]())
+  ring.add_first(value: List[S64]())
+  ring[1].add_last(value: 4)
+  show(f"circular list = {ring[0].count()} {ring[1].count()} {ring[1][0]}")
+
+  show(f"containers unchanged in size = {grid.count()} {boxes.count()} {groups.count()} {ring.count()}")
+  show("DONE")
+  return

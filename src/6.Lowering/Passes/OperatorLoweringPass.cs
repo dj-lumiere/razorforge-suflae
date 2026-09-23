@@ -1,5 +1,6 @@
 using Builder.Instantiation;
 using Builder.Tokenizer;
+using Builder.Verification.Enums;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -35,6 +36,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     /// <summary>The bare name of the element-access member routine (no failable suffix).</summary>
     private const string GetItemMemberRoutine = "getitem";
     private const string SetItemMemberRoutine = "setitem";
+    private const string ModifyAtMemberRoutine = "modify_at";
+    private const string ViewAtMemberRoutine = "view_at";
 
     /// <summary>Ordered set of signed integer widths used for upcasting arithmetic results.</summary>
     private static readonly int[] SignedWidths = [8, 16, 32, 64, 128];
@@ -101,9 +104,100 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
             return new ExpressionStatement(Expression: setItemCall, Location: s.Location);
         }
 
+        // A field write on an entity element (`grid[0].n = v`) goes through a write token on the element.
+        if (s.Target is MemberExpression { Object: var fieldOwner } fieldTarget &&
+            LowerElementPath(expr: fieldOwner, write: true) is { } throughToken)
+        {
+            return s with { Target = fieldTarget with { Object = throughToken }, Value = val };
+        }
+
         return ReferenceEquals(objA: val, objB: s.Value)
             ? s
             : s with { Value = val };
+    }
+
+    /// <summary>
+    /// Lowers a path that reaches an entity ELEMENT of a container (<c>grid[0]</c>, or a field chain on
+    /// one such as <c>grid[0].inner</c>) so the element is reached through a token instead of a
+    /// <c>getitem</c> copy: <c>grid.modify_at(index: 0)</c> when <paramref name="write"/>, else
+    /// <c>grid.view_at(index: 0)</c>. A call or field write on the path then acts on the element in
+    /// place. Returns null when the path does not reach an entity element or the container has no such
+    /// accessor (the element is then read as a copy, as before).
+    /// </summary>
+    private Expression? LowerElementPath(Expression expr, bool write)
+    {
+        switch (expr)
+        {
+            case MemberExpression member:
+                return LowerElementPath(expr: member.Object, write: write) is { } owner
+                    ? member with { Object = owner }
+                    : null;
+            case IndexExpression { ResolvedType: EntityTypeSymbol } element:
+                return MintElementToken(element: element, write: write);
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds <c>container.modify_at(i)</c> / <c>container.view_at(i)</c> for an entity element read
+    /// <c>container[i]</c>, resolved by the index type the same way <c>getitem</c> is. Null when the
+    /// container declares no such accessor.
+    /// </summary>
+    private CallExpression? MintElementToken(IndexExpression element, bool write)
+    {
+        if (element.Object.ResolvedType is not { } containerType)
+        {
+            return null;
+        }
+
+        string accessor = write
+            ? ModifyAtMemberRoutine
+            : ViewAtMemberRoutine;
+        Expression container = VisitExpression(expr: element.Object);
+        Expression index = LowerBackIndexBounds(loweredObj: container,
+            loweredIdx: VisitExpression(expr: element.Index),
+            targetType: containerType,
+            location: element.Location);
+        TypeSymbol? indexType = index.ResolvedType ?? element.Index.ResolvedType;
+        RoutineInfo? mint = indexType != null
+            ? ctx.Registry.LookupMemberRoutineOverload(type: containerType,
+                memberRoutineName: accessor,
+                argTypes: [indexType])
+            : null;
+        if (mint == null && ctx.Registry.LookupType(name: "U64") is { } u64 &&
+            indexType is not null && indexType != u64)
+        {
+            mint = ctx.Registry.LookupMemberRoutineOverload(type: containerType,
+                memberRoutineName: accessor,
+                argTypes: [u64]);
+        }
+
+        mint ??= ctx.Registry.LookupMemberRoutine(type: containerType, memberRoutineName: accessor);
+        if (mint == null)
+        {
+            return null;
+        }
+
+        if (indexType != null)
+        {
+            mint = ResolveMemberRoutineGenericRoutine(routine: mint, argTypes: [indexType]);
+        }
+
+        var callee = new MemberExpression(Object: container,
+            MemberName: accessor,
+            Location: element.Location);
+        // The token IS the element's own pointer (Viewing/Modifying and an entity share one pointer
+        // representation), so the call or field access on it dispatches on the ELEMENT type, exactly as
+        // a wrapper forwarder would after unwrapping. The read/write intent and the container freeze
+        // were already checked at analysis (RF-S639). An entity-typed temporary is not torn down, so
+        // the element stays owned by the container.
+        return new CallExpression(Callee: callee, Arguments: [index], Location: element.Location)
+        {
+            ResolvedRoutine = mint,
+            ResolvedType = element.ResolvedType,
+            LoweringKind = ClassifyCallLoweringKind(routine: mint, receiverType: containerType)
+        };
     }
 
     /// <summary>
@@ -299,11 +393,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
             return null;
         }
 
-        // An indexed receiver (`a[i][j] = v`) has no storage address of its own, so it is read with
-        // `getitem`. Any other receiver keeps its shape and only its interior is lowered.
-        Expression receiver = idx.Object is IndexExpression
-            ? VisitExpression(expr: idx.Object)
-            : LowerAssignTarget(target: idx.Object);
+        // An entity element receiver (`grid[0][j] = v`) is written through a token on the element. Any
+        // other indexed receiver has no storage of its own and is read with `getitem` (a value element
+        // was already split into a write-back by LowerValueWriteBack). Anything else keeps its shape
+        // and only its interior is lowered.
+        Expression receiver = LowerElementPath(expr: idx.Object, write: true) ??
+                              (idx.Object is IndexExpression
+                                  ? VisitExpression(expr: idx.Object)
+                                  : LowerAssignTarget(target: idx.Object));
         Expression loweredIdx = LowerBackIndexBounds(loweredObj: receiver,
             loweredIdx: VisitExpression(expr: idx.Index),
             targetType: targetType,
@@ -417,6 +514,22 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     /// </summary>
     public override Expression VisitExpression(Expression expr)
     {
+        // A call on an entity element (`grid[0].add_last(value: v)`) runs through a token on that element
+        // (`grid.modify_at(index: 0).add_last(value: v)`) so it changes the element in place, not a copy.
+        if (expr is CallExpression { Callee: MemberExpression { Object: var elementReceiver } callee } elementCall &&
+            LowerElementPath(expr: elementReceiver,
+                write: elementCall.ResolvedRoutine?.MutationCategory != MutationCategory.Readonly) is
+                { } throughToken)
+        {
+            expr = elementCall with { Callee = callee with { Object = throughToken } };
+        }
+        // A field read on an entity element (`grid[0].n`) reads it through a read token, not a copy.
+        else if (expr is MemberExpression { Object: var fieldOwner } fieldRead &&
+                 LowerElementPath(expr: fieldOwner, write: false) is { } viewToken)
+        {
+            expr = fieldRead with { Object = viewToken };
+        }
+
         switch (expr)
         {
             case WithExpression withExpr:
@@ -619,6 +732,12 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         {
             case MemberExpression mem:
             {
+                // A field write on an entity element goes through a write token on the element.
+                if (LowerElementPath(expr: mem.Object, write: true) is { } throughToken)
+                {
+                    return mem with { Object = throughToken };
+                }
+
                 Expression obj = VisitExpression(expr: mem.Object);
                 return ReferenceEquals(objA: obj, objB: mem.Object)
                     ? target

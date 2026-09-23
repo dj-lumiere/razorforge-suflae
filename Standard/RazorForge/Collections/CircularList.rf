@@ -368,6 +368,31 @@ routine CircularList[T].setitem!(index: U64, value: T)
   me.write_at(physical_idx: physical_idx, value: value)
   return
 
+### Returns a write token on the entity stored at logical position `index`, so one call through it changes
+### the element in place: `ring[0].add_last(value: 1)` lowers to `ring.modify_at(index: 0).add_last(value:
+### 1)`. A plain `getitem` hands back a copy, and a call on that copy would change only the copy. Like
+### `T.modify()`, the token lives only for that one call (the builder keeps the container still meanwhile,
+### RF-S639). Entity elements only.
+routine CircularList[T].modify_at!(index: U64) -> Modifying[T]
+needs EntityType T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  danger
+    return Modifying[T](me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]]())
+
+### Returns a read token on the entity stored at logical position `index`, so one call through it reads the
+### element without copying it: `ring[0].count()` lowers to `ring.view_at(index: 0).count()`. A plain
+### `getitem` hands back a copy, and a call on that copy would copy the whole element first. Like
+### `T.view()`, the token lives only for that one call (the builder keeps the container still meanwhile,
+### RF-S639). Entity elements only.
+@readonly
+routine CircularList[T].view_at!(index: U64) -> Viewing[T]
+needs EntityType T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  danger
+    return Viewing[T](me.data.offset(T.data_size() * me.physical_index(index)).peek_as[Hijacked[T]]())
+
 ### Returns a NEW circular list holding independent copies of the elements in `range` — the slice form of
 ### indexing (`circular list[a til b]`), over LOGICAL positions (front = 0). A half-open `a til b` yields
 ### `[a, b)`; an inclusive `a to b` yields `[a, b]`; a descending range reverses. Positions at or past

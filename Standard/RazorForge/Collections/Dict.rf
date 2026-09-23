@@ -418,6 +418,32 @@ routine Dict[K, V].setitem!(key: Accessing[K], value: V)
   me.write_val_at(ei: me.read_index(slot), val: value)
   return
 
+### Returns a write token on the entity stored at `key`, so one call through it changes the value in place:
+### `groups["a"].add_last(value: 1)` lowers to `groups.modify_at(key: "a").add_last(value: 1)`. A plain
+### `getitem` hands back a copy, and a call on that copy would change only the copy. Like `T.modify()`, the
+### token lives only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity
+### elements only.
+routine Dict[K, V].modify_at!(key: Accessing[K]) -> Modifying[V]
+needs EntityType V
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    absent
+  danger
+    return Modifying[V](me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]]())
+
+### Returns a read token on the entity stored at `key`, so one call through it reads the value without
+### copying it: `groups["a"].count()` lowers to `groups.view_at(key: "a").count()`. A plain `getitem` hands
+### back a copy, and a call on that copy would copy the whole value first. Like `T.view()`, the token lives
+### only for that one call (the builder keeps the container still meanwhile, RF-S639). Entity elements only.
+@readonly
+routine Dict[K, V].view_at!(key: Accessing[K]) -> Viewing[V]
+needs EntityType V
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    absent
+  danger
+    return Viewing[V](me.vals.offset(V.data_size() * me.read_index(slot)).peek_as[Hijacked[V]]())
+
 # ============================================================================
 # Keys / Values / Entries
 # ============================================================================
