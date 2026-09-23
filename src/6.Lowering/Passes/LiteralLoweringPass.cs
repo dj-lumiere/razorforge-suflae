@@ -259,7 +259,7 @@ internal sealed class LiteralLoweringPass : AstRewriter
             // defaults to S64) is still `UndecidedInteger` at this pass — ExpressionLoweringPass only
             // rewrites the token to IntegerLiteral LATER, after this construction pass has already run.
             // So match the RESOLVED TYPE here and construct it too; otherwise codegen emits an invalid
-            // raw `store <int> %Record.Integer` (Integer is a LibTomMath-handle record, not a scalar).
+            // raw `store <int> %Record.Integer` (Integer is a limb-buffer record, not a scalar).
             TokenType.UndecidedInteger when literal.ResolvedType?.Name == "Integer" &&
                                             _integerType != null &&
                                             _integerFromLiteral != null => MakeFromLiteralCall(

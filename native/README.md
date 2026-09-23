@@ -255,7 +255,6 @@ These directories are vendored snapshots, not separate repos the runtime should 
 
 - `libbf`
 - `decNumber`
-- `libtommath`
 
 ### Data and text adjacent libraries
 

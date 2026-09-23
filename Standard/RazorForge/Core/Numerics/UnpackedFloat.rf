@@ -27,7 +27,7 @@ needs L obeys FloorDivisible
   exp: S64
   ### Sign + zero/inf/nan state folded into ONE i32-backed field. Replaces the old
   ### `sign`/`iszero`/`isinf`/`isnan` boolean quartet — four `i1` struct fields hit an aarch64
-  ### by-value calling-convention bug when they spill to the stack (the wide `U512` mantissa
+  ### by-value calling-convention bug when they spill to the stack (a wide mantissa
   ### exhausts the argument registers and pushes the flags out, where caller/callee disagree on
   ### the stack layout). One integer field is laid out unambiguously on every target.
   ### Read it through the `sign()`/`iszero()`/`isinf()`/`isnan()` accessors below.
@@ -116,9 +116,9 @@ record UFSign[AnyType M, AnyType L, U64 W]
 ### Converts a non-negative S64 amount `s` into a value of int type `T` (for shift amounts
 ### derived from runtime S64 values, which are strictly typed). A `common` routine keyed on the
 ### TARGET type `T` (not a `[T]`-parametrized S64 member): a method-level type param drives the
-### instantiation off the call, which the reachability pass prunes for the widest tier (U1024,
-### reached only through nested generic-member instantiations) — keying on the receiver type
-### seeds every width, exactly like `low_mask`/`from_words`.
+### instantiation off the call, which the reachability pass prunes for the widest tier (the wide
+### product type `L`, reached only through nested generic-member instantiations) — keying on the
+### receiver type seeds every width, exactly like `low_mask`/`from_words`.
 common routine T.to_width(s: S64) -> T
   return LLVM::zero_extend[U64, T](LLVM::reinterpret_bits[S64, U64](s))
 
@@ -954,7 +954,7 @@ common routine M.from_words2(h1: U64, h0: U64) -> M
   return LLVM::bit_or[M](a: LLVM::zero_extend[U64, M](h0), b: LLVM::shift_left[M](value: LLVM::zero_extend[U64, M](h1), bits: 64))
 
 ### Builds an `M`-typed value from three U64 limbs (h2..h0) — the 192-bit (U192) mantissa of the
-### binary192 engine, which has no literal suffix (assembled from limbs like U512/U1024).
+### binary192 engine, which has no literal suffix (assembled from limbs).
 common routine M.from_words3(h2: U64, h1: U64, h0: U64) -> M
   return LLVM::bit_or[M](a: M.from_words2(h1: h1, h0: h0), b: LLVM::shift_left[M](value: LLVM::zero_extend[U64, M](h2), bits: 128))
 

@@ -1,10 +1,9 @@
 /*
  * RazorForge Runtime - Word-division primitives
  *
- * Extracted from bignum_functions.c so this translation unit is fully self-contained
- * (only <stdint.h> / <intrin.h>, no libtommath / razorforge_math.h). That lets the
- * dev-loop LTO step compile it straight to LLVM bitcode and llvm-link it into the RF
- * module before opt, so the reciprocal/divide shims inline at the RF<->runtime seam
+ * A fully self-contained translation unit (only <stdint.h> / <intrin.h>, no razorforge_math.h).
+ * That lets the dev-loop LTO step compile it straight to LLVM bitcode and llvm-link it into the
+ * RF module before opt, so the reciprocal/divide shims inline at the RF<->runtime seam
  * (rf_reciprocal_word folds to a constant 0 on x86-64; rf_udivrem_128_64_pre inlines
  * its `divq`). See src/BuildSystem/NativeToolchain.cs (BuildHotRuntimeBitcode).
  */

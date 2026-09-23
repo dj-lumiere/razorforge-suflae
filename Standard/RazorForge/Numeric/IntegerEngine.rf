@@ -2,9 +2,9 @@ module Numerics
 
 # The arbitrary-precision integer engine behind {Integer}, built on the 64-bit limb layer of the libbf
 # port (limbs_add / limbs_sub / limbs_mul with its NTT path / limbs_divmod / limbs_sqrt_rem). Division
-# is Euclidean (the remainder is always in [0, |b|)). Otherwise it keeps LibTomMath's observable
-# semantics: AND / OR / XOR act on the infinite two's-complement form, a right shift moves the magnitude
-# and keeps the sign, and text uses the digit map 0-9 A-Z a-z + / (case-insensitive up to radix 36).
+# is Euclidean (the remainder is always in [0, |b|)). AND / OR / XOR act on the infinite two's-complement
+# form, a right shift moves the magnitude and keeps the sign, and text uses the digit map 0-9 A-Z a-z + /
+# (letters case-insensitive up to radix 36).
 #
 # Memory: like the Real engine, every buffer comes from the calling thread's scratch region, and
 # {Integer} copies the final result out before releasing the region.
@@ -55,7 +55,7 @@ secret routine bigint_low_u64(a: IntV) -> U64
       return 0u64
     return limb(tab: a.tab, i: 0u64)
 
-# The value wrapped to 64 bits in two's complement (exact when it fits). (mp_get_i64)
+# The value wrapped to 64 bits in two's complement (exact when it fits).
 secret routine bigint_low_s64(a: IntV) -> S64
   var mag = bigint_low_u64(a: a)
   var bits = if a.neg then 0u64 -% mag else mag
@@ -196,8 +196,17 @@ secret routine bigint_shl(a: IntV, bits: U64) -> IntV
     set_limb(tab: r, i: limb_shift +% a.len, value: carry)
     return bigint_make(neg: a.neg, tab: r, len: n)
 
-# The magnitude shifted right by `bits`, keeping the sign (truncates toward zero). (mp_div_2d)
+# floor(a / 2^bits): the arithmetic right shift of the two's-complement form, so -5 >> 1 is -3.
 secret routine bigint_shr(a: IntV, bits: U64) -> IntV
+  danger
+    var q = bigint_shr_mag(a: a, bits: bits)
+    if a.neg and limbs_ctz(tab: a.tab, n: a.len) < bits
+      # a negative value lost nonzero bits: round its magnitude up
+      return bigint_add_mag(a: q, b: bigint_from_u64(v: 1u64, neg: false), neg: true)
+    return q
+
+# The magnitude shifted right by `bits`, keeping the sign (truncates toward zero).
+secret routine bigint_shr_mag(a: IntV, bits: U64) -> IntV
   danger
     var limb_shift = bits // 64u64
     if limb_shift >= a.len
@@ -215,8 +224,7 @@ secret routine bigint_shr(a: IntV, bits: U64) -> IntV
       discard limbs_shr(tab_r: r, tab: src, n: n, shift: U32(from: bit_shift), high: 0u64)
     return bigint_make(neg: a.neg, tab: r, len: n)
 
-# Bitwise AND (op 0), OR (op 1) or XOR (op 2) over the infinite two's-complement forms. (mp_and /
-# mp_or / mp_xor)
+# Bitwise AND (op 0), OR (op 1) or XOR (op 2) over the infinite two's-complement forms.
 secret routine bigint_bitop(a: IntV, b: IntV, op: U32) -> IntV
   danger
     var w = (if a.len > b.len then a.len else b.len) +% 1u64
@@ -255,7 +263,7 @@ secret routine bigint_bitop(a: IntV, b: IntV, op: U32) -> IntV
       i = i +% 1u64
     return bigint_make(neg: neg_r, tab: r, len: w)
 
-# a^e by square and multiply (0^0 = 1). (mp_expt_n)
+# a^e by square and multiply (0^0 = 1).
 secret routine bigint_pow(a: IntV, e: U64) -> IntV
   var result = bigint_from_u64(v: 1u64, neg: false)
   var base = a
@@ -268,9 +276,9 @@ secret routine bigint_pow(a: IntV, e: U64) -> IntV
       base = bigint_mul(a: base, b: base)
   return result
 
-# floor(sqrt(a)) for a >= 0 (a negative `a` gives 0, as LibTomMath leaves the result untouched).
+# floor(sqrt(a)). `a` is non-negative ({Integer.sqrt} rejects a negative value before calling this).
 # Shifts `a` left by an even amount so the 2n-limb square root sees a top limb >= 2^62, then shifts the
-# root back by half. (mp_sqrt)
+# root back by half.
 secret routine bigint_isqrt(a: IntV) -> IntV
   danger
     if a.neg or a.len == 0u64
@@ -285,9 +293,10 @@ secret routine bigint_isqrt(a: IntV) -> IntV
       set_limb(tab: buf, i: limb_shift +% a.len, value: carry)
     var s = alloc_limbs(n: n)
     discard limbs_sqrt_rem(tabs: s, taba: buf, n: n)
-    return bigint_shr(a: bigint_make(neg: false, tab: s, len: n), bits: sh // 2u64)
+    return bigint_shr_mag(a: bigint_make(neg: false, tab: s, len: n), bits: sh // 2u64)
 
-# gcd(|a|, |b|) by Euclid's algorithm (gcd(0, 0) = 0). (mp_gcd)
+# gcd(|a|, |b|), with gcd(0, 0) = 0. Binary GCD in place on scratch copies, after Euclid remainder steps
+# while one operand is much longer than the other.
 secret routine bigint_gcd(a: IntV, b: IntV) -> IntV
   danger
     var x = bigint_abs(a: a)
@@ -403,7 +412,7 @@ secret dangerous routine limbs_sub_in_place(a: Hijacked[U64], na: U64, b: Hijack
     m = m -% 1u64
   return m
 
-# lcm(|a|, |b|), 0 when either is 0. (mp_lcm)
+# lcm(|a|, |b|), 0 when either is 0.
 secret routine bigint_lcm(a: IntV, b: IntV) -> IntV
   if a.len == 0u64 or b.len == 0u64
     return bigint_zero()
@@ -425,7 +434,7 @@ secret dangerous routine limbs_divmod_word_any(tabr: Hijacked[U64], taba: Hijack
     set_limb(tab: tabr, i: i, value: u128_lo(t: q))
   return r
 
-# The LibTomMath digit map: 0-9, A-Z, a-z, '+', '/'.
+# The digit map for radices up to 64: 0-9, A-Z, a-z, '+', '/'.
 secret routine bigint_digit_char(d: U64) -> Character
   var cp = 0u32
   if d < 10u64
@@ -440,7 +449,7 @@ secret routine bigint_digit_char(d: U64) -> Character
     cp = 47u32
   return Character(from: cp)
 
-# The digit value of a codepoint in `radix` under the LibTomMath map (letters case-insensitive up to
+# The digit value of a codepoint in `radix` under the digit map (letters case-insensitive up to
 # radix 36), or 255 when it is not a digit of the map.
 secret routine bigint_digit_value(cp: U32, radix: U64) -> U64
   var c = cp
@@ -458,7 +467,7 @@ secret routine bigint_digit_value(cp: U32, radix: U64) -> U64
     return 63u64
   return 255u64
 
-# `a` in `radix` (2 to 64): an optional '-' then the digits, "0" for zero. (mp_to_radix)
+# `a` in `radix` (2 to 64): an optional '-' then the digits, "0" for zero.
 secret routine bigint_to_text(a: IntV, radix: U64) -> Text
   danger
     if a.len == 0u64
@@ -496,7 +505,7 @@ secret routine bigint_to_text(a: IntV, radix: U64) -> Text
 
 # Parse `text` in `radix` (2 to 64): an optional leading '-', then digits up to the first character
 # outside the radix. The text must end there, or at a '\r' / '\n'. Empty digits read as 0. Returns
-# (value, ok). (mp_read_radix)
+# (value, ok).
 secret routine bigint_parse(text: Text, radix: U64) -> (IntV, Bool)
   danger
     if radix < 2u64 or radix > 64u64

@@ -337,8 +337,8 @@ routine Integer.shl(bits: S32) -> Integer
     return integer_shift(a: me, bits: U64(from: 0s64 -% S64(from: bits)), left: false)
   return integer_shift(a: me, bits: U64(from: S64(from: bits)), left: true)
 
-### Shifts this value's magnitude right by `bits` positions, keeping the sign (the result
-### truncates toward zero). A negative count shifts left.
+### Shifts this value right by `bits` positions: `floor(me / 2^bits)`, the arithmetic shift of the
+### two's-complement form (so `-5 >> 1` is `-3`). A negative count shifts left.
 ### :param bits: The number of bit positions to shift.
 ### :returns: The resulting `Integer` value.
 @readonly
@@ -368,16 +368,36 @@ routine Integer.pow(exp: U32) -> Integer
     C::rf_region_release(mark: mark)
     return r
 
-### Returns the integer square root of this value (0 for a negative value).
+### Returns the integer square root of this value.
 ### The result is the greatest integer whose square does not exceed the input.
 ### :returns: The resulting `Integer` value.
+### :throws: {NumericDomainError} when this value is negative (it has no real square root).
 @readonly
-routine Integer.sqrt() -> Integer
+routine Integer.sqrt!() -> Integer
+  if me.is_negative()
+    throw NumericDomainError(description: "sqrt: negative Integer has no real square root")
   danger
     var mark = C::rf_region_mark()
     var r = integer_from_view(x: bigint_isqrt(a: integer_view(v: me)))
     C::rf_region_release(mark: mark)
     return r
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+### :throws: {NumericDomainError} when this value is negative (it has no real square root).
+@readonly
+routine Integer.sqrtrem!() -> (Integer, Integer)
+  if me.is_negative()
+    throw NumericDomainError(description: "sqrtrem: negative Integer has no real square root")
+  danger
+    var mark = C::rf_region_mark()
+    var a = integer_view(v: me)
+    var s = bigint_isqrt(a: a)
+    var root = integer_from_view(x: s)
+    var remainder = integer_from_view(x: bigint_sub(a: a, b: bigint_mul(a: s, b: s)))
+    C::rf_region_release(mark: mark)
+    return (root, remainder)
 
 ### Computes the greatest common divisor of this value and `other` (non-negative).
 ### :param other: The other operand.

@@ -654,8 +654,15 @@ routine S16.clamp(min_val: S16, max_val: S16) -> S16
 ### :returns: The floor of the square root of `me`.
 ### :throws: {NumericDomainError} if `me < 0`.
 routine S16.isqrt() -> S16
+  return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+### :throws: {NumericDomainError} if `me < 0`.
+routine S16.sqrtrem!() -> (S16, S16)
   if me < 0_s16
-    throw NumericDomainError(description: "isqrt of a negative value has no real result")
+    throw NumericDomainError(description: "square root of a negative value has no real result")
   var x = me
   var result = 0_s16
   var bit = 1_s16 << 14_u32
@@ -669,7 +676,7 @@ routine S16.isqrt() -> S16
     else
       result = result.lshr(1_u32)
     bit = bit.lshr(2_u32)
-  return result
+  return (result, x)
 
 ### Returns ⌊log₂ me⌋. Throws if `me <= 0`.
 ### :returns: The floor of the base-2 logarithm.

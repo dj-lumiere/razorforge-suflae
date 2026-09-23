@@ -93,7 +93,6 @@ jobs:
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
-          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
           git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd
@@ -220,7 +219,6 @@ jobs:
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           if ($LASTEXITCODE -ne 0) { throw 'libbf extract failed' }
           Remove-Item libbf.tar.gz
-          Clone 'https://github.com/libtom/libtommath.git' libtommath
           Clone 'https://github.com/shibatch/tlfloat.git' tlfloat
           Clone 'https://github.com/madler/zlib.git' zlib
           Clone 'https://github.com/facebook/zstd.git' zstd
@@ -303,7 +301,6 @@ jobs:
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
-          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
           git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd

@@ -555,6 +555,12 @@ routine U16.clamp(min_val: U16, max_val: U16) -> U16
 ### Returns the integer square root ⌊√me⌋ — the largest value whose square is ≤ me.
 ### :returns: The floor of the square root of `me`.
 routine U16.isqrt() -> U16
+  return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+routine U16.sqrtrem() -> (U16, U16)
   var x = me
   var result = 0_u16
   var bit = 1_u16 << 14_u32
@@ -568,7 +574,7 @@ routine U16.isqrt() -> U16
     else
       result = result.lshr(1_u32)
     bit = bit.lshr(2_u32)
-  return result
+  return (result, x)
 
 ### Returns ⌊log₂ me⌋. Throws if `me` is zero (the logarithm of zero is undefined).
 ### :returns: The floor of the base-2 logarithm.

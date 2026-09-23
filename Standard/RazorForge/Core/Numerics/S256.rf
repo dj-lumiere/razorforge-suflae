@@ -771,3 +771,35 @@ routine S256!(from_text: Text) -> S256
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S256.hash(k0: U64, k1: U64) -> U64
   return LLVM::reinterpret_bits[S256, U256](me).hash(k0: k0, k1: k1)
+
+# ============================================================================
+# Integer Math (roots)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋. Throws for a negative `me`.
+### :returns: The floor of the square root of `me`.
+### :throws: {NumericDomainError} if `me < 0`.
+routine S256.isqrt() -> S256
+  return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+### :throws: {NumericDomainError} if `me < 0`.
+routine S256.sqrtrem!() -> (S256, S256)
+  if me < 0_s256
+    throw NumericDomainError(description: "square root of a negative value has no real result")
+  var x = me
+  var result = 0_s256
+  var bit = 1_s256 << 254_u32
+  while bit > x
+    bit = bit.lshr(2_u32)
+  while bit != 0_s256
+    var next = result.add_wrap(bit)
+    if x >= next
+      x = x.sub_wrap(next)
+      result = result.lshr(1_u32).add_wrap(bit)
+    else
+      result = result.lshr(1_u32)
+    bit = bit.lshr(2_u32)
+  return (result, x)

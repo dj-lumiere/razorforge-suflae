@@ -557,6 +557,12 @@ routine U32.clamp(min_val: U32, max_val: U32) -> U32
 ### Returns the integer square root ⌊√me⌋ — the largest value whose square is ≤ me.
 ### :returns: The floor of the square root of `me`.
 routine U32.isqrt() -> U32
+  return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+routine U32.sqrtrem() -> (U32, U32)
   var x = me
   var result = 0_u32
   var bit = 1_u32 << 30_u32
@@ -570,7 +576,7 @@ routine U32.isqrt() -> U32
     else
       result = result.lshr(1_u32)
     bit = bit.lshr(2_u32)
-  return result
+  return (result, x)
 
 ### Returns ⌊log₂ me⌋. Throws if `me` is zero (the logarithm of zero is undefined).
 ### :returns: The floor of the base-2 logarithm.

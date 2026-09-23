@@ -1,0 +1,61 @@
+module Tests/Stdlib/SqrtremApi
+
+import IO/Console
+import Numerics.[Integer]
+
+# `sqrtrem` returns (s, r) with s = floor(sqrt(me)) and r = me - s*s, across the fixed-width integers
+# and Integer. Signed types and Integer reject a negative value.
+routine start()
+  var a = (5_s8).sqrtrem()
+  show(f"S8 5: {a.item0} {a.item1}")
+  var b = S8_MAX.sqrtrem()
+  show(f"S8 max: {b.item0} {b.item1}")
+  var c = S16_MAX.sqrtrem()
+  show(f"S16 max: {c.item0} {c.item1}")
+  var d = (1_000_000_s32).sqrtrem()
+  show(f"S32 1e6: {d.item0} {d.item1}")
+  var e = S64_MAX.sqrtrem()
+  show(f"S64 max: {e.item0} {e.item1}")
+  var f = S128_MAX.sqrtrem()
+  show(f"S128 max: {f.item0} {f.item1}")
+  var g = S256_MAX.sqrtrem()
+  show(f"S256 max: {g.item0} {g.item1}")
+  var h = (0_u8).sqrtrem()
+  show(f"U8 0: {h.item0} {h.item1}")
+  var i = U8_MAX.sqrtrem()
+  show(f"U8 max: {i.item0} {i.item1}")
+  var j = U16_MAX.sqrtrem()
+  show(f"U16 max: {j.item0} {j.item1}")
+  var k = U32_MAX.sqrtrem()
+  show(f"U32 max: {k.item0} {k.item1}")
+  var l = U64_MAX.sqrtrem()
+  show(f"U64 max: {l.item0} {l.item1}")
+  var m = U128_MAX.sqrtrem()
+  show(f"U128 max: {m.item0} {m.item1}")
+  var n = U256_MAX.sqrtrem()
+  show(f"U256 max: {n.item0} {n.item1}")
+  show(f"isqrt S256/U256: {(1_000_000_s256).isqrt()} {(99_u256).isqrt()}")
+
+  var p = Integer(value: 5_s64).sqrtrem()
+  show(f"Integer 5: {p.item0} {p.item1}")
+  var big = Integer(value: 10_s64).pow(exp: 101_u32) + Integer(value: 12345_s64)
+  var q = big.sqrtrem()
+  show(f"Integer big: {q.item0} {q.item1}")
+  show(f"Integer big check: {q.item0 * q.item0 + q.item1 == big} {q.item1 <= q.item0 + q.item0}")
+
+  var neg_s = try s64_sqrtrem(value: -4_s64)
+  var neg_i = try integer_sqrtrem(value: Integer(value: -4_s64))
+  show(f"negative: {neg_s} {neg_i}")
+  show("DONE")
+  return
+
+# Wrappers exposing the failable `sqrtrem` for try_ generation (the tuple result is reduced to the root).
+# The call is bound to a variable first: try_ synthesis only rewrites a failable call that is a whole
+# declaration initializer, a statement, or a returned value, not one nested inside an expression.
+routine s64_sqrtrem!(value: S64) -> S64
+  var r = value.sqrtrem()
+  return r.item0
+
+routine integer_sqrtrem!(value: Integer) -> Integer
+  var r = value.sqrtrem()
+  return r.item0

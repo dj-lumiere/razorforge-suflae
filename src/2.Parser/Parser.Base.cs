@@ -785,7 +785,7 @@ public partial class Parser
             // Deferred types - store raw string for semantic analyzer to parse with native libraries
             // b128: IEEE binary128, requires LibBF
             // d32/d64/d128: IEEE decimal floating-point, requires decNumber
-            // Integer: arbitrary precision, requires LibTomMath
+            // Integer: arbitrary precision, pure-RF limb engine
             // Decimal: arbitrary precision, requires decNumber
             TokenType.B128Literal => CleanNumericSuffix(text: text, suffix: "b128"),
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),

@@ -913,3 +913,31 @@ routine U256.hash(k0: U64, k1: U64) -> U64
   var lo = __secure_hash_u128(v: me.low128(), k0: k0, k1: k1)
   var hi = __secure_hash_u128(v: me.high128(), k0: k0, k1: k1)
   return lo ^ hi
+
+# ============================================================================
+# Integer Math (roots)
+# ============================================================================
+
+### Returns the integer square root ⌊√me⌋ — the largest value whose square is ≤ me.
+### :returns: The floor of the square root of `me`.
+routine U256.isqrt() -> U256
+  return me.sqrtrem().item0
+
+### Returns the integer square root together with its remainder: `(s, r)` with `s = ⌊√me⌋` and
+### `r = me - s*s`, so `0 <= r <= 2s` (e.g. `5.sqrtrem()` is `(2, 1)`).
+### :returns: The tuple `(root, remainder)`.
+routine U256.sqrtrem() -> (U256, U256)
+  var x = me
+  var result = 0_u256
+  var bit = 1_u256 << 254_u32
+  while bit > x
+    bit = bit.lshr(2_u32)
+  while bit != 0_u256
+    var next = result.add_wrap(bit)
+    if x >= next
+      x = x.sub_wrap(next)
+      result = result.lshr(1_u32).add_wrap(bit)
+    else
+      result = result.lshr(1_u32)
+    bit = bit.lshr(2_u32)
+  return (result, x)

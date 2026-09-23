@@ -7,7 +7,7 @@ import Collections
 # of the binary192 float engine (UnpackedFloat[U192, U384, 192], the D128 scratch).
 # Not user-facing, so it carries only the minimal surface the engine needs:
 # FloorDivisible (knuth-D, the `//` the divide core calls) + value semantics. No literal
-# suffix (like U512/U1024, constants are assembled from U64 limbs via `asm192`).
+# suffix (constants are assembled from U64 limbs via `asm192`).
 # ============================================================================
 
 @llvm("i192")

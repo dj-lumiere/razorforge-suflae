@@ -76,7 +76,9 @@ routine start()
   show(f"not: {n12.bitnot()} {ten.bitnot()}")
   show(f"big and: {(two.pow(exp: 200_u32) - Integer.one()).bitand(other: p20.neg())}")
   show(f"shl: {Integer.one().shl(bits: 200_s32)}")
-  show(f"shr: {Integer(value: -5_s64).shr(bits: 1_s32)} {Integer(value: -1_s64).shr(bits: 1_s32)} {p20.shr(bits: 10_s32)} {p20.shr(bits: 100_s32)}")
+  show(f"shr: {Integer(value: -5_s64).shr(bits: 1_s32)} {Integer(value: -1_s64).shr(bits: 1_s32)} {Integer(value: -4_s64).shr(bits: 1_s32)} {p20.shr(bits: 10_s32)} {p20.shr(bits: 100_s32)}")
+  var neg_big = (two.pow(exp: 200_u32) + Integer.one()).neg()
+  show(f"shr big negative == floor div: {neg_big.shr(bits: 100_s32) == neg_big // two.pow(exp: 100_u32)} {neg_big.shr(bits: 300_s32)}")
 
   show("-- powers / roots / gcd --")
   show(f"pow: {two.pow(exp: 100_u32)} {Integer(value: -3_s64).pow(exp: 5_u32)} {Integer.zero().pow(exp: 0_u32)}")
@@ -85,6 +87,8 @@ routine start()
   var gx = two.pow(exp: 100_u32) * Integer(value: 3_s64).pow(exp: 200_u32) * Integer(value: 5_s64).pow(exp: 50_u32)
   var gy = two.pow(exp: 90_u32) * Integer(value: 3_s64).pow(exp: 250_u32) * seven
   show(f"gcd balanced: {gx.gcd(other: gy) == two.pow(exp: 90_u32) * Integer(value: 3_s64).pow(exp: 200_u32)} {gy.neg().gcd(other: gx)}")
+  var neg_root = try integer_sqrt(value: Integer(value: -4_s64))
+  show(f"sqrt negative: {neg_root}")
   show(f"lcm: {Integer(value: -4_s64).lcm(other: Integer(value: 6_s64))} {Integer.zero().lcm(other: Integer(value: 5_s64))}")
   show(f"modpow: {Integer(value: 3_s64).modpow(exp: p20, modulus: prime)}")
 
@@ -98,3 +102,7 @@ routine start()
   show(f"to u64: {U64!(from: Integer(value: U64_MAX))}")
   show("DONE")
   return
+
+# Wrapper exposing the failable `sqrt` for try_ generation.
+routine integer_sqrt!(value: Integer) -> Integer
+  return value.sqrt()

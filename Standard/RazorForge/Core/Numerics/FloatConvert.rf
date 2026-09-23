@@ -10,7 +10,7 @@ import Numerics.Integer
 # software shims). Both directions are EXACT-RATIONAL: a binary float is
 # f = m · 2^e with integer m, e, so every question ("what are the first N
 # decimal digits, correctly rounded?" / "which float is nearest this decimal?")
-# is an exact big-integer comparison. The unbounded `Integer` (LibTomMath) is
+# is an exact big-integer comparison. The unbounded `Integer` is
 # the scratch type — formatting is a cold path, so clarity/correctness beat the
 # table-heavy speed tricks (Ryū/Grisu) that only pay off in a hot loop.
 #

@@ -44,7 +44,6 @@ Suflae-Wiki/
 # Third-party native libraries (download separately)
 /native/inteldecimal/
 /native/libbf/
-/native/libtommath/
 /native/tlfloat/
 /native/mapm/
 

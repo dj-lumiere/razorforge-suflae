@@ -80,10 +80,6 @@ jobs:
           rm libbf.tar.gz
           echo "::endgroup::"
 
-          echo "::group::libtommath"
-          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
-          echo "::endgroup::"
-
           echo "::group::tlfloat"
           git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           echo "::endgroup::"
@@ -153,7 +149,7 @@ jobs:
           # POSIX features and avoid the warning; we skip configure, so blanket
           # the build with -Wno-implicit-function-declaration as a safety net for
           # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc,
-          # libbf, libtommath) — for which the per-target flags in cmake/*.cmake
+          # libbf) — for which the per-target flags in cmake/*.cmake
           # don't apply. Pair it with _GNU_SOURCE so glibc feature-test macros
           # expose the full POSIX surface (lseek, mlock, ftruncate, etc.).
           export CC=clang
@@ -276,7 +272,6 @@ jobs:
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           if ($LASTEXITCODE -ne 0) { throw 'libbf extract failed' }
           Remove-Item libbf.tar.gz
-          Clone 'https://github.com/libtom/libtommath.git' libtommath
           Clone 'https://github.com/shibatch/tlfloat.git' tlfloat
 
           # --- Modules (loaded on demand) ---
@@ -367,7 +362,6 @@ jobs:
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
-          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
           git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd

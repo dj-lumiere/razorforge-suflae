@@ -2298,7 +2298,7 @@ public sealed partial class SemanticVerifier
 
         // Analyze the compiler-generated body in its OWNER's module, not whatever module happens to be
         // current when the body is first made live. A synthesized failable variant of a Core routine
-        // (e.g. `Decimal.try_logb`) references Core module-private `secret` types (`U512`); resolved
+        // (e.g. `Decimal.try_logb`) references Core module-private `secret` types; resolved
         // under a user module those fail the secret-visibility check and silently become ErrorType,
         // which surfaces later as codegen "Error type found in codegen" for the variant — an
         // order/liveness-dependent (CI-flaky) failure. Pin the module to the routine's owner so
