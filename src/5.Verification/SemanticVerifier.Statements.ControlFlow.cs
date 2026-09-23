@@ -958,8 +958,21 @@ public sealed partial class SemanticVerifier
             type: boundType,
             location: usingStmt.Location);
 
+        // While the body runs, the object the token points at must stay put (RF-S639).
+        (string Source, string Verb)? tokenSource =
+            TokenMintSource(resource: usingStmt.Resource, resourceType: resourceType);
+        if (tokenSource is { } frozen)
+        {
+            _frozenTokenSources.Add(item: (frozen.Source, frozen.Verb, usingStmt.Location));
+        }
+
         // Analyze the body
         AnalyzeStatement(statement: usingStmt.Body);
+
+        if (tokenSource != null)
+        {
+            _frozenTokenSources.RemoveAt(index: _frozenTokenSources.Count - 1);
+        }
 
         // #171/#172: Token/resource scope escape — validate that the using-bound variable
         // is not returned or stored in outer scope (handled by ValidateNotTokenReturnType

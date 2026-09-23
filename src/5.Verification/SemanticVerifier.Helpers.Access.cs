@@ -518,4 +518,173 @@ public sealed partial class SemanticVerifier
         return normalizedFile.StartsWith(value: normalizedStdlib,
             comparisonType: StringComparison.OrdinalIgnoreCase);
     }
+
+    // =====================================================================================
+    // Token source freezing (RF-S639)
+    // =====================================================================================
+
+    /// <summary>
+    /// When <paramref name="resource"/> mints an access token from a named path (<c>a.modify()</c>,
+    /// <c>s.inner.amend()</c>), returns that path and the minting verb. Null for anything else.
+    /// </summary>
+    private static (string Source, string Verb)? TokenMintSource(Expression resource,
+        TypeSymbol? resourceType)
+    {
+        if (resourceType == null || !IsInlineOnlyTokenType(type: resourceType))
+        {
+            return null;
+        }
+
+        Expression mint = resource is NamedArgumentExpression named
+            ? named.Value
+            : resource;
+        return mint is CallExpression { Callee: MemberExpression { Object: var receiver } callee } &&
+               BuildAccessPath(expr: receiver) is { } path
+            ? (path, callee.MemberName)
+            : null;
+    }
+
+    /// <summary>
+    /// RF-S639: reports <paramref name="target"/> when it names the source of a live access token or a
+    /// prefix of it. A token points at the object it was taken from, so replacing (<c>a = …</c>) or
+    /// moving out (<c>steal a</c>) that object, or anything that owns it, while the token is in use
+    /// would leave the token pointing at freed memory.
+    /// </summary>
+    private void CheckFrozenTokenSource(Expression target, string attempt,
+        SourceLocation location)
+    {
+        CheckFrozenTokenSource(target: target,
+            attempt: attempt,
+            location: location,
+            sources: _frozenTokenSources);
+    }
+
+    private void CheckFrozenTokenSource(Expression target, string attempt,
+        SourceLocation location, IReadOnlyList<(string Source, string Verb, SourceLocation Opened)> sources)
+    {
+        if (sources.Count == 0 || BuildAccessPath(expr: target) is not { } path)
+        {
+            return;
+        }
+
+        foreach ((string source, string verb, SourceLocation opened) in sources)
+        {
+            if (source != path && !source.StartsWith(value: path + "."))
+            {
+                continue;
+            }
+
+            string owner = source == path
+                ? $"'{path}'"
+                : $"'{path}', which owns '{source}',";
+            ReportError(code: SemanticDiagnosticCode.TokenSourceReplaced,
+                message:
+                $"You are trying to {attempt} {owner} while the '{verb}()' token taken from " +
+                $"'{source}' (line {opened.Line}) is still in use. The token points at that object, " +
+                "so it would be left pointing at freed memory. Do this after the token is done: " +
+                "after its 'using' block ends, or outside the call it is passed to.",
+                location: location);
+            return;
+        }
+    }
+
+    /// <summary>Analyzes a call, then applies the inline-token source check (RF-S639).</summary>
+    private TypeSymbol AnalyzeCallWithInlineTokens(CallExpression call, TypeSymbol? expectedType)
+    {
+        TypeSymbol result = AnalyzeCallExpression(call: call, expectedType: expectedType);
+        if (_registry.Language == Language.RazorForge)
+        {
+            CheckInlineTokenSourceSteals(call: call);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RF-S639 for a token passed inline to one call (<c>f(m: a.modify(), x: steal a)</c>,
+    /// <c>a.modify().absorb(x: steal a)</c>): the token lives for that call, so a <c>steal</c> of its
+    /// source anywhere else in the same call's arguments is rejected. Runs after the call is analyzed,
+    /// when the token argument's type is known.
+    /// </summary>
+    private void CheckInlineTokenSourceSteals(CallExpression call)
+    {
+        var mints = new List<(Expression Node, string Source, string Verb)>();
+        if (call.Callee is MemberExpression { Object: var receiver } &&
+            TokenMintSource(resource: receiver, resourceType: receiver.ResolvedType) is { } recvMint)
+        {
+            mints.Add(item: (receiver, recvMint.Source, recvMint.Verb));
+        }
+
+        foreach (Expression arg in call.Arguments)
+        {
+            Expression value = arg is NamedArgumentExpression named
+                ? named.Value
+                : arg;
+            if (TokenMintSource(resource: value, resourceType: value.ResolvedType) is { } argMint)
+            {
+                mints.Add(item: (arg, argMint.Source, argMint.Verb));
+            }
+        }
+
+        if (mints.Count == 0)
+        {
+            return;
+        }
+
+        // Only this call's own tokens: a steal inside an enclosing `using` region was already
+        // checked against that region's token when the steal was analyzed.
+        var inlineSources = mints.Select(selector: m => (m.Source, m.Verb, m.Node.Location))
+                                 .ToList();
+        foreach (Expression arg in call.Arguments)
+        {
+            foreach (StealExpression steal in FindSteals(expr: arg))
+            {
+                CheckFrozenTokenSource(target: steal.Operand,
+                    attempt: "steal",
+                    location: steal.Location,
+                    sources: inlineSources);
+            }
+        }
+    }
+
+    /// <summary>Every <c>steal</c> inside an argument expression (through nested calls, named
+    /// arguments, and member receivers).</summary>
+    private static IEnumerable<StealExpression> FindSteals(Expression expr)
+    {
+        switch (expr)
+        {
+            case StealExpression steal:
+                yield return steal;
+                break;
+            case NamedArgumentExpression named:
+                foreach (StealExpression s in FindSteals(expr: named.Value))
+                {
+                    yield return s;
+                }
+
+                break;
+            case MemberExpression member:
+                foreach (StealExpression s in FindSteals(expr: member.Object))
+                {
+                    yield return s;
+                }
+
+                break;
+            case CallExpression inner:
+                foreach (StealExpression s in FindSteals(expr: inner.Callee))
+                {
+                    yield return s;
+                }
+
+                foreach (Expression a in inner.Arguments)
+                {
+                    foreach (StealExpression s in FindSteals(expr: a))
+                    {
+                        yield return s;
+                    }
+                }
+
+                break;
+        }
+    }
 }

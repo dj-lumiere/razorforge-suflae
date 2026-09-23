@@ -753,6 +753,11 @@ public enum SemanticDiagnosticCode
     /// or an `consult()` (reader) on the same Guarded handle in an overlapping `using` scope.</summary>
     ReadersXorWriter = 630,
 
+    /// <summary>The source of a live access token (or something that owns it) is reassigned or stolen
+    /// while the token is in use — inside the token's `using` block, or in the same call the token is
+    /// passed to — which would leave the token pointing at freed memory.</summary>
+    TokenSourceReplaced = 639,
+
     /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
     /// thread-shareable wrapper (Atomic/Guarded/Witnessed); passing it would silently alias
     /// unsynchronized state across the thread boundary.</summary>

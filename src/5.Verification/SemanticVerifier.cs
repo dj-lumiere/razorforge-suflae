@@ -202,6 +202,13 @@ public sealed partial class SemanticVerifier
     private readonly List<(string Handle, int Identity, bool IsWriter, SourceLocation Location)>
         _activeAccessHolds = [];
 
+    /// <summary>Sources of the access tokens opened by the enclosing `using` blocks, innermost last:
+    /// the dotted path the token was taken from (`a` for `a.modify()`), the minting verb, and where
+    /// the block opened. The object a token points at must stay put while the token is in use, so
+    /// each path and its prefixes are frozen against reassignment and `steal` (RF-S639).</summary>
+    private readonly List<(string Source, string Verb, SourceLocation Opened)> _frozenTokenSources =
+        [];
+
     /// <summary>Maps a Guarded/Witnessed handle path (`s`, `s.a`) to the identity of the controller
     /// (the atomic Arc cell) it refers to. A fresh `T.share[P]()` mints a new identity;
     /// `.share()`/`.watch()` clones and plain copies INHERIT the source handle's identity, so all

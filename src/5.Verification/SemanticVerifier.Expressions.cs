@@ -32,7 +32,7 @@ public sealed partial class SemanticVerifier
             BinaryExpression binary => AnalyzeBinaryExpression(binary: binary,
                 expectedType: expectedType),
             UnaryExpression unary => AnalyzeUnaryExpression(unary: unary),
-            CallExpression call => AnalyzeCallExpression(call: call, expectedType: expectedType),
+            CallExpression call => AnalyzeCallWithInlineTokens(call: call, expectedType: expectedType),
             MemberExpression member => AnalyzeMemberExpression(member: member),
             SpliceMemberExpression spliceMember => AnalyzeSpliceMemberExpression(
                 spliceMember: spliceMember),
@@ -1070,6 +1070,8 @@ public sealed partial class SemanticVerifier
                 location: target.Location);
             return targetType;
         }
+
+        CheckFrozenTokenSource(target: target, attempt: "reassign", location: location);
 
         switch (target)
         {
