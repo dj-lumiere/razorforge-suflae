@@ -715,6 +715,18 @@ public sealed partial class SemanticVerifier
             // Validate that tokens cannot be returned (RazorForge only)
             ValidateNotTokenReturnType(type: returnType, location: ret.Location);
 
+            // RF-S413: returning a field or a container element hands the caller an entity its owner
+            // still keeps. A returned local is a move, so a bare variable is not flagged here.
+            if (_registry.Language == Language.RazorForge &&
+                ReadsKeptEntity(value: ret.Value, includeVariables: false) &&
+                _registry.IsEntityKind(type: returnType))
+            {
+                ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                    message: KeptEntityMessage(action: "You are returning", value: ret.Value,
+                        type: returnType),
+                    location: ret.Value.Location);
+            }
+
             if (!isNormalizedBareReturn && _currentRoutine.ReturnType != null &&
                 !IsAssignableTo(source: returnType, target: _currentRoutine.ReturnType))
             {

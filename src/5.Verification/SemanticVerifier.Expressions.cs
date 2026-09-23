@@ -1291,12 +1291,12 @@ public sealed partial class SemanticVerifier
         // `b = a` where `a` is a bare identifier of entity-KIND type (a bare entity, or a record/tuple that
         // transitively owns one) is a build error — copying it would make two owners of the single-owner
         // entity inside. Move it (`steal`) or hold a shareable handle.
-        if (_registry.Language == Language.RazorForge && value is IdentifierExpression &&
+        if (_registry.Language == Language.RazorForge &&
+            ReadsKeptEntity(value: value, includeVariables: true) &&
             _registry.IsEntityKind(type: valueType))
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                message: $"Cannot directly assign '{valueType.Name}': it owns a single-owner entity. " +
-                         "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                message: KeptEntityMessage(action: "You are storing", value: value, type: valueType),
                 location: location);
         }
 

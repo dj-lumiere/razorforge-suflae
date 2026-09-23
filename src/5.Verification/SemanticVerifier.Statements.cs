@@ -911,22 +911,13 @@ public sealed partial class SemanticVerifier
         // A tuple element access (`_t.item0`) is how `var (a, b) = expr` destructuring lowers: the tuple
         // is a CONSUMED temporary, so each element MOVES out — not a view of a persisting owner. Exclude it
         // (Object is a TupleTypeSymbol) so channel/pair destructuring of entity elements stays a legal move.
-        bool isEntityViewInit = varDecl.Initializer is IdentifierExpression ||
-                                varDecl.Initializer is IndexExpression
-                                {
-                                    Index: not RangeExpression
-                                } || varDecl.Initializer is MemberExpression
-                                {
-                                    Object.ResolvedType: not TupleTypeSymbol
-                                };
-        if (_registry.Language == Language.RazorForge && isEntityViewInit &&
+        if (_registry.Language == Language.RazorForge && varDecl.Initializer != null &&
+            ReadsKeptEntity(value: varDecl.Initializer, includeVariables: true) &&
             _registry.IsEntityKind(type: varType))
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                message:
-                $"You are keeping a '{varType.Name}', but it owns a single-owner entity (no copy of its " +
-                $"own), so 'var {varDecl.Name} = …' would make two owners of one value. Move it out with " +
-                "'steal' (e.g. 'remove_at'), or keep a shareable handle instead.",
+                message: KeptEntityMessage(action: $"You are keeping in '{varDecl.Name}'",
+                    value: varDecl.Initializer, type: varType),
                 location: varDecl.Location);
         }
 

@@ -1643,14 +1643,16 @@ public sealed partial class SemanticVerifier
             }
 
             if (cParam is { Type: EntityTypeSymbol } &&
-                cArgValue is IdentifierExpression or MemberExpression &&
+                ReadsKeptEntity(value: cArgValue, includeVariables: true) &&
                 creatorArgTypes[index: ci] is EntityTypeSymbol cArgEntity)
             {
+                string creatorName = string.IsNullOrEmpty(value: creator.Name)
+                    ? creator.OwnerType?.Name ?? "the creator"
+                    : creator.Name;
                 ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                    message:
-                    $"Cannot pass entity '{cArgEntity.Name}' to consuming parameter " +
-                    $"'{cParam.Name}' of '{creator.Name}' directly. Use 'steal' for " +
-                    "ownership transfer, or pass a borrow.",
+                    message: KeptEntityMessage(
+                        action: $"'{creatorName}' takes ownership of its '{cParam.Name}', and you are passing it",
+                        value: cArgValue, type: cArgEntity),
                     location: cArgValue.Location);
             }
         }

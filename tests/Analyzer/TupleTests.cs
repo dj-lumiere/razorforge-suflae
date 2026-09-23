@@ -42,7 +42,7 @@ public class TupleTests
 
                         routine test()
                           var p = Point(x: 1, y: 2)
-                          var tuple = (1, p)
+                          var tuple = (1, steal p)
                           return
                         """;
 
@@ -133,7 +133,7 @@ public class TupleTests
 
                         routine test()
                           var user = User(id: 42s32)
-                          var tuple = (1, user)
+                          var tuple = (1, steal user)
                           return
                         """;
 

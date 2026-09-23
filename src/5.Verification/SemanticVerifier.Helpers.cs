@@ -643,15 +643,61 @@ public sealed partial class SemanticVerifier
         // are Steal/Call expressions, not Identifier/Member, so they are excluded automatically.
         // Safety comes from move tracking; this check makes the destructive transfer visible in source.
         if (_registry.Language == Language.RazorForge &&
-            argValue is IdentifierExpression or MemberExpression && argType is EntityTypeSymbol &&
+            ReadsKeptEntity(value: argValue, includeVariables: true) && argType is EntityTypeSymbol &&
             paramType is EntityTypeSymbol)
         {
             ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                message:
-                $"Cannot pass entity '{argType.Name}' to consuming parameter '{param.Name}' of " +
-                $"'{routine.Name}' directly. Use 'steal' for ownership transfer, or pass a borrow.",
+                message: KeptEntityMessage(
+                    action: $"'{routine.Name}' takes ownership of its '{param.Name}', and you are passing it",
+                    value: argValue, type: argType),
                 location: argValue.Location);
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="value"/> reads an entity that something else goes on owning: a variable
+    /// (<c>x</c>), a field (<c>p.a</c>), or a container element (<c>boxes[0]</c>). Putting such a read into
+    /// a place that owns what it holds (a variable, a field, a container slot, a consuming parameter, a
+    /// returned value, a tuple) would make two owners of one entity, and for an element the container's
+    /// <c>getitem</c> would quietly duplicate it first. A range slice (<c>xs[a til b]</c>) builds a fresh
+    /// collection and a tuple item (<c>_t.item0</c>) is how destructuring moves out of a consumed tuple, so
+    /// neither counts. <paramref name="includeVariables"/> is false where a bare variable is a move (a
+    /// returned local).
+    /// </summary>
+    private static bool ReadsKeptEntity(Expression value, bool includeVariables)
+    {
+        return value switch
+        {
+            IdentifierExpression => includeVariables,
+            IndexExpression { Index: not RangeExpression } => true,
+            MemberExpression { Object.ResolvedType: not TupleTypeSymbol } => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// The RF-S413 message for a read that <see cref="ReadsKeptEntity"/> flags. <paramref name="action"/>
+    /// opens the sentence ("You are returning", "You are storing", ...) and the fix depends on the
+    /// form: an element comes out of its container through a removing routine or is worked on where it
+    /// sits, anything else is moved with <c>steal</c>. An explicit copy is offered only when the type has one.
+    /// </summary>
+    private string KeptEntityMessage(string action, Expression value, TypeSymbol type)
+    {
+        string owner = value switch
+        {
+            IdentifierExpression id => $"'{id.Name}'",
+            IndexExpression => "its container",
+            _ => "the value it belongs to"
+        };
+        string copy = ImplementsProtocol(type: type, protocolName: "Copyable")
+            ? ", or make an explicit copy with '.duplicate()'"
+            : "";
+        string fix = value is IndexExpression
+            ? $"Take it out with a removing routine (e.g. 'remove_at'){copy}, or work on it where it sits " +
+              "(a call or field write on the element reaches it in place)."
+            : $"Move it with 'steal'{copy}, or keep a shareable handle instead.";
+        return $"{action} a '{type.Name}' that {owner} still owns, which would make two owners of one " +
+               $"single-owner entity. {fix}";
     }
 
     /// <summary>

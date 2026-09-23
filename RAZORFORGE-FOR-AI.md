@@ -447,8 +447,17 @@ builder reaches it through the container's `modify_at`/`view_at` token (List,
 CircularList, Dict). In that same statement nothing may add to or remove from
 the container, directly or through a call (RF-S639), since that could move the
 element. A VALUE element works the same way (`m[i][j] = v`, `pts[k].x = v`):
-the builder writes through a copy and stores it back. Binding an entity element
-to a name (`var x = grid[0]`) still makes a copy.
+the builder writes through a copy and stores it back.
+
+**An entity element or field cannot be taken by a plain read.** `boxes[0]` and
+`p.a` read an entity their container still owns, so putting one anywhere that
+owns what it holds (`var x = boxes[0]`, `x = boxes[0]`, `p.b = boxes[0]`,
+`take(b: boxes[0])`, `holder.add_last(value: boxes[0])`, `return boxes[0]`,
+`(boxes[0], 1)`) is RF-S413: it would make two owners of one entity (a tuple
+owns its items, so a variable goes in with `steal` too: `(steal z, 1)`). Take an
+element out with a removing routine (`boxes.remove_at(index: 0)`), copy it
+explicitly when its type is `Copyable` (`grid[0].duplicate()`), or work on it
+where it sits.
 
 ## 10b. Filesystem and paths (`IO/File`, `IO/FileSystem`)
 

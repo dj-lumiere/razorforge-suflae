@@ -612,6 +612,18 @@ public sealed partial class SemanticVerifier
             TypeSymbol elementType = AnalyzeExpression(expression: tuple.Elements[i],
                 expectedType: elemExpected);
             elementTypes.Add(item: elementType);
+
+            // RF-S413: a tuple owns its items, so a variable, field or container element placed in one
+            // without `steal` would have two owners (both tear it down).
+            if (_registry.Language == Language.RazorForge &&
+                ReadsKeptEntity(value: tuple.Elements[i], includeVariables: true) &&
+                _registry.IsEntityKind(type: elementType))
+            {
+                ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                    message: KeptEntityMessage(action: "You are putting into a tuple",
+                        value: tuple.Elements[i], type: elementType),
+                    location: tuple.Elements[i].Location);
+            }
         }
 
         // Empty tuples are not allowed - use None instead
