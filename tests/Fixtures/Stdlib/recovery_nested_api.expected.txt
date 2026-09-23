@@ -1,0 +1,18 @@
+member: 4 none
+arg: 5 none
+order ok:
+  eval middle
+  -> 5
+order fails first:
+  -> none
+order fails second:
+  eval middle
+  -> none
+and: false true none
+or: true true none
+if: 1 0 none
+decl: 620 none none
+grab caught: Numeric domain error
+lookup: none
+lookup caught: Numeric domain error
+DONE

@@ -1,0 +1,91 @@
+module Tests/Stdlib/RecoveryNestedApi
+
+import IO/Console
+
+# A failable call nested inside an expression of a failable routine's body is still recovered when the
+# routine is called under `try` / `grab` / `lookup`: the recovery body splits it out in evaluation order,
+# and never runs a short-circuited operand that the original would have skipped.
+
+# Throws for an odd n, else n / 2.
+routine half!(n: S64) -> S64
+  if n % 2 != 0
+    throw NumericDomainError(description: "odd")
+  return n // 2
+
+# absent for a negative n, else n.
+routine nonneg!(n: S64) -> S64
+  if n < 0
+    absent
+  return n
+
+routine note(tag: Text, v: S64) -> S64
+  show(f"  eval {tag}")
+  return v
+
+routine plus_one(x: S64) -> S64
+  return x + 1
+
+# nested as a member-call receiver
+routine w_member!(n: S64) -> S64
+  return half(n: n).abs()
+
+# nested as an argument of a plain call
+routine w_arg!(n: S64) -> S64
+  return plus_one(x: half(n: n))
+
+# two failable calls with a plain call evaluated between them
+routine w_order!(a: S64, b: S64) -> S64
+  return half(n: a) + note(tag: "middle", v: 0) + half(n: b)
+
+# the right side of `and` runs only when the left is true
+routine w_and!(n: S64) -> Bool
+  return n > 0 and half(n: n) > 1
+
+# the right side of `or` runs only when the left is false
+routine w_or!(n: S64) -> Bool
+  return n < 0 or half(n: n) > 1
+
+# nested in an `if` condition
+routine w_if!(n: S64) -> S64
+  if half(n: n) > 2
+    return 1
+  return 0
+
+# nested in a declaration initializer and in an assignment value
+routine w_decl!(n: S64) -> S64
+  var x = half(n: n) * 10
+  x = x + nonneg(n: n - 100)
+  return x
+
+routine start()
+  show(f"member: {try w_member(n: 8)} {try w_member(n: 3)}")
+  show(f"arg: {try w_arg(n: 8)} {try w_arg(n: 3)}")
+  show("order ok:")
+  show(f"  -> {try w_order(a: 4, b: 6)}")
+  show("order fails first:")
+  show(f"  -> {try w_order(a: 3, b: 6)}")
+  show("order fails second:")
+  show(f"  -> {try w_order(a: 4, b: 5)}")
+  show(f"and: {try w_and(n: -3)} {try w_and(n: 8)} {try w_and(n: 3)}")
+  show(f"or: {try w_or(n: -3)} {try w_or(n: 8)} {try w_or(n: 3)}")
+  show(f"if: {try w_if(n: 8)} {try w_if(n: 2)} {try w_if(n: 3)}")
+  show(f"decl: {try w_decl(n: 120)} {try w_decl(n: 7)} {try w_decl(n: 8)}")
+
+  var g = grab w_member(n: 3)
+  when g
+    is S64 v                => show(f"grab: {v}")
+    is NumericDomainError e => show(f"grab caught: {e.crash_title()}")
+    else                    => show("grab: other error")
+  var l = lookup w_decl(n: 8)
+  when l
+    is S64 v => show(f"lookup: {v}")
+    is None  => show("lookup: none")
+    else     => show("lookup: error")
+  var l2 = lookup w_decl(n: 7)
+  when l2
+    is S64 v                => show(f"lookup: {v}")
+    is None                 => show("lookup: none")
+    is NumericDomainError e => show(f"lookup caught: {e.crash_title()}")
+    else                    => show("lookup: other error")
+  show("DONE")
+  return

@@ -1,6 +1,7 @@
 using Builder.Desugaring;
 using Builder.Declaration;
 using SyntaxTree;
+using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
@@ -493,6 +494,25 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     private static Statement TransformBodyCore(Statement body, ErrorHandlingVariantKind kind,
         VariantCallRewriter? rewriter, TypeRegistry? registry, bool nextOnly)
     {
+        // A lone statement outside a block (e.g. an `if` branch that is a bare `return f().item0`) gets the
+        // same nested-failable split as block members. The hoisted temps then need a block to live in.
+        if (body is not BlockStatement && TryHoistNestedFailables(stmt: body,
+                kind: kind,
+                registry: registry,
+                nextOnly: nextOnly,
+                hoisted: out List<Statement>? hoisted,
+                residual: out Statement? residual))
+        {
+            var stmts = new List<Statement>(collection: hoisted!) { residual! };
+            return new BlockStatement(Statements: TransformBlockStatements(stmts: stmts,
+                    start: 0,
+                    kind: kind,
+                    rewriter: rewriter,
+                    registry: registry,
+                    nextOnly: nextOnly),
+                Location: body.Location);
+        }
+
         return body switch
         {
             // `pierce` stays a crash even inside a try_/check_ variant — it pierces through the
@@ -748,6 +768,27 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         {
             Statement s = stmts[index: i];
 
+            // A failable call NESTED inside the statement (`return f().item0`, `g(f())`) is invisible to the
+            // statement-shaped propagation below. Split it into its own `var` first (A-normal form), then
+            // process the hoisted declarations and the residual statement like any others.
+            if (TryHoistNestedFailables(stmt: s,
+                    kind: kind,
+                    registry: registry,
+                    nextOnly: nextOnly,
+                    hoisted: out List<Statement>? hoisted,
+                    residual: out Statement? residual))
+            {
+                var respliced = new List<Statement>(collection: hoisted!) { residual! };
+                respliced.AddRange(collection: stmts.Skip(count: i + 1));
+                result.AddRange(collection: TransformBlockStatements(stmts: respliced,
+                    start: 0,
+                    kind: kind,
+                    rewriter: rewriter,
+                    registry: registry,
+                    nextOnly: nextOnly));
+                return result;
+            }
+
             if (kind == ErrorHandlingVariantKind.Try && registry != null && TryBuildTryPropagation(
                     stmt: s,
                     registry: registry,
@@ -821,6 +862,254 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Splits a statement whose failable calls are NESTED inside an expression into A-normal form, so the
+    /// statement-shaped propagation (<see cref="TryBuildTryPropagation"/> / <see cref="TryBuildCarrierSafeCall"/>)
+    /// and the tail rewriter can see them. <c>return v.sqrtrem().item0</c> becomes
+    /// <c>var __rf_hoist_0 = v.sqrtrem()</c> then <c>return __rf_hoist_0.item0</c>.
+    ///
+    /// Only eagerly evaluated positions are split: the value of a <c>return</c>, a variable initializer, an
+    /// expression / <c>discard</c> statement, an assignment's value, and an <c>if</c> condition (evaluated once,
+    /// before either branch). Inside an expression, conditionally evaluated operands are never hoisted
+    /// ahead of their condition: an <c>and</c>/<c>or</c> whose right side holds a failable call is lowered to
+    /// <c>var t = left</c> plus an <c>if</c> that assigns the right side only when it would run, so that call
+    /// is split out inside the branch. The right side of <c>??</c>, the branches of a conditional
+    /// expression, the third and later operands of a chained comparison, and loop conditions (which re-run
+    /// every iteration) are left as they are.
+    ///
+    /// Evaluation order is preserved: every call evaluated up to the LAST nested failable call is hoisted in
+    /// evaluation order, failable or not, so a plain call that ran before the failable one still does. A
+    /// statement whose ROOT is itself a failable call (<c>return f(...)</c>, <c>var x = f(...)</c>, a bare
+    /// <c>f(...)</c>) keeps that root in place, since the existing paths handle it, and only its nested calls
+    /// are split out. Returns false when nothing needs splitting, or when no propagation would follow.
+    /// </summary>
+    private static bool TryHoistNestedFailables(Statement stmt, ErrorHandlingVariantKind kind,
+        TypeRegistry? registry, bool nextOnly, out List<Statement>? hoisted, out Statement? residual)
+    {
+        hoisted = null;
+        residual = null;
+
+        // Split only when a propagation path will consume the hoisted declarations: Try always (with a
+        // registry), Check/Lookup only on the global path-1 (see TransformBlockStatements).
+        bool propagationAvailable = registry != null && (kind == ErrorHandlingVariantKind.Try ||
+                                                         (kind is ErrorHandlingVariantKind.Check
+                                                              or ErrorHandlingVariantKind.Lookup &&
+                                                          !nextOnly));
+        if (!propagationAvailable)
+        {
+            return false;
+        }
+
+        // Same restriction as the statement-shaped propagation: the monomorphized path-2 only threads
+        // inner `emit` calls.
+        bool Propagates(CallExpression call)
+        {
+            RoutineInfo? rr = call.ResolvedRoutine;
+            if (rr == null || !(rr.IsFailable || rr.HasThrow || rr.HasAbsent))
+            {
+                return false;
+            }
+
+            return !nextOnly || (rr.OriginalName ?? rr.Name) == "emit";
+        }
+
+        (Expression? root, bool keepRootCall) = stmt switch
+        {
+            ReturnStatement { Value: { } v } => (v, v is CallExpression c && Propagates(call: c)),
+            DeclarationStatement { Declaration: VariableDeclaration { Initializer: { } init } } =>
+                (init, init is CallExpression c && Propagates(call: c)),
+            ExpressionStatement { Expression: var e } => (e, e is CallExpression c && Propagates(call: c)),
+            DiscardStatement { Expression: var e } => (e, false),
+            AssignmentStatement { Value: var v } => (v, false),
+            IfStatement { Condition: var c } => (c, false),
+            _ => ((Expression?)null, false)
+        };
+        if (root == null)
+        {
+            return false;
+        }
+
+        // Pass 1: classify every eagerly evaluated call in evaluation (post-) order.
+        var scan = new NestedFailableHoister(propagates: Propagates, hoistUpTo: -1, skipIndex: -1);
+        scan.VisitExpression(expr: root);
+        List<bool> failable = scan.CallIsFailable;
+        int rootIndex = keepRootCall ? failable.Count - 1 : -1;
+        int last = -1;
+        for (int i = 0; i < failable.Count; i++)
+        {
+            if (failable[index: i] && i != rootIndex)
+            {
+                last = i;
+            }
+        }
+
+        if (last < 0)
+        {
+            return false;
+        }
+
+        // Pass 2: hoist every call up to and including the last nested failable one (the kept root excepted).
+        var hoister = new NestedFailableHoister(propagates: Propagates, hoistUpTo: last, skipIndex: rootIndex);
+        Expression newRoot = hoister.VisitExpression(expr: root);
+        hoisted = hoister.Hoisted;
+        residual = stmt switch
+        {
+            ReturnStatement r => r with { Value = newRoot },
+            DeclarationStatement { Declaration: VariableDeclaration vd } d =>
+                d with { Declaration = vd with { Initializer = newRoot } },
+            ExpressionStatement es => es with { Expression = newRoot },
+            DiscardStatement ds => ds with { Expression = newRoot },
+            AssignmentStatement a => a with { Value = newRoot },
+            IfStatement ifs => ifs with { Condition = newRoot },
+            _ => stmt
+        };
+        return true;
+    }
+
+    private static int _hoistTemp;
+
+    /// <summary>
+    /// Walks one expression in evaluation order, skipping conditionally evaluated operands. Every
+    /// <see cref="CallExpression"/> it reaches gets a sequence index (post-order). The scan mode
+    /// (<c>hoistUpTo</c> = -1) only records which indices are propagatable failable calls. The hoist mode
+    /// moves each call with index &lt;= <c>hoistUpTo</c> (except <c>skipIndex</c>) into a fresh
+    /// <c>var __rf_hoist_N = call</c> in <see cref="Hoisted"/> and replaces it with a reference to the temp.
+    /// An entity-typed temp is referenced through <c>steal</c>, which keeps the original meaning of the
+    /// call's result as a temporary that is moved into its use rather than a named local the scope destroys.
+    /// </summary>
+    private sealed class NestedFailableHoister(Func<CallExpression, bool> propagates, int hoistUpTo,
+        int skipIndex) : AstRewriter
+    {
+        private int _index;
+
+        /// <summary>Per reached call, in evaluation order: is it a propagatable failable call.</summary>
+        public List<bool> CallIsFailable { get; } = [];
+
+        /// <summary>The hoisted temp declarations, in evaluation order.</summary>
+        public List<Statement> Hoisted { get; } = [];
+
+        protected override Expression VisitCall(CallExpression e)
+        {
+            Expression rewritten = base.VisitCall(e: e);
+            int index = _index++;
+            if (rewritten is not CallExpression call)
+            {
+                return rewritten;
+            }
+
+            CallIsFailable.Add(item: propagates(arg: call));
+            if (index > hoistUpTo || index == skipIndex)
+            {
+                return call;
+            }
+
+            string tempName = $"__rf_hoist_{Interlocked.Increment(location: ref _hoistTemp)}";
+            Hoisted.Add(item: new DeclarationStatement(Declaration: new VariableDeclaration(
+                    Name: tempName,
+                    Type: null,
+                    Initializer: call,
+                    Visibility: VisibilityModifier.Secret,
+                    Location: call.Location),
+                Location: call.Location));
+            var reference = new IdentifierExpression(Name: tempName, Location: call.Location)
+            {
+                ResolvedType = call.ResolvedType
+            };
+            return call.ResolvedType?.Category == TypeCategory.Entity
+                ? new StealExpression(Operand: reference, Location: call.Location)
+                {
+                    ResolvedType = call.ResolvedType
+                }
+                : reference;
+        }
+
+        protected override Expression VisitBinary(BinaryExpression e)
+        {
+            if (e.Operator is not (BinaryOperator.And or BinaryOperator.Or or BinaryOperator.NoneCoalesce))
+            {
+                return base.VisitBinary(e: e);
+            }
+
+            // Short-circuit: only the left operand always runs.
+            Expression left = VisitExpression(expr: e.Left);
+            Expression kept = ReferenceEquals(objA: left, objB: e.Left) ? e : e with { Left = left };
+            if (e.Operator == BinaryOperator.NoneCoalesce || !RightHasFailable(right: e.Right))
+            {
+                return kept;
+            }
+
+            // `and` / `or` with a failable call on the right: the right side counts as one failable step in
+            // evaluation order (after the left), so everything before it is hoisted too.
+            int index = _index++;
+            CallIsFailable.Add(item: true);
+            if (index > hoistUpTo || index == skipIndex)
+            {
+                return kept;
+            }
+
+            // Lower to statements so the right side still runs only when needed:
+            //   var t = <left>
+            //   if t       (and)        |  if t (or): nothing, else t = <right>
+            //     t = <right>
+            // The assignment's failable calls are split out again when the branch itself is transformed.
+            string tempName = $"__rf_lazy_{Interlocked.Increment(location: ref _hoistTemp)}";
+            SourceLocation loc = e.Location;
+            Hoisted.Add(item: new DeclarationStatement(Declaration: new VariableDeclaration(Name: tempName,
+                    Type: null,
+                    Initializer: left,
+                    Visibility: VisibilityModifier.Secret,
+                    Location: loc),
+                Location: loc));
+            IdentifierExpression Ref() => new(Name: tempName, Location: loc) { ResolvedType = e.ResolvedType };
+            var assignRight = new BlockStatement(
+                Statements: [new AssignmentStatement(Target: Ref(), Value: e.Right, Location: loc)],
+                Location: loc);
+            Hoisted.Add(item: e.Operator == BinaryOperator.And
+                ? new IfStatement(Condition: Ref(), ThenStatement: assignRight, ElseStatement: null, Location: loc)
+                : new IfStatement(Condition: Ref(),
+                    ThenStatement: new BlockStatement(Statements: [], Location: loc),
+                    ElseStatement: assignRight,
+                    Location: loc));
+            return Ref();
+        }
+
+        // Whether a conditionally evaluated operand holds a propagatable failable call anywhere.
+        private bool RightHasFailable(Expression right)
+        {
+            var probe = new NestedFailableHoister(propagates: propagates, hoistUpTo: -1, skipIndex: -1);
+            probe.VisitExpression(expr: right);
+            return probe.CallIsFailable.Contains(item: true);
+        }
+
+        protected override Expression VisitConditional(ConditionalExpression e)
+        {
+            // Only the condition always runs.
+            Expression condition = VisitExpression(expr: e.Condition);
+            return ReferenceEquals(objA: condition, objB: e.Condition) ? e : e with { Condition = condition };
+        }
+
+        protected override Expression VisitChainedComparison(ChainedComparisonExpression e)
+        {
+            // `a < b < c` stops after the first false link, so only the first two operands always run.
+            var operands = new List<Expression>(collection: e.Operands);
+            bool changed = false;
+            for (int i = 0; i < operands.Count && i < 2; i++)
+            {
+                Expression visited = VisitExpression(expr: operands[index: i]);
+                changed |= !ReferenceEquals(objA: visited, objB: operands[index: i]);
+                operands[index: i] = visited;
+            }
+
+            return changed ? e with { Operands = operands } : e;
+        }
+
+        protected override Expression VisitRecovery(RecoveryExpression e)
+        {
+            // A nested recovery keyword already handles its own failures.
+            return e;
+        }
     }
 
     /// <summary>

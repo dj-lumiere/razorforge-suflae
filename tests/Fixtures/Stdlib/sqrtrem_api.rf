@@ -49,13 +49,9 @@ routine start()
   show("DONE")
   return
 
-# Wrappers exposing the failable `sqrtrem` for try_ generation (the tuple result is reduced to the root).
-# The call is bound to a variable first: try_ synthesis only rewrites a failable call that is a whole
-# declaration initializer, a statement, or a returned value, not one nested inside an expression.
+# Failable wrappers reducing the tuple to the root, so `try` can recover the negative case.
 routine s64_sqrtrem!(value: S64) -> S64
-  var r = value.sqrtrem()
-  return r.item0
+  return value.sqrtrem().item0
 
 routine integer_sqrtrem!(value: Integer) -> Integer
-  var r = value.sqrtrem()
-  return r.item0
+  return value.sqrtrem().item0
