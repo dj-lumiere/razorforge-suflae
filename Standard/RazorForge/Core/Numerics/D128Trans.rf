@@ -2,7 +2,7 @@ module Core
 
 # ============================================================================
 # D128Trans — decimal128 (Pmax=34) transcendentals + libm surface via the
-# UNIFORM W=192 engine (UnpackedFloat[U192, U384, 192], ~190-bit significand
+# UNIFORM W=192 engine (UnpackedFloat[3, 6], ~190-bit significand
 # ~57 decimal digits). A D128 value is widened to the W=192 engine value, run
 # through the (already 34-digit-correct) engine transcendental, and rounded
 # back to 34 digits: the W=192 error lands near digit ~57, far below the
@@ -11,7 +11,7 @@ module Core
 # engine and land faithful to ~114 bits).
 #
 # There is no packed 192-bit float type, so the intermediate carrier here is
-# the engine value UnpackedFloat[U192, U384, 192] directly (its 190-bit
+# the engine value UnpackedFloat[3, 6] directly (its 190-bit
 # mantissa holds the up-to-126-bit D128 coefficient exactly). The special
 # funcs erf/erfc/tgamma/lgamma use the GENERIC W=192 engine cores; the
 # W-dispatched coefficient tables (gamma_coef, erf CF) self-size at W=192.
@@ -24,69 +24,90 @@ module Core
 ### Builds the W=192 engine value of a U128 integer with the given sign (exact;
 ### coeff <= 126 bits fits the 190-bit significand). MSB lands at bit 190 (W-2).
 ### Mirrors B128.to_uf192's normalized-build convention.
-routine uf192_from_u128(c: U128, sign: Bool) -> UnpackedFloat[U192, U384, 192]
+routine uf192_from_u128(c: U128, sign: Bool) -> UnpackedFloat[3, 6]
   if LLVM::int_eq(a: c, b: 0_u128)
-    return UnpackedFloat[U192, U384, 192].zero(sign: sign)
-  var cw = LLVM::zero_extend[U128, U192](c)
-  var x = LLVM::sub(a: 192_s64, b: LLVM::int_truncate[U192, S64](LLVM::leading_zeros(cw)))
-  var mant = LLVM::shift_left(value: cw, bits: U192.to_width(s: LLVM::sub(a: 191_s64, b: x)))
-  return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    return UnpackedFloat[3, 6].zero(sign: sign)
+  var cw = wide_from_u128[3](v: c)
+  var x = LLVM::sub(a: 192_s64, b: cw.wide_clz())
+  var mant = cw.wide_shl(n: LLVM::sub(a: 191_s64, b: x))
+  return UnpackedFloat[3, 6].make(mant: mant, exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
-### Rounds the engine value (assumed a positive ~integer) to a U384, round-half-even.
-### shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
-routine uf192_to_u384_round(u: UnpackedFloat[U192, U384, 192]) -> U384
-  var mw = LLVM::zero_extend[U192, U384](u.mant)
+### Rounds the engine value (assumed a positive ~integer) to a 384-bit (6-limb) integer,
+### round-half-even. shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
+routine uf192_to_limbs6_round(u: UnpackedFloat[3, 6]) -> Array[U64, 6]
+  var mw = wide_resize[3, 6](a: u.mant)
   var shift = LLVM::sub(a: 189_s64, b: u.exp)
   if LLVM::signed_le(a: shift, b: 0_s64)
-    return LLVM::shift_left(value: mw, bits: U384.to_width(s: LLVM::sub(a: 0_s64, b: shift)))
+    return mw.wide_shl(n: LLVM::sub(a: 0_s64, b: shift))
   if LLVM::signed_ge(a: shift, b: 384_s64)
-    return LLVM::zero_extend[U64, U384](0_u64)
-  var q = LLVM::shift_right_unsigned(mw, U384.to_width(s: shift))
-  var lost = LLVM::bit_and(a: mw, b: U384.low_mask(n: shift))
-  var half = LLVM::shift_left[U384](value: 1, bits: U384.to_width(s: LLVM::sub[S64](a: shift, b: 1_s64)))
-  if LLVM::unsigned_gt(a: lost, b: half)
-    q = LLVM::add[U384](a: q, b: 1)
-  elseif LLVM::int_eq[U384](a: lost, b: half) and LLVM::int_ne[U384](a: LLVM::bit_and[U384](a: q, b: 1), b: 0)
-    q = LLVM::add[U384](a: q, b: 1)
+    return Array[U64, 6]()
+  var q = mw.wide_shl(n: LLVM::sub(a: 0_s64, b: shift))
+  var lost = mw.wide_keep_low(n: shift)
+  var half = wide_bit_at[6](pos: LLVM::sub[S64](a: shift, b: 1_s64))
+  var lh = lost.wide_cmp(you: half)
+  if LLVM::signed_gt(a: lh, b: 0_s64)
+    q = q.wide_add_u64(v: 1_u64)
+  elseif LLVM::int_eq(a: lh, b: 0_s64) and q.wide_bit(pos: 0_s64)
+    q = q.wide_add_u64(v: 1_u64)
   return q
 
-### Builds the W=192 engine value of a non-negative U384 EXACT integer with the given sign,
-### rounding the (up to 384-bit) integer to the 190-bit significand ONCE (round-half-even).
+### Builds the W=192 engine value of a non-negative 384-bit (6-limb) EXACT integer with the given
+### sign, rounding the integer to the 190-bit significand ONCE (round-half-even).
 ### The single-rounding contract: fed the exact `coeff * 10^exp` big integer, this returns the
 ### correctly-rounded engine value (strictly better than a coeff-load then engine-multiply, which
 ### rounds twice). MSB of the rounded mantissa lands at bit 190 (W-2); exp per the engine's
 ### value = mant * 2^(exp - 189) convention.
-routine uf192_from_u384(n: U384, sign: Bool) -> UnpackedFloat[U192, U384, 192]
-  if LLVM::int_eq[U384](a: n, b: 0)
-    return UnpackedFloat[U192, U384, 192].zero(sign: sign)
+routine uf192_from_limbs6(n: Array[U64, 6], sign: Bool) -> UnpackedFloat[3, 6]
+  if n.wide_is_zero()
+    return UnpackedFloat[3, 6].zero(sign: sign)
   # b = bit length of n; the rounded value has exp = b - 2 (adjusted +1 on a rounding carry).
-  var b = LLVM::sub(a: 384_s64, b: LLVM::int_truncate[U384, S64](LLVM::leading_zeros(n)))
+  var b = LLVM::sub(a: 384_s64, b: n.wide_clz())
   var sh = LLVM::sub(a: b, b: 191_s64)
   var exp = LLVM::sub(a: b, b: 2_s64)
   if LLVM::signed_le(a: sh, b: 0_s64)
     # n fits the significand exactly: shift the MSB up to bit 190, no rounding.
-    var mant = LLVM::int_truncate[U384, U192](LLVM::shift_left(value: n, bits: U384.to_width(s: LLVM::sub(a: 0_s64, b: sh))))
-    return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: exp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var mant = wide_resize[6, 3](a: n.wide_shl(n: LLVM::sub(a: 0_s64, b: sh)))
+    return UnpackedFloat[3, 6].make(mant: mant, exp: exp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   # sh > 0: q = n >> sh, round-half-even on the sh dropped low bits.
-  var q = LLVM::shift_right_unsigned(n, U384.to_width(s: sh))
-  var lost = LLVM::bit_and(a: n, b: U384.low_mask(n: sh))
-  var half = LLVM::shift_left[U384](value: 1, bits: U384.to_width(s: LLVM::sub[S64](a: sh, b: 1_s64)))
-  if LLVM::unsigned_gt(a: lost, b: half)
-    q = LLVM::add[U384](a: q, b: 1)
-  elseif LLVM::int_eq[U384](a: lost, b: half) and LLVM::int_ne[U384](a: LLVM::bit_and[U384](a: q, b: 1), b: 0)
-    q = LLVM::add[U384](a: q, b: 1)
+  var q = n.wide_shl(n: LLVM::sub(a: 0_s64, b: sh))
+  var lost = n.wide_keep_low(n: sh)
+  var half = wide_bit_at[6](pos: LLVM::sub[S64](a: sh, b: 1_s64))
+  var lh = lost.wide_cmp(you: half)
+  if LLVM::signed_gt(a: lh, b: 0_s64)
+    q = q.wide_add_u64(v: 1_u64)
+  elseif LLVM::int_eq(a: lh, b: 0_s64) and q.wide_bit(pos: 0_s64)
+    q = q.wide_add_u64(v: 1_u64)
   # A round-up may carry the MSB from bit 190 to bit 191 (q == 2^191): renormalize.
-  var lead192 = LLVM::shift_left[U384](value: 1, bits: U384.to_width(s: 191_s64))
-  if LLVM::unsigned_ge(a: q, b: lead192)
-    q = LLVM::shift_right_unsigned(q, U384.to_width(s: 1_s64))
+  if q.wide_bit(pos: 191_s64)
+    q = q.wide_shl(n: -1_s64)
     exp = LLVM::add(a: exp, b: 1_s64)
-  return UnpackedFloat[U192, U384, 192].make(mant: LLVM::int_truncate[U384, U192](q), exp: exp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  return UnpackedFloat[3, 6].make(mant: wide_resize[6, 3](a: q), exp: exp, fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+
+### A U256 as 6 limbs (zero-extended).
+routine u256_to_limbs6(c: U256) -> Array[U64, 6]
+  var r = Array[U64, 6]()
+  var i = 0_s64
+  while i < 4
+    var ui = LLVM::reinterpret_bits[S64, U64](i)
+    r[ui] = LLVM::int_truncate[U256, U64](LLVM::shift_right_unsigned(c, LLVM::zero_extend[U64, U256](ui * 64)))
+    i = i + 1
+  return r
+
+### The low 256 bits of a 6-limb integer as a U256.
+routine limbs6_low_u256(a: Array[U64, 6]) -> U256
+  var r = LLVM::zero_extend[U64, U256](0_u64)
+  var i = 3_s64
+  while i >= 0
+    var ui = LLVM::reinterpret_bits[S64, U64](i)
+    r = LLVM::bit_or(a: LLVM::shift_left(value: r, bits: LLVM::zero_extend[U64, U256](64_u64)), b: LLVM::zero_extend[U64, U256](a[ui]))
+    i = i - 1
+  return r
 
 ### Builds the W=192 engine value of a non-negative U256 EXACT integer (round-half-even into the
 ### 190-bit significand). Used to load an exact power-of-ten table entry (10^k for k up to 76, which
 ### exceeds 190 bits for k > 57 and so genuinely rounds).
-routine uf192_from_u256(c: U256, sign: Bool) -> UnpackedFloat[U192, U384, 192]
-  return uf192_from_u384(n: LLVM::zero_extend[U256, U384](c), sign: sign)
+routine uf192_from_u256(c: U256, sign: Bool) -> UnpackedFloat[3, 6]
+  return uf192_from_limbs6(n: u256_to_limbs6(c: c), sign: sign)
 
 # ============================================================================
 # Power-of-ten table for the W=192 engine (sqrt-split, both signs, NO division).
@@ -117,28 +138,28 @@ secret preset POW10_LOW_NEG_EXP: Array[S64, 79] = [-1_s64, -5_s64, -8_s64, -11_s
 
 ### Reads a W=192 engine value from a 3-limb MANT preset (stride 3, h2:h1:h0 high->low) and its
 ### EXP preset at logical index `idx`. Every table entry is a positive normal.
-routine pow10_high_pos(idx: U64) -> UnpackedFloat[U192, U384, 192]
+routine pow10_high_pos(idx: U64) -> UnpackedFloat[3, 6]
   var p = LLVM::mul(a: idx, b: 3_u64)
-  return UnpackedFloat[U192, U384, 192].make(mant: U192.from_words3(h2: POW10_HIGH_POS_MANT[p], h1: POW10_HIGH_POS_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_HIGH_POS_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_HIGH_POS_EXP[idx], fpclass: POSITIVE_NORMAL)
+  return UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: POW10_HIGH_POS_MANT[p], h1: POW10_HIGH_POS_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_HIGH_POS_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_HIGH_POS_EXP[idx], fpclass: POSITIVE_NORMAL)
 
-routine pow10_low_pos(idx: U64) -> UnpackedFloat[U192, U384, 192]
+routine pow10_low_pos(idx: U64) -> UnpackedFloat[3, 6]
   var p = LLVM::mul(a: idx, b: 3_u64)
-  return UnpackedFloat[U192, U384, 192].make(mant: U192.from_words3(h2: POW10_LOW_POS_MANT[p], h1: POW10_LOW_POS_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_LOW_POS_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_LOW_POS_EXP[idx], fpclass: POSITIVE_NORMAL)
+  return UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: POW10_LOW_POS_MANT[p], h1: POW10_LOW_POS_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_LOW_POS_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_LOW_POS_EXP[idx], fpclass: POSITIVE_NORMAL)
 
-routine pow10_high_neg(idx: U64) -> UnpackedFloat[U192, U384, 192]
+routine pow10_high_neg(idx: U64) -> UnpackedFloat[3, 6]
   var p = LLVM::mul(a: idx, b: 3_u64)
-  return UnpackedFloat[U192, U384, 192].make(mant: U192.from_words3(h2: POW10_HIGH_NEG_MANT[p], h1: POW10_HIGH_NEG_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_HIGH_NEG_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_HIGH_NEG_EXP[idx], fpclass: POSITIVE_NORMAL)
+  return UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: POW10_HIGH_NEG_MANT[p], h1: POW10_HIGH_NEG_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_HIGH_NEG_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_HIGH_NEG_EXP[idx], fpclass: POSITIVE_NORMAL)
 
-routine pow10_low_neg(idx: U64) -> UnpackedFloat[U192, U384, 192]
+routine pow10_low_neg(idx: U64) -> UnpackedFloat[3, 6]
   var p = LLVM::mul(a: idx, b: 3_u64)
-  return UnpackedFloat[U192, U384, 192].make(mant: U192.from_words3(h2: POW10_LOW_NEG_MANT[p], h1: POW10_LOW_NEG_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_LOW_NEG_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_LOW_NEG_EXP[idx], fpclass: POSITIVE_NORMAL)
+  return UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: POW10_LOW_NEG_MANT[p], h1: POW10_LOW_NEG_MANT[LLVM::add(a: p, b: 1_u64)], h0: POW10_LOW_NEG_MANT[LLVM::add(a: p, b: 2_u64)]), exp: POW10_LOW_NEG_EXP[idx], fpclass: POSITIVE_NORMAL)
 
 ### 10^e as a W=192 engine value, over the full decimal128 exponent span (|e| <= 6176), via the
 ### sqrt-split table: a = |e|, hi = a / 79, lo = a % 79; result = HIGH[hi] * LOW[lo] with the
 ### positive or negative tables per sign(e). ONE engine multiply, no division, no binary-exp loop.
 ### Each table entry is correctly rounded to ~57 decimal digits, so the product is faithful to
 ### ~56 digits, far tighter than D128's 34-digit target.
-routine uf192_pow10(e: S64) -> UnpackedFloat[U192, U384, 192]
+routine uf192_pow10(e: S64) -> UnpackedFloat[3, 6]
   var neg = LLVM::signed_lt(a: e, b: 0_s64)
   var a = if neg then LLVM::sub(a: 0_s64, b: e) else e
   var au = LLVM::reinterpret_bits[S64, U64](a)
@@ -160,23 +181,23 @@ routine uf192_pow10(e: S64) -> UnpackedFloat[U192, U384, 192]
 ### The coeff may carry up to 38 digits (<= 126 bits); the 190-bit significand holds it exactly.
 ###
 ### exp >= 0 within the exact-table range (0..76): form the EXACT big integer coeff * 10^exp
-###   (<= 126 + 253 = 379 bits, fits the U384 scratch) and round it to the significand ONCE ->
+###   (<= 126 + 253 = 379 bits, fits 6 limbs) and round it to the significand ONCE ->
 ###   correctly rounded, no engine-multiply loop, no faithful pow10 error.
 ### exp < 0 within range: value = coeff / 10^|exp| — load 10^|exp| exactly and do ONE engine
 ###   divide (correctly rounded by the engine), instead of building 10^|exp| by binary-exp.
 ### Out of the table's exact-integer range: fall back to coeff-load times uf192_pow10 (whose own
 ###   sqrt-split table covers the full D128 exponent span; only the rare extremes reach here).
-routine d128parts_to_uf192(p: D128Parts) -> UnpackedFloat[U192, U384, 192]
+routine d128parts_to_uf192(p: D128Parts) -> UnpackedFloat[3, 6]
   if LLVM::int_eq(a: p.special, b: 1_u64)
-    return UnpackedFloat[U192, U384, 192].inf(sign: p.sign)
+    return UnpackedFloat[3, 6].inf(sign: p.sign)
   if LLVM::unsigned_ge(a: p.special, b: 2_u64)
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   if LLVM::int_eq(a: p.coeff, b: 0_u128)
-    return UnpackedFloat[U192, U384, 192].zero(sign: p.sign)
+    return UnpackedFloat[3, 6].zero(sign: p.sign)
   if LLVM::signed_ge(a: p.exp, b: 0_s64) and LLVM::signed_le(a: p.exp, b: 76_s64)
-    # Exact integer coeff * 10^exp in U384, rounded once.
-    var prod = LLVM::mul(a: LLVM::zero_extend[U128, U384](p.coeff), b: LLVM::zero_extend[U256, U384](pow10_tbl(k: p.exp)))
-    return uf192_from_u384(n: prod, sign: p.sign)
+    # Exact integer coeff * 10^exp in 384 bits (<= 126 + 253 = 379), rounded once.
+    var prod = wide_mul_to[6, 6](a: wide_from_u128[6](v: p.coeff), b: u256_to_limbs6(c: pow10_tbl(k: p.exp)))
+    return uf192_from_limbs6(n: prod, sign: p.sign)
   if LLVM::signed_lt(a: p.exp, b: 0_s64) and LLVM::signed_ge(a: p.exp, b: -76_s64)
     # coeff / 10^|exp|: exact coeff load, exact 10^|exp| load, one engine divide.
     var num = uf192_from_u128(c: p.coeff, sign: p.sign)
@@ -185,11 +206,11 @@ routine d128parts_to_uf192(p: D128Parts) -> UnpackedFloat[U192, U384, 192]
   return uf192_from_u128(c: p.coeff, sign: p.sign).mul(you: uf192_pow10(e: p.exp))
 
 ### dec -> bin: D128 value as a W=192 engine value (coeff exact, scaled by 10^exp).
-routine d128_to_uf192(x: D128) -> UnpackedFloat[U192, U384, 192]
+routine d128_to_uf192(x: D128) -> UnpackedFloat[3, 6]
   return d128parts_to_uf192(p: x.decode())
 
 ### bin -> dec: W=192 engine value as a D128, correctly rounded to <=34 digits.
-routine uf192_to_d128(x: UnpackedFloat[U192, U384, 192]) -> D128
+routine uf192_to_d128(x: UnpackedFloat[3, 6]) -> D128
   if x.isnan()
     return D128.quiet_nan()
   if x.isinf()
@@ -202,15 +223,15 @@ routine uf192_to_d128(x: UnpackedFloat[U192, U384, 192]) -> D128
   var decexp = LLVM::signed_div(a: LLVM::mul(a: e_bin, b: 315653_s64), b: 1048576_s64)
   var q = LLVM::sub(a: 40_s64, b: decexp)
   var scaled = x.abs().mul(you: uf192_pow10(e: q))
-  var coeff = uf192_to_u384_round(u: scaled)
+  var coeff = uf192_to_limbs6_round(u: scaled)
   # Normalize the result cohort: pref = qmax (6111) makes decfinB strip ALL trailing zeros
   # after rounding to 34 digits, so a float->decimal result is stored reduced (e.g. exp2(10)
   # is 1024×10^0, not 1024×10^-30) rather than padded to a fixed ~34-digit fraction.
-  return d128_of_parts(p: decfinB(sign: sign, coeff: LLVM::int_truncate[U384, U256](coeff), exp: LLVM::sub(a: 0_s64, b: q), pref: 6111_s64))
+  return d128_of_parts(p: decfinB(sign: sign, coeff: limbs6_low_u256(a: coeff), exp: LLVM::sub(a: 0_s64, b: q), pref: 6111_s64))
 
 # ============================================================================
 # Transcendentals — decode to the W=192 engine, run the engine core, round back
-# to D128. The generic UnpackedFloat[U192, U384, 192] carries the full method
+# to D128. The generic UnpackedFloat[3, 6] carries the full method
 # surface (exp/log/trig/hyperbolic/...).
 # ============================================================================
 
@@ -255,7 +276,7 @@ routine D128.exp2!() -> D128
 
 ### Raw 2^me via the W=192 core; may return ±inf or NaN; never crashes.
 routine D128.exp2_unchecked() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).mul(you: UnpackedFloat[U192, U384, 192].ln2()).exp(n: 20_s64))
+  return uf192_to_d128(x: d128_to_uf192(x: me).mul(you: UnpackedFloat[3, 6].ln2()).exp(n: 20_s64))
 
 ### 10^me. Crashes: NumericDomainError on NaN, NumericOverflowError on ±inf.
 routine D128.exp10!() -> D128
@@ -268,7 +289,7 @@ routine D128.exp10!() -> D128
 
 ### Raw 10^me via the W=192 core; may return ±inf or NaN; never crashes.
 routine D128.exp10_unchecked() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).mul(you: UnpackedFloat[U192, U384, 192].ln10()).exp(n: 20_s64))
+  return uf192_to_d128(x: d128_to_uf192(x: me).mul(you: UnpackedFloat[3, 6].ln10()).exp(n: 20_s64))
 
 ### Natural log ln(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError on
 ### ±inf (e.g. log(0) = -inf).
@@ -309,7 +330,7 @@ routine D128.log2!() -> D128
 
 ### Raw log2(me) via the W=192 core; may return ±inf or NaN; never crashes.
 routine D128.log2_unchecked() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U192, U384, 192].ln2()))
+  return uf192_to_d128(x: d128_to_uf192(x: me).log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[3, 6].ln2()))
 
 ### Base-10 log log10(me). Crashes: NumericDomainError on NaN/domain, NumericOverflowError on ±inf.
 routine D128.log10!() -> D128
@@ -322,7 +343,7 @@ routine D128.log10!() -> D128
 
 ### Raw log10(me) via the W=192 core; may return ±inf or NaN; never crashes.
 routine D128.log10_unchecked() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[U192, U384, 192].ln10()))
+  return uf192_to_d128(x: d128_to_uf192(x: me).log(n: 23_s64, m: 0_s64, t: 0_s64).div(you: UnpackedFloat[3, 6].ln10()))
 
 ### Square root sqrt(me). Crashes: NumericDomainError on NaN/domain (me<0), NumericOverflowError
 ### on ±inf.
@@ -349,25 +370,25 @@ routine D128.cbrt() -> D128
 routine D128.pow_unchecked(you: D128) -> D128
   var mu = d128_to_uf192(x: me)
   var yo = d128_to_uf192(x: you)
-  var one = UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64)
+  var one = UnpackedFloat[3, 6].from_s64(src: 1_s64)
   var negone = one.neg()
-  var poszero = UnpackedFloat[U192, U384, 192].zero(sign: false)
-  var negzero = UnpackedFloat[U192, U384, 192].zero(sign: true)
-  var posinf = UnpackedFloat[U192, U384, 192].inf(sign: false)
-  var neginf = UnpackedFloat[U192, U384, 192].inf(sign: true)
+  var poszero = UnpackedFloat[3, 6].zero(sign: false)
+  var negzero = UnpackedFloat[3, 6].zero(sign: true)
+  var posinf = UnpackedFloat[3, 6].inf(sign: false)
+  var neginf = UnpackedFloat[3, 6].inf(sign: true)
   var mefin = not mu.isnan() and not mu.isinf()
   var youfin = not yo.isnan() and not yo.isinf()
   var yisint = yo.isint()
   var yisoddint = yisint and not yo.iseven()
   # Negative base raised to a non-integer power has no real result -> qNaN.
   if mu.sign() and mefin and not mu.iszero() and youfin and not yisint
-    return uf192_to_d128(x: UnpackedFloat[U192, U384, 192].nan())
+    return uf192_to_d128(x: UnpackedFloat[3, 6].nan())
   if mu.eq(you: one) or yo.iszero()
     return uf192_to_d128(x: one)
   if mu.isnan()
-    return uf192_to_d128(x: UnpackedFloat[U192, U384, 192].nan())
+    return uf192_to_d128(x: UnpackedFloat[3, 6].nan())
   if yo.isnan()
-    return uf192_to_d128(x: UnpackedFloat[U192, U384, 192].nan())
+    return uf192_to_d128(x: UnpackedFloat[3, 6].nan())
   if not yo.sign() and not yo.iszero() and mu.iszero() and yisoddint
     return uf192_to_d128(x: mu)
   if mu.iszero() and not yo.sign() and not yo.iszero() and not yisoddint
@@ -397,7 +418,7 @@ routine D128.pow_unchecked(you: D128) -> D128
   if mu.isinf() and not mu.sign() and not yo.sign() and not yo.iszero()
     return uf192_to_d128(x: posinf)
   if mu.iszero() and yisoddint and yo.sign()
-    return uf192_to_d128(x: UnpackedFloat[U192, U384, 192].inf(sign: mu.sign()))
+    return uf192_to_d128(x: UnpackedFloat[3, 6].inf(sign: mu.sign()))
   if mu.iszero() and yo.sign() and not yo.iszero() and not yisoddint
     return uf192_to_d128(x: posinf)
   var z = mu.abs().log(n: 23_s64, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: 20_s64)
@@ -587,21 +608,21 @@ routine D128.atanh_unchecked() -> D128
 # ============================================================================
 
 ### Small-integer W=192 engine constant (erf/tgamma thresholds and exact special results).
-routine uf192_intval(n: S64) -> UnpackedFloat[U192, U384, 192]
-  return UnpackedFloat[U192, U384, 192].from_s64(src: n)
+routine uf192_intval(n: S64) -> UnpackedFloat[3, 6]
+  return UnpackedFloat[3, 6].from_s64(src: n)
 
 ### gamma via the generic Stirling lgamma_core (W-dispatched gamma_coef self-sizes at W=192).
-routine uf192_tgamma(x: UnpackedFloat[U192, U384, 192]) -> UnpackedFloat[U192, U384, 192]
+routine uf192_tgamma(x: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
   if x.isnan()
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   if x.isinf()
     if x.sign()
-      return UnpackedFloat[U192, U384, 192].nan()
+      return UnpackedFloat[3, 6].nan()
     return x
   if x.iszero()
-    return UnpackedFloat[U192, U384, 192].inf(sign: x.sign())
+    return UnpackedFloat[3, 6].inf(sign: x.sign())
   if x.sign() and x.isint()
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   var p = x.lgamma_core()
   # lgamma_core returns (sign, ln|gamma|); exponentiate to recover |gamma| then reapply sign.
   var r = p.item1.exp(n: 20_s64)
@@ -611,13 +632,13 @@ routine uf192_tgamma(x: UnpackedFloat[U192, U384, 192]) -> UnpackedFloat[U192, U
 
 ### Log-gamma ln|gamma(x)| via the generic Stirling lgamma_core. lgamma(0)=lgamma(±inf)=+inf, and
 ### +inf at negative integers (poles). Returns the magnitude's log; the sign of gamma is dropped.
-routine uf192_lgamma(x: UnpackedFloat[U192, U384, 192]) -> UnpackedFloat[U192, U384, 192]
+routine uf192_lgamma(x: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
   if x.isnan()
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   if x.iszero() or x.isinf()
-    return UnpackedFloat[U192, U384, 192].inf(sign: false)
+    return UnpackedFloat[3, 6].inf(sign: false)
   if x.sign() and x.isint()
-    return UnpackedFloat[U192, U384, 192].inf(sign: false)
+    return UnpackedFloat[3, 6].inf(sign: false)
   var p = x.lgamma_core()
   return p.item1
 
@@ -629,34 +650,34 @@ routine uf192_lgamma(x: UnpackedFloat[U192, U384, 192]) -> UnpackedFloat[U192, U
 
 ### erf at W=192 with caller-sized CF levels (D128). Mirrors B128.erf's branch structure.
 ### erf(-inf) = -1, erf(+inf) = 1. Threshold ±3.1 picks the erf vs 1-erfc continued fraction.
-routine uf192_erf_fast(x: UnpackedFloat[U192, U384, 192], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[U192, U384, 192]
+routine uf192_erf_fast(x: UnpackedFloat[3, 6], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[3, 6]
   if x.isnan()
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   if x.isinf()
     if x.sign()
       return uf192_intval(n: -1_s64)
     return uf192_intval(n: 1_s64)
-  var thr = UnpackedFloat[U192, U384, 192].from_s64(src: 31_s64).div(you: UnpackedFloat[U192, U384, 192].from_s64(src: 10_s64))
+  var thr = UnpackedFloat[3, 6].from_s64(src: 31_s64).div(you: UnpackedFloat[3, 6].from_s64(src: 10_s64))
   if x.lt(you: thr.neg())
-    return UnpackedFloat[U192, U384, 192].from_s64(src: -1_s64).sub(you: x.erfc_cf(levels: levels_tail))
+    return UnpackedFloat[3, 6].from_s64(src: -1_s64).sub(you: x.erfc_cf(levels: levels_tail))
   if x.lt(you: thr)
     return x.erf_cf(levels: levels_mid)
-  return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: x.erfc_cf(levels: levels_tail))
+  return UnpackedFloat[3, 6].from_s64(src: 1_s64).sub(you: x.erfc_cf(levels: levels_tail))
 
 ### erfc at W=192 with caller-sized CF levels (D128). Mirrors B128.erfc's branch structure.
 ### erfc(-inf) = 2, erfc(+inf) = 0. Threshold ±3.1 selects erf vs erfc continued fraction.
-routine uf192_erfc_fast(x: UnpackedFloat[U192, U384, 192], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[U192, U384, 192]
+routine uf192_erfc_fast(x: UnpackedFloat[3, 6], levels_mid: S64, levels_tail: S64) -> UnpackedFloat[3, 6]
   if x.isnan()
-    return UnpackedFloat[U192, U384, 192].nan()
+    return UnpackedFloat[3, 6].nan()
   if x.isinf()
     if x.sign()
       return uf192_intval(n: 2_s64)
     return uf192_intval(n: 0_s64)
-  var thr = UnpackedFloat[U192, U384, 192].from_s64(src: 31_s64).div(you: UnpackedFloat[U192, U384, 192].from_s64(src: 10_s64))
+  var thr = UnpackedFloat[3, 6].from_s64(src: 31_s64).div(you: UnpackedFloat[3, 6].from_s64(src: 10_s64))
   if x.lt(you: thr.neg())
-    return UnpackedFloat[U192, U384, 192].from_s64(src: 2_s64).add(you: x.erfc_cf(levels: levels_tail))
+    return UnpackedFloat[3, 6].from_s64(src: 2_s64).add(you: x.erfc_cf(levels: levels_tail))
   if x.lt(you: thr)
-    return UnpackedFloat[U192, U384, 192].from_s64(src: 1_s64).sub(you: x.erf_cf(levels: levels_mid))
+    return UnpackedFloat[3, 6].from_s64(src: 1_s64).sub(you: x.erf_cf(levels: levels_mid))
   return x.erfc_cf(levels: levels_tail)
 
 ### Error function erf(me), in [-1, 1]. Finite-preserving; never crashes.

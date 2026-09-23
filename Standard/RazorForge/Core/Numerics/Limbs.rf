@@ -1,0 +1,574 @@
+module Core
+
+# ============================================================================
+# Limb kernels — unsigned fixed-width integer arithmetic on `Array[U64, K]` (little-endian: limb 0 is
+# the least significant). The soft-float engine (`UnpackedFloat[N, N2]`) keeps its mantissa and its
+# double-width intermediate as limb arrays, so no per-width integer type (U192/U384/...) is needed:
+# one set of kernels serves every width, and K is a build-time constant per instantiation (the loops
+# unroll at -O2).
+#
+# All arithmetic wraps modulo 2^(64K). Shift amounts at or beyond the width give zero; a bit position
+# outside [0, 64K) reads as 0. Operations on a value are members (`x.wide_add(you: y)`); builders and
+# width conversions are free routines taking the limb count(s) explicitly (`wide_from_u64[N](v: 1)`,
+# `wide_resize[N, N2](a: x)`).
+#
+# Performance shape (these run in the inner loop of every soft-float operation, including at -O0 in
+# the dev loop and the test suite):
+#   * limbs are read/written in place through a `Hijacked` pointer (`LLVM::load_element_ref` /
+#     `store_element_ref`), not the bounds-checked `getitem!`/`setitem!` calls — every index is a loop
+#     counter already inside [0, K);
+#   * loop counters use raw `LLVM::` integer ops, not the checked `S64` operators (each of which is a
+#     routine call at -O0);
+#   * every kernel is `@inline` (LLVM `alwaysinline`, honored at -O0 too).
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Builders
+# ----------------------------------------------------------------------------
+
+### A limb array holding `v` (zero-extended).
+@inline
+routine wide_from_u64[K](v: U64) -> Array[U64, K]
+needs U64 K
+  var r = Array[U64, K]()
+  danger
+    LLVM::store_element_ref[Array[U64, K], U64](r.hijack(), 0_u64, v)
+  return r
+
+### A limb array holding `h1 * 2^64 + h0` (only `h0` when K = 1).
+@inline
+routine wide_words2[K](h1: U64, h0: U64) -> Array[U64, K]
+needs U64 K
+  var r = Array[U64, K]()
+  danger
+    var rp = r.hijack()
+    LLVM::store_element_ref[Array[U64, K], U64](rp, 0_u64, h0)
+    if LLVM::unsigned_gt(a: K, b: 1_u64)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, 1_u64, h1)
+  return r
+
+### A limb array holding `h2 * 2^128 + h1 * 2^64 + h0` (upper words dropped when K is smaller).
+@inline
+routine wide_words3[K](h2: U64, h1: U64, h0: U64) -> Array[U64, K]
+needs U64 K
+  var r = wide_words2[K](h1: h1, h0: h0)
+  danger
+    if LLVM::unsigned_gt(a: K, b: 2_u64)
+      LLVM::store_element_ref[Array[U64, K], U64](r.hijack(), 2_u64, h2)
+  return r
+
+### A limb array holding `v` (zero-extended; truncated when K = 1).
+@inline
+routine wide_from_u128[K](v: U128) -> Array[U64, K]
+needs U64 K
+  var hi = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(v, 64_u128))
+  var lo = LLVM::int_truncate[U128, U64](v)
+  return wide_words2[K](h1: hi, h0: lo)
+
+### The mask `2^n - 1` (n <= 0 gives 0, n >= 64K gives all ones).
+@inline
+routine wide_low_mask[K](n: S64) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var r = Array[U64, K]()
+  danger
+    var rp = r.hijack()
+    var i = 0_s64
+    var take = n
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      if LLVM::signed_ge(a: take, b: 64_s64)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, U64_MAX)
+      elseif LLVM::signed_gt(a: take, b: 0_s64)
+        var part = LLVM::sub(a: LLVM::shift_left(value: 1_u64, bits: LLVM::reinterpret_bits[S64, U64](take)), b: 1_u64)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, part)
+      take = LLVM::sub(a: take, b: 64_s64)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### The single bit `2^pos` (zero when pos is outside [0, 64K)).
+@inline
+routine wide_bit_at[K](pos: S64) -> Array[U64, K]
+needs U64 K
+  var r = Array[U64, K]()
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  if LLVM::signed_lt(a: pos, b: 0_s64) or LLVM::signed_ge(a: pos, b: LLVM::mul(a: kl, b: 64_s64))
+    return r
+  danger
+    var wi = LLVM::reinterpret_bits[S64, U64](LLVM::shift_right_signed(pos, 6_s64))
+    var sh = LLVM::reinterpret_bits[S64, U64](LLVM::bit_and(a: pos, b: 63_s64))
+    LLVM::store_element_ref[Array[U64, K], U64](r.hijack(), wi, LLVM::shift_left(value: 1_u64, bits: sh))
+  return r
+
+### Copies `a` into K2 limbs: zero-extends when K2 > K, keeps the low K2 limbs when K2 < K.
+@inline
+routine wide_resize[K, K2](a: Array[U64, K]) -> Array[U64, K2]
+needs U64 K, U64 K2
+  var n = LLVM::reinterpret_bits[U64, S64](K)
+  var k2 = LLVM::reinterpret_bits[U64, S64](K2)
+  if LLVM::signed_lt(a: k2, b: n)
+    n = k2
+  var src = a
+  var r = Array[U64, K2]()
+  danger
+    var sp = src.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: n)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      LLVM::store_element_ref[Array[U64, K2], U64](rp, ui, LLVM::load_element_ref[Array[U64, K], U64](sp, ui))
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### The product `a * b`, kept to its low K2 limbs (K2 = 2K is the exact full product).
+@inline
+routine wide_mul_to[K, K2](a: Array[U64, K], b: Array[U64, K]) -> Array[U64, K2]
+needs U64 K, U64 K2
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var k2 = LLVM::reinterpret_bits[U64, S64](K2)
+  var x = a
+  var y = b
+  var r = Array[U64, K2]()
+  danger
+    var xp = x.hijack()
+    var yp = y.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl) and LLVM::signed_lt(a: i, b: k2)
+      var carry = 0_u64
+      var xi = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](xp, LLVM::reinterpret_bits[S64, U64](i)))
+      var j = 0_s64
+      var t = i
+      while LLVM::signed_lt(a: j, b: kl) and LLVM::signed_lt(a: t, b: k2)
+        var ut = LLVM::reinterpret_bits[S64, U64](t)
+        var yj = LLVM::load_element_ref[Array[U64, K], U64](yp, LLVM::reinterpret_bits[S64, U64](j))
+        var rt = LLVM::load_element_ref[Array[U64, K2], U64](rp, ut)
+        var p = LLVM::mul(a: xi, b: LLVM::zero_extend[U64, U128](yj))
+        p = LLVM::add(a: p, b: LLVM::zero_extend[U64, U128](rt))
+        p = LLVM::add(a: p, b: LLVM::zero_extend[U64, U128](carry))
+        LLVM::store_element_ref[Array[U64, K2], U64](rp, ut, LLVM::int_truncate[U128, U64](p))
+        carry = LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(p, 64_u128))
+        j = LLVM::add(a: j, b: 1_s64)
+        t = LLVM::add(a: t, b: 1_s64)
+      var top = LLVM::add(a: i, b: kl)
+      if LLVM::signed_lt(a: top, b: k2)
+        LLVM::store_element_ref[Array[U64, K2], U64](rp, LLVM::reinterpret_bits[S64, U64](top), carry)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+# ----------------------------------------------------------------------------
+# Tests and comparisons
+# ----------------------------------------------------------------------------
+
+### Whether every limb is zero.
+@inline
+routine Array[U64, K].wide_is_zero() -> Bool
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var acc = 0_u64
+  danger
+    var ap = a.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      acc = LLVM::bit_or(a: acc, b: LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](i)))
+      i = LLVM::add(a: i, b: 1_s64)
+  return LLVM::int_eq(a: acc, b: 0_u64)
+
+### Unsigned three-way comparison: -1, 0 or +1.
+@inline
+routine Array[U64, K].wide_cmp(you: Array[U64, K]) -> S64
+needs U64 K
+  var a = me
+  var b = you
+  danger
+    var ap = a.hijack()
+    var bp = b.hijack()
+    var i = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](K), b: 1_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      var x = LLVM::load_element_ref[Array[U64, K], U64](ap, ui)
+      var y = LLVM::load_element_ref[Array[U64, K], U64](bp, ui)
+      if LLVM::unsigned_lt(a: x, b: y)
+        return -1_s64
+      if LLVM::unsigned_gt(a: x, b: y)
+        return 1_s64
+      i = LLVM::sub(a: i, b: 1_s64)
+  return 0_s64
+
+### Whether `me == you`.
+@inline
+routine Array[U64, K].wide_eq(you: Array[U64, K]) -> Bool
+needs U64 K
+  return LLVM::int_eq(a: me.wide_cmp(you: you), b: 0_s64)
+
+### Whether `me < you` (unsigned).
+@inline
+routine Array[U64, K].wide_lt(you: Array[U64, K]) -> Bool
+needs U64 K
+  return LLVM::signed_lt(a: me.wide_cmp(you: you), b: 0_s64)
+
+### Whether `me > you` (unsigned).
+@inline
+routine Array[U64, K].wide_gt(you: Array[U64, K]) -> Bool
+needs U64 K
+  return LLVM::signed_gt(a: me.wide_cmp(you: you), b: 0_s64)
+
+### Whether `me >= you` (unsigned).
+@inline
+routine Array[U64, K].wide_ge(you: Array[U64, K]) -> Bool
+needs U64 K
+  return LLVM::signed_ge(a: me.wide_cmp(you: you), b: 0_s64)
+
+### Whether `me <= you` (unsigned).
+@inline
+routine Array[U64, K].wide_le(you: Array[U64, K]) -> Bool
+needs U64 K
+  return LLVM::signed_le(a: me.wide_cmp(you: you), b: 0_s64)
+
+### Bit `pos` (false outside [0, 64K)).
+@inline
+routine Array[U64, K].wide_bit(pos: S64) -> Bool
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  if LLVM::signed_lt(a: pos, b: 0_s64) or LLVM::signed_ge(a: pos, b: LLVM::mul(a: kl, b: 64_s64))
+    return false
+  var a = me
+  danger
+    var wi = LLVM::reinterpret_bits[S64, U64](LLVM::shift_right_signed(pos, 6_s64))
+    var w = LLVM::load_element_ref[Array[U64, K], U64](a.hijack(), wi)
+    var sh = LLVM::reinterpret_bits[S64, U64](LLVM::bit_and(a: pos, b: 63_s64))
+    return LLVM::int_ne(a: LLVM::bit_and(a: LLVM::shift_right_unsigned(w, sh), b: 1_u64), b: 0_u64)
+
+### Whether any of the low `n` bits is set.
+@inline
+routine Array[U64, K].wide_low_nonzero(n: S64) -> Bool
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var acc = 0_u64
+  danger
+    var ap = a.hijack()
+    var i = 0_s64
+    var take = n
+    while LLVM::signed_lt(a: i, b: kl) and LLVM::signed_gt(a: take, b: 0_s64)
+      var w = LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](i))
+      if LLVM::signed_lt(a: take, b: 64_s64)
+        w = LLVM::bit_and(a: w, b: LLVM::sub(a: LLVM::shift_left(value: 1_u64, bits: LLVM::reinterpret_bits[S64, U64](take)), b: 1_u64))
+      acc = LLVM::bit_or(a: acc, b: w)
+      take = LLVM::sub(a: take, b: 64_s64)
+      i = LLVM::add(a: i, b: 1_s64)
+  return LLVM::int_ne(a: acc, b: 0_u64)
+
+### Count of leading zero bits over the full 64K-bit width (64K for zero).
+@inline
+routine Array[U64, K].wide_clz() -> S64
+needs U64 K
+  var a = me
+  var z = 0_s64
+  danger
+    var ap = a.hijack()
+    var i = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](K), b: 1_s64)
+    while LLVM::signed_ge(a: i, b: 0_s64)
+      var w = LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](i))
+      if LLVM::int_ne(a: w, b: 0_u64)
+        return LLVM::add(a: z, b: LLVM::reinterpret_bits[U64, S64](LLVM::leading_zeros(w)))
+      z = LLVM::add(a: z, b: 64_s64)
+      i = LLVM::sub(a: i, b: 1_s64)
+  return z
+
+### The least significant limb.
+@inline
+routine Array[U64, K].wide_low_u64() -> U64
+needs U64 K
+  var a = me
+  danger
+    return LLVM::load_element_ref[Array[U64, K], U64](a.hijack(), 0_u64)
+
+### The low 128 bits (limbs 0 and 1; limb 1 is taken as 0 when K = 1).
+@inline
+routine Array[U64, K].wide_low_u128() -> U128
+needs U64 K
+  var a = me
+  danger
+    var ap = a.hijack()
+    var lo = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](ap, 0_u64))
+    if LLVM::unsigned_lt(a: K, b: 2_u64)
+      return lo
+    var hi = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](ap, 1_u64))
+    return LLVM::bit_or(a: lo, b: LLVM::shift_left(value: hi, bits: 64_u128))
+
+# ----------------------------------------------------------------------------
+# Bitwise
+# ----------------------------------------------------------------------------
+
+### Limb-wise AND.
+@inline
+routine Array[U64, K].wide_and(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var b = you
+  var r = Array[U64, K]()
+  danger
+    var ap = a.hijack()
+    var bp = b.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::bit_and(a: LLVM::load_element_ref[Array[U64, K], U64](ap, ui), b: LLVM::load_element_ref[Array[U64, K], U64](bp, ui)))
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### Limb-wise OR.
+@inline
+routine Array[U64, K].wide_or(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var b = you
+  var r = Array[U64, K]()
+  danger
+    var ap = a.hijack()
+    var bp = b.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::bit_or(a: LLVM::load_element_ref[Array[U64, K], U64](ap, ui), b: LLVM::load_element_ref[Array[U64, K], U64](bp, ui)))
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### Limb-wise complement.
+@inline
+routine Array[U64, K].wide_not() -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var r = Array[U64, K]()
+  danger
+    var ap = a.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::bit_xor(a: LLVM::load_element_ref[Array[U64, K], U64](ap, ui), b: U64_MAX))
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### Keeps only the low `n` bits.
+@inline
+routine Array[U64, K].wide_keep_low(n: S64) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var r = me
+  danger
+    var rp = r.hijack()
+    var i = 0_s64
+    var take = n
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      if LLVM::signed_le(a: take, b: 0_s64)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, 0_u64)
+      elseif LLVM::signed_lt(a: take, b: 64_s64)
+        var w = LLVM::load_element_ref[Array[U64, K], U64](rp, ui)
+        var mask = LLVM::sub(a: LLVM::shift_left(value: 1_u64, bits: LLVM::reinterpret_bits[S64, U64](take)), b: 1_u64)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::bit_and(a: w, b: mask))
+      take = LLVM::sub(a: take, b: 64_s64)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### Clears the low `n` bits.
+@inline
+routine Array[U64, K].wide_clear_low(n: S64) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var r = me
+  danger
+    var rp = r.hijack()
+    var i = 0_s64
+    var take = n
+    while LLVM::signed_lt(a: i, b: kl) and LLVM::signed_gt(a: take, b: 0_s64)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      if LLVM::signed_ge(a: take, b: 64_s64)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, 0_u64)
+      else
+        var w = LLVM::load_element_ref[Array[U64, K], U64](rp, ui)
+        var keep = LLVM::bit_xor(a: LLVM::sub(a: LLVM::shift_left(value: 1_u64, bits: LLVM::reinterpret_bits[S64, U64](take)), b: 1_u64), b: U64_MAX)
+        LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::bit_and(a: w, b: keep))
+      take = LLVM::sub(a: take, b: 64_s64)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### Logical left shift by `n` bits (a negative `n` shifts right).
+@inline
+routine Array[U64, K].wide_shl(n: S64) -> Array[U64, K]
+needs U64 K
+  if LLVM::signed_lt(a: n, b: 0_s64)
+    return me.wide_shr(n: LLVM::sub(a: 0_s64, b: n))
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var r = Array[U64, K]()
+  var q = LLVM::shift_right_signed(n, 6_s64)
+  var b = LLVM::reinterpret_bits[S64, U64](LLVM::bit_and(a: n, b: 63_s64))
+  var inv = LLVM::sub(a: 64_u64, b: b)
+  danger
+    var ap = a.hijack()
+    var rp = r.hijack()
+    var i = LLVM::sub(a: kl, b: 1_s64)
+    while LLVM::signed_ge(a: i, b: q)
+      var src = LLVM::sub(a: i, b: q)
+      var w = LLVM::shift_left(value: LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](src)), bits: b)
+      if LLVM::int_ne(a: b, b: 0_u64) and LLVM::signed_gt(a: src, b: 0_s64)
+        var lower = LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](LLVM::sub(a: src, b: 1_s64)))
+        w = LLVM::bit_or(a: w, b: LLVM::shift_right_unsigned(lower, inv))
+      LLVM::store_element_ref[Array[U64, K], U64](rp, LLVM::reinterpret_bits[S64, U64](i), w)
+      i = LLVM::sub(a: i, b: 1_s64)
+  return r
+
+### Logical right shift by `n` bits (a negative `n` shifts left).
+@inline
+routine Array[U64, K].wide_shr(n: S64) -> Array[U64, K]
+needs U64 K
+  if LLVM::signed_lt(a: n, b: 0_s64)
+    return me.wide_shl(n: LLVM::sub(a: 0_s64, b: n))
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var r = Array[U64, K]()
+  var q = LLVM::shift_right_signed(n, 6_s64)
+  var b = LLVM::reinterpret_bits[S64, U64](LLVM::bit_and(a: n, b: 63_s64))
+  var inv = LLVM::sub(a: 64_u64, b: b)
+  danger
+    var ap = a.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    var last = LLVM::sub(a: kl, b: q)
+    while LLVM::signed_lt(a: i, b: last)
+      var src = LLVM::add(a: i, b: q)
+      var w = LLVM::shift_right_unsigned(LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](src)), b)
+      var nxt = LLVM::add(a: src, b: 1_s64)
+      if LLVM::int_ne(a: b, b: 0_u64) and LLVM::signed_lt(a: nxt, b: kl)
+        var upper = LLVM::load_element_ref[Array[U64, K], U64](ap, LLVM::reinterpret_bits[S64, U64](nxt))
+        w = LLVM::bit_or(a: w, b: LLVM::shift_left(value: upper, bits: inv))
+      LLVM::store_element_ref[Array[U64, K], U64](rp, LLVM::reinterpret_bits[S64, U64](i), w)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+# ----------------------------------------------------------------------------
+# Arithmetic (wrapping)
+# ----------------------------------------------------------------------------
+
+### `me + you` modulo 2^(64K).
+@inline
+routine Array[U64, K].wide_add(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var b = you
+  var r = Array[U64, K]()
+  var carry = 0_u128
+  danger
+    var ap = a.hijack()
+    var bp = b.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      var x = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](ap, ui))
+      var y = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](bp, ui))
+      var s = LLVM::add(a: LLVM::add(a: x, b: y), b: carry)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::int_truncate[U128, U64](s))
+      carry = LLVM::shift_right_unsigned(s, 64_u128)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### `me - you` modulo 2^(64K).
+@inline
+routine Array[U64, K].wide_sub(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var a = me
+  var b = you
+  var r = Array[U64, K]()
+  var borrow = 0_u128
+  danger
+    var ap = a.hijack()
+    var bp = b.hijack()
+    var rp = r.hijack()
+    var i = 0_s64
+    while LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      var x = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](ap, ui))
+      var y = LLVM::zero_extend[U64, U128](LLVM::load_element_ref[Array[U64, K], U64](bp, ui))
+      var d = LLVM::sub(a: LLVM::sub(a: x, b: y), b: borrow)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::int_truncate[U128, U64](d))
+      borrow = LLVM::bit_and(a: LLVM::shift_right_unsigned(d, 64_u128), b: 1_u128)
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### `me + v` modulo 2^(64K) — the carry ripples only as far as it has to.
+@inline
+routine Array[U64, K].wide_add_u64(v: U64) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var r = me
+  danger
+    var rp = r.hijack()
+    var carry = v
+    var i = 0_s64
+    while LLVM::int_ne(a: carry, b: 0_u64) and LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      var w = LLVM::load_element_ref[Array[U64, K], U64](rp, ui)
+      var s = LLVM::add(a: w, b: carry)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, s)
+      carry = if LLVM::unsigned_lt(a: s, b: w) then 1_u64 else 0_u64
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### `me - v` modulo 2^(64K) — the borrow ripples only as far as it has to.
+@inline
+routine Array[U64, K].wide_sub_u64(v: U64) -> Array[U64, K]
+needs U64 K
+  var kl = LLVM::reinterpret_bits[U64, S64](K)
+  var r = me
+  danger
+    var rp = r.hijack()
+    var borrow = v
+    var i = 0_s64
+    while LLVM::int_ne(a: borrow, b: 0_u64) and LLVM::signed_lt(a: i, b: kl)
+      var ui = LLVM::reinterpret_bits[S64, U64](i)
+      var w = LLVM::load_element_ref[Array[U64, K], U64](rp, ui)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, ui, LLVM::sub(a: w, b: borrow))
+      borrow = if LLVM::unsigned_lt(a: w, b: borrow) then 1_u64 else 0_u64
+      i = LLVM::add(a: i, b: 1_s64)
+  return r
+
+### `me * you` modulo 2^(64K).
+@inline
+routine Array[U64, K].wide_mul(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  return wide_mul_to[K, K](a: me, b: you)
+
+### Quotient and remainder of an unsigned division.
+record WideQuoRem[U64 K]
+  ### The quotient.
+  quo: Array[U64, K]
+  ### The remainder.
+  rem: Array[U64, K]
+
+### `me // you` and `me % you` via the base-2^64 Knuth-D kernel (`you` must be nonzero).
+routine Array[U64, K].wide_divmod(you: Array[U64, K]) -> WideQuoRem[K]
+needs U64 K
+  var av = me
+  var bv = you
+  var rem = Array[U64, K]()
+  danger
+    var q = knuth_divide[K](a: av.hijack(), b: bv.hijack(), rem: rem.hijack())
+    return WideQuoRem[K](quo: q, rem: rem)
+
+### `me // you` (`you` must be nonzero).
+@inline
+routine Array[U64, K].wide_div(you: Array[U64, K]) -> Array[U64, K]
+needs U64 K
+  return me.wide_divmod(you: you).quo

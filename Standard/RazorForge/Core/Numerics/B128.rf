@@ -1401,35 +1401,35 @@ routine b128_represent(bits: U128) -> Text
   return result
 
 # ============================================================================
-# Packed B128 <-> generic UnpackedFloat[U128, U256, 128] casts (concrete; the
+# Packed B128 <-> generic UnpackedFloat[2, 4] casts (concrete; the
 # entry points the transcendentals and external tests use).
 # ============================================================================
 
 ### Decodes this `B128` into the quad unpacked engine value (exact).
-routine B128.to_uf() -> UnpackedFloat[U128, U256, 128]
+routine B128.to_uf() -> UnpackedFloat[2, 4]
   var bits = me.to_bits()
   var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
   var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
   var f = LLVM::bit_and(a: bits, b: b128_mant_mask())
   if e == 0x7FFF_u64
     if LLVM::int_ne(a: f, b: 0_u128)
-      return UnpackedFloat[U128, U256, 128].nan()
-    return UnpackedFloat[U128, U256, 128].inf(sign: sign)
+      return UnpackedFloat[2, 4].nan()
+    return UnpackedFloat[2, 4].inf(sign: sign)
   if e == 0_u64 and LLVM::int_eq(a: f, b: 0_u128)
-    return UnpackedFloat[U128, U256, 128].zero(sign: sign)
+    return UnpackedFloat[2, 4].zero(sign: sign)
   if e == 0_u64
     var msbf = LLVM::int_truncate[U128, S64](LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(f)))
     var shift = LLVM::sub(a: 126_s64, b: msbf)
-    var mant = LLVM::shift_left(value: f, bits: U128.to_width(s: shift))
-    return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var mant = wide_from_u128[2](v: LLVM::shift_left(value: f, bits: U128.to_width(s: shift)))
+    return UnpackedFloat[2, 4].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = LLVM::bit_or(a: f, b: b128_implicit())
-  var mant = LLVM::shift_left(value: sig, bits: 14_u128)
-  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  var mant = wide_from_u128[2](v: LLVM::shift_left(value: sig, bits: 14_u128))
+  return UnpackedFloat[2, 4].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Rounds any unpacked engine value (any width) back to an `B128`
 ### (round-to-nearest-even). Width-generic: the mantissa shift is `W - 114`
-### (14 for the W=128 quad engine, 78 for the W=192 engine, 206 for the W=320 engine).
-routine UnpackedFloat[M, L, W].to_b128() -> B128
+### (14 for the W=128 quad engine, 78 for the W=192 engine).
+routine UnpackedFloat[N, N2].to_b128() -> B128
   var sign = 0_u64
   if me.sign()
     sign = 1_u64
@@ -1440,13 +1440,14 @@ routine UnpackedFloat[M, L, W].to_b128() -> B128
   if me.iszero()
     return B128.from_bits(bits: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128))
   var biased = LLVM::add(a: me.exp, b: 16384_s64)
-  var sh = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](W), b: 114_s64)
-  var lost = LLVM::bit_and(a: me.mant, b: M.low_mask(n: sh))
-  var half = LLVM::shift_left[M](value: 1, bits: M.to_width(s: LLVM::sub[S64](a: sh, b: 1_s64)))
-  var sig = LLVM::int_truncate[L, U128](LLVM::zero_extend[M, L](LLVM::shift_right_unsigned(me.mant, M.to_width(s: sh))))
-  if LLVM::unsigned_gt(a: lost, b: half)
+  var sh = LLVM::sub(a: UnpackedFloat[N, N2].width(), b: 114_s64)
+  var lost = me.mant.wide_keep_low(n: sh)
+  var half = UnpackedFloat[N, N2].mant_bit(pos: LLVM::sub[S64](a: sh, b: 1_s64))
+  var sig = me.mant.wide_shl(n: LLVM::sub(a: 0_s64, b: sh)).wide_low_u128()
+  var lh = lost.wide_cmp(you: half)
+  if LLVM::signed_gt(a: lh, b: 0_s64)
     sig = LLVM::add(a: sig, b: 1_u128)
-  elseif LLVM::int_eq(a: lost, b: half) and LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
+  elseif LLVM::int_eq(a: lh, b: 0_s64) and LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
     sig = LLVM::add(a: sig, b: 1_u128)
   if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: LLVM::shift_left(value: 1_u128, bits: 113_u128)), b: 0_u128)
     sig = LLVM::shift_right_unsigned(sig, 1_u128)
@@ -1458,7 +1459,7 @@ routine UnpackedFloat[M, L, W].to_b128() -> B128
   return B128.from_bits(bits: b128_pack(sign: sign, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
 
 # ============================================================================
-# Packed B128 <-> W=192 UnpackedFloat[U192, U384, 192] casts. This is the
+# Packed B128 <-> W=192 UnpackedFloat[3, 6] casts. This is the
 # uniform engine for ALL B128 transcendentals: a 192-bit mantissa (leading bit
 # at 190) carries 79 guard bits over B128's 113-bit significand, so every
 # transcendental is faithfully ~1 ULP. Mirrors to_uf() exactly for
@@ -1468,25 +1469,25 @@ routine UnpackedFloat[M, L, W].to_b128() -> B128
 # ============================================================================
 
 ### Decodes this `B128` into the W=192 unpacked engine value (exact).
-routine B128.to_uf192() -> UnpackedFloat[U192, U384, 192]
+routine B128.to_uf192() -> UnpackedFloat[3, 6]
   var bits = me.to_bits()
   var sign = LLVM::int_ne(a: LLVM::bit_and(a: bits, b: b128_sign_mask()), b: 0_u128)
   var e = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 112_u128), b: 32767_u128))
   var f = LLVM::bit_and(a: bits, b: b128_mant_mask())
   if e == 0x7FFF_u64
     if LLVM::int_ne(a: f, b: 0_u128)
-      return UnpackedFloat[U192, U384, 192].nan()
-    return UnpackedFloat[U192, U384, 192].inf(sign: sign)
+      return UnpackedFloat[3, 6].nan()
+    return UnpackedFloat[3, 6].inf(sign: sign)
   if e == 0_u64 and LLVM::int_eq(a: f, b: 0_u128)
-    return UnpackedFloat[U192, U384, 192].zero(sign: sign)
+    return UnpackedFloat[3, 6].zero(sign: sign)
   if e == 0_u64
     var msbf = LLVM::int_truncate[U128, S64](LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(f)))
     var shift = LLVM::sub(a: 190_s64, b: msbf)
-    var mant = LLVM::shift_left(value: LLVM::zero_extend[U128, U192](f), bits: U192.to_width(s: shift))
-    return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+    var mant = wide_from_u128[3](v: f).wide_shl(n: shift)
+    return UnpackedFloat[3, 6].make(mant: mant, exp: LLVM::sub(a: msbf, b: 16495_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
   var sig = LLVM::bit_or(a: f, b: b128_implicit())
-  var mant = LLVM::shift_left[U192](value: LLVM::zero_extend[U128, U192](sig), bits: 78)
-  return UnpackedFloat[U192, U384, 192].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  var mant = wide_from_u128[3](v: sig).wide_shl(n: 78_s64)
+  return UnpackedFloat[3, 6].make(mant: mant, exp: LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16384_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 # ============================================================================
 # More exact members: nextafter, modf, frexp
@@ -1572,7 +1573,7 @@ routine B128(from: S32) -> B128
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: S64) -> B128
-  return UnpackedFloat[U128, U256, 128].from_s64(src: from).to_b128()
+  return UnpackedFloat[2, 4].from_s64(src: from).to_b128()
 
 ### Converts an `S128` into quadruple-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
@@ -1614,7 +1615,7 @@ routine B128(from: U32) -> B128
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `B128` value.
 routine B128(from: U64) -> B128
-  return UnpackedFloat[U128, U256, 128].from_u64(v: from).to_b128()
+  return UnpackedFloat[2, 4].from_u64(v: from).to_b128()
 
 ### Converts a `U128` into quadruple-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.

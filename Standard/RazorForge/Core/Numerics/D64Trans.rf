@@ -114,7 +114,7 @@ routine dd_to_d64(x: DD) -> D64
   return d64_of_parts(p: decfin64(sign: sign, coeff: LLVM::zero_extend[U64, U128](coeff), exp: LLVM::sub(a: 0_s64, b: q), pref: 369_s64))
 
 # ============================================================================
-# Binary <-> decimal bridge (dec <-> bin128). Engine = UnpackedFloat[U128, U256, 128] (= B128).
+# Binary <-> decimal bridge (dec <-> bin128). Engine = UnpackedFloat[2, 4] (= B128).
 # Used BOTH for the correctly-rounded D64 <-> B32/B64/B128 conversions AND (below) for every D64
 # transcendental: B128's ~34-digit significand and ±4932 binary exponent fully cover decimal64's 16
 # digits and its ±385 decimal range, so an out-of-B64-range D64 (e.g. log(1e380) = 875.06…) converts
@@ -124,24 +124,25 @@ routine dd_to_d64(x: DD) -> D64
 
 ### Builds the engine value of a U64 integer with the given sign (exact; <=64 bits
 ### fits the 113-bit significand). value = mant * 2^(exp-125), MSB at bit 126.
-routine uf128_from_u64(c: U64, sign: Bool) -> UnpackedFloat[U128, U256, 128]
+routine uf128_from_u64(c: U64, sign: Bool) -> UnpackedFloat[2, 4]
   if LLVM::int_eq(a: c, b: 0_u64)
-    return UnpackedFloat[U128, U256, 128].zero(sign: sign)
+    return UnpackedFloat[2, 4].zero(sign: sign)
   var cw = LLVM::zero_extend[U64, U128](c)
   var x = LLVM::sub(a: 128_s64, b: LLVM::int_truncate[U128, S64](LLVM::leading_zeros(cw)))
   var mant = LLVM::shift_left(value: cw, bits: U128.to_width(s: LLVM::sub(a: 127_s64, b: x)))
-  return UnpackedFloat[U128, U256, 128].make(mant: mant, exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
+  return UnpackedFloat[2, 4].make(mant: wide_from_u128[2](v: mant), exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
 ### Rounds the engine value (assumed a positive ~integer) to a U128, round-half-even.
 ### shift = 125 - exp (positive in the ~10^20 range).
-routine uf128_to_u128_round(u: UnpackedFloat[U128, U256, 128]) -> U128
+routine uf128_to_u128_round(u: UnpackedFloat[2, 4]) -> U128
+  var um = u.mant.wide_low_u128()
   var shift = LLVM::sub(a: 125_s64, b: u.exp)
   if LLVM::signed_le(a: shift, b: 0_s64)
-    return LLVM::shift_left(value: u.mant, bits: U128.to_width(s: LLVM::sub(a: 0_s64, b: shift)))
+    return LLVM::shift_left(value: um, bits: U128.to_width(s: LLVM::sub(a: 0_s64, b: shift)))
   if LLVM::signed_ge(a: shift, b: 128_s64)
     return LLVM::zero_extend[U64, U128](0_u64)
-  var q = LLVM::shift_right_unsigned(u.mant, U128.to_width(s: shift))
-  var lost = LLVM::bit_and(a: u.mant, b: U128.low_mask(n: shift))
+  var q = LLVM::shift_right_unsigned(um, U128.to_width(s: shift))
+  var lost = LLVM::bit_and(a: um, b: U128.low_mask(n: shift))
   var half = LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: LLVM::sub[S64](a: shift, b: 1_s64)))
   if LLVM::unsigned_gt(a: lost, b: half)
     q = LLVM::add[U128](a: q, b: 1)
@@ -166,22 +167,22 @@ secret preset D64_UF128_HN_EXP: Array[S64, 21] = [-1_s64, -68_s64, -134_s64, -20
 secret preset D64_UF128_LN_MANT: Array[U64, 40] = [4611686018427387904_u64, 0_u64, 7378697629483820646_u64, 7378697629483820646_u64, 5902958103587056517_u64, 2213609288845146194_u64, 4722366482869645213_u64, 12838933875301847925_u64, 7555786372591432341_u64, 16852945385741046356_u64, 6044629098073145873_u64, 9793007493850926762_u64, 4835703278458516698_u64, 15213103624564562056_u64, 7737125245533626718_u64, 2204872910851837350_u64, 6189700196426901374_u64, 9142595958165290527_u64, 4951760157141521099_u64, 11003425581274142744_u64, 7922816251426433759_u64, 6537434485812897422_u64, 6338253001141147007_u64, 8919296403392228260_u64, 5070602400912917605_u64, 18203483566939513578_u64, 8112963841460668169_u64, 10678829633393670109_u64, 6490371073168534535_u64, 12232412521456846410_u64, 5192296858534827628_u64, 9785930017165477128_u64, 8307674973655724205_u64, 11968139212722853082_u64, 6646139978924579364_u64, 9574511370178282465_u64, 5316911983139663491_u64, 11348957910884536296_u64, 8507059173023461586_u64, 10779635027931437427_u64]
 secret preset D64_UF128_LN_EXP: Array[S64, 20] = [-1_s64, -5_s64, -8_s64, -11_s64, -15_s64, -18_s64, -21_s64, -25_s64, -28_s64, -31_s64, -35_s64, -38_s64, -41_s64, -45_s64, -48_s64, -51_s64, -55_s64, -58_s64, -61_s64, -65_s64]
 
-routine pow10_hp128(idx: U64) -> UnpackedFloat[U128, U256, 128]
+routine pow10_hp128(idx: U64) -> UnpackedFloat[2, 4]
   var p = LLVM::mul(a: idx, b: 2_u64)
-  return UnpackedFloat[U128, U256, 128].make(mant: U128.from_words2(h1: D64_UF128_HP_MANT[p], h0: D64_UF128_HP_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_HP_EXP[idx], fpclass: POSITIVE_NORMAL)
-routine pow10_lp128(idx: U64) -> UnpackedFloat[U128, U256, 128]
+  return UnpackedFloat[2, 4].make(mant: wide_words2[2](h1: D64_UF128_HP_MANT[p], h0: D64_UF128_HP_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_HP_EXP[idx], fpclass: POSITIVE_NORMAL)
+routine pow10_lp128(idx: U64) -> UnpackedFloat[2, 4]
   var p = LLVM::mul(a: idx, b: 2_u64)
-  return UnpackedFloat[U128, U256, 128].make(mant: U128.from_words2(h1: D64_UF128_LP_MANT[p], h0: D64_UF128_LP_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_LP_EXP[idx], fpclass: POSITIVE_NORMAL)
-routine pow10_hn128(idx: U64) -> UnpackedFloat[U128, U256, 128]
+  return UnpackedFloat[2, 4].make(mant: wide_words2[2](h1: D64_UF128_LP_MANT[p], h0: D64_UF128_LP_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_LP_EXP[idx], fpclass: POSITIVE_NORMAL)
+routine pow10_hn128(idx: U64) -> UnpackedFloat[2, 4]
   var p = LLVM::mul(a: idx, b: 2_u64)
-  return UnpackedFloat[U128, U256, 128].make(mant: U128.from_words2(h1: D64_UF128_HN_MANT[p], h0: D64_UF128_HN_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_HN_EXP[idx], fpclass: POSITIVE_NORMAL)
-routine pow10_ln128(idx: U64) -> UnpackedFloat[U128, U256, 128]
+  return UnpackedFloat[2, 4].make(mant: wide_words2[2](h1: D64_UF128_HN_MANT[p], h0: D64_UF128_HN_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_HN_EXP[idx], fpclass: POSITIVE_NORMAL)
+routine pow10_ln128(idx: U64) -> UnpackedFloat[2, 4]
   var p = LLVM::mul(a: idx, b: 2_u64)
-  return UnpackedFloat[U128, U256, 128].make(mant: U128.from_words2(h1: D64_UF128_LN_MANT[p], h0: D64_UF128_LN_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_LN_EXP[idx], fpclass: POSITIVE_NORMAL)
+  return UnpackedFloat[2, 4].make(mant: wide_words2[2](h1: D64_UF128_LN_MANT[p], h0: D64_UF128_LN_MANT[LLVM::add(a: p, b: 1_u64)]), exp: D64_UF128_LN_EXP[idx], fpclass: POSITIVE_NORMAL)
 
 ### 10^e as a W=128 engine value via the sqrt-split table (one engine multiply, no loop). Covers
 ### decimal64's |e| <= 398; |e| beyond that saturates at the table edge (folds to inf/0 downstream).
-routine uf128_pow10(e: S64) -> UnpackedFloat[U128, U256, 128]
+routine uf128_pow10(e: S64) -> UnpackedFloat[2, 4]
   var neg = LLVM::signed_lt(a: e, b: 0_s64)
   var a = if neg then LLVM::sub(a: 0_s64, b: e) else e
   var au = LLVM::reinterpret_bits[S64, U64](a)
