@@ -758,6 +758,11 @@ public enum SemanticDiagnosticCode
     /// passed to — which would leave the token pointing at freed memory.</summary>
     TokenSourceReplaced = 639,
 
+    /// <summary>A shared buffer's refcount handle (`Hijacked[FrozenController]`) is read out of an existing
+    /// value into a new one without that routine holding it first, so both values release one count and
+    /// the buffer is freed twice.</summary>
+    ControllerRewrapWithoutHold = 640,
+
     /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
     /// thread-shareable wrapper (Atomic/Guarded/Witnessed); passing it would silently alias
     /// unsynchronized state across the thread boundary.</summary>

@@ -306,6 +306,8 @@ public sealed partial class SemanticVerifier
         // null is a transient "not yet inferred" state — after body analysis it must be resolved.
         routineInfo.ReturnType ??= _registry.LookupType(name: "None");
 
+        CheckControllerRewraps(routine: routine);
+
         // Validate that all routines terminate explicitly on every path (#144).
         // None-returning routines still require an explicit `return` — implicit fall-off
         // is rejected so control-flow analysis remains uniform across return types.
