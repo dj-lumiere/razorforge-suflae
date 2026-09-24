@@ -1395,6 +1395,15 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private bool TryRouteCreatorToCreate(TypeSymbol type, CreatorExpression creator)
     {
+        // `Hijacked[T](raw)`: a positional construction on a generic type reaches here with empty names
+        // (GenericCallLoweringPass lowers it before analysis). Bind it to a creator by argument type and
+        // give each argument its parameter's name, so the named routing below takes over.
+        if (creator.MemberVariables.All(predicate: mv => mv.Name.Length == 0) &&
+            !NamePositionalCreatorArguments(type: type, creator: creator))
+        {
+            return false;
+        }
+
         var providedNames = creator.MemberVariables
                                    .Select(selector: mv => mv.Name)
                                    .ToList();
@@ -1417,16 +1426,28 @@ public sealed partial class SemanticVerifier
         // same Creator kind (IsFailable is a structured flag), so IsCreator matches both.
         candidates.AddRange(collection: _registry.GetMemberRoutinesForType(type: type)
                                                  .Where(predicate: m => m.IsCreator));
+        // A creator may leave defaulted parameters out, but only when the names are not a field-init
+        // (all of them fields), which keeps preferring inline field-init for a partial field list.
+        List<MemberVariableInfo>? typeFields = type switch
+        {
+            RecordTypeSymbol record => record.MemberVariables,
+            EntityTypeSymbol entity => entity.MemberVariables,
+            _ => null
+        };
+        bool mayOmitDefaults = typeFields == null ||
+                               !providedNameSet.IsSubsetOf(
+                                   other: typeFields.Select(selector: f => f.Name));
         foreach (RoutineInfo m in candidates)
         {
-            if (m.Parameters.Count != creator.MemberVariables.Count)
-            {
-                continue;
-            }
-
+            // Every provided name is a parameter, and every parameter left out has a default.
             var pNames = new HashSet<string>(
                 collection: m.Parameters.Select(selector: p => p.Name));
-            if (pNames.SetEquals(other: providedNameSet))
+            bool fits = m.Parameters.Count == providedNameSet.Count
+                ? pNames.SetEquals(other: providedNameSet)
+                : mayOmitDefaults && pNames.IsSupersetOf(other: providedNameSet) &&
+                  m.Parameters.All(predicate: p =>
+                      providedNameSet.Contains(item: p.Name) || p.HasDefaultValue);
+            if (fits)
             {
                 nameMatches.Add(item: m);
             }
@@ -1524,6 +1545,11 @@ public sealed partial class SemanticVerifier
         {
             if (!argByName.TryGetValue(key: p.Name, value: out Expression? arg))
             {
+                if (p.HasDefaultValue)
+                {
+                    continue;
+                }
+
                 return null;
             }
 
@@ -1536,6 +1562,53 @@ public sealed partial class SemanticVerifier
                userMatches.Any(predicate: m => m.RegistryKey == resolved.RegistryKey)
             ? resolved
             : null;
+    }
+
+    /// <summary>
+    /// Names the all-positional arguments of <paramref name="creator"/> after the parameters of the
+    /// creator they bind to, chosen by argument type through <c>LookupCreatorOverload</c>. Each argument
+    /// is analyzed with its slot's parameter type as the expected type when every candidate creator
+    /// agrees on it, so a bare literal adapts. Returns false (arguments left unnamed) when no creator
+    /// accepts the arguments.
+    /// </summary>
+    private bool NamePositionalCreatorArguments(TypeSymbol type, CreatorExpression creator)
+    {
+        int argCount = creator.MemberVariables.Count;
+        var candidates = new List<RoutineInfo>();
+        _registry.CollectCreatorCandidates(type: type, candidates: candidates);
+        candidates.AddRange(collection: _registry.GetMemberRoutinesForType(type: type)
+                                                 .Where(predicate: m => m.IsCreator));
+        candidates.RemoveAll(match: m => m.Parameters.Any(predicate: p => p.IsVariadicParam) ||
+                                         !RoutineCanAcceptArgCount(routine: m, argCount: argCount));
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        var argTypes = new List<TypeSymbol>(capacity: argCount);
+        for (int i = 0; i < argCount; i++)
+        {
+            var slotTypes = candidates.Select(selector: m => m.Parameters[index: i].Type)
+                                      .DistinctBy(keySelector: t => t.FullName)
+                                      .ToList();
+            argTypes.Add(item: AnalyzeExpression(expression: creator.MemberVariables[index: i].Value,
+                expectedType: slotTypes.Count == 1
+                    ? slotTypes[index: 0]
+                    : null));
+        }
+
+        if (_registry.LookupCreatorOverload(type: type, argTypes: argTypes) is not { } resolved)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < argCount; i++)
+        {
+            creator.MemberVariables[index: i] = (resolved.Parameters[index: i].Name,
+                creator.MemberVariables[index: i].Value);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -1582,6 +1655,17 @@ public sealed partial class SemanticVerifier
         // Validate each provided member variable
         foreach ((string memberVariableName, Expression value) in memberVariables)
         {
+            // A positional argument that no creator accepted (NamePositionalCreatorArguments left it unnamed).
+            if (memberVariableName.Length == 0)
+            {
+                TypeSymbol argType = AnalyzeExpression(expression: value);
+                ReportError(code: SemanticDiagnosticCode.MemberVariableNotFound,
+                    message:
+                    $"No creator of '{type.Name}' takes a '{argType.Name}' here. Check the argument's type, or name the parameter you mean (for example `{type.Name}(from: ...)`).",
+                    location: value.Location);
+                continue;
+            }
+
             // Check for duplicates
             if (!providedMemberVariables.Add(item: memberVariableName))
             {

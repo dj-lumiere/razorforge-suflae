@@ -1195,8 +1195,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
             return LowerNonOverloadableBinary(expr: expr, bin: bin);
         }
 
-        Expression left = VisitExpression(expr: bin.Left);
-        Expression right = VisitExpression(expr: bin.Right);
+        // An entity element operand (`a == boxes[0]`) is read through a view token on the element, not a
+        // getitem copy.
+        Expression left = LowerElementPath(expr: bin.Left, write: false) ?? VisitExpression(expr: bin.Left);
+        Expression right = LowerElementPath(expr: bin.Right, write: false) ?? VisitExpression(expr: bin.Right);
 
         // Membership operators reverse receiver/argument: x in coll -> coll.contains(x)
         bool isReversed = bin.Operator is BinaryOperator.In or BinaryOperator.NotIn;
@@ -1213,6 +1215,21 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
             memberRoutineName: memberRoutineName,
             receiverType: receiverType,
             argType: argType);
+
+        // An operator whose parameter is a protocol (`eq(you: Accessing[Box])`) is generic in that
+        // parameter: bind it to the argument's type, as the direct call `a.eq(you: b)` does.
+        if (resolvedMemberRoutine != null && argType != null)
+        {
+            resolvedMemberRoutine = ResolveMemberRoutineGenericRoutine(routine: resolvedMemberRoutine,
+                argTypes: [argType]);
+        }
+
+        // An operator that changes its receiver reaches an element receiver through a write token instead.
+        if (resolvedMemberRoutine is { MutationCategory: not MutationCategory.Readonly } &&
+            LowerElementPath(expr: isReversed ? bin.Right : bin.Left, write: true) is { } writeToken)
+        {
+            receiver = writeToken;
+        }
 
         // Mixed fixed-width integer comparisons have no direct cross-width overloads in the
         // stdlib. Normalize both sides to a common width here so we lower to a concrete

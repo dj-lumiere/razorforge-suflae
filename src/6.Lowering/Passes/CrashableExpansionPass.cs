@@ -328,6 +328,11 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
                 bindName = tp.VariableName;
                 loc = tp.Location;
                 return true;
+            // `else e` after the value arm(s): analysis proved only the error is left.
+            case ElsePattern { BindsCarrierError: true } ep:
+                bindName = ep.VariableName;
+                loc = ep.Location;
+                return true;
             default:
                 bindName = null;
                 loc = null;

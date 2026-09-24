@@ -931,7 +931,16 @@ public record CrashablePattern(
 /// </list>
 /// </remarks>
 public record ElsePattern(string? VariableName, SourceLocation Location)
-    : Pattern(Location: Location);
+    : Pattern(Location: Location)
+{
+    /// <summary>
+    /// Set by semantic analysis when the subject is a <c>Check</c>/<c>Lookup</c> carrier and every
+    /// earlier arm already covers the value (and <c>None</c> for a Lookup), so the only case left is the
+    /// caught error. The binding then holds that error (typed <c>Crashable</c>), exactly like
+    /// <c>is Crashable e</c>, and lowering treats the clause as that arm.
+    /// </summary>
+    public bool BindsCarrierError { get; set; }
+}
 
 /// <summary>
 /// Pattern for destructuring records and similar types.

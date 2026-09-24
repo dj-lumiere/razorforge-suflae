@@ -447,6 +447,17 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
         foreach ((string key, Statement synthBody) in synthesizedBodies)
         {
             RoutineInfo? synthInfo = ctx.Registry.LookupRoutine(fullName: key);
+            // A derive that is generic in its OWN parameters (`ne` derived from `eq(you: Accessing[Box])`)
+            // gets one body per reached resolution (`ne[Box]`).
+            if (synthInfo is { IsSynthesized: true, IsGenericDefinition: true, GenericParameters: { } rParams } &&
+                synthInfo.OwnerType is not { IsGenericDefinition: true })
+            {
+                MaterializeRoutineGenericSynthBodies(synthInfo: synthInfo,
+                    synthBody: synthBody,
+                    routineParams: rParams);
+                continue;
+            }
+
             if (synthInfo is not { IsSynthesized: true, IsGenericDefinition: false })
             {
                 continue;
@@ -482,6 +493,50 @@ internal sealed class RoutineCollectionPass(InstantiationContext ctx)
                 genericOwner: genericOwner,
                 gParams: gParams,
                 concreteInstances: concreteInstances);
+        }
+    }
+
+    /// <summary>
+    /// Materializes a synthesized body that is generic in the routine's own parameters, once per reached
+    /// resolution of it, substituting those parameters with the resolution's type arguments.
+    /// </summary>
+    private void MaterializeRoutineGenericSynthBodies(RoutineInfo synthInfo, Statement synthBody,
+        List<string> routineParams)
+    {
+        foreach (RoutineInfo resolution in ctx.Registry.GetAllRoutineResolutions().ToList())
+        {
+            // Monomorphization leaves an empty synthesized sentinel for a resolution whose body it cannot
+            // find; that is not a body, so it is replaced here.
+            bool hasRealBody =
+                ctx.InstantiatedGenericBodies.TryGetValue(key: resolution.RegistryKey,
+                    value: out MonomorphizedBody? existing) &&
+                !(existing.IsSynthesized && existing.Ast.Body is BlockStatement { Statements.Count: 0 });
+            if (!ReferenceEquals(objA: resolution.GenericDefinition, objB: synthInfo) ||
+                resolution.TypeArguments is not { } tArgs || tArgs.Count != routineParams.Count ||
+                !ctx.LiveRoutineKeys.Contains(item: resolution.RegistryKey) || hasRealBody)
+            {
+                continue;
+            }
+
+            var subs = new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal);
+            for (int i = 0; i < routineParams.Count; i++)
+            {
+                subs[key: routineParams[index: i]] = tArgs[index: i];
+            }
+
+            Statement rewritten = GenericAstRewriter.RewriteStatement(stmt: synthBody,
+                subs: subs.ToDictionary(keySelector: kv => kv.Key,
+                    elementSelector: kv => kv.Value.FullName),
+                typeSubs: subs,
+                registry: ctx.Registry,
+                enclosingRoutine: resolution);
+            ctx.InstantiatedGenericBodies[key: resolution.RegistryKey] = new MonomorphizedBody(
+                Ast: WrapInSynthShellDecl(name: resolution.Name, body: rewritten, info: resolution),
+                Info: resolution,
+                TypeSubs: subs,
+                VariantStatus: null,
+                VariantInnerType: null,
+                IsSynthesized: true);
         }
     }
 

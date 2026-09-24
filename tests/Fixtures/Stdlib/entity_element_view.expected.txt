@@ -1,5 +1,6 @@
 list of lists = 2 1 20 | 1 9
 field write and call = 6
+comparison operand = true false
 through an entity field = 16
 dict value = 2 8
 circular list = 0 1 4

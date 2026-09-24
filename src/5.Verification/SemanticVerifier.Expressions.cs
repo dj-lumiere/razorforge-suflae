@@ -720,6 +720,7 @@ public sealed partial class SemanticVerifier
                 right: rightType,
                 op: binary.Operator,
                 location: binary.Location);
+            ValidateComparisonConsumingOperand(binary: binary, leftType: leftType, rightType: rightType);
             return _registry.LookupType(name: "Bool") ?? ErrorTypeSymbol.Instance;
         }
 
@@ -759,6 +760,35 @@ public sealed partial class SemanticVerifier
                      "Implement 'unwrap_or(default: T) -> T' to enable none coalescing.",
             location: binary.Location);
         return ErrorTypeSymbol.Instance;
+    }
+
+    /// <summary>
+    /// A comparison lowers to a call on one operand with the other as its argument (<c>a == b</c> is
+    /// <c>a.eq(you: b)</c>, <c>x in c</c> is <c>c.contains(x)</c>). When that parameter takes ownership
+    /// (<c>eq(you: Box)</c>), the argument operand is a consuming argument and must not be a kept entity.
+    /// </summary>
+    private void ValidateComparisonConsumingOperand(BinaryExpression binary, TypeSymbol leftType,
+        TypeSymbol rightType)
+    {
+        if (binary.Operator.GetMemberRoutineName() is not { } memberRoutineName)
+        {
+            return;
+        }
+
+        bool isReversed = binary.Operator is BinaryOperator.In or BinaryOperator.NotIn;
+        (TypeSymbol receiverType, Expression argument, TypeSymbol argType) = isReversed
+            ? (rightType, binary.Left, leftType)
+            : (leftType, binary.Right, rightType);
+        if (_registry.LookupMemberRoutineOverload(type: receiverType,
+                memberRoutineName: memberRoutineName,
+                argTypes: [argType]) is { Parameters: [var param, ..] } routine)
+        {
+            ValidateBareEntityConsumingArg(routine: routine,
+                param: param,
+                paramType: param.Type,
+                argValue: argument,
+                argType: argType);
+        }
     }
 
     /// <summary>
@@ -840,6 +870,13 @@ public sealed partial class SemanticVerifier
                 location: binary.Location);
             return ErrorTypeSymbol.Instance;
         }
+
+        // An operator whose parameter takes ownership (`eq(you: Box)`) is a consuming call like any other.
+        ValidateBareEntityConsumingArg(routine: memberRoutine,
+            param: memberRoutine.Parameters[index: 0],
+            paramType: paramType,
+            argValue: binary.Right,
+            argType: rightType);
 
         return ResolveOperatorReturnType(routine: memberRoutine, leftType: leftType);
     }

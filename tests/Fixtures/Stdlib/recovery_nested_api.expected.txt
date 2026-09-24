@@ -15,4 +15,6 @@ decl: 620 none none
 grab caught: Numeric domain error
 lookup: none
 lookup caught: Numeric domain error
+grab else: Numeric domain error
+lookup else: Numeric domain error
 DONE

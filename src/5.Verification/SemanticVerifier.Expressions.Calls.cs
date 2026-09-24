@@ -1250,8 +1250,9 @@ public sealed partial class SemanticVerifier
                 argTypes: creatorArgTypes) ?? creator;
         }
 
-        if (creator == null || creator.Parameters.Count != creatorArgTypes.Count ||
-            creator.Parameters.Any(predicate: p => p.IsVariadicParam))
+        // Trailing defaulted parameters may be left out; the emitter fills them in.
+        if (creator == null || creator.Parameters.Any(predicate: p => p.IsVariadicParam) ||
+            !RoutineCanAcceptArgCount(routine: creator, argCount: creatorArgTypes.Count))
         {
             return null;
         }

@@ -1641,9 +1641,16 @@ public sealed partial class TypeRegistry
             return null;
         }
 
+        // A full-arity match wins; only when none exists may trailing defaulted parameters be left out
+        // (`Real(text: t)` against `create(text: Text, radix: S32 = 10)`).
         return MatchMemberOverloadByArgTypes(candidates: candidates,
-            receiverType: type,
-            argTypes: argTypes);
+                   receiverType: type,
+                   argTypes: argTypes,
+                   allowOmittedDefaults: false) ??
+               MatchMemberOverloadByArgTypes(candidates: candidates,
+                   receiverType: type,
+                   argTypes: argTypes,
+                   allowOmittedDefaults: true);
     }
 
     /// <summary>
@@ -1663,13 +1670,14 @@ public sealed partial class TypeRegistry
     /// <see cref="SubstituteMemberRoutineForOwner"/>.
     /// </summary>
     private RoutineInfo? MatchMemberOverloadByArgTypes(List<RoutineInfo> candidates,
-        TypeSymbol receiverType, List<TypeSymbol> argTypes)
+        TypeSymbol receiverType, List<TypeSymbol> argTypes, bool allowOmittedDefaults)
     {
         // Tier 1 — exact type-name match (unique by declaration).
         RoutineInfo? exactMatch = candidates.FirstOrDefault(predicate: candidate =>
             OverloadParamsMatch(candidate: candidate,
                 receiverType: receiverType,
                 argTypes: argTypes,
+                allowOmittedDefaults: allowOmittedDefaults,
                 match: (arg, param) => param.Name == arg.Name));
         if (exactMatch != null)
         {
@@ -1683,6 +1691,7 @@ public sealed partial class TypeRegistry
             if (!OverloadParamsMatch(candidate: candidate,
                     receiverType: receiverType,
                     argTypes: argTypes,
+                    allowOmittedDefaults: allowOmittedDefaults,
                     match: (arg, param) =>
                         IsMemberRoutineArgumentAssignable(source: arg, target: param)))
             {
@@ -1720,9 +1729,12 @@ public sealed partial class TypeRegistry
     /// is treated as the concrete <paramref name="receiverType"/>.
     /// </summary>
     private static bool OverloadParamsMatch(RoutineInfo candidate, TypeSymbol receiverType,
-        List<TypeSymbol> argTypes, Func<TypeSymbol, TypeSymbol, bool> match)
+        List<TypeSymbol> argTypes, bool allowOmittedDefaults, Func<TypeSymbol, TypeSymbol, bool> match)
     {
-        if (candidate.Parameters.Count != argTypes.Count)
+        if (candidate.Parameters.Count != argTypes.Count &&
+            !(allowOmittedDefaults && argTypes.Count < candidate.Parameters.Count &&
+              candidate.Parameters.Skip(count: argTypes.Count)
+                       .All(predicate: p => p.HasDefaultValue && !p.IsVariadicParam)))
         {
             return false;
         }

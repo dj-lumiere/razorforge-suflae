@@ -499,7 +499,8 @@ public partial class LlvmEmitter
         // BID/IEEE encoding for carrier records (B128/F256/D32/D64/D128/Decimal). Honor it —
         // never inline a scalar cast that would bypass the encoding and corrupt carrier values.
         // The backend must not re-decide a conversion the resolver already settled.
-        if (resolvedRoutine is { IsSynthesized: false, IsCreator: true, Parameters.Count: 1 })
+        if (resolvedRoutine is { IsSynthesized: false, IsCreator: true, Parameters.Count: >= 1 } &&
+            resolvedRoutine.Parameters.Skip(count: 1).All(predicate: p => p.HasDefaultValue))
         {
             TypeSymbol? paramType = resolvedRoutine.Parameters[index: 0].Type;
             if (paramType != null && (paramType.FullName == argType.FullName ||

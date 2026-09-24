@@ -54,6 +54,23 @@ public class KeptEntityReadTests
     }
 
     [Fact]
+    public void Analyze_EntityElementIntoConsumingOperatorParameter_Errors()
+    {
+        Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """
+                                    routine Box.eq(you: Box) -> Bool
+                                      return me.n == you.n
+
+                                    routine start()
+                                      var boxes = List[Box]()
+                                      boxes.add_last(value: Box(n: 1))
+                                      var a = Box(n: 1)
+                                      show(f"{a == boxes[0]}")
+                                      return
+                                    """,
+            expected: "'eq' takes ownership of its 'you'"));
+    }
+
+    [Fact]
     public void Analyze_ReturningAnEntityElement_Errors()
     {
         Assert.Contains(filter: IsKeptEntityError, collection: ErrorsFor(body: """

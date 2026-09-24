@@ -399,6 +399,7 @@ public sealed partial class SemanticVerifier
         bool handledNone = false;
         bool handledNoneValue = false;
         bool handledCrashable = false;
+        bool handledValue = false;
 
         foreach (WhenClause clause in whenStmt.Clauses)
         {
@@ -410,7 +411,8 @@ public sealed partial class SemanticVerifier
                     HandledArms: handledArms),
                 handledNone: ref handledNone,
                 handledNoneValue: ref handledNoneValue,
-                handledCrashable: ref handledCrashable);
+                handledCrashable: ref handledCrashable,
+                handledValue: ref handledValue);
             if (handled)
             {
                 continue;
@@ -455,7 +457,7 @@ public sealed partial class SemanticVerifier
 
     private bool AnalyzeWhenClause(WhenClause clause, TypeSymbol matchedType,
         WhenClauseContext ctx, ref bool handledNone, ref bool handledNoneValue,
-        ref bool handledCrashable)
+        ref bool handledCrashable, ref bool handledValue)
     {
         ApplyElseVariantNarrowing(clause: clause,
             whenVarName: ctx.WhenVarName,
@@ -469,6 +471,24 @@ public sealed partial class SemanticVerifier
 
         if (clause.Pattern is ElsePattern elsePat && IsCarrierType(type: matchedType))
         {
+            // Every earlier arm already covers the value (and None for a Lookup), so the only case
+            // left is the caught error: bind it as `is Crashable e` would, not the carrier itself.
+            string? carrierBase = GetCarrierBaseName(type: matchedType);
+            bool onlyErrorLeft = handledValue && !handledCrashable &&
+                                 (carrierBase == "Check" || carrierBase == "Lookup" && handledNone);
+            if (onlyErrorLeft && elsePat.VariableName != null)
+            {
+                elsePat.BindsCarrierError = true;
+                DeclarePatternVariable(name: elsePat.VariableName,
+                    type: ResolveType(typeExpr: new TypeExpression(Name: "Crashable",
+                        GenericArguments: null,
+                        Location: elsePat.Location)),
+                    location: elsePat.Location);
+                AnalyzeStatement(statement: clause.Body);
+                _registry.ExitScope();
+                return true;
+            }
+
             TypeSymbol? narrowedType = ComputeNarrowedType(type: matchedType,
                 eliminateNone: handledNone,
                 eliminateCrashable: handledCrashable);
@@ -484,6 +504,11 @@ public sealed partial class SemanticVerifier
         }
 
         AnalyzePattern(pattern: clause.Pattern, matchedType: matchedType);
+        if (IsCarrierValueArm(pattern: clause.Pattern, carrierType: matchedType))
+        {
+            handledValue = true;
+        }
+
         ApplyVariantArmNarrowing(clause: clause,
             whenVarName: ctx.WhenVarName,
             whenVariant: ctx.WhenVariant,
@@ -539,6 +564,24 @@ public sealed partial class SemanticVerifier
         {
             handledCrashable = true;
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="pattern"/> is an unguarded <c>is T</c> / <c>is T v</c> arm that fully
+    /// covers a carrier's value case (<c>T</c> is the carrier's value type).
+    /// </summary>
+    private bool IsCarrierValueArm(Pattern pattern, TypeSymbol carrierType)
+    {
+        if (GetCarrierBaseName(type: carrierType) is not ("Check" or "Lookup") ||
+            carrierType.TypeArguments is not { Count: > 0 } ||
+            pattern is not TypePattern tp ||
+            (tp.Type.ResolvedType ?? _registry.LookupType(name: tp.Type.Name)) is not { } armType)
+        {
+            return false;
+        }
+
+        TypeSymbol valueType = carrierType.TypeArguments[index: 0];
+        return ReferenceEquals(objA: armType, objB: valueType) || armType.Name == valueType.Name;
     }
 
     /// <summary>
