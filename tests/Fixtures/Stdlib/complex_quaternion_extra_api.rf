@@ -1,0 +1,47 @@
+module Tests/Stdlib/ComplexQuaternionExtraApi
+
+import IO/Console
+import Math3D
+import Numerics.[Complex, Real]
+
+# C64/C128/C256, Complex, Q128 and Q256: real-scalar * and /, integer pow, checked exp/log/sqrt, NaN
+# queries, fixed(places), a+bi parsing, Hashable keys, and the quaternion rotation API (axis-angle,
+# Euler Z-Y-X, from_to, nlerp, is_unit, Q256 -> Q128). Unsuffixed float literals take the context type.
+
+routine start()
+  var z = C128(real: 1.0, imag: 2.0)
+  var w = z * 2.0
+  var h = z / 2.0
+  show(f"{w} {h} {z.pow(exp: 3)} {z.pow(exp: -1).fixed(3)} {z.pow(exp: 0)}")
+  show(f"{z.exp().fixed(4)} {z.sqrt().fixed(4)} {z.log().fixed(4)} {z.is_finite()} {z.is_nan()}")
+  var zero = C128.zero()
+  var r = try zero.log()
+  when r
+    is None => show("log(0): none")
+    else v => show(f"log(0): {v}")
+  show(f"{C128!(from_text: "1.5-2i")} {C128!(from_text: "3")} {C128!(from_text: "-i")} {C64!(from_text: "1e-3+2.5i")} {C256!(from_text: "2i")}")
+  var d = Dict[C64, Text]()
+  discard d.add(key: C64(real: 1.0, imag: 0.0), value: "one")
+  show(f"{d.count()} {C64(real: 1.5, imag: -0.25).fixed(2)} {C256(real: 1.0, imag: 1.0).fixed(3)}")
+
+  var q = Q128.from_axis_angle(axis: Vector3D(x: 0.0, y: 0.0, z: 1.0), angle: 1.0)
+  var aa = q.to_axis_angle()
+  show(f"axis-angle: {aa.item0} {aa.item1.fixed(4)} unit={q.is_unit()}")
+  var e = Q128.from_euler(roll: 0.1, pitch: 0.2, yaw: 0.3)
+  var back = e.to_euler()
+  show(f"euler: {back.item0.fixed(4)} {back.item1.fixed(4)} {back.item2.fixed(4)}")
+  var ft = Q128.from_to(from: Vector3D(x: 1.0, y: 0.0, z: 0.0), target: Vector3D(x: 0.0, y: 1.0, z: 0.0))
+  show(f"from_to: {ft.rotate(v: Vector3D(x: 1.0, y: 0.0, z: 0.0))} opposite: {Q128.from_to(from: Vector3D(x: 1.0, y: 0.0, z: 0.0), target: Vector3D(x: -1.0, y: 0.0, z: 0.0)).fixed(3)}")
+  var q2 = Q256.from_axis_angle(axis: Vector3D(x: 1.0, y: 0.0, z: 0.0), angle: 0.5)
+  var aa2 = q2.to_axis_angle()
+  show(f"q256: {aa2.item0} {aa2.item1.fixed(6)} {Q128(from: q2).fixed(4)} {(q2 * 2.0).fixed(3)} {q2.nlerp(you: Q256_IDENTITY, t: 0.5).is_unit()}")
+  var qs = Set[Q128]()
+  discard qs.add(q)
+  show(f"{qs.count()} {Q128_IDENTITY.angle()}")
+  var c = Complex(from: z)
+  show(f"{(c * Real(value: 2.0)).fixed(2)} {(c / Real(value: 2.0)).fixed(2)}")
+  var lits = C256(real: 1.0, imag: 0.1)
+  var narrow: B32 = 2.5
+  show(f"{lits} {narrow}")
+  show("DONE")
+  return

@@ -71,6 +71,18 @@ routine Complex(from: S64) -> Complex
 routine Complex(from: B64) -> Complex
   return Complex(real: Real(value: from), imag: Real.zero())
 
+### Widens a `C64` to `Complex` (each part exactly, through `B64`).
+### :param from: The single-precision complex value.
+### :returns: The same value as a `Complex`.
+routine Complex(from: C64) -> Complex
+  return Complex(real: Real(value: B64(from.real)), imag: Real(value: B64(from.imag)))
+
+### Widens a `C128` to `Complex` (each part exactly).
+### :param from: The double-precision complex value.
+### :returns: The same value as a `Complex`.
+routine Complex(from: C128) -> Complex
+  return Complex(real: Real(value: from.real), imag: Real(value: from.imag))
+
 ### Creates a complex value from polar coordinates.
 ### `r` is the radius and `theta` is the angle in radians.
 ### :param r: The radius value.
@@ -99,8 +111,8 @@ routine Complex.add(you: Complex) -> Complex
 routine Complex.sub(you: Complex) -> Complex
   return Complex(real: me.real - you.real, imag: me.imag - you.imag)
 
-### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). Only `+`/`-` allow
-### real↔complex mixing (arbitrary Real pairs with arbitrary Complex).
+### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). `+`/`-`/`*`/`/` accept a
+### `Real` operand.
 ### :param you: The real addend.
 ### :returns: The complex sum.
 @readonly
@@ -113,6 +125,20 @@ routine Complex.add(you: Real) -> Complex
 @readonly
 routine Complex.sub(you: Real) -> Complex
   return me.sub(Complex(real: you))
+
+### Returns `me * you` for a real `you` (both parts scaled).
+### :param you: The real factor.
+### :returns: The scaled complex value.
+@readonly
+routine Complex.mul(you: Real) -> Complex
+  return Complex(real: me.real * you, imag: me.imag * you)
+
+### Returns `me / you` for a real `you` (both parts divided).
+### :param you: The real divisor.
+### :returns: The divided complex value.
+@readonly
+routine Complex.truediv(you: Real) -> Complex
+  return Complex(real: me.real / you, imag: me.imag / you)
 
 ### Multiplies this value by `you` using the standard complex product rule.
 ### :param you: The value to multiply by.
@@ -447,6 +473,14 @@ routine Complex.represent_with_places(decimal_places: S32) -> Text
   if me.imag.is_negative()
     return real_text + " - " + imag_abs + "i"
   return real_text + " + " + imag_abs + "i"
+
+### Formats this value as `a + bi` / `a - bi` with exactly `places` digits after the point in each
+### part (the same as `represent_with_places`; see `Real.fixed`).
+### :param places: The number of digits after the point.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.fixed(places: U64) -> Text
+  return me.represent_with_places(decimal_places: LLVM::int_truncate[U64, S32](places))
 
 ### Returns a diagnostic string that includes the type name wrapper.
 ### Standard `diagnose` shape (no args) for f-string dispatch.

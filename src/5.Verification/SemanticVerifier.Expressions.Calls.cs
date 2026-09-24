@@ -2528,22 +2528,22 @@ public sealed partial class SemanticVerifier
     private void ValidateMemberCallOperatorSemantics(CallExpression call, MemberExpression member,
         TypeSymbol objectType, RoutineInfo memberRoutine)
     {
-        // #68: Real-to-Complex promotion — only add/sub allow float↔complex cross-type
+        // #68: Real-to-Complex promotion. A complex value takes a real operand in `+ - * /` (its own
+        // overloads), but a real receiver never takes a complex argument: `2.0 * z` has no B64 routine
+        // for it, so write `z * 2.0` or convert explicitly.
         if (!IsOperatorWired(name: member.MemberName) ||
-            member.MemberName is "add" or "sub" or "iadd" or "isub" ||
             call.Arguments.Count == 0 || memberRoutine.Parameters.Count == 0)
         {
             return;
         }
 
         TypeSymbol argType = memberRoutine.Parameters[index: 0].Type;
-        if (IsFloatType(type: objectType) && IsComplexType(type: argType) ||
-            IsComplexType(type: objectType) && IsFloatType(type: argType))
+        if (IsFloatType(type: objectType) && IsComplexType(type: argType))
         {
             ReportError(code: SemanticDiagnosticCode.RealComplexPromotionInvalid,
                 message:
-                $"Operator '{member.MemberName}' does not allow real↔complex promotion. " +
-                "Only '+' and '-' support implicit real-to-complex conversion. Use explicit conversion for other operators.",
+                $"Operator '{member.MemberName}' has no real receiver taking a complex operand. " +
+                "Put the complex value first (`z * 2.0`), or convert the real explicitly.",
                 location: call.Location);
         }
     }

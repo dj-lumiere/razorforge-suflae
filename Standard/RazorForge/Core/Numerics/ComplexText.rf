@@ -1,0 +1,44 @@
+module Core
+
+### The two number texts of a complex literal `a+bi`, ready for the component type's parser.
+record ComplexTextParts
+  ### The real part's text (`0` when the input has none).
+  real: Text
+  ### The imaginary part's text without the `i` (`0` when the input has none, `1` / `-1` for a bare `i`).
+  imag: Text
+
+### Splits `a`, `bi`, `a+bi` or `a-bi` into its real and imaginary texts. The split point is the last
+### `+`/`-` that is not the leading sign and not an exponent sign (`1e-3+2i` splits before `+2i`).
+### :param text: The text to split.
+### :param target: The type being parsed, for the error.
+### :returns: The real and imaginary texts.
+### :throws: {InvalidValueError} if the text is empty.
+routine split_complex_text!(text: Text, target: Text) -> ComplexTextParts
+  var t = text.trim()
+  var n = t.count()
+  if n == 0u64
+    throw InvalidValueError(input: text, target: target)
+  if t[n - 1u64] != 'i'
+    return ComplexTextParts(real: t, imag: "0")
+  var body = t[0u64 til n - 1u64]
+  var split = 0u64
+  var k = body.count()
+  while k > 1u64 and split == 0u64
+    k = k - 1u64
+    var c = body[k]
+    if (c == '+' or c == '-') and body[k - 1u64] != 'e' and body[k - 1u64] != 'E'
+      split = k
+  var real = "0"
+  var imag = body
+  if split > 0u64
+    real = body[0u64 til split]
+    imag = body[split til body.count()]
+  if real.count() > 1u64 and real[0u64] == '+'
+    real = real[1u64 til real.count()]
+  if imag.count() > 0u64 and imag[0u64] == '+'
+    imag = imag[1u64 til imag.count()]
+  if imag.count() == 0u64
+    imag = "1"
+  elseif imag == "-"
+    imag = "-1"
+  return ComplexTextParts(real: real, imag: imag)

@@ -1295,20 +1295,17 @@ public sealed partial class SemanticVerifier
     /// Returns true if the type implements the <c>BinaryFP</c> protocol (i.e., is a binary
     /// floating-point type such as b32 or b64).
     /// </summary>
-    private bool IsFloatType(TypeSymbol type)
+    private static bool IsFloatType(TypeSymbol type)
     {
-        // Check if type obeys the Floating protocol (binary floats)
-        return ImplementsProtocol(type: type, protocolName: "BinaryFP");
+        return type.Name is "B16" or "B32" or "B64" or "B128";
     }
 
     /// <summary>
-    /// Returns true if the type implements the <c>DecimalFP</c> protocol (i.e., is a decimal
-    /// floating-point type such as d64 or Suflae's Decimal).
+    /// Returns true if the type is a decimal floating-point type (D32, D64, D128, Decimal).
     /// </summary>
-    private bool IsDecimalType(TypeSymbol type)
+    private static bool IsDecimalType(TypeSymbol type)
     {
-        // Check if type obeys the DecimalFloating protocol
-        return ImplementsProtocol(type: type, protocolName: "DecimalFP");
+        return type.Name is "D32" or "D64" or "D128" or "Decimal";
     }
 
     /// <summary>Returns true if the type is a complex number type (C64, C128, C256, Complex).</summary>

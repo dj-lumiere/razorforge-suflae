@@ -3,7 +3,7 @@ module Core
 ### A complex number with double-precision real and imaginary components.
 ### `C128` stores two `B64` values and is the standard complex type for general
 ### scientific and numeric code. Use `C256` when quadruple precision is needed.
-record C128 obeys Numeric, Equatable
+record C128 obeys Numeric, Equatable, Hashable
   ### The real part.
   real: B64
   ### The imaginary part.
@@ -161,8 +161,8 @@ routine C128.add(you: C128) -> C128
 routine C128.sub(you: C128) -> C128
   return C128(real: me.real - you.real, imag: me.imag - you.imag)
 
-### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). Only `+`/`-` allow
-### real↔complex mixing; the component width must match (B64 pairs with C128).
+### Returns `me + you`, promoting the real `you` to complex (imaginary part 0). `+`/`-`/`*`/`/` accept
+### a real operand; the component width must match (B64 pairs with C128).
 ### :param you: The real addend.
 ### :returns: The complex sum.
 routine C128.add(you: B64) -> C128
@@ -173,6 +173,18 @@ routine C128.add(you: B64) -> C128
 ### :returns: The complex difference.
 routine C128.sub(you: B64) -> C128
   return me.sub(C128(from: you))
+
+### Returns `me * you` for a real `you` (both components scaled).
+### :param you: The real factor.
+### :returns: The scaled complex value.
+routine C128.mul(you: B64) -> C128
+  return C128(real: me.real * you, imag: me.imag * you)
+
+### Returns `me / you` for a real `you` (both components divided).
+### :param you: The real divisor.
+### :returns: The divided complex value.
+routine C128.truediv(you: B64) -> C128
+  return C128(real: me.real / you, imag: me.imag / you)
 
 ### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
 ### :param you: The right operand.
@@ -422,6 +434,60 @@ routine C128.pow(you: C128) -> C128
   # z^w = exp(w·log z); principal branch via log_unchecked.
   return (you * me.log_unchecked()).exp_unchecked()
 
+### Crashes unless both parts of `r` are finite: a NaN part is a domain error, an infinite part an
+### overflow. The check behind the `!` forms of `exp`/`log`/`sqrt`/`sinh`/`cosh`.
+routine c128_checked!(r: C128) -> C128
+  if r.real.is_finite() and r.imag.is_finite()
+    return r
+  if r.real.is_nan() or r.imag.is_nan()
+    throw NumericDomainError(description: "domain error: no complex result")
+  throw NumericOverflowError(description: "overflow: out of range")
+
+### Returns `e` raised to this value. Checked: crashes if a part of the result is not finite.
+### Use `exp_unchecked` for raw IEEE 754 propagation.
+### :returns: The complex exponential.
+routine C128.exp!() -> C128
+  return c128_checked(r: me.exp_unchecked())
+
+### Returns the principal natural logarithm. Checked: crashes on `log(0)` (an infinite real part).
+### Use `log_unchecked` for raw IEEE 754 propagation.
+### :returns: `log(|me|) + i·arg(me)`.
+routine C128.log!() -> C128
+  return c128_checked(r: me.log_unchecked())
+
+### Returns the principal square root. Checked: crashes if a part of the result is not finite.
+### Use `sqrt_unchecked` for raw IEEE 754 propagation.
+### :returns: The square root with non-negative real part.
+routine C128.sqrt!() -> C128
+  return c128_checked(r: me.sqrt_unchecked())
+
+### Returns the hyperbolic sine. Checked: crashes if a part of the result is not finite.
+### :returns: The complex hyperbolic sine.
+routine C128.sinh!() -> C128
+  return c128_checked(r: me.sinh_unchecked())
+
+### Returns the hyperbolic cosine. Checked: crashes if a part of the result is not finite.
+### :returns: The complex hyperbolic cosine.
+routine C128.cosh!() -> C128
+  return c128_checked(r: me.cosh_unchecked())
+
+### Returns this value raised to the integer power `exp` by repeated squaring (exact up to rounding of
+### each product, no `log`/`exp` round trip). A negative `exp` inverts first; `exp` 0 gives `1`.
+### :param exp: The integer exponent.
+### :returns: `me ** exp`.
+routine C128.pow(exp: S64) -> C128
+  var base = if exp < 0_s64 then me.reciprocal() else me
+  var k = LLVM::reinterpret_bits[S64, U64](exp)
+  if exp < 0_s64
+    k = 0u64 -% k
+  var result = C128.one()
+  while k != 0u64
+    if k % 2u64 == 1u64
+      result = result * base
+    base = base * base
+    k = k // 2u64
+  return result
+
 # ============================================================================
 # Query Routines
 # ============================================================================
@@ -441,6 +507,18 @@ routine C128.is_real() -> Bool
 routine C128.is_imaginary() -> Bool
   return me.real == 0.0_b64
 
+### Returns `true` if either part is NaN.
+routine C128.is_nan() -> Bool
+  return me.real.is_nan() or me.imag.is_nan()
+
+### Returns `true` if either part is infinite.
+routine C128.is_infinite() -> Bool
+  return me.real.is_infinite() or me.imag.is_infinite()
+
+### Returns `true` if both parts are finite.
+routine C128.is_finite() -> Bool
+  return me.real.is_finite() and me.imag.is_finite()
+
 # ============================================================================
 # Text Representation
 # ============================================================================
@@ -456,6 +534,25 @@ routine C128.represent() -> Text
   if me.imag < 0.0_b64
     return real_text + "-" + imag_abs + "i"
   return real_text + "+" + imag_abs + "i"
+
+### Formats this value as `a+bi` / `a-bi` with exactly `places` digits after the point in each part
+### (see `B64.fixed`).
+### :param places: The number of digits after the point.
+### :returns: The resulting `Text` value.
+routine C128.fixed(places: U64) -> Text
+  var imag_abs = me.imag.abs().fixed(places)
+  if me.imag < 0.0_b64
+    return me.real.fixed(places) + "-" + imag_abs + "i"
+  return me.real.fixed(places) + "+" + imag_abs + "i"
+
+### Parses `a`, `bi`, `a+bi` or `a-bi` (a bare `i` / `-i` is a unit imaginary part), the form
+### `represent` writes. Each part uses `B64`'s own number syntax.
+### :param from_text: The text to parse.
+### :returns: The parsed value.
+### :throws: {InvalidValueError} if the text is not a complex number.
+routine C128!(from_text: Text) -> C128
+  var parts = split_complex_text(text: from_text, target: "C128")
+  return C128(real: B64!(from_text: parts.real), imag: B64!(from_text: parts.imag))
 
 ### Returns the real component (mirrors `Complex.real_part`; the `real` field is also public).
 ### :returns: The real part as `B64`.
