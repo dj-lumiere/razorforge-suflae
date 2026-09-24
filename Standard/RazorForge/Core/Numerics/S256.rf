@@ -723,6 +723,17 @@ routine S256.represent() -> Text
   # yields |me| (works correctly even for S256.MIN, whose absolute value overflows S256).
   return "-" + (0u256 -% LLVM::reinterpret_bits[S256, U256](me)).represent()
 
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative (`255.to_text(radix: 16)` is `ff`).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine S256.to_text(radix: S32) -> Text
+  var raw = LLVM::reinterpret_bits[S256, U256](me)
+  if me < 0_s256
+    return wide_radix_text[U256](mag: LLVM::zero_extend[U64, U256](0_u64) -% raw, negative: true, radix: radix)
+  return wide_radix_text[U256](mag: raw, negative: false, radix: radix)
+
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 @override

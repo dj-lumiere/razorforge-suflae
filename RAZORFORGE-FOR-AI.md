@@ -370,7 +370,20 @@ relates ListEmitter[T] as Iter        # associated type binding
 ```razorforge
 show(f"x={x} and pi≈{pi}")    # f-string interpolation
 show(f"debug: {value:?}")     # :? = diagnose (debug) format spec
+show(f"{n.hex()} {x.fixed(2)} {name.pad_end(10)} {n.represent().zero_pad(5)}")
 ```
+
+The only f-text format specs are `=`, `?` and `=?`. Everything else is a member routine you call
+inside the braces:
+- **Integers** (`S8`..`S256`, `U8`..`U256`, `Integer`): `to_text(radix:)` (2 to 36, lowercase
+  digits, `-` for negatives, crashes on another radix) and the shorthands `hex()` / `bin()` / `oct()`.
+  No `0x` prefix; `.to_uppercase()` for `FF`.
+- **Reals** (`B16`..`B128`, `D32`..`D128`, `Decimal`, `Real`): `fixed(places)` — exactly `places`
+  digits after the point, integer part in full, rounded half to even from the exact value
+  (`2.675.fixed(2)` is `2.67`; `Real` rounds ties away from zero). `to_text(sig_digits:)` on
+  `B16`/`B32`/`B64` is the significant-digit (`%g`) form.
+- **Text**: `pad_start(width)` / `pad_end(width)` / `center(width)` (fill defaults to a space) and
+  `zero_pad(width)`, which keeps a leading `-`/`+` in front (`"-5".zero_pad(4)` is `-005`).
 
 `Text` is UTF-32, a record (value type). `Bytes` is a record for raw byte
 sequences with UTF-8 iteration helpers. A `b'x'` byte-letter literal has type

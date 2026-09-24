@@ -558,6 +558,15 @@ routine B32.represent() -> Text
 routine B32.to_text(sig_digits: U64) -> Text
   return format_binary(value: B64(from: me), sig: sig_digits)
 
+### Renders this value with exactly `places` digits after the point, rounded half to even from its
+### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
+### part is always written out in full, never in exponent form.
+### :param places: The number of digits after the point (0 for none).
+### :returns: The rendered `Text`.
+@readonly
+routine B32.fixed(places: U64) -> Text
+  return format_binary_fixed(value: B64(from: me), places: places)
+
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @override

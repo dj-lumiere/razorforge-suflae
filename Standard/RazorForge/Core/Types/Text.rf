@@ -795,10 +795,10 @@ routine Text.reverse() -> Text
 ### Returns a copy padded on the left.
 ### If `width` is less than or equal to the current length, the original text is returned.
 ### :param width: The total width to target.
-### :param fill: The fill character to use.
+### :param fill: The fill character to use (a space when omitted).
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.pad_start(width: U64, fill: Character) -> Text
+routine Text.pad_start(width: U64, fill: Character = ' ') -> Text
   if me.count >= width
     return me
   var result = List[Character]()
@@ -812,10 +812,10 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
 ### Returns a copy padded on the right.
 ### If `width` is less than or equal to the current length, the original text is returned.
 ### :param width: The total width to target.
-### :param fill: The fill character to use.
+### :param fill: The fill character to use (a space when omitted).
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.pad_end(width: U64, fill: Character) -> Text
+routine Text.pad_end(width: U64, fill: Character = ' ') -> Text
   if me.count >= width
     return me
   var result = List[Character]()
@@ -830,10 +830,10 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 ### An odd remainder puts the extra fill character on the right. If `width` is at
 ### or below the current length, the original text is returned.
 ### :param width: The total width to target.
-### :param fill: The fill character to use.
+### :param fill: The fill character to use (a space when omitted).
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.center(width: U64, fill: Character) -> Text
+routine Text.center(width: U64, fill: Character = ' ') -> Text
   if me.count >= width
     return me
   var total = width - me.count
@@ -847,6 +847,19 @@ routine Text.center(width: U64, fill: Character) -> Text
   each p in 0u64 til right
     result.add_last(fill)
   return Text(from_list: steal result)
+
+### Returns a copy padded on the left with `0` to `width`, keeping a leading sign (`-` or `+`) in front,
+### so a rendered number stays a number: `"-5".zero_pad(4)` is `-005`, `"ff".zero_pad(4)` is `00ff`.
+### If `width` is at or below the current length, the original text is returned.
+### :param width: The total width to target, sign included.
+### :returns: The resulting `Text` value.
+@readonly
+routine Text.zero_pad(width: U64) -> Text
+  if me.count >= width
+    return me
+  if me.count > 0u64 and (me[0u64] == '-' or me[0u64] == '+')
+    return me[0u64 til 1u64] + me[1u64 til me.count].pad_start(width: width - 1u64, fill: '0')
+  return me.pad_start(width: width, fill: '0')
 
 # Split/Join
 

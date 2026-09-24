@@ -1,0 +1,24 @@
+module Tests/Stdlib/NumberTextApi
+
+import IO/Console
+import Numerics.[Integer, Real]
+
+# Number formatting is member routines, not f-text format specs: `to_text(radix:)` / `hex()` / `bin()` /
+# `oct()` on every integer, `fixed(places)` on every real type (exact value, ties to even except Real),
+# and `pad_start` / `pad_end` / `center` / `zero_pad` on Text.
+
+routine start()
+  var neg = -255
+  var small = -128_s8
+  var tiny = -0.001
+  show(f"{255.hex()} {neg.hex()} {5.bin()} {8.oct()} {255.to_text(radix: 36)}")
+  show(f"{255u8.hex()} {small.hex()} {65535u16.hex()} {S64_MIN.hex()} {U64_MAX.hex()}")
+  show(f"{S128_MIN.hex()} {U128_MAX.hex()} {U256_MAX.bin().count()} {S256_MIN.to_text(radix: 10)}")
+  show(f"{Integer(value: 255u64).hex()} {255.hex().to_uppercase()}")
+  show(f"[{"ab".pad_start(5)}] [{"ab".pad_end(5)}] [{"ab".center(6)}] [{"-5".zero_pad(4)}] [{"ff".zero_pad(4)}]")
+  show(f"{3.14159.fixed(2)} {2.675.fixed(2)} {0.5.fixed(0)} {1.5.fixed(0)} {tiny.fixed(2)} {1e20.fixed(1)} {1.0.fixed(3)}")
+  show(f"{B32(from: 3.14159).fixed(3)} {B16(from: 0.5).fixed(2)} {B128(from: 2.5).fixed(4)}")
+  show(f"{D64(from: 1.235).fixed(2)} {D128(from: 1.245).fixed(2)} {D32(from: 12.5).fixed(0)}")
+  show(f"{Real!(text: "2.5").fixed(3)} {Decimal(from: 7.125).fixed(2)}")
+  show("DONE")
+  return

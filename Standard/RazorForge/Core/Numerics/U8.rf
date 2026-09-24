@@ -815,6 +815,14 @@ routine U8.is_odd() -> Bool
 routine U8.represent() -> Text
   return int_to_text(mag: LLVM::zero_extend[U8, U64](me), negative: false)
 
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative (`255.to_text(radix: 16)` is `ff`).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine U8.to_text(radix: S32) -> Text
+  return radix_text(mag: LLVM::zero_extend[U8, U64](me), negative: false, radix: radix)
+
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 @override

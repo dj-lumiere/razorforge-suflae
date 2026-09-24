@@ -205,6 +205,99 @@ routine format_binary(value: B64, sig: U64) -> Text
   return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sig)
 
 # ----------------------------------------------------------------------------
+# Fixed-point formatting: exactly `places` digits after the point
+# ----------------------------------------------------------------------------
+# Every real type reduces to sign × num / den exactly (a binary float is m · 2^e, a decimal float
+# c · 10^e), so `fixed(places)` is one exact big-integer step: round num · 10^places / den to an
+# integer, half to even, then put the point `places` digits from the right. No %g switch to
+# scientific form: the whole integer part is always written out.
+
+### Renders `scaled` (the value times 10^places, already an integer) with `places` digits after the
+### point and a leading `-` when `neg`.
+routine fixed_from_scaled(neg: Bool, scaled: Integer, places: U64) -> Text
+  var digits = scaled.represent()
+  if digits.count() <= places
+    digits = zeros_text(n: places + 1u64 - digits.count()) + digits
+  var body = digits
+  if places > 0u64
+    var point = digits.count() - places
+    body = digits[0u64 til point] + "." + digits[point til digits.count()]
+  if neg
+    return "-" + body
+  return body
+
+### The exact non-negative value `num / den` rendered with `places` digits after the point, rounded
+### half to even.
+routine fixed_from_ratio(neg: Bool, num: Integer, den: Integer, places: U64) -> Text
+  var scaled = div_round_half_even(n: num.mul(other: pow10_int(k: LLVM::reinterpret_bits[U64, S64](places))), d: den)
+  return fixed_from_scaled(neg: neg, scaled: scaled, places: places)
+
+### The exact value m · 2^e2 (m non-negative) with `places` digits after the point.
+routine fixed_from_binary(neg: Bool, m: Integer, e2: S64, places: U64) -> Text
+  var num = m
+  var den = Integer.one()
+  if e2 >= 0_s64
+    num = num.shl(bits: LLVM::int_truncate[S64, S32](e2))
+  else
+    den = den.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - e2))
+  return fixed_from_ratio(neg: neg, num: num, den: den, places: places)
+
+### Renders a B64 with exactly `places` digits after the point (B16/B32 widen to B64 exactly first).
+### Specials: "NaN" / "inf" / "-inf".
+routine format_binary_fixed(value: B64, places: U64) -> Text
+  if value.is_nan()
+    return "NaN"
+  if value.is_infinite()
+    if value.signbit()
+      return "-inf"
+    return "inf"
+  var raw = value.to_bits()
+  var bits = LLVM::bit_and(a: raw, b: 0x7FFFFFFFFFFFFFFFu64)
+  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, 52u64), b: 0x7FFu64)
+  var mf = LLVM::bit_and(a: bits, b: 0xFFFFFFFFFFFFFu64)
+  var m = mf
+  var e2 = -1074_s64
+  if LLVM::int_ne(a: ef, b: 0u64)
+    m = LLVM::bit_or(a: mf, b: 0x10000000000000u64)
+    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
+  return fixed_from_binary(neg: value.signbit(), m: Integer(value: m), e2: e2, places: places)
+
+### Renders the raw bits of a B128 with exactly `places` digits after the point.
+routine format_b128_fixed(value: B128, places: U64) -> Text
+  if value.is_nan()
+    return "NaN"
+  if value.is_infinite()
+    if value.signbit()
+      return "-inf"
+    return "inf"
+  var bits = value.to_bits()
+  var ef = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](0x7FFFu64)))
+  var mf = LLVM::bit_and(a: bits, b: LLVM::sub(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](1u64)))
+  var m = mf
+  var e2 = -16494_s64
+  if LLVM::int_ne(a: ef, b: 0u64)
+    m = LLVM::bit_or(a: mf, b: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)))
+    e2 = LLVM::reinterpret_bits[U64, S64](ef) - 16495_s64
+  return fixed_from_binary(neg: value.signbit(), m: Integer(from: m), e2: e2, places: places)
+
+### Renders decoded decimal-float parts (c · 10^e) with exactly `places` digits after the point.
+### Specials: "NaN" / "sNaN" / "inf" / "-inf".
+routine format_decimal_fixed(p: D128Parts, places: U64) -> Text
+  if LLVM::int_eq(a: p.special, b: 1_u64)
+    return if p.sign then "-inf" else "inf"
+  if LLVM::int_eq(a: p.special, b: 3_u64)
+    return "sNaN"
+  if LLVM::unsigned_ge(a: p.special, b: 2_u64)
+    return "NaN"
+  var num = Integer(from: p.coeff)
+  var den = Integer.one()
+  if p.exp >= 0_s64
+    num = num.mul(other: pow10_int(k: p.exp))
+  else
+    den = pow10_int(k: 0_s64 - p.exp)
+  return fixed_from_ratio(neg: p.sign, num: num, den: den, places: places)
+
+# ----------------------------------------------------------------------------
 # Parsing: decimal text -> nearest binary float (rounded straight to target)
 # ----------------------------------------------------------------------------
 

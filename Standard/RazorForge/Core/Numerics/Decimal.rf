@@ -324,6 +324,15 @@ routine Decimal.represent() -> Text
       e = LLVM::add(a: e, b: 1_s64)
   return d128_represent(p: D128Parts(sign: p.sign, special: p.special, exp: e, coeff: cu))
 
+### Renders this value with exactly `places` digits after the point, rounded half to even from its
+### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
+### part is always written out in full, never in exponent form.
+### :param places: The number of digits after the point (0 for none).
+### :returns: The rendered `Text`.
+@readonly
+routine Decimal.fixed(places: U64) -> Text
+  return format_decimal_fixed(p: dec_to_d128(x: me).decode(), places: places)
+
 ### Returns a debug rendering of this value, e.g. `Decimal(3.5)`. Mirrors the D32/D64/D128 surface.
 @override
 routine Decimal.diagnose() -> Text

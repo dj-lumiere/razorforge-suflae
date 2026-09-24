@@ -911,6 +911,17 @@ routine S128.represent() -> Text
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
   return "-" + (0u128 -% LLVM::reinterpret_bits[S128, U128](me)).represent()
 
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative (`255.to_text(radix: 16)` is `ff`).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine S128.to_text(radix: S32) -> Text
+  var raw = LLVM::reinterpret_bits[S128, U128](me)
+  if me < 0s128
+    return wide_radix_text[U128](mag: LLVM::zero_extend[U64, U128](0_u64) -% raw, negative: true, radix: radix)
+  return wide_radix_text[U128](mag: raw, negative: false, radix: radix)
+
 ### Returns a type-tagged debug rendering of this value.
 ### :returns: A diagnostic `Text` rendering, e.g. `Type(value)`.
 @override

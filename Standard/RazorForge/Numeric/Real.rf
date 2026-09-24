@@ -734,6 +734,15 @@ routine Real.represent() -> Text
     C::rf_region_release(mark: mark)
     return text
 
+### Renders this value with exactly `places` digits after the point, the integer part written out in
+### full. Same as `represent_with_places`, so ties round away from zero (the binary and decimal floats'
+### `fixed` round ties to even).
+### :param places: The number of digits after the point (0 for none).
+### :returns: The rendered `Text`.
+@readonly
+routine Real.fixed(places: U64) -> Text
+  return me.represent_with_places(decimal_places: LLVM::int_truncate[U64, S32](places))
+
 ### Formats this value with EXACTLY `decimal_places` digits after the decimal point,
 ### rounding to nearest (ties away from zero). A negative `decimal_places` is treated as 0.
 ### Works by scaling to an integer (`value * 10^places`), rounding, then placing the point on

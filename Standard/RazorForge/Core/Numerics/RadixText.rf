@@ -1,0 +1,95 @@
+module Core
+
+# ============================================================================
+# Integer text in any base (2 to 36). Every integer type's `to_text(radix:)` reduces to a magnitude plus
+# a sign and lands here: the 8..64-bit types widen to a `U64` magnitude, the 128/256-bit types keep their
+# own width. Digits past 9 are lowercase letters (`ff`, not `FF`); `Text.to_uppercase()` gives the other
+# case. `hex()` / `bin()` / `oct()` are the named shorthands.
+# ============================================================================
+
+### Crashes unless `radix` is a base this module can render (2 to 36).
+### :param radix: The requested numeric base.
+### :throws: {NumericDomainError} if `radix` is below 2 or above 36.
+routine check_radix!(radix: S32)
+  if radix < 2_s32 or radix > 36_s32
+    throw NumericDomainError(description: f"radix must be between 2 and 36, got {radix}")
+  return
+
+### The digit character for `d` (0 to 35): `0`-`9`, then `a`-`z`.
+routine radix_digit(d: U64) -> Character
+  var d32 = LLVM::int_truncate[U64, U32](d)
+  if d < 10u64
+    return Character(LLVM::add(a: 0x0030u32, b: d32))
+  return Character(LLVM::add(a: 0x0057u32, b: d32))
+
+### The digits of `mag` in base `radix`, with a leading `-` when `negative`.
+### :param mag: The magnitude to render.
+### :param negative: Whether to prefix a minus sign.
+### :param radix: The numeric base (2 to 36).
+### :returns: The rendered `Text`.
+routine radix_text(mag: U64, negative: Bool, radix: S32) -> Text
+  check_radix(radix: radix)
+  if mag == 0u64
+    return "0"
+  var base = LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](radix))
+  var reversed = List[Character]()
+  var m = mag
+  while m != 0u64
+    reversed.add_last(value: radix_digit(d: LLVM::unsigned_rem(a: m, b: base)))
+    m = LLVM::unsigned_div(a: m, b: base)
+  if negative
+    reversed.add_last(value: '-')
+  var digits = List[Character]()
+  var i = reversed.count()
+  while i > 0u64
+    i = i - 1u64
+    digits.add_last(value: reversed[i])
+  return Text(from_list: steal digits)
+
+### `radix_text` for a signed 64-bit value (the 8/16/32-bit signed types sign-extend into it first).
+### Takes the magnitude through the raw bits so `S64` minimum renders correctly.
+routine signed_radix_text(value: S64, radix: S32) -> Text
+  var raw = LLVM::reinterpret_bits[S64, U64](value)
+  if value < 0_s64
+    return radix_text(mag: 0u64 -% raw, negative: true, radix: radix)
+  return radix_text(mag: raw, negative: false, radix: radix)
+
+### `radix_text` for a wide unsigned magnitude (`U128`, `U256`), dividing in the value's own width.
+routine wide_radix_text[T](mag: T, negative: Bool, radix: S32) -> Text
+needs T obeys FloorDivisible
+  check_radix(radix: radix)
+  var zero = LLVM::zero_extend[U64, T](0_u64)
+  if LLVM::int_eq(a: mag, b: zero)
+    return "0"
+  var base = LLVM::zero_extend[U64, T](LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](radix)))
+  var reversed = List[Character]()
+  var m = mag
+  while LLVM::int_ne(a: m, b: zero)
+    reversed.add_last(value: radix_digit(d: LLVM::int_truncate[T, U64](LLVM::unsigned_rem(a: m, b: base))))
+    m = LLVM::unsigned_div(a: m, b: base)
+  if negative
+    reversed.add_last(value: '-')
+  var digits = List[Character]()
+  var i = reversed.count()
+  while i > 0u64
+    i = i - 1u64
+    digits.add_last(value: reversed[i])
+  return Text(from_list: steal digits)
+
+### This value in hexadecimal, lowercase (`255.hex()` is `ff`, `-255` is `-ff`). No `0x` prefix.
+### :returns: The hexadecimal `Text`.
+routine T.hex() -> Text
+needs T obeys Integral
+  return me.to_text(radix: 16_s32)
+
+### This value in binary (`5.bin()` is `101`). No `0b` prefix.
+### :returns: The binary `Text`.
+routine T.bin() -> Text
+needs T obeys Integral
+  return me.to_text(radix: 2_s32)
+
+### This value in octal (`8.oct()` is `10`). No `0o` prefix.
+### :returns: The octal `Text`.
+routine T.oct() -> Text
+needs T obeys Integral
+  return me.to_text(radix: 8_s32)

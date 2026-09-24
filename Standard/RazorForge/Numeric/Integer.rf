@@ -604,6 +604,15 @@ routine Integer.represent_radix(radix: S32) -> Text
     C::rf_region_release(mark: mark)
     return text
 
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative. Crashes on any other radix (unlike `represent_radix`, which renders an empty text).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine Integer.to_text(radix: S32) -> Text
+  check_radix(radix: radix)
+  return me.represent_radix(radix: radix).to_lowercase()
+
 # ============================================================================
 # Hashing
 # ============================================================================

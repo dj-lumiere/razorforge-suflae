@@ -5,4 +5,9 @@ module Core
 ### bitwise operations, and shifting into the standard surface expected from
 ### signed and unsigned integer families.
 protocol Integral obeys Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable
-  pass
+  ### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading
+  ### `-` when negative. Crashes on any other radix. `hex()` / `bin()` / `oct()` are shorthands for it.
+  ### :param radix: The numeric base.
+  ### :returns: The rendered `Text`.
+  @readonly
+  routine Me.to_text(radix: S32) -> Text

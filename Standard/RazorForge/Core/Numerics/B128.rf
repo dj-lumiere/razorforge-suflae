@@ -1211,6 +1211,15 @@ routine B128.represent() -> Text
     return "snan"
   return b128_represent(bits: me.to_bits())
 
+### Renders this value with exactly `places` digits after the point, rounded half to even from its
+### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
+### part is always written out in full, never in exponent form.
+### :param places: The number of digits after the point (0 for none).
+### :returns: The rendered `Text`.
+@readonly
+routine B128.fixed(places: U64) -> Text
+  return format_b128_fixed(value: me, places: places)
+
 ### Returns a diagnostic representation tagged with the type name.
 ### :returns: The formatted representation.
 @override

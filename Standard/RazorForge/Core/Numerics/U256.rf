@@ -264,6 +264,14 @@ routine udivrem256(num: U256, den: U256) -> UDR256
 routine U256.represent() -> Text
   return wide_dec[U256](me)
 
+### Renders this value in base `radix` (2 to 36), digits past 9 as lowercase letters, with a leading `-`
+### when negative (`255.to_text(radix: 16)` is `ff`).
+### :param radix: The numeric base.
+### :returns: The rendered `Text`.
+@readonly
+routine U256.to_text(radix: S32) -> Text
+  return wide_radix_text[U256](mag: me, negative: false, radix: radix)
+
 ### Diagnostic representation tagged with the type name.
 @override
 routine U256.diagnose() -> Text

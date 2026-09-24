@@ -1395,6 +1395,18 @@ public partial class LlvmEmitter
                     _ => TokenType.DecimalLiteral
                 }
             },
+            // A letter default (`fill: Character = ' '`) never passes LiteralLoweringPass, so its value is
+            // still the source text: emit the code point (Character is i32, Byte is i8).
+            LiteralExpression { LiteralType: TokenType.CharacterLiteral, Value: string ch } charLit => charLit with
+            {
+                Value = (ch.Length > 0 ? char.ConvertToUtf32(s: ch, index: 0) : 0).ToString(),
+                LiteralType = TokenType.U32Literal
+            },
+            LiteralExpression { LiteralType: TokenType.ByteLetterLiteral, Value: string b } byteLit => byteLit with
+            {
+                Value = (b.Length > 0 ? b[index: 0] & 0xFF : 0).ToString(),
+                LiteralType = TokenType.U8Literal
+            },
             _ => defaultExpr
         };
 
