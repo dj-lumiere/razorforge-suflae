@@ -1359,6 +1359,9 @@ public sealed partial class SemanticVerifier
         }
 
         creator.ConstructedType = type;
+        ValidateZeroFilledArray(constructed: type,
+            argumentCount: creator.MemberVariables.Count,
+            location: creator.Location);
         creator.LoweringKind = ClassifyConstruction(type: type, isCollectionLiteral: false);
 
         // Propagate the in-flight bit from the resolved type's implicit constructor.

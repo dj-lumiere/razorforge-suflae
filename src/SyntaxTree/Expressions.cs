@@ -152,6 +152,12 @@ public record ListLiteralExpression(
     TypeExpression? ElementType,
     SourceLocation Location) : Expression(Location: Location)
 {
+    /// <summary>
+    /// Set for the element-list construction <c>Array[N](a, b, ...)</c>: the array length <c>N</c>. The
+    /// literal is then an <c>Array[T, N]</c> whose <c>T</c> is inferred from the elements.
+    /// </summary>
+    public TypeExpression? ArrayLength { get; init; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

@@ -106,12 +106,37 @@ public sealed partial class SemanticVerifier
         return type.BareName;
     }
 
+    /// <summary>
+    /// The <c>Array[T, N]</c> type of an element-list construction <c>Array[N](a, b, ...)</c>: <c>N</c>
+    /// from <paramref name="arrayLength"/>, <c>T</c> from the first element (the rest are then checked
+    /// against it). Null when the length or the element type does not resolve (already reported).
+    /// </summary>
+    private TypeSymbol? ResolveElementListArrayType(ListLiteralExpression list, TypeExpression arrayLength)
+    {
+        TypeSymbol length = ResolveType(typeExpr: arrayLength);
+        TypeSymbol elementType = AnalyzeExpression(expression: list.Elements[index: 0]);
+        if (length is ErrorTypeSymbol || elementType is ErrorTypeSymbol ||
+            _registry.LookupType(name: CollectionNameArray) is not { } arrayDef)
+        {
+            return null;
+        }
+
+        return _registry.GetOrCreateResolution(genericDef: arrayDef, typeArguments: [elementType, length]);
+    }
+
     private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list,
         TypeSymbol? expectedType = null)
     {
         // Collection literals are entity rvalues — value-in-flight produced by a fresh
         // `create + add_last` sequence. Mark for the auto-bind rule (rvalue T → bound T).
         list.IsInFlight = true;
+
+        // `Array[N](a, b, ...)`: the literal is an `Array[T, N]` whose T comes from the elements.
+        if (list.ArrayLength is { } arrayLength &&
+            ResolveElementListArrayType(list: list, arrayLength: arrayLength) is { } elementListArray)
+        {
+            expectedType = elementListArray;
+        }
         // Extract expected element type from list-shaped expected types.
         TypeSymbol? collectionExpectedType = expectedType != null
             ? UnwrapCollectionLiteralExpectedType(type: expectedType)

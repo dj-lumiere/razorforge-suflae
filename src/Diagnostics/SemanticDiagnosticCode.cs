@@ -763,6 +763,11 @@ public enum SemanticDiagnosticCode
     /// the buffer is freed twice.</summary>
     ControllerRewrapWithoutHold = 640,
 
+    /// <summary>`Array[T, N]()` fills every slot with zero bits, but `T` has no zero value (an entity, a
+    /// Retained/Tracked-style handle, or a record/tuple/variant holding one), so a zero slot is a null
+    /// handle that crashes when read or torn down.</summary>
+    ArrayElementHasNoZeroValue = 641,
+
     /// <summary>A `threaded routine` parameter is neither trivially copyable (passed by value) nor a
     /// thread-shareable wrapper (Atomic/Guarded/Witnessed); passing it would silently alias
     /// unsynchronized state across the thread boundary.</summary>

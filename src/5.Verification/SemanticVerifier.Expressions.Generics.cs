@@ -489,12 +489,28 @@ public sealed partial class SemanticVerifier
             typeSymbol = realmCtorDef;
         }
 
+        // The type's own `needs` constraints (`SplitList[T] needs T obeys Splittable`) on a concrete
+        // construction. Inside a template (`EnumerateIterable[T, Me]`) the arguments are still open and are
+        // checked where the template is used.
+        if (typeArgs.All(predicate: Declaration.TypeRegistry.IsFullyConcrete))
+        {
+            ValidateGenericConstraints(genericDef: typeSymbol,
+                typeArgs: typeArgs.ToList(),
+                location: generic.Location);
+        }
+
         // Resolve the generic type with the provided type arguments
         TypeSymbol resolvedType = _registry.GetOrCreateResolution(genericDef: typeSymbol,
             typeArguments: typeArgs.ToList());
         generic.ConstructedType = resolvedType;
         generic.LoweringKind = ClassifyConstruction(type: resolvedType,
             isCollectionLiteral: generic.IsCollectionLiteral);
+        if (!generic.IsCollectionLiteral)
+        {
+            ValidateZeroFilledArray(constructed: resolvedType,
+                argumentCount: generic.Arguments.Count,
+                location: generic.Location);
+        }
 
         // For field-init style (named args matching field names), pre-compute a field-name →
         // field-type map so literals see the field's declared type as their contextual expected type.

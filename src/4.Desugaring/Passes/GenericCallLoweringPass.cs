@@ -343,6 +343,18 @@ internal sealed class GenericCallLoweringPass : AstRewriter
             return null;
         }
 
+        // `Array[N](a, b, ...)`: an array built from its elements, with the element type left to the
+        // elements. It is the array literal `[a, b, ...]` of length N (analysis infers `Array[T, N]`).
+        if (gmc is { Object: IdentifierExpression { Name: "Array" }, MemberRoutineName: "Array",
+                TypeArguments: [var arrayLength], Arguments.Count: > 0 } &&
+            gmc.Arguments.All(predicate: a => a is not NamedArgumentExpression))
+        {
+            return new ListLiteralExpression(
+                Elements: gmc.Arguments.Select(selector: VisitExpression).ToList(),
+                ElementType: null,
+                Location: gmc.Location) { ArrayLength = arrayLength };
+        }
+
         // A construction GMC (`WhereIterable[T, Me](...)`) monomorphized on the COLD path carries concrete
         // TypeArguments but a NULL ConstructedType: it's re-materialized from an un-SA'd stdlib template, and
         // the `with`-clone in monomorphization drops the mutable ConstructedType stamp SA would have set. Recover

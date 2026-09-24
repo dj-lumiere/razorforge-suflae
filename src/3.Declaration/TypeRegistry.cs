@@ -2227,7 +2227,7 @@ public sealed partial class TypeRegistry
     /// Returns true when a type argument is fully concrete — no GenericParameterTypeSymbol,
     /// ErrorTypeSymbol, or None at any nesting depth.
     /// </summary>
-    private static bool IsFullyConcrete(TypeSymbol t)
+    internal static bool IsFullyConcrete(TypeSymbol t)
     {
         // An unresolved associated-type projection (`S/Iter`) or protocol self (`Me`/ProtocolSelf)
         // is NOT concrete — both must be resolved to a concrete type during monomorphization before
