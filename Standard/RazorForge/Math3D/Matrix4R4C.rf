@@ -38,7 +38,7 @@ routine vec4(x: B32, y: B32, z: B32, w: B32) -> Vector[B32, 4]
 # ============================================================================
 
 ### A 4x4 matrix of `B32`, stored as four column vectors (column-major).
-record Matrix4R4C obeys Addable, Subtractable, Negatable, Equatable
+record Matrix4R4C obeys Addable, Subtractable, Multiplicable, Negatable, Equatable
   ### Column 0.
   c0: Vector[B32, 4]
   ### Column 1.
@@ -378,4 +378,4 @@ routine Matrix4R4C.represent() -> Text
 ### :returns: The resulting `Text` value.
 @[readonly, override]
 routine Matrix4R4C.diagnose() -> Text
-  return "Simd.Matrix4R4C(" + me.represent() + ")"
+  return "Math3D.Matrix4R4C(" + me.represent() + ")"

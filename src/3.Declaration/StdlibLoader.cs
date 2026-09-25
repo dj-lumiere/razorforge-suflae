@@ -491,10 +491,35 @@ public sealed partial class StdlibLoader
             return false;
         }
 
-        _loadedModules.Add(item: moduleName);
+        // Already registered (reached again through an import cycle).
+        if (!_loadedModules.Add(item: moduleName))
+        {
+            return true;
+        }
 
+        LoadModuleImports(registry: registry, programs: programs);
         RunModuleRegistrationPasses(registry: registry, programs: programs);
         return true;
+    }
+
+    /// <summary>
+    /// Loads the modules that a module's files import, before the module itself registers, so a member
+    /// variable or type argument naming an imported type (Math3D's <c>Vector[B32, 4]</c> from Simd)
+    /// resolves. Without it a module was only usable when the user file imported its dependencies too.
+    /// </summary>
+    private static void LoadModuleImports(TypeRegistry registry,
+        List<(Program Program, string FilePath, string Module)> programs)
+    {
+        foreach ((Program program, string filePath, string _) in programs)
+        {
+            foreach (ImportDeclaration import in program.Declarations.OfType<ImportDeclaration>())
+            {
+                registry.LoadModule(importPath: import.ModulePath,
+                    currentFile: filePath,
+                    location: import.Location,
+                    effectiveModule: out _);
+            }
+        }
     }
 
     /// <summary>
@@ -565,6 +590,8 @@ public sealed partial class StdlibLoader
     private static void RunModuleRegistrationPasses(TypeRegistry registry,
         List<(Program Program, string FilePath, string Module)> programs)
     {
+        IReadOnlyCollection<string>? savedImports = registry.ActiveRegistrationImports;
+
         // Three-pass registration: protocols first, then other types, then routines
         // Register protocol shells across all files first, then fill in memberRoutines
         RegisterCoreProtocolShells(registry: registry, corePrograms: programs);
@@ -577,7 +604,7 @@ public sealed partial class StdlibLoader
 
         foreach ((Program program, string filePath, string ns) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             RegisterProgramTypes(registry: registry, program: program, moduleName: ns);
         }
 
@@ -590,45 +617,69 @@ public sealed partial class StdlibLoader
         // mis-apply its protocols/members to the wrong realm — the BitList not-iterable bug).
         foreach ((Program program, string filePath, string _) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             ResolveProgramMemberVariables(registry: registry, program: program);
         }
 
         foreach ((Program program, string filePath, string _) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
 
         // Re-resolve protocol memberRoutine return types that failed due to forward references
         foreach ((Program program, string filePath, string _) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             ResolveProtocolMemberRoutineReturnTypes(registry: registry, program: program);
             ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
         foreach ((Program program, string filePath, string ns) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             RegisterProgramRoutines(registry: registry, program: program, moduleName: ns);
         }
 
         foreach ((Program program, string filePath, string ns) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
         }
 
         // Register presets for the module
         foreach ((Program program, string filePath, string ns) in programs)
         {
-            StampRealm(realm: RealmOf(filePath: filePath));
+            StampProgram(registry: registry, program: program, filePath: filePath);
             RegisterProgramPresets(registry: registry, program: program, moduleName: ns);
         }
 
+        registry.ActiveRegistrationImports = savedImports;
         // Clear the thread-static realm so it never leaks into a later load pass on this thread.
         StampRealm(realm: null);
+    }
+
+    /// <summary>
+    /// Stamps the realm of the program about to be registered and installs its imports on
+    /// <see cref="TypeRegistry.ActiveRegistrationImports"/>, so a field or signature naming a type from an
+    /// imported module (Math3D's <c>Vector[B32, 4]</c> from Simd) resolves while the module registers.
+    /// </summary>
+    private static void StampProgram(TypeRegistry registry, Program program, string filePath)
+    {
+        StampRealm(realm: RealmOf(filePath: filePath));
+        var imports = new List<string>();
+        foreach (ImportDeclaration import in program.Declarations.OfType<ImportDeclaration>())
+        {
+            string importModule = import.ModulePath.Replace(oldChar: '/', newChar: '.');
+            imports.Add(item: importModule);
+            int dotIdx = importModule.IndexOf(value: '.');
+            if (dotIdx > 0)
+            {
+                imports.Add(item: importModule[..dotIdx]);
+            }
+        }
+
+        registry.ActiveRegistrationImports = imports;
     }
 
     /// <summary>
@@ -946,7 +997,8 @@ public sealed partial class StdlibLoader
         // `Suflae.Core.List` probe and correctly falls back to the RazorForge `Core.List`.
         TypeSymbol? genericDef = (moduleName != null
             ? registry.LookupType(name: $"{moduleName}.{typeName}")
-            : null) ?? registry.LookupType(name: typeName);
+            : null) ?? registry.LookupType(name: typeName) ??
+            ResolveViaActiveImports(registry: registry, typeName: typeName);
         if (genericDef is { IsGenericDefinition: true } && genericDef.GenericParameters!.Count ==
             typeExpr.GenericArguments.Count)
         {

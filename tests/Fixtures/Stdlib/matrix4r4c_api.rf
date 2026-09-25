@@ -1,0 +1,57 @@
+module Tests/Stdlib/Matrix4R4CApi
+import IO/Console
+import Math3D
+
+# Exercises Matrix4R4C (column-major B32 4x4 over Simd vectors) with only Math3D imported, and the
+# quaternion <-> matrix conversions. Values are powers of two or small integers so every result is
+# exact; the rotation check alone uses a tolerance.
+routine start()
+  var id = Matrix4R4C.identity()
+  show(f"identity: {id}")
+  show(f"zero: {Matrix4R4C.zero()}")
+  show(f"get(0,0) of identity: {id.get(row: 0u64, col: 0u64)}")
+
+  var t = Matrix4R4C.translation(tx: 1.0_b32, ty: 2.0_b32, tz: 3.0_b32)
+  show(f"translation: {t}")
+  show(f"translation get(1,3): {t.get(row: 1u64, col: 3u64)}")
+  show(f"translation row 0: {t[0u64]}")
+  show(f"translation column 3: {t.column(index: 3u64)}")
+  show(f"translation transpose: {t.transpose()}")
+
+  var s = Matrix4R4C.scaling(sx: 2.0_b32, sy: 4.0_b32, sz: 8.0_b32)
+  show(f"scaling det: {s.determinant()}")
+  show(f"scaling inverse: {s.inverse()}")
+  show(f"translation inverse: {t.inverse()}")
+  show(f"t * t^-1 == identity: {t * t.inverse() == id}")
+  show(f"singular inverse: {Matrix4R4C.zero().inverse() == Matrix4R4C.zero()}")
+
+  show(f"s * t: {s * t}")
+  show(f"s + id: {s + id}")
+  show(f"s - id: {s - id}")
+  show(f"-id: {-id}")
+  show(f"id.scale(3): {id.scale(factor: 3.0_b32)}")
+  show(f"s == s: {s == s}, s == t: {s == t}")
+
+  var p = vec4(x: 1.0_b32, y: 1.0_b32, z: 1.0_b32, w: 1.0_b32)
+  show(f"t transforms (1,1,1,1): {t.transform(v: p)}")
+  show(f"s transforms (1,1,1,1): {s.transform(v: p)}")
+
+  # A 90-degree rotation about z takes +x to +y (within float noise: cos(pi/2) is not exactly 0).
+  var rz = Matrix4R4C.rotation_z(angle: 1.5707963_b32)
+  var x_to_y = rz.transform(v: vec4(x: 1.0_b32, y: 0.0_b32, z: 0.0_b32, w: 1.0_b32))
+  var dx = x_to_y[0u64]
+  var dy = x_to_y[1u64] - 1.0_b32
+  show(f"rotation_z(90) maps x to y: {dx * dx + dy * dy < 0.000001_b32}")
+
+  # Quaternion -> matrix: a half turn about x is diag(1, -1, -1, 1).
+  var half_x = Matrix4R4C.from_quaternion(q: Q128(w: 0.0_b32, x: 1.0_b32, y: 0.0_b32, z: 0.0_b32))
+  show(f"from_quaternion(half turn x): {half_x}")
+
+  # Matrix -> quaternion through each Shepperd branch (w, x, y, z largest).
+  show(f"Q128.from_matrix(identity): {Q128.from_matrix(m: id)}")
+  show(f"Q128.from_matrix(half turn x): {Q128.from_matrix(m: half_x)}")
+  show(f"Q128.from_matrix(half turn y): {Q128.from_matrix(m: Matrix4R4C.scaling(sx: -1.0_b32, sy: 1.0_b32, sz: -1.0_b32))}")
+  show(f"Q128.from_matrix(half turn z): {Q128.from_matrix(m: Matrix4R4C.scaling(sx: -1.0_b32, sy: -1.0_b32, sz: 1.0_b32))}")
+  show(f"Q256.from_matrix(identity): {Q256.from_matrix(m: id)}")
+  show(f"Q256.from_matrix(half turn y): {Q256.from_matrix(m: Matrix4R4C.scaling(sx: -1.0_b32, sy: 1.0_b32, sz: -1.0_b32))}")
+  return

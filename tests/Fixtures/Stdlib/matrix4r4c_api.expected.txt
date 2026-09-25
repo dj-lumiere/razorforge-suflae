@@ -1,0 +1,29 @@
+identity: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+zero: [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+get(0,0) of identity: 1
+translation: [[1, 0, 0, 1], [0, 1, 0, 2], [0, 0, 1, 3], [0, 0, 0, 1]]
+translation get(1,3): 2
+translation row 0: <1, 0, 0, 1>
+translation column 3: <1, 2, 3, 1>
+translation transpose: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [1, 2, 3, 1]]
+scaling det: 64
+scaling inverse: [[0.5, 0, 0, 0], [0, 0.25, 0, 0], [0, 0, 0.125, 0], [0, 0, 0, 1]]
+translation inverse: [[1, 0, 0, -1], [0, 1, 0, -2], [0, 0, 1, -3], [0, 0, 0, 1]]
+t * t^-1 == identity: true
+singular inverse: true
+s * t: [[2, 0, 0, 2], [0, 4, 0, 8], [0, 0, 8, 24], [0, 0, 0, 1]]
+s + id: [[3, 0, 0, 0], [0, 5, 0, 0], [0, 0, 9, 0], [0, 0, 0, 2]]
+s - id: [[1, 0, 0, 0], [0, 3, 0, 0], [0, 0, 7, 0], [0, 0, 0, 0]]
+-id: [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, -1]]
+id.scale(3): [[3, 0, 0, 0], [0, 3, 0, 0], [0, 0, 3, 0], [0, 0, 0, 3]]
+s == s: true, s == t: false
+t transforms (1,1,1,1): <2, 3, 4, 1>
+s transforms (1,1,1,1): <2, 4, 8, 1>
+rotation_z(90) maps x to y: true
+from_quaternion(half turn x): [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]
+Q128.from_matrix(identity): 1+0i+0j+0k
+Q128.from_matrix(half turn x): 0+1i+0j+0k
+Q128.from_matrix(half turn y): 0+0i+1j+0k
+Q128.from_matrix(half turn z): 0+0i+0j+1k
+Q256.from_matrix(identity): 1+0i+0j+0k
+Q256.from_matrix(half turn y): 0+0i+1j+0k
