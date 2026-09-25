@@ -13,6 +13,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "../include/razorforge_runtime.h"
+
 // ============================================================================
 // Platform detection
 // ============================================================================
@@ -299,7 +301,7 @@ void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id,
         fprintf(stderr, "\033[31m\nRazorForge Runtime Error: Stack overflow (depth > %d)\n\033[0m",
                 RF_RUNTIME_STACK_MAX);
         fflush(stderr);
-        exit(1);
+        exit(RF_EXIT_CRASH);
     }
     rf_RoutineRecord* r = &s->records[s->depth++];
     r->file_id    = file_id;
@@ -453,7 +455,7 @@ void __rf_throw(const char* error_type, const char* message)
     print_stack_for_mode();
     fprintf(stderr, "\033[0m\n");
     fflush(stderr);
-    exit(1);
+    exit(RF_EXIT_CRASH);
 }
 
 void __rf_throw_absent(void)

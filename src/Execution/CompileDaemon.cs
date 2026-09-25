@@ -722,7 +722,7 @@ internal partial class Program
             // Resident-JIT (A) split-at-IR: prefer the WARM DAEMON. It holds the analyzed stdlib snapshot in
             // RAM (captured once at startup), so routing the analysis THERE removes the ~840 ms per-run `.pbrf`
             // reload the in-process path below pays in this disposable client. The daemon compiles warm and
-            // ships IR; THIS throwaway client only JITs+runs it, so a user crash (rf_crash → exit(1)) kills only
+            // ships IR; THIS throwaway client only JITs+runs it, so a user crash (rf_crash → exit(RF_EXIT_CRASH)) kills only
             // the client and never the warm daemon (§3 crash isolation preserved). Falls through to the
             // in-process lazy path when no daemon is reachable.
             if (resolved.UseDaemon &&

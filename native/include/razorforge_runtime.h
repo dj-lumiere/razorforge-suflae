@@ -9,6 +9,12 @@
 extern "C" {
 #endif
 
+/* Process exit status of every runtime crash (an unrecovered throw/absent, rf_crash, shadow-stack
+ * overflow, allocation failure), for RazorForge and Suflae alike. 0x52 is 'R', for Runtime error.
+ * It is kept apart from 1 so a caller can tell a crash from a program that chose to fail, and it
+ * avoids the shell's 126/127/128+n and the sysexits 64-78 range. */
+#define RF_EXIT_CRASH 0x52
+
 typedef struct rf_context_runtime rf_context_runtime;
 typedef struct rf_async_runtime rf_async_runtime;
 typedef struct rf_task rf_task;

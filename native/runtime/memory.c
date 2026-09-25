@@ -13,7 +13,7 @@
 typedef uintptr_t rf_address;
 typedef size_t rf_size_t;
 
-/* Runtime error + stack trace + exit(1) (stacktrace.c). On a heap-allocation failure we raise this
+/* Runtime error + stack trace + exit(RF_EXIT_CRASH) (stacktrace.c). On a heap-allocation failure we raise this
  * instead of returning NULL, which would otherwise be dereferenced and crash with no diagnosis. */
 extern void __rf_throw(const char* error_type, const char* message);
 
@@ -21,7 +21,7 @@ static void rf_oom(const char* what, uint64_t bytes)
 {
     char buf[128];
     snprintf(buf, sizeof(buf), "Failed to %s %llu bytes", what, (unsigned long long)bytes);
-    __rf_throw("OutOfMemoryError", buf); /* prints + stack trace + exit(1); does not return */
+    __rf_throw("OutOfMemoryError", buf); /* prints + stack trace + exit(RF_EXIT_CRASH); does not return */
 }
 
 /*

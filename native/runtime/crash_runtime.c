@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../include/razorforge_runtime.h"
+
 #define RF_TRACE_MAX 32
 
 typedef struct
@@ -95,5 +97,5 @@ void rf_crash(const char* type_name, int64_t type_len,
 
     fprintf(stderr, "\033[0m");
     fflush(stderr);
-    exit(1);
+    exit(RF_EXIT_CRASH);
 }

@@ -19,7 +19,7 @@ extern _Atomic uint64_t g_rf_completion_seq;
 #include <time.h>
 #endif
 
-/* Runtime error + stack trace + exit(1) (stacktrace.c). Raised on a control-structure allocation
+/* Runtime error + stack trace + exit(RF_EXIT_CRASH) (stacktrace.c). Raised on a control-structure allocation
  * failure instead of returning NULL/0 that would crash or silently mis-spawn downstream. */
 extern void __rf_throw(const char* error_type, const char* message);
 

@@ -46,6 +46,12 @@ When unsure, consult ground truth in the repo/package:
    a trailing `!!` applies to the recovery result. There is no `try_foo` name form —
    recovery is a keyword at the call site, not a mangled variant name. There are no
    exceptions in the Java/C# sense.
+   **A crash exits the process with status 82** (`0x52`, `'R'` for Runtime error —
+   `RF_EXIT_CRASH`), for every runtime crash (unrecovered `throw`/`absent`, checked-
+   arithmetic failure, out of memory, stack overflow). If a run ended with 82, it
+   crashed: read stderr for the error name, message, and stack trace. Status 1 is NOT a
+   crash. A native signal (e.g. a segfault) is not 82 either — that is a builder or
+   runtime bug (or `danger` code), not a language failure.
 8. **Bare integer literals adapt to context; variables do not.**
    `h << 5` and `x.clamp(0, 100)` are fine (literals conform), but mixing a
    `U64` variable with an `S64` variable needs explicit conversion.

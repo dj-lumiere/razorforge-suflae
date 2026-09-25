@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-/* Runtime error + stack trace + exit(1) (stacktrace.c). */
+/* Runtime error + stack trace + exit(RF_EXIT_CRASH) (stacktrace.c). */
 extern void __rf_throw(const char* error_type, const char* message);
 
 struct rf_context_runtime

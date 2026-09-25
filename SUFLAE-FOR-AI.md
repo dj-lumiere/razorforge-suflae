@@ -256,6 +256,12 @@ Fatal-tier details:
 - **AccessViolation / segfault** — cannot occur in pure SF (memory-safe by
   construction). If one appears, it is a compiler/runtime bug (or unsafe code SF
   called) → report as an internal error, not a language failure mode.
+
+Every crash — an unrecovered `throw`/`absent` or a fatal wall — exits the process
+with **status 82** (`0x52`, `'R'` for Runtime error), the same as RF. If a run ended
+with 82, it crashed: read stderr for the error and stack trace. Status 1 is NOT a
+crash, and a native signal (a segfault) is not 82 — that is the internal-error case
+above.
 - **External kill (SIGKILL / OOM-killer)** — the process dies before any handler
   runs; SF never gets control and does not narrate it.
 

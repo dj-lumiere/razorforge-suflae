@@ -46,7 +46,7 @@
 
 #include "rf_sync.h" /* portable rf_mutex / rf_cond — shared with the task↔coro bridge */
 
-/* Runtime error + stack trace + exit(1) (stacktrace.c). We raise this on a hard allocation failure so
+/* Runtime error + stack trace + exit(RF_EXIT_CRASH) (stacktrace.c). We raise this on a hard allocation failure so
  * a coroutine that cannot be created dies with a diagnosed error instead of a NULL that crashes later
  * (or, at scale, a machine wedged under commit pressure). */
 extern void __rf_throw(const char* error_type, const char* message);
