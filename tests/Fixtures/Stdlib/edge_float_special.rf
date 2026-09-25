@@ -37,5 +37,19 @@ routine start()
     show(f"1.0 / +0: {1.0_b64.truediv_unchecked(you: pz)}")
     show(f"1.0 / -0: {1.0_b64.truediv_unchecked(you: nz)}")
 
+  # An exact zero from x - x or x + (-x) is +0 (round to nearest), and -0 - 0 / -0 + -0 stay -0.
+  # B128 is software arithmetic, so it is checked against the hardware B64 rule too.
+  var m2: B128 = -2.0_b128
+  var d128 = m2 - m2
+  show(f"B128 -2 - (-2): {d128} bits={d128.to_bits().hex()}")
+  var s128 = m2 + 2.0_b128
+  show(f"B128 -2 + 2: {s128} bits={s128.to_bits().hex()}")
+  var nz128: B128 = -0.0_b128
+  show(f"B128 -0 - 0: {nz128 - 0.0_b128}")
+  show(f"B128 -0 + -0: {nz128 + nz128}")
+  var m2_64: B64 = -2.0_b64
+  show(f"B64 -2 - (-2): {m2_64 - m2_64}")
+  show(f"B64 -0 - 0: {nz - pz}")
+
   show("DONE")
   return
