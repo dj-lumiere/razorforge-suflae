@@ -4,7 +4,7 @@ import Collections
 import Numerics.Integer
 
 # ============================================================================
-# Pure-RF binary-float text conversion (formatting + parsing) for B16/B32/B64.
+# Pure-RF binary-float text conversion (formatting + parsing) for B16/B32/B64/B128.
 #
 # Replaces the old C runtime (snprintf "%g" / strtof / strtod, plus the b16
 # software shims). Both directions are EXACT-RATIONAL: a binary float is
@@ -23,7 +23,7 @@ import Numerics.Integer
 # format, since the shortest digits depend on that format's spacing.
 #
 # PARSE: `parse_float_components` validates + extracts (kind, sign, significand,
-# decimal-exponent); `b{16,32,64}_from_ratio` builds the exact rational and
+# decimal-exponent); `b{16,32,64,128}_from_ratio` builds the exact rational and
 # rounds it straight to the TARGET precision (single rounding — no B64 detour,
 # so no double-rounding error), then packs the IEEE 754 bit pattern.
 # ============================================================================
@@ -718,3 +718,61 @@ routine b16_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B16
     den = pow10_int(k: 0_s64 - dec_exp)
   var bits = round_and_pack(neg: neg, num_in: num, den_in: den, fmt: 2_s32)
   return B16.from_bits(bits: LLVM::int_truncate[U64, U16](bits))
+
+### Rounds significand × 10^dec_exp to the nearest B128 (single rounding, ties to even) and packs
+### the IEEE 754 binary128 bit pattern: 113 significand bits, normal exponents -16382..16383,
+### subnormals down to 2^-16494, overflow to infinity.
+routine b128_from_ratio(neg: Bool, digits: Text, dec_exp: S64) -> B128
+  var sign = 0u64
+  if neg
+    sign = 1u64
+  var sign_bit = LLVM::shift_left(value: LLVM::zero_extend[U64, U128](sign), bits: 127_u128)
+  var m = Integer.from_literal(text: digits)
+  if m.is_zero()
+    return B128.from_bits(bits: sign_bit)
+  # value < 10^mag, so mag bounds the magnitude cheaply before any big power of ten is built.
+  var mag = LLVM::reinterpret_bits[U64, S64](m.represent().count()) + dec_exp
+  if mag > 4940_s64
+    return B128.from_bits(bits: b128_inf(sign: sign))
+  if mag < -4970_s64
+    return B128.from_bits(bits: sign_bit)
+  var num = m
+  var den = Integer.one()
+  if dec_exp >= 0_s64
+    num = m.mul(other: pow10_int(k: dec_exp))
+  else
+    den = pow10_int(k: 0_s64 - dec_exp)
+  # Binary exponent of the leading significand bit: 2^ee <= value < 2^(ee+1).
+  var ee = (LLVM::reinterpret_bits[U64, S64](num.bit_length()) - LLVM::reinterpret_bits[U64, S64](den.bit_length())) - 1_s64
+  while ratio_ge_pow2(num: num, den: den, k: ee + 1_s64)
+    ee = ee + 1_s64
+  while not ratio_ge_pow2(num: num, den: den, k: ee)
+    ee = ee - 1_s64
+  var lsb = ee - 112_s64
+  if lsb < -16494_s64
+    lsb = -16494_s64
+  var n2 = num
+  var d2 = den
+  if lsb >= 0_s64
+    d2 = den.shl(bits: LLVM::int_truncate[S64, S32](lsb))
+  else
+    n2 = num.shl(bits: LLVM::int_truncate[S64, S32](0_s64 - lsb))
+  var q = div_round_half_even(n: n2, d: d2)
+  # A round-up can carry to 2^113; renormalize one bit.
+  if q.cmp(you: Integer(value: 1u64).shl(bits: 113_s32)) != ME_SMALL
+    q = q.shr(bits: 1_s32)
+    lsb = lsb + 1_s64
+  if q.is_zero()
+    return B128.from_bits(bits: sign_bit)
+  var leading = LLVM::reinterpret_bits[U64, S64](q.bit_length())
+  var efinal = lsb + leading - 1_s64
+  if efinal > 16383_s64
+    return B128.from_bits(bits: b128_inf(sign: sign))
+  var q_hi = q.shr(bits: 64_s32)
+  var q_lo = q.sub(other: q_hi.shl(bits: 64_s32))
+  var qbits = LLVM::bit_or(a: LLVM::shift_left(value: LLVM::zero_extend[U64, U128](U64(from: q_hi)), bits: 64_u128), b: LLVM::zero_extend[U64, U128](U64(from: q_lo)))
+  if leading == 113_s64 and efinal >= -16382_s64
+    var biased = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](efinal + 16383_s64))
+    var mant = LLVM::bit_and(a: qbits, b: LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: 112_u128), b: 1_u128))
+    qbits = LLVM::bit_or(a: LLVM::shift_left(value: biased, bits: 112_u128), b: mant)
+  return B128.from_bits(bits: LLVM::bit_or(a: sign_bit, b: qbits))

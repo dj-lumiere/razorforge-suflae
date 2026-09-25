@@ -782,11 +782,11 @@ public partial class Parser
             TokenType.B32Literal => ParseTypedFloat<float>(text: text, suffix: "b32"),
             TokenType.B64Literal => ParseTypedFloat<double>(text: text, suffix: "b64"),
 
-            // Deferred types - store raw string for semantic analyzer to parse with native libraries
-            // b128: IEEE binary128, requires LibBF
-            // d32/d64/d128: IEEE decimal floating-point, requires decNumber
-            // Integer: arbitrary precision, pure-RF limb engine
-            // Decimal: arbitrary precision, requires decNumber
+            // Deferred types - store raw string for the semantic analyzer's exact managed encoders
+            // b128: IEEE binary128 (EncodeB128)
+            // d32/d64/d128: IEEE decimal floating-point (BID encoders)
+            // Integer: arbitrary precision (BigInteger)
+            // Decimal: arbitrary precision (EncodeDecimalCanonical)
             TokenType.B128Literal => CleanNumericSuffix(text: text, suffix: "b128"),
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
             TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),

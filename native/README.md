@@ -70,7 +70,6 @@ native/
 │   ├── bignum_functions.c
 │   ├── f16_functions.c
 │   ├── f128_functions.c
-│   ├── csharp_interop.c
 │   └── types.h
 ├── cmake/
 │   └── *.cmake
@@ -250,11 +249,6 @@ It should not collapse all of that into one anonymous “heap handle” abstract
 ## Vendored Libraries
 
 These directories are vendored snapshots, not separate repos the runtime should expose directly.
-
-### Core numeric/runtime support
-
-- `libbf`
-- `decNumber`
 
 ### Data and text adjacent libraries
 

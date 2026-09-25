@@ -4,7 +4,8 @@ RazorForge itself is distributed under the MIT License (see [LICENSE](LICENSE)).
 
 Portions of the RazorForge standard library — specifically the pure-RazorForge
 software floating-point and decimal engines under
-`Standard/RazorForge/Core/Numerics/` — are **ports and extensions** of the
+`Standard/RazorForge/Core/Numerics/` and the arbitrary-precision engines under
+`Standard/RazorForge/Numeric/` — are **ports and extensions** of the
 algorithms, table data, and bit-layouts of the third-party projects credited
 below. The RazorForge code was written by reading the upstream source and
 following its structure faithfully (so it is a derivative work — a port), and then
@@ -52,6 +53,42 @@ SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
 FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+```
+
+---
+
+## LibBF — tiny arbitrary-precision floating-point library
+
+Used by the RazorForge arbitrary-precision engines: **`Real`** (`RealEngine`) and **`Integer`**
+(`IntegerEngine`, built on the same limb layer). The limb primitives, the NTT multiplication over
+five ~2^62 primes, Newton-reciprocal division and square root, the rounding core, decimal
+conversion, and the transcendentals with Ziv correct-rounding loops are ports of LibBF (64-bit limb
+configuration).
+
+- Project: **LibBF** — https://bellard.org/libbf/
+- Copyright © 2017-2025 Fabrice Bellard.
+- License: **MIT License**.
+
+```
+Copyright (c) 2017-2025 Fabrice Bellard
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ```
 
 ---

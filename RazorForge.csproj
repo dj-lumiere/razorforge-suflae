@@ -76,7 +76,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="native\**\*.cs"/>
-    <!-- Vendored native third-party sources (pcre2, libbf, ...) are fetched into native/ at build
+    <!-- Vendored native third-party sources (pcre2, zstd, ...) are fetched into native/ at build
          time and compiled by native/build.sh (CMake), not by MSBuild. Drop them from the SDK's
          default None glob so SonarScanner doesn't list them under sonar.sources — the vendored tree
          (e.g. native/pcre2/src/.clang-format) otherwise fails Sonar's source-path validation. The

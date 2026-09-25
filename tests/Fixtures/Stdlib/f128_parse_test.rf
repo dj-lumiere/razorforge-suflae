@@ -1,9 +1,8 @@
 module Tests/Stdlib/B128ParseTest
 import IO/Console
 
-# Covers Text -> B128 parse via rf_parse_B128. The native function uses an
-# out-param ABI (void f(const char*, b128_t*)) to sidestep the Windows x64
-# sret/xmm0 mismatch that would otherwise make a returned b128_t silently zero.
+# Covers Text -> B128 parse (pure RF: parse_float_components + b128_from_ratio,
+# exact rational rounded once to binary128).
 
 routine start()
   var a = B128!("3.14")

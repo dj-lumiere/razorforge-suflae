@@ -77,14 +77,6 @@ jobs:
         run: |
           cd native
 
-          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
-
-          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
-          mkdir -p libbf
-          tar -xzf libbf.tar.gz -C libbf --strip-components=1
-          rm libbf.tar.gz
-
-          git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd
 

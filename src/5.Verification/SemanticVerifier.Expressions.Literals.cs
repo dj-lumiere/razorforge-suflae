@@ -844,12 +844,11 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedInteger ParseIntegerLiteral(LiteralExpression literal, string rawValue)
     {
-        // Strip the `n` suffix and digit-group underscores (e.g. "1_000_000n" -> "1000000")
-        // before handing the bare digits to the native parser.
+        // Strip the `n` suffix and digit-group underscores (e.g. "1_000_000n" -> "1000000"), then
+        // parse the magnitude (decimal or 0x/0b/0o) into a BigInteger.
         string digits =
             CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "n"));
-        (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: digits);
-        if (bytes.Length == 0)
+        if (!TryParseWideMagnitude(cleaned: digits, value: out System.Numerics.BigInteger value))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
                 message: $"Invalid Integer literal: '{rawValue}'",
@@ -861,8 +860,11 @@ public sealed partial class SemanticVerifier
         }
 
         return new ParsedInteger(Location: literal.Location,
-            Limbs: bytes,
-            Sign: sign,
+            Limbs: System.Numerics.BigInteger.Abs(value: value)
+                                             .ToByteArray(isUnsigned: true, isBigEndian: false),
+            Sign: value.Sign < 0
+                ? 1
+                : 0,
             Exponent: 0);
     }
 
@@ -872,7 +874,7 @@ public sealed partial class SemanticVerifier
     private ParsedDecimal ParseDecimalLiteral(LiteralExpression literal, string rawValue)
     {
         // Strip the `dn` suffix and digit-group underscores (e.g. "3.14_159dn" -> "3.14159")
-        // before parsing. decNumber (unlike libbf's bf_atof) rejects trailing non-numeric chars.
+        // before parsing.
         string digits =
             CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "dn"));
 

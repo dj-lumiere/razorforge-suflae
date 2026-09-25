@@ -561,13 +561,13 @@ public partial class LlvmEmitter
             return EmitSpecialFloatLiteral(name: numericValue, literalType: literalType);
         }
 
-        // B128: use native parser for full 128-bit precision. B128 is an i128
-        // bit carrier in LLVM (never fp128), so the literal is emitted as an
-        // i128 integer constant holding the IEEE binary128 bit pattern
+        // B128: encoded exactly (BigInteger, round-half-even) by the same encoder analysis
+        // validated the literal with. B128 is an i128 bit carrier in LLVM (never fp128), so the
+        // literal is emitted as an i128 integer constant holding the IEEE binary128 bit pattern
         // (LLVM hex integer syntax: u0x<Hi16hex><Lo16hex>).
         if (literalType == TokenType.B128Literal)
         {
-            NumericLiteralParser.B128 b128 = NumericLiteralParser.ParseB128(str: numericValue);
+            NumericLiteralParser.B128 b128 = NumericLiteralParser.EncodeB128(str: numericValue);
             return $"u0x{b128.Hi:X16}{b128.Lo:X16}";
         }
 

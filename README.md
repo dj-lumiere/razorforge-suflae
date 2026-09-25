@@ -250,7 +250,7 @@ RazorForge/
 │   ├── CodeGen/         #   LLVM IR emission
 │   └── Execution/       #   CLI driver, build pipeline (opt + clang + run)
 ├── Standard/RazorForge/ # Standard library (.rf sources)
-├── native/              # C runtime + vendored libs (decNumber, libbf, zstd, …)
+├── native/              # C runtime + vendored libs (zstd, sqlite3, pcre2, …)
 ├── tests/               # Unit tests + end-to-end snapshot fixtures
 ├── RazorForge-Wiki/     # Documentation sources
 └── Suflae-Wiki/         # Suflae design documentation

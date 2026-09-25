@@ -2,8 +2,8 @@ module Core
 
 ### A complex number with quadruple-precision real and imaginary components.
 ### `C256` stores two `B128` values and provides the widest complex precision
-### in the stdlib, including a full set of transcendental functions via the
-### LibBF runtime. Use this type when `C128` does not provide enough accuracy.
+### in the stdlib, including a full set of transcendental functions (pure-RF
+### software B128). Use this type when `C128` does not provide enough accuracy.
 record C256 obeys Numeric, Equatable, Hashable
   ### The real part.
   real: B128

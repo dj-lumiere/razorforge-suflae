@@ -1619,22 +1619,6 @@ routine B128.int_truncate() -> B128
   return me.trunc()
 
 # ============================================================================
-# Trigonometric Functions (via LibBF native runtime)
-# ============================================================================
-
-# ============================================================================
-# Hyperbolic Functions (via LibBF native runtime)
-# ============================================================================
-
-# ============================================================================
-# Exponential and Logarithmic Functions (via LibBF native runtime)
-# ============================================================================
-
-# ============================================================================
-# Power Functions (via LibBF native runtime)
-# ============================================================================
-
-# ============================================================================
 # Convenience (recip / angle conversion / integer power / midpoint)
 # ============================================================================
 
@@ -1882,72 +1866,25 @@ routine B128.hash() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
-### Parses decimal text into the correctly-rounded `B128` (round-to-nearest-even). Delegates the
-### value conversion to the LibBF arbitrary-precision parser via `C::rf_parse_B128` — the same
-### growable-bignum path the family uses (B32/B64 go through libc `strtod`). This routine validates
-### the surface format and throws on malformed input; the out-param ABI (a `b128_t*`) avoids the
-### Windows x64 sret/xmm0 mismatch a by-value `b128_t` return would hit.
+### Parses decimal text into the correctly-rounded `B128` (round-to-nearest-even). Accepts standard
+### decimal notation and the special values `nan`, `inf`, and `infinity` (case-insensitive, with
+### optional leading sign). The value is built as an exact rational and rounded once, straight to
+### binary128 (`b128_from_ratio`, the same path B16/B32/B64 use).
 ### :param from_text: The decimal literal.
 ### :returns: The correctly-rounded `B128` value.
 ### :throws: {InvalidValueError} on malformed input.
 routine B128!(from_text: Text) -> B128
-  var len = from_text.count()
-  if len == 0u64
+  var pc = parse_float_components(from_text: from_text, target: "B128")
+  if pc.kind == 3_s32
     throw InvalidValueError(input: from_text, target: "B128")
-  var i = 0u64
-  var first = from_text[0u64]
-  if first == Character(0x002Bu32) or first == Character(0x002Du32)
-    i = 1u64
-    if i >= len
-      throw InvalidValueError(input: from_text, target: "B128")
-  var special = false
-  var rest = len - i
-  if rest >= 3u64
-    var c0 = from_text[i].to_lowercase()
-    var c1 = from_text[i + 1u64].to_lowercase()
-    var c2 = from_text[i + 2u64].to_lowercase()
-    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
-      special = true
-    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      special = true
-    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
-      var c3 = from_text[i + 3u64].to_lowercase()
-      var c4 = from_text[i + 4u64].to_lowercase()
-      var c5 = from_text[i + 5u64].to_lowercase()
-      var c6 = from_text[i + 6u64].to_lowercase()
-      var c7 = from_text[i + 7u64].to_lowercase()
-      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
-        special = true
-  if not special
-    var has_digit = false
-    var has_dot = false
-    var has_exp = false
-    while i < len
-      var ch = from_text[i]
-      if ch.is_numeric()
-        has_digit = true
-      elseif ch == Character(0x002Eu32)
-        if has_dot or has_exp
-          throw InvalidValueError(input: from_text, target: "B128")
-        has_dot = true
-      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
-        if has_exp or not has_digit
-          throw InvalidValueError(input: from_text, target: "B128")
-        has_exp = true
-        has_digit = false
-        if i + 1u64 < len
-          var next_ch = from_text[i + 1u64]
-          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
-            i = i + 1u64
-      else
-        throw InvalidValueError(input: from_text, target: "B128")
-      i = i + 1u64
-    if not has_digit
-      throw InvalidValueError(input: from_text, target: "B128")
-  var result = 0.0b128
-  var cstr_val = CStr(from: from_text)
-  C::rf_parse_B128(cstr: cstr_val, out: result.hijack())
-  return result
+  if pc.kind == 1_s32
+    return B128.from_bits(bits: b128_qnan())
+  if pc.kind == 2_s32
+    var sign = 0u64
+    if pc.is_neg
+      sign = 1u64
+    return B128.from_bits(bits: b128_inf(sign: sign))
+  return b128_from_ratio(neg: pc.is_neg, digits: pc.digits, dec_exp: pc.dec_exp)
 
 # ============================================================================
 # Hashing

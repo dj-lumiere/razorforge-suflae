@@ -3,55 +3,53 @@ using Builder.Verification;
 namespace RazorForge.Tests.Meta;
 
 /// <summary>
-/// Cross-checks the managed <see cref="NumericLiteralParser.EncodeB128"/> (pure C#, BigInteger,
-/// round-to-nearest-even) against the native <see cref="NumericLiteralParser.ParseB128"/> (TLFloat,
-/// correctly rounded) for a battery of decimal literals. They must agree bit-for-bit. Once this is
-/// green the native B128 parser (and TLFloat) can be retired.
+/// Pins the managed <see cref="NumericLiteralParser.EncodeB128"/> (pure C#, BigInteger,
+/// round-to-nearest-even) against IEEE binary128 bit patterns computed independently with exact
+/// rational arithmetic, for a battery of decimal literals including the extremes of the finite
+/// range. Subnormals are checked by round-trip to within half a ULP.
 /// </summary>
 public sealed class B128EncoderTests
 {
     [Theory]
-    [InlineData("0")]
-    [InlineData("1")]
-    [InlineData("2")]
-    [InlineData("0.5")]
-    [InlineData("0.25")]
-    [InlineData("0.1")]
-    [InlineData("0.2")]
-    [InlineData("3.14159")]
-    [InlineData("3.141592653589793238462643383279502884")]
-    [InlineData("2.718281828459045235360287471352662498")]
-    [InlineData("10")]
-    [InlineData("100")]
-    [InlineData("1000000")]
-    [InlineData("123456789.123456789")]
-    [InlineData("1e10")]
-    [InlineData("1e-10")]
-    [InlineData("1e100")]
-    [InlineData("1e-100")]
-    [InlineData("1e1000")]
-    [InlineData("1e-1000")]
-    [InlineData("1e4000")]
-    [InlineData("1e-4000")]
-    [InlineData("1.18973149535723176508575932662800702e4932")] // near B128_MAX
-    [InlineData("3.36210314311209350626267781732175260e-4932")] // smallest normal
-    [InlineData("9.99999999999999999999999999999999999e4931")]
-    [InlineData("0.333333333333333333333333333333333333")]
-    [InlineData("7")]
-    [InlineData("0.0001220703125")] // exact binary fraction
-    [InlineData("12345678901234567890123456789012345678")]
-    public void EncodeB128_MatchesNativeParser_OnFiniteNormals(string s)
+    [InlineData("0", 0x0000000000000000UL, 0x0000000000000000UL)]
+    [InlineData("1", 0x3FFF000000000000UL, 0x0000000000000000UL)]
+    [InlineData("2", 0x4000000000000000UL, 0x0000000000000000UL)]
+    [InlineData("0.5", 0x3FFE000000000000UL, 0x0000000000000000UL)]
+    [InlineData("0.25", 0x3FFD000000000000UL, 0x0000000000000000UL)]
+    [InlineData("0.1", 0x3FFB999999999999UL, 0x999999999999999AUL)]
+    [InlineData("0.2", 0x3FFC999999999999UL, 0x999999999999999AUL)]
+    [InlineData("3.14159", 0x4000921F9F01B866UL, 0xE43AA79BBADC0981UL)]
+    [InlineData("3.141592653589793238462643383279502884", 0x4000921FB54442D1UL, 0x8469898CC51701B8UL)]
+    [InlineData("2.718281828459045235360287471352662498", 0x40005BF0A8B14576UL, 0x95355FB8AC404E7AUL)]
+    [InlineData("10", 0x4002400000000000UL, 0x0000000000000000UL)]
+    [InlineData("100", 0x4005900000000000UL, 0x0000000000000000UL)]
+    [InlineData("1000000", 0x4012E84800000000UL, 0x0000000000000000UL)]
+    [InlineData("123456789.123456789", 0x4019D6F34547E6B7UL, 0x4DCE58D7CC490820UL)]
+    [InlineData("1e10", 0x40202A05F2000000UL, 0x0000000000000000UL)]
+    [InlineData("1e-10", 0x3FDDB7CDFD9D7BDBUL, 0xAB7D6AE6881CB511UL)]
+    [InlineData("1e100", 0x414B249AD2594C37UL, 0xCEB0B2784C4CE0BFUL)]
+    [InlineData("1e-100", 0x3EB2BFF2EE48E052UL, 0xFD7AB2F0FC572779UL)]
+    [InlineData("1e1000", 0x4CF8E71B63F3BA7BUL, 0x580AF1A52D2A7379UL)]
+    [InlineData("1e-1000", 0x33050D152311513CUL, 0x28CE202627C06EC2UL)]
+    [InlineData("1e4000", 0x73E6A3750647FCABUL, 0x18C21AB905450CC3UL)]
+    [InlineData("1e-4000", 0x0C17387AE70C9E70UL, 0x0B8049732D11A23DUL)]
+    [InlineData("1.18973149535723176508575932662800702e4932", 0x7FFEFFFFFFFFFFFFUL, 0xFFFFFFFFFFFFFFFFUL)]
+    [InlineData("3.36210314311209350626267781732175260e-4932", 0x0001000000000000UL, 0x0000000000000000UL)]
+    [InlineData("9.99999999999999999999999999999999999e4931", 0x7FFEAE596552B8FDUL, 0xED99D037E3D04B75UL)]
+    [InlineData("0.333333333333333333333333333333333333", 0x3FFD555555555555UL, 0x5555555555555555UL)]
+    [InlineData("7", 0x4001C00000000000UL, 0x0000000000000000UL)]
+    [InlineData("0.0001220703125", 0x3FF2000000000000UL, 0x0000000000000000UL)]
+    [InlineData("12345678901234567890123456789012345678", 0x407A29361EDE0046UL, 0x627889320A1BC71EUL)]
+    public void EncodeB128_MatchesReferenceBits_OnFiniteNormals(string s, ulong hi, ulong lo)
     {
         NumericLiteralParser.B128 managed = NumericLiteralParser.EncodeB128(str: s);
-        NumericLiteralParser.B128 native = NumericLiteralParser.ParseB128(str: s);
-        Assert.Equal(expected: (native.Hi, native.Lo), actual: (managed.Hi, managed.Lo));
+        Assert.Equal(expected: (hi, lo), actual: (managed.Hi, managed.Lo));
     }
 
     /// <summary>
-    /// The managed encoder produces correct binary128 SUBNORMALS; the native TLFloat parser
-    /// (incorrectly) flushes them to zero. Verified self-consistently by round-trip: decoding the
-    /// managed bits back to a rational reproduces the literal within half a ULP. (Another reason
-    /// TLFloat is being retired.)
+    /// The managed encoder produces correct binary128 SUBNORMALS (not flushed to zero). Verified
+    /// self-consistently by round-trip: decoding the managed bits back to a rational reproduces the
+    /// literal within half a ULP.
     /// </summary>
     [Theory]
     [InlineData("1e-4940")]
@@ -59,13 +57,9 @@ public sealed class B128EncoderTests
     [InlineData("1.5e-4950")]
     [InlineData("1e-4960")]
     [InlineData("6.475175119438025110924438958227646552e-4966")] // smallest subnormal
-    public void EncodeB128_SubnormalsAreCorrect_NativeFlushesToZero(string s)
+    public void EncodeB128_SubnormalsAreCorrect(string s)
     {
         NumericLiteralParser.B128 managed = NumericLiteralParser.EncodeB128(str: s);
-        NumericLiteralParser.B128 native = NumericLiteralParser.ParseB128(str: s);
-
-        // Native TLFloat flushes the subnormal to zero — the bug we're moving off of.
-        Assert.Equal(expected: (0UL, 0UL), actual: (native.Hi, native.Lo));
 
         System.Numerics.BigInteger bits =
             (System.Numerics.BigInteger)managed.Hi << 64 | managed.Lo;

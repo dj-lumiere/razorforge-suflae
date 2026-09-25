@@ -101,7 +101,7 @@ Covered today (see `*.rf` files in this directory):
   binary op + unary `-`
 - Decimal transcendentals: `decimal_math` — full sin…log1p/pow/cbrt/hypot surface on D32/D64/D128 (tiered TLFloat
   routing: binary64/quad/octuple — correctly rounded, platform-identical)
-- Arbitrary-precision Decimal trig: `decimal_trig` — sin…tanh/atan2/pi/e on `Decimal` (LibBF-backed, precision-scaled;
+- Arbitrary-precision Decimal trig: `decimal_trig` — sin…tanh/atan2/pi/e on `Decimal` (precision-scaled;
   default 50 digits + a 100-digit pi)
 - Runtime errors — collections: `runtime_error_collections` — `try_remove_last`/`try_remove_first`/`try_remove_at`/
   `try_first`/`try_last` on empty / out-of-bounds inputs

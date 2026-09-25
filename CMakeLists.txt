@@ -49,7 +49,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${PLATFORM_NAME}/${AR
 
 # Options
 option(BUILD_NATIVE_RUNTIME "Build native runtime libraries" ON)
-option(BUILD_MATH_LIBRARIES "Build mathematical computation libraries (libdfp, libbf, mafm)" ON)
 option(BUILD_TESTS "Build and run tests" ON)
 option(BUILD_LANGUAGE_SERVER "Build the Language Server Protocol implementation" ON)
 option(BUILD_VSCODE_EXTENSION "Build VS Code extension" ON)
@@ -272,7 +271,6 @@ message(STATUS "  Build Type:           ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Platform:             ${PLATFORM_NAME}")
 message(STATUS "  Architecture:         ${ARCH_NAME}")
 message(STATUS "  Native Runtime:       ${BUILD_NATIVE_RUNTIME}")
-message(STATUS "  Math Libraries:       ${BUILD_MATH_LIBRARIES}")
 message(STATUS "  Language Server:      ${BUILD_LANGUAGE_SERVER}")
 message(STATUS "  VS Code Extension:    ${BUILD_VSCODE_EXTENSION}")
 message(STATUS "  Tests:                ${BUILD_TESTS}")

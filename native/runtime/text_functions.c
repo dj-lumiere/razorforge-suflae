@@ -19,9 +19,9 @@
 #include <math.h>
 #include "types.h"
 
-// Binary-float formatting (B16/B32/B64) and parsing are now pure RazorForge
+// Binary-float formatting and parsing (B16/B32/B64/B128) are pure RazorForge
 // (Standard/RazorForge/Core/Numerics/FloatConvert.rf — exact-rational, correctly
-// rounded). B128 formatting/parsing stays in b128_functions.c (requires LibBF).
+// rounded).
 // This file retains only the pointer-format + Text concatenation runtime below.
 
 // ============================================================================

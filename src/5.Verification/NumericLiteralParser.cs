@@ -4,14 +4,11 @@ using System.Runtime.InteropServices;
 namespace Builder.Verification;
 
 /// <summary>
-/// P/Invoke bindings for native numeric literal parsing functions.
-/// Used by the semantic analyzer to parse types without C# equivalents:
-/// b128, d32, d64, d128, Integer, Decimal.
+/// Managed, exact encoders for numeric literals without a C# equivalent (b128, d32, d64, d128,
+/// Decimal). Each is correctly rounded with BigInteger arithmetic; no native library is involved.
 /// </summary>
 public static partial class NumericLiteralParser
 {
-    private const string RuntimeLib = "razorforge_runtime";
-
     #region b128 (IEEE binary128)
 
     /// <summary>
@@ -37,22 +34,6 @@ public static partial class NumericLiteralParser
             return $"b128(0x{Hi:X16}{Lo:X16})";
         }
     }
-
-    /// <summary>
-    /// Parses a string to IEEE binary128 (b128) using LibBF.
-    /// </summary>
-    /// <param name="str">The string representation of the number.</param>
-    /// <returns>The parsed b128 value.</returns>
-    public static B128 ParseB128(string str)
-    {
-        ArgumentNullException.ThrowIfNull(argument: str);
-        return ParseB128Native(str: str);
-    }
-
-    [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_b128_from_string",
-        StringMarshalling = StringMarshalling.Utf8)]
-    private static partial B128 ParseB128Native(string str);
 
     #endregion
 
@@ -117,21 +98,6 @@ public static partial class NumericLiteralParser
             return $"d128(0x{Hi:X16}{Lo:X16})";
         }
     }
-
-    [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_d32_from_string",
-        StringMarshalling = StringMarshalling.Utf8)]
-    private static partial D32 ParseD32(string str);
-
-    [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_d64_from_string",
-        StringMarshalling = StringMarshalling.Utf8)]
-    private static partial D64 ParseD64(string str);
-
-    [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_d128_from_string",
-        StringMarshalling = StringMarshalling.Utf8)]
-    private static partial D128 ParseD128(string str);
 
     #endregion
 
@@ -509,8 +475,8 @@ public static partial class NumericLiteralParser
 
     /// <summary>
     /// Encodes a decimal literal into IEEE binary128 (Core.B128, @llvm("i128")) bits, correctly
-    /// rounded to nearest-even via exact BigInteger arithmetic. Replaces the
-    /// <c>rf_b128_from_string</c> FFI. Throws <see cref="OverflowException"/> when the value is out
+    /// rounded to nearest-even via exact BigInteger arithmetic. Used by both analysis and the LLVM
+    /// emitter. Throws <see cref="OverflowException"/> when the value is out
     /// of binary128's finite range (a compile-time literal overflow); the explicit <c>inf</c>/
     /// <c>nan</c> literals are handled by the caller before this is reached.
     /// </summary>
@@ -725,70 +691,11 @@ public static partial class NumericLiteralParser
 
     #endregion
 
-    #region Arbitrary precision Integer (LibBF)
-
-    [LibraryImport(libraryName: RuntimeLib,
-        EntryPoint = "rf_cs_integer_from_string",
-        StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint ParseInteger(string str);
-
-    [LibraryImport(libraryName: RuntimeLib, EntryPoint = "rf_cs_integer_free")]
-    private static partial void FreeInteger(nint handle);
-
-    [LibraryImport(libraryName: RuntimeLib, EntryPoint = "rf_cs_integer_byte_size")]
-    private static partial nuint GetIntegerByteSize(nint handle);
-
-    [LibraryImport(libraryName: RuntimeLib, EntryPoint = "rf_cs_integer_to_bytes")]
-    private static partial nuint IntegerToBytes(nint handle, [In] [Out] byte[] buffer,
-        nuint bufferSize);
-
-    [LibraryImport(libraryName: RuntimeLib, EntryPoint = "rf_cs_integer_sign")]
-    private static partial int GetIntegerSign(nint handle);
-
-    [LibraryImport(libraryName: RuntimeLib, EntryPoint = "rf_cs_integer_exponent")]
-    private static partial long GetIntegerExponent(nint handle);
-
-    #endregion
-
     #region Helper memberRoutines for managed types
 
     /// <summary>
-    /// Parses an arbitrary precision integer and returns it as a managed byte array.
-    /// </summary>
-    /// <param name="str">The string representation.</param>
-    /// <returns>Tuple of (bytes, sign) where sign is 0 for positive, 1 for negative.</returns>
-    public static (byte[] bytes, int sign) ParseIntegerToBytes(string str)
-    {
-        nint handle = ParseInteger(str: str);
-        if (handle == nint.Zero)
-        {
-            return ([], 0);
-        }
-
-        try
-        {
-            nuint size = GetIntegerByteSize(handle: handle);
-            int sign = GetIntegerSign(handle: handle);
-
-            // Handle zero: libbf represents zero with len=0, but we need at least 1 byte
-            if (size == 0)
-            {
-                return ([0], sign);
-            }
-
-            byte[] bytes = new byte[(int)size];
-            IntegerToBytes(handle: handle, buffer: bytes, bufferSize: size);
-            return (bytes, sign);
-        }
-        finally
-        {
-            FreeInteger(handle: handle);
-        }
-    }
-
-    /// <summary>
     /// Parses an arbitrary precision decimal and returns metadata, using the managed
-    /// <see cref="ParseDecimalLiteral"/> splitter (no native FFI — the old libbf/decNumber
+    /// <see cref="ParseDecimalLiteral"/> splitter (no native FFI — the old decNumber
     /// <c>rf_cs_decimal_from_string</c> backend has been retired). The returned tuple feeds the
     /// vestigial <c>ParsedDecimal</c> SA result; the compile-time bits come from
     /// <see cref="EncodeDecimalCanonical"/>, which is the single source of truth.

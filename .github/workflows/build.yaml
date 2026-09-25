@@ -68,22 +68,6 @@ jobs:
         run: |
           cd native
 
-          # --- Core (always needed) ---
-          echo "::group::decNumber"
-          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
-          echo "::endgroup::"
-
-          echo "::group::libbf"
-          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
-          mkdir -p libbf
-          tar -xzf libbf.tar.gz -C libbf --strip-components=1
-          rm libbf.tar.gz
-          echo "::endgroup::"
-
-          echo "::group::tlfloat"
-          git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
-          echo "::endgroup::"
-
           # --- Modules (loaded on demand) ---
           echo "::group::zlib"
           git clone --depth 1 https://github.com/madler/zlib.git zlib
@@ -148,8 +132,8 @@ jobs:
           # default. Vendored libs normally use their own ./configure to detect
           # POSIX features and avoid the warning; we skip configure, so blanket
           # the build with -Wno-implicit-function-declaration as a safety net for
-          # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc,
-          # libbf) — for which the per-target flags in cmake/*.cmake
+          # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc)
+          # — for which the per-target flags in cmake/*.cmake
           # don't apply. Pair it with _GNU_SOURCE so glibc feature-test macros
           # expose the full POSIX surface (lseek, mlock, ftruncate, etc.).
           export CC=clang
@@ -265,15 +249,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
           }
 
-          # --- Core (always needed) ---
-          Clone 'https://github.com/SDL-Hercules-390/decNumber.git' decNumber
-          Fetch 'https://bellard.org/libbf/libbf-2025-06-03.tar.gz' libbf.tar.gz
-          New-Item -ItemType Directory -Force libbf | Out-Null
-          tar -xzf libbf.tar.gz -C libbf --strip-components=1
-          if ($LASTEXITCODE -ne 0) { throw 'libbf extract failed' }
-          Remove-Item libbf.tar.gz
-          Clone 'https://github.com/shibatch/tlfloat.git' tlfloat
-
           # --- Modules (loaded on demand) ---
           Clone 'https://github.com/madler/zlib.git' zlib
           Clone 'https://github.com/facebook/zstd.git' zstd
@@ -357,12 +332,6 @@ jobs:
         run: |
           cd native
 
-          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
-          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
-          mkdir -p libbf
-          tar -xzf libbf.tar.gz -C libbf --strip-components=1
-          rm libbf.tar.gz
-          git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd
           mkdir -p sqlite3

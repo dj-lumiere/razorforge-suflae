@@ -26,18 +26,11 @@ include_directories(include)
 # Third-party libraries — Core (always needed)
 # ============================================================================
 
-# LibBF - Arbitrary precision floating point with transcendentals
-# https://bellard.org/libbf/ (MIT)
-include(cmake/libbf.cmake)
-
-# (decNumber retired: D32/D64/D128 are now pure-RF software BID engines; the arbitrary
-#  Decimal was removed in favour of Integer + Real. Integer and Real are now pure RF (a libbf port), libbf
-#  itself stays for B128.)
-
-# (TLFloat retired 2026-06-19: F128 arithmetic/libm/conversions are pure-RF software
-#  (SoftFloat/F128*.rf); F128 literals parse in managed C# (NumericLiteralParser.EncodeF128).
-#  Algorithm credit retained in docs/licenses. LibBF remains for arbitrary Real + the F128
-#  string fallback. See native/runtime/b128_functions.c.)
+# (No arbitrary-precision C library: decNumber, TLFloat and LibBF are all retired. D32/D64/D128,
+#  B128, Integer and Real are pure-RF software engines (Integer and Real are a port of LibBF's
+#  algorithms), B128 text parsing/formatting is pure RF (FloatConvert.rf), and the builder encodes
+#  B128/Integer literals in managed C# (NumericLiteralParser.EncodeB128). Algorithm credit retained
+#  in docs/licenses.)
 
 # ============================================================================
 # Third-party libraries — Modules (loaded on demand)
@@ -94,7 +87,7 @@ include(cmake/libuv.cmake)
 
 # ============================================================================
 # Compiler-RT shim for 128-bit integer operations (Windows)
-# LibBF uses __int128 which requires __udivti3 etc. from compiler-rt/libgcc
+# The runtime uses __int128 (rf_divide.c) which requires __udivti3 etc. from compiler-rt/libgcc
 # ============================================================================
 if(WIN32)
     add_library(compiler_rt_shim STATIC
@@ -121,9 +114,7 @@ add_library(razorforge_runtime SHARED
     runtime/moment.c
     runtime/math_functions.c
     runtime/rf_divide.c
-    runtime/b128_functions.c
     runtime/text_functions.c
-    runtime/csharp_interop.c
     runtime/file_functions.c
     runtime/task_runtime.c
     runtime/concurrency_context.c
@@ -150,13 +141,14 @@ if(WIN32)
     target_link_libraries(razorforge_runtime dbghelp)
 endif()
 
-# Link LibBF (f128 support with transcendentals)
-if(HAVE_LIBBF)
-    target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBBF)
-    target_link_libraries(razorforge_runtime libbf)
-    # On Windows, link the compiler-rt shim for 128-bit integer operations
-    if(WIN32)
-        target_link_libraries(razorforge_runtime compiler_rt_shim)
+# On Windows, compile the compiler-rt shim (128-bit integer division builtins) straight into the
+# runtime DLL. Linking it as a static library would only pull its object in when something in the
+# DLL itself references __udivti3 etc., and then the builtins would be missing from the export
+# table the in-process ORC JIT resolves against.
+if(WIN32)
+    target_sources(razorforge_runtime PRIVATE runtime/compiler_rt_shim.c)
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(runtime/compiler_rt_shim.c PROPERTIES COMPILE_OPTIONS -fvisibility=default)
     endif()
 endif()
 
@@ -246,7 +238,6 @@ set_target_properties(razorforge_runtime PROPERTIES
 add_library(razorforge_math STATIC
     runtime/math_functions.c
     runtime/rf_divide.c
-    runtime/b128_functions.c
 )
 
 target_include_directories(razorforge_math PUBLIC include)
@@ -255,13 +246,9 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(razorforge_math m)
 endif()
 
-if(HAVE_LIBBF)
-    target_compile_definitions(razorforge_math PRIVATE HAVE_LIBBF)
-    target_link_libraries(razorforge_math libbf)
-    # On Windows, link the compiler-rt shim for 128-bit integer operations
-    if(WIN32)
-        target_link_libraries(razorforge_math compiler_rt_shim)
-    endif()
+# On Windows, link the compiler-rt shim for 128-bit integer operations
+if(WIN32)
+    target_link_libraries(razorforge_math compiler_rt_shim)
 endif()
 
 set_target_properties(razorforge_math PROPERTIES
@@ -288,8 +275,6 @@ install(FILES include/razorforge_runtime.h
 # Print configuration summary
 message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
-message(STATUS "  ── Core ──")
-message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
 message(STATUS "  ── Modules ──")
 message(STATUS "  zlib (compression):               ${HAVE_ZLIB}")
 message(STATUS "  zstd (compression):               ${HAVE_ZSTD}")

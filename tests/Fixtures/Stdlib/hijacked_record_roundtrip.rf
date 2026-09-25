@@ -2,8 +2,7 @@ module Tests/Stdlib/HijackedRecordRoundtrip
 import IO/Console
 
 # Tests Hijacked[Record].peek() / .poke() round-trip for two record shapes:
-# 1. A primitive-shaped record (B128 via @llvm("fp128")) — relevant to the
-#    b128_t out-param plan for fixing the rf_parse_B128 ABI mismatch.
+# 1. A primitive-shaped record (B128, an i128 bit carrier).
 # 2. A multi-field user record (Point) — verifies hijack of normal records.
 
 record Point

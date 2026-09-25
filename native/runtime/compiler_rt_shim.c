@@ -2,7 +2,7 @@
  * RazorForge Compiler-RT Shim
  *
  * Provides missing 128-bit integer runtime functions for Windows.
- * LibBF uses __int128 on 64-bit platforms which requires these functions
+ * The runtime uses __int128 on 64-bit platforms (rf_divide.c), which requires these functions
  * that are normally provided by compiler-rt (Clang) or libgcc (GCC).
  *
  * On Windows, neither is typically available, so we provide our own.

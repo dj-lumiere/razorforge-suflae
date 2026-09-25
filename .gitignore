@@ -41,12 +41,6 @@ Suflae-Wiki/
 
 /native/.cache/
 
-# Third-party native libraries (download separately)
-/native/inteldecimal/
-/native/libbf/
-/native/tlfloat/
-/native/mapm/
-
 *.old
 *.backup
 /vscode-extension/
@@ -60,7 +54,6 @@ old
 /native/openssl/
 /native/libsodium/
 /native/icu/
-/native/decNumber/
 /native/bdwgc/
 /native/mbedtls2/
 /native/utf8proc/
