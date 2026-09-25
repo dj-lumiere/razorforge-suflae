@@ -1,6 +1,5 @@
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using Builder.Targeting;
 using Builder.Verification;
 using TypeModel.Enums;
@@ -38,7 +37,18 @@ internal partial class Program
 
         // ---- request / response DTOs ---------------------------------------------------------------
 
-        private sealed class DaemonRequest
+        /// <summary>A daemon IPC message: written and read as a fixed field sequence with <see cref="BinaryWriter"/>.
+        /// Hand-written instead of JSON so the dev-loop client never loads System.Text.Json (its first use cost
+        /// every run ~20 ms). Client and daemon are always the same compiler build (the version-stamped ping
+        /// restarts a stale daemon), so the field order needs no versioning.</summary>
+        private interface IDaemonMessage<TSelf> where TSelf : IDaemonMessage<TSelf>
+        {
+            void Write(BinaryWriter writer);
+
+            static abstract TSelf Read(BinaryReader reader);
+        }
+
+        private sealed class DaemonRequest : IDaemonMessage<DaemonRequest>
         {
             public string Verb { get; set; } = ""; // "build" | "ir" | "shutdown" | "ping"
             public string EntryFile { get; set; } = "";
@@ -57,9 +67,44 @@ internal partial class Program
             /// client loads the object and JITs only the delta. Set only on the incremental JIT path
             /// (<c>[target] incremental</c>); there is no separate <c>base-delta</c> manifest field.</summary>
             public bool BaseDelta { get; set; }
+
+            public void Write(BinaryWriter writer)
+            {
+                writer.Write(value: Verb);
+                writer.Write(value: EntryFile);
+                WriteNullable(writer: writer, value: ProjectRoot);
+                writer.Write(value: BuildMode);
+                writer.Write(value: DumpAst);
+                writer.Write(value: SaTiming);
+                writer.Write(value: RequireStart);
+                writer.Write(value: ShowBuildStages);
+                WriteList(writer: writer, values: LibraryRoots);
+                WriteList(writer: writer, values: CLibraries);
+                WriteList(writer: writer, values: LibraryPaths);
+                writer.Write(value: BaseDelta);
+            }
+
+            public static DaemonRequest Read(BinaryReader reader)
+            {
+                return new DaemonRequest
+                {
+                    Verb = reader.ReadString(),
+                    EntryFile = reader.ReadString(),
+                    ProjectRoot = ReadNullable(reader: reader),
+                    BuildMode = reader.ReadInt32(),
+                    DumpAst = reader.ReadBoolean(),
+                    SaTiming = reader.ReadBoolean(),
+                    RequireStart = reader.ReadBoolean(),
+                    ShowBuildStages = reader.ReadBoolean(),
+                    LibraryRoots = ReadList(reader: reader),
+                    CLibraries = ReadList(reader: reader),
+                    LibraryPaths = ReadList(reader: reader),
+                    BaseDelta = reader.ReadBoolean()
+                };
+            }
         }
 
-        private sealed class DaemonResponse
+        private sealed class DaemonResponse : IDaemonMessage<DaemonResponse>
         {
             public int ExitCode { get; set; }
             public string Output { get; set; } = "";
@@ -73,6 +118,66 @@ internal partial class Program
             /// <summary>Server-side wall-clock ms of the warm compile itself (excludes IPC/transfer), so a
             /// client can report where dev-loop latency goes: round-trip − CompileMs = transfer.</summary>
             public long CompileMs { get; set; }
+
+            public void Write(BinaryWriter writer)
+            {
+                writer.Write(value: ExitCode);
+                writer.Write(value: Output);
+                WriteNullable(writer: writer, value: ExePath);
+                WriteNullable(writer: writer, value: Ir);
+                WriteNullable(writer: writer, value: BaseObjectPath);
+                writer.Write(value: CompileMs);
+            }
+
+            public static DaemonResponse Read(BinaryReader reader)
+            {
+                return new DaemonResponse
+                {
+                    ExitCode = reader.ReadInt32(),
+                    Output = reader.ReadString(),
+                    ExePath = ReadNullable(reader: reader),
+                    Ir = ReadNullable(reader: reader),
+                    BaseObjectPath = ReadNullable(reader: reader),
+                    CompileMs = reader.ReadInt64()
+                };
+            }
+        }
+
+        private static void WriteNullable(BinaryWriter writer, string? value)
+        {
+            writer.Write(value: value != null);
+            if (value != null)
+            {
+                writer.Write(value: value);
+            }
+        }
+
+        private static string? ReadNullable(BinaryReader reader)
+        {
+            return reader.ReadBoolean()
+                ? reader.ReadString()
+                : null;
+        }
+
+        private static void WriteList(BinaryWriter writer, List<string> values)
+        {
+            writer.Write(value: values.Count);
+            foreach (string value in values)
+            {
+                writer.Write(value: value);
+            }
+        }
+
+        private static List<string> ReadList(BinaryReader reader)
+        {
+            int count = reader.ReadInt32();
+            var values = new List<string>(capacity: count);
+            for (int i = 0; i < count; i++)
+            {
+                values.Add(item: reader.ReadString());
+            }
+
+            return values;
         }
 
         // ---- pipe naming / opt-in ------------------------------------------------------------------
@@ -652,6 +757,8 @@ internal partial class Program
                 return false;
             }
 
+            ClientClock.Mark(label: "LLVM/ORC initialized");
+
             // Resident-JIT incremental (B) M3: `[target] incremental` runs the program via the FULLY-LAZY JIT +
             // per-routine disk IR cache instead of a single eager module — @main is materialized on demand and
             // each pure-stdlib routine is served from / written to the cross-run cache. Analysis is still
@@ -825,6 +932,7 @@ internal partial class Program
                         programName: entryFull,
                         programArgs: []);
                 swJit.Stop();
+                ClientClock.Mark(label: "JIT compile + run done");
                 if (PhaseTiming())
                 {
                     Console.Error.WriteLine(
@@ -856,6 +964,8 @@ internal partial class Program
                 return false;
             }
 
+            ClientClock.Mark(label: "daemon ping (liveness + version stamp)");
+
             // The one-time spawn+warm wait (~5 s on first run) is NOT transfer — report it separately so
             // it doesn't inflate the `transfer` figure below.
             if (PhaseTiming() && spawned)
@@ -877,6 +987,7 @@ internal partial class Program
             }
 
             _swIr.Stop();
+            ClientClock.Mark(label: "daemon IR received");
             if (PhaseTiming())
             {
                 Console.Error.WriteLine(
@@ -1133,7 +1244,10 @@ internal partial class Program
         private static bool TryPing(int timeoutMs)
         {
             string? stamp = PingStamp(timeoutMs: timeoutMs);
-            return stamp != null && stamp == CompilerVersionStamp();
+            ClientClock.Mark(label: "  ping round-trip");
+            bool fresh = stamp != null && stamp == CompilerVersionStamp();
+            ClientClock.Mark(label: "  version stamp computed");
+            return fresh;
         }
 
         /// <summary>If a daemon is up but running a STALE compiler (its stamp differs from the current DLL, or
@@ -1302,11 +1416,18 @@ internal partial class Program
             return false;
         }
 
-        // ---- length-prefixed JSON framing ----------------------------------------------------------
+        // ---- length-prefixed binary framing ----------------------------------------------------------
 
-        private static void WriteMessage<T>(Stream stream, T value)
+        private static void WriteMessage<T>(Stream stream, T value) where T : IDaemonMessage<T>
         {
-            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(value: value);
+            var buffer = new MemoryStream();
+            using (var writer = new BinaryWriter(output: buffer, encoding: System.Text.Encoding.UTF8,
+                       leaveOpen: true))
+            {
+                value.Write(writer: writer);
+            }
+
+            byte[] payload = buffer.ToArray();
             Span<byte> len = stackalloc byte[4];
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(destination: len,
                 value: payload.Length);
@@ -1315,7 +1436,7 @@ internal partial class Program
             stream.Flush();
         }
 
-        private static T? ReadMessage<T>(Stream stream) where T : class
+        private static T? ReadMessage<T>(Stream stream) where T : class, IDaemonMessage<T>
         {
             byte[] lenBuf = new byte[4];
             if (!ReadExact(stream: stream, buffer: lenBuf, count: 4))
@@ -1335,7 +1456,9 @@ internal partial class Program
                 return null;
             }
 
-            return JsonSerializer.Deserialize<T>(utf8Json: payload);
+            using var reader = new BinaryReader(input: new MemoryStream(buffer: payload),
+                encoding: System.Text.Encoding.UTF8);
+            return T.Read(reader: reader);
         }
 
         private static bool ReadExact(Stream stream, byte[] buffer, int count)

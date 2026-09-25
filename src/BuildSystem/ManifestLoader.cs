@@ -44,9 +44,31 @@ public static class ManifestLoader
     public static ProjectManifest Load(string tomlPath, bool resolveExecutable = true)
     {
         string fullPath = Path.GetFullPath(path: tomlPath);
-        string manifestDir = Path.GetDirectoryName(path: fullPath)!;
         string content = File.ReadAllText(path: fullPath);
 
+        // An explicit-entry build (the dev loop) reads the cached parse when the manifest is unchanged. A
+        // manifest-entry build resolves the executable against the project's files, so it always parses.
+        if (!resolveExecutable &&
+            ManifestCache.TryRead(fullPath: fullPath, content: content, manifest: out ProjectManifest? cached))
+        {
+            return cached!;
+        }
+
+        ProjectManifest parsed = Parse(fullPath: fullPath, content: content,
+            resolveExecutable: resolveExecutable);
+        if (!resolveExecutable)
+        {
+            ManifestCache.TryWrite(fullPath: fullPath, content: content, manifest: parsed);
+        }
+
+        return parsed;
+    }
+
+    /// <summary>Parses the manifest text. Kept apart from <see cref="Load"/> so a cache hit never loads the
+    /// TOML parser.</summary>
+    private static ProjectManifest Parse(string fullPath, string content, bool resolveExecutable)
+    {
+        string manifestDir = Path.GetDirectoryName(path: fullPath)!;
         TomlTable root = Toml.ToModel(text: content);
 
         var manifest = new ProjectManifest { ManifestDirectory = manifestDir };

@@ -295,7 +295,9 @@ internal partial class Program
     /// </summary>
     private static int RunBuildAndRunCommand(string[] args)
     {
+        ClientClock.Mark(label: "buildandrun entered (host startup + Main)");
         ResolvedEntry resolved = ResolveEntryFile(args: args, needsOutputArg: false);
+        ClientClock.Mark(label: "manifest resolved");
         if (resolved.EntryFile == null)
         {
             return 1;
@@ -310,6 +312,8 @@ internal partial class Program
         // no exe, no spawn. IR comes warm from the daemon when it's up, else a local cold compile.
         if (!dumpIr && CompileDaemon.TryClientJitRun(resolved: resolved, exitCode: out int jrc))
         {
+            ClientClock.Mark(label: "JIT path returned");
+            ClientClock.Dump();
             return jrc;
         }
 
