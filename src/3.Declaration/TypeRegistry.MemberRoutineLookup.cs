@@ -1877,6 +1877,7 @@ public sealed partial class TypeRegistry
         {
             [key: universalOwner.Name] = resolvedOwner
         };
+        BindProtocolSelf(substitution: substitution, resolvedOwner: resolvedOwner);
 
         var substitutedParams = memberRoutine.Parameters
                                              .Select(selector: p =>
@@ -2069,6 +2070,8 @@ public sealed partial class TypeRegistry
             return memberRoutine;
         }
 
+        BindProtocolSelf(substitution: substitution2, resolvedOwner: resolvedOwner);
+
         // Wrapper-forwarder: re-resolve signature against the concrete inner memberRoutine instead of
         // naive name substitution (inner-T vs wrapper-T collision: both T and List[T] use T,
         // so {T: List[Character]} would map List[T].getitem!'s T to List[Character], not Character).
@@ -2162,6 +2165,26 @@ public sealed partial class TypeRegistry
             OriginalName = memberRoutine.OriginalName
         };
         return CacheResolvedOwnerMemberRoutine(resolvedMemberRoutine: resolvedOwnerMemberRoutine);
+    }
+
+    /// <summary>
+    /// Adds <c>Me</c>→<paramref name="resolvedOwner"/> to a re-homing substitution when the owner is concrete. A
+    /// protocol-extension routine re-homed onto its implementer must have <c>Me</c> bound everywhere in its
+    /// signature, including inside type arguments (<c>Iterable[T].exclude[SO] -> ExcludeIterable[T, Me, SO]</c> on
+    /// <c>List[S64]</c> is <c>ExcludeIterable[S64, List[S64], SO]</c>). Left unbound, the routine's signature still
+    /// counted as generic, so the emitter skipped declaring it and a module that calls it without defining it
+    /// (the lazy JIT's main module) referenced an undefined symbol.
+    /// </summary>
+    private static void BindProtocolSelf(Dictionary<string, TypeSymbol> substitution,
+        TypeSymbol resolvedOwner)
+    {
+        if (resolvedOwner is GenericParameterTypeSymbol or ProtocolTypeSymbol or ProtocolSelfTypeSymbol ||
+            resolvedOwner.IsGenericDefinition)
+        {
+            return;
+        }
+
+        substitution[key: ProtocolSelfTypeSymbol.Instance.Name] = resolvedOwner;
     }
 
     /// <summary>
