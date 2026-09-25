@@ -32,7 +32,7 @@ routine start()
   show(f"id.scale(3): {id.scale(factor: 3.0_b32)}")
   show(f"s == s: {s == s}, s == t: {s == t}")
 
-  var p = vec4(x: 1.0_b32, y: 1.0_b32, z: 1.0_b32, w: 1.0_b32)
+  var p = vec4(1.0_b32, 1.0_b32, 1.0_b32, 1.0_b32)
   show(f"t transforms (1,1,1,1): {t.transform(v: p)}")
   show(f"s transforms (1,1,1,1): {s.transform(v: p)}")
 

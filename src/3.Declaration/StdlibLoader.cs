@@ -766,13 +766,18 @@ public sealed partial class StdlibLoader
         // above for why the overlay's same-named types must not collapse to the RazorForge realm.
         TypeSymbol? resolved = (moduleName != null
             ? registry.LookupType(name: $"{moduleName}.{typeName}")
-            : null) ?? registry.LookupType(name: typeName);
-        if (resolved != null)
+            : null) ?? registry.LookupType(name: typeName) ??
+            ResolveViaActiveImports(registry: registry, typeName: typeName);
+
+        // `Name[Args]` that the parameterized path above could not apply (an argument still unresolved, an
+        // arity mismatch) must stay unresolved. Returning the bare generic definition dropped the
+        // arguments and let the definition reach the emitter as a field or signature type.
+        if (resolved is { IsGenericDefinition: true } && typeExpr.GenericArguments is { Count: > 0 })
         {
-            return resolved;
+            return null;
         }
 
-        return ResolveViaActiveImports(registry: registry, typeName: typeName);
+        return resolved;
     }
 
     /// <summary>
