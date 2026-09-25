@@ -1199,17 +1199,17 @@ routine B128.remainder(you: B128) -> B128
   return r
 
 # ============================================================================
-# Decimal text conversion — a faithful port of TLFloat's `snprint` (%g, 6 sig
-# figs), built entirely on the software B128 arithmetic. No native delegation.
+# Decimal text conversion — exact, on the raw bits (FloatConvert.rf). No native delegation.
 # ============================================================================
 
-### Returns the decimal text of this value (%g with 6 significant digits).
+### Returns the shortest decimal text that reads back as this exact value (`B128!(from_text:)`
+### round-trips it bit for bit).
 ### :returns: The formatted representation.
 @override
 routine B128.represent() -> Text
   if me.is_signaling()
     return "snan"
-  return b128_represent(bits: me.to_bits())
+  return format_b128_shortest(value: me)
 
 ### Renders this value with exactly `places` digits after the point, rounded half to even from its
 ### exact value (`2.675.fixed(2)` is `2.67`, since the stored double is just below 2.675). The integer
@@ -1224,7 +1224,7 @@ routine B128.fixed(places: U64) -> Text
 ### :returns: The formatted representation.
 @override
 routine B128.diagnose() -> Text
-  return "B128(" + b128_represent(bits: me.to_bits()) + ")"
+  return "B128(" + me.represent() + ")"
 
 ### Builds the `B128` value of a small non-negative integer (castFromInt).
 ### :param n: The integer to convert.
@@ -1252,162 +1252,6 @@ routine b128_ilogb(v: B128) -> S64
     var msb = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(m))
     return LLVM::sub(a: LLVM::int_truncate[U128, S64](msb), b: 16494_s64)
   return LLVM::sub(a: LLVM::sign_extend[S32, S64](LLVM::int_truncate[U64, S32](e)), b: 16383_s64)
-
-### Returns `10^a` as an `B128` via exponentiation by squaring (TLFloat's `exp10i`).
-### :param a: The integer power.
-### :returns: The corresponding power of ten.
-routine b128_exp10i(a: S64) -> B128
-  var neg = LLVM::signed_lt(a: a, b: 0_s64)
-  var n = a
-  if neg
-    n = LLVM::sub(a: 0_s64, b: a)
-  var r = b128_from_int(1_u64)
-  var d = b128_from_int(10_u64)
-  while LLVM::signed_gt(a: n, b: 0_s64)
-    if LLVM::signed_rem(a: n, b: 2_s64) == 1_s64
-      r = r * d
-    d = d * d
-    n = LLVM::shift_right_signed(n, 1_s64)
-  if neg
-    return b128_from_int(1_u64) / r
-  return r
-
-### Returns `floor(log10(v))` (TLFloat's `ilog10`): estimate then correct by +/- 1.
-### :param v: The value (assumed positive, nonzero).
-### :returns: The decimal exponent.
-routine b128_ilog10(v: B128) -> S64
-  var ib = b128_ilogb(v)
-  var bias_round = 50000_s64
-  if LLVM::signed_lt(a: ib, b: 0_s64)
-    bias_round = LLVM::sub(a: 0_s64, b: 50000_s64)
-  var ret = LLVM::signed_div(a: LLVM::add(a: LLVM::mul(a: ib, b: 30103_s64), b: bias_round), b: 100000_s64)
-  var e = b128_exp10i(ret)
-  if e > v
-    ret = LLVM::sub(a: ret, b: 1_s64)
-  elseif (e * b128_from_int(10_u64)) < v
-    ret = LLVM::add(a: ret, b: 1_s64)
-  return ret
-
-### Returns the integer part of a non-negative value (TLFloat's `castToInt`, floor).
-### :param v: The value (assumed in roughly [0, 2^63)).
-### :returns: The integer part.
-routine b128_floor_int(v: B128) -> U64
-  var ib = b128_ilogb(v)
-  if LLVM::signed_lt(a: ib, b: 0_s64)
-    return 0_u64
-  var sig = LLVM::bit_or(a: v.raw_mantissa(), b: b128_implicit())
-  var shift = LLVM::sub(a: 112_s64, b: ib)
-  if LLVM::signed_lt(a: shift, b: 0_s64)
-    return 0_u64
-  var shu = LLVM::zero_extend[U32, U128](LLVM::int_truncate[S64, U32](shift))
-  return LLVM::int_truncate[U128, U64](LLVM::shift_right_unsigned(sig, shu))
-
-### Returns the single-character text for a decimal digit 0..9. Clamps to 9 so any
-### residual drift in the high-digit extraction can never emit a non-digit character.
-### :param d: The digit value.
-### :returns: The digit character as text.
-routine b128_digit(d: U64) -> Text
-  var dd = if LLVM::unsigned_gt(a: d, b: 9_u64) then 9_u64 else d
-  return Text(from_character: Character(from: LLVM::add(a: 0x30u32, b: LLVM::int_truncate[U64, U32](dd))))
-
-### Returns the unsigned decimal text of `n` (recursive).
-### :param n: The value to format.
-### :returns: The decimal digits.
-routine b128_u64_dec(n: U64) -> Text
-  if LLVM::unsigned_lt(a: n, b: 10_u64)
-    return b128_digit(n)
-  return b128_u64_dec(LLVM::unsigned_div(a: n, b: 10_u64)) + b128_digit(LLVM::unsigned_rem(a: n, b: 10_u64))
-
-### Formats a scientific-notation exponent as `e±NN` (at least two digits).
-### :param exp: The decimal exponent.
-### :returns: The exponent suffix text.
-routine b128_exp_str(exp: S64) -> Text
-  var s = "+"
-  var m = exp
-  if LLVM::signed_lt(a: exp, b: 0_s64)
-    s = "-"
-    m = LLVM::sub(a: 0_s64, b: exp)
-  var mu = LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](m))
-  var body = b128_u64_dec(mu)
-  if LLVM::unsigned_lt(a: mu, b: 10_u64)
-    body = "0" + body
-  return "e" + s + body
-
-### Strips trailing zeros (and a dangling decimal point) from a fraction string.
-### :param s: The text to trim.
-### :returns: The trimmed text.
-routine b128_strip(s: Text) -> Text
-  var r = s
-  while r.ends_with(suffix: "0")
-    r = r.remove_suffix(suffix: "0")
-  if r.ends_with(suffix: ".")
-    r = r.remove_suffix(suffix: ".")
-  return r
-
-### `%g`-style decimal conversion at 34 significant digits (`FLT128_DIG`) — the digits
-### B128 carries reliably. Extraction runs in B128 arithmetic, so it CANNOT exceed ~34
-### digits (the residual drifts past [0,10) and emits garbage); a bit-exact 36-digit
-### round-trip would need wider-than-B128 (W=192+) digit extraction here AND a 36-digit parser
-### (the current `create!` narrows through 34-digit D128). Trailing zeros are stripped.
-### :param bits: The raw `B128` encoding.
-### :returns: The decimal text.
-routine b128_represent(bits: U128) -> Text
-  var x = B128.from_bits(bits: bits)
-  if x.is_nan()
-    return "NaN"
-  var sgn = ""
-  if x.is_negative()
-    sgn = "-"
-  if x.is_infinite()
-    return sgn + "inf"
-  if x.is_zero()
-    return sgn + "0"
-  var value = x.abs()
-  # 34 significant digits = FLT128_DIG (precision+1 are printed). This is the most
-  # B128-arithmetic extraction can reliably produce; higher counts drift into garbage.
-  var precision = 33_s64
-  var rounder = b128_exp10i(LLVM::sub(a: 0_s64, b: precision)) / b128_from_int(2_u64)
-  var exp = b128_ilog10(value)
-  value = value * b128_exp10i(LLVM::sub(a: 0_s64, b: exp))
-  value = value + rounder
-  if value >= b128_from_int(10_u64)
-    value = value / b128_from_int(10_u64)
-    exp = LLVM::add(a: exp, b: 1_s64)
-  elseif value < b128_from_int(1_u64)
-    value = value * b128_from_int(10_u64)
-    exp = LLVM::sub(a: exp, b: 1_s64)
-  var scientific = LLVM::signed_lt(a: exp, b: -4_s64) or LLVM::signed_gt(a: exp, b: precision)
-  var e2 = 0_s64
-  if not scientific
-    precision = LLVM::sub(a: precision, b: exp)
-    e2 = exp
-  var result = sgn
-  if LLVM::signed_lt(a: e2, b: 0_s64)
-    result = result + "0"
-  else
-    while LLVM::signed_ge(a: e2, b: 0_s64)
-      var d = b128_floor_int(value)
-      result = result + b128_digit(d)
-      value = (value - b128_from_int(d)) * b128_from_int(10_u64)
-      e2 = LLVM::sub(a: e2, b: 1_s64)
-  var flag_dp = LLVM::signed_gt(a: precision, b: 0_s64)
-  if flag_dp
-    result = result + "."
-  e2 = LLVM::add(a: e2, b: 1_s64)
-  while LLVM::signed_lt(a: e2, b: 0_s64) and LLVM::signed_gt(a: precision, b: 0_s64)
-    result = result + "0"
-    precision = LLVM::sub(a: precision, b: 1_s64)
-    e2 = LLVM::add(a: e2, b: 1_s64)
-  while LLVM::signed_gt(a: precision, b: 0_s64)
-    var d2 = b128_floor_int(value)
-    result = result + b128_digit(d2)
-    value = (value - b128_from_int(d2)) * b128_from_int(10_u64)
-    precision = LLVM::sub(a: precision, b: 1_s64)
-  if flag_dp
-    result = b128_strip(s: result)
-  if scientific
-    result = result + b128_exp_str(exp: exp)
-  return result
 
 # ============================================================================
 # Packed B128 <-> generic UnpackedFloat[2, 4] casts (concrete; the

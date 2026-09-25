@@ -454,13 +454,14 @@ common routine B16.signaling_nan() -> B16
 # Text Representation and Parsing
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the shortest decimal text that reads back as this exact value (`B16!(from_text:)`
+### round-trips it bit for bit).
 ### :returns: The resulting `Text` value.
 @override
 routine B16.represent() -> Text
   if me.is_signaling()
     return "snan"
-  return me.to_text(sig_digits: 4u64)
+  return format_binary_shortest(raw: LLVM::zero_extend[U16, U64](me.to_bits()), fmt: 2_s32)
 
 ### Renders this value to `sig_digits` significant decimal digits with C `%g`
 ### layout (pure-RF exact-rational conversion; widens to B64 exactly first).

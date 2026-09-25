@@ -17,7 +17,10 @@ import Numerics.Integer
 # FORMAT: `format_binary(value, sig)` renders `value` to `sig` significant
 # decimal digits (round-half-even), then lays them out with C `%g` rules
 # (scientific when the decimal exponent is < -4 or >= sig, else fixed). B16/B32
-# widen EXACTLY to B64 first, so one core covers all three.
+# widen EXACTLY to B64 first, so one core covers all three. `represent` instead
+# prints the SHORTEST decimal that reads back as the same float
+# (`format_binary_shortest`, `format_b128_shortest`), decoded in the source
+# format, since the shortest digits depend on that format's spacing.
 #
 # PARSE: `parse_float_components` validates + extracts (kind, sign, significand,
 # decimal-exponent); `b{16,32,64}_from_ratio` builds the exact rational and
@@ -203,6 +206,181 @@ routine format_binary(value: B64, sig: U64) -> Text
     e2 = LLVM::reinterpret_bits[U64, S64](ef) - 1075_s64
   var pr = binary_float_digits(m: m, e2: e2, sig: sig)
   return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sig)
+
+# ----------------------------------------------------------------------------
+# Shortest round-trip formatting (what `represent` prints)
+# ----------------------------------------------------------------------------
+# A binary float owns the interval of reals that round to it: halfway to the next float below and
+# halfway to the next float above. Any decimal inside that interval reads back as the same float,
+# so `represent` prints the SHORTEST such decimal (and, among equally short ones, the closest to the
+# exact value). This is the free-format algorithm of Steele & White / Burger & Dybvig carried out on
+# exact `Integer` ratios: v = r/s, and the half-gaps to the neighbours are m_minus/s and m_plus/s.
+# Every parser in the family rounds half to even, so an interval end counts as inside exactly when
+# the significand is even.
+
+### Returns the shortest decimal digits of the positive value m · 2^e2 that read back as the same
+### float, with the exponent of the leading digit (value ≈ d0.d1… × 10^E).
+### :param m: The full significand (hidden bit included for a normal value).
+### :param e2: The binary exponent of the significand's last bit.
+### :param lower_closer: Whether the float below is half as far away as the float above (the
+###   value is an exact power of two above the smallest normal exponent).
+### :returns: The digit string and the exponent of its leading digit.
+routine shortest_float_digits(m: Integer, e2: S64, lower_closer: Bool) -> FloatDigits
+  var inclusive = m.is_even()
+  var ten = Integer(value: 10u64)
+  var r = Integer.zero()
+  var s = Integer.one()
+  var m_plus = Integer.one()
+  var m_minus = Integer.one()
+  # Everything is scaled by 2 (by 4 when the lower gap is the narrow one) so the half-gaps stay integers.
+  if e2 >= 0_s64
+    var ulp = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](e2))
+    if lower_closer
+      r = m.mul(other: ulp).shl(bits: 2_s32)
+      s = Integer(value: 4u64)
+      m_plus = ulp.shl(bits: 1_s32)
+      m_minus = ulp
+    else
+      r = m.mul(other: ulp).shl(bits: 1_s32)
+      s = Integer(value: 2u64)
+      m_plus = ulp
+      m_minus = ulp
+  elseif lower_closer
+    r = m.shl(bits: 2_s32)
+    s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](2_s64 - e2))
+    m_plus = Integer(value: 2u64)
+  else
+    r = m.shl(bits: 1_s32)
+    s = Integer.one().shl(bits: LLVM::int_truncate[S64, S32](1_s64 - e2))
+  # Find k with 10^(k-1) <= (upper interval end) < 10^k: estimate from the bit lengths, then settle
+  # it exactly in whichever direction the estimate was off.
+  var bl = LLVM::reinterpret_bits[U64, S64](r.bit_length()) - LLVM::reinterpret_bits[U64, S64](s.bit_length())
+  var k = (bl * 30103_s64) // 100000_s64
+  if k >= 0_s64
+    s = s.mul(other: pow10_int(k: k))
+  else
+    var scale = pow10_int(k: 0_s64 - k)
+    r = r.mul(other: scale)
+    m_plus = m_plus.mul(other: scale)
+    m_minus = m_minus.mul(other: scale)
+  var settled = false
+  while not settled
+    var top = r.add(other: m_plus).cmp(you: s)
+    if top == ME_LARGE or (inclusive and top == SAME)
+      s = s.mul(other: ten)
+      k = k + 1_s64
+    else
+      var below = r.add(other: m_plus).mul(other: ten).cmp(you: s)
+      if below == ME_SMALL or (not inclusive and below == SAME)
+        r = r.mul(other: ten)
+        m_plus = m_plus.mul(other: ten)
+        m_minus = m_minus.mul(other: ten)
+        k = k - 1_s64
+      else
+        settled = true
+  # Emit digits until the prefix alone (rounded down, or its last digit rounded up) lands inside
+  # the interval.
+  var digits = Text()
+  var done = false
+  while not done
+    r = r.mul(other: ten)
+    m_plus = m_plus.mul(other: ten)
+    m_minus = m_minus.mul(other: ten)
+    var qr = r.divmod!(other: s)
+    var d = U64!(from: qr.item0)
+    r = qr.item1
+    var low_c = r.cmp(you: m_minus)
+    var low = low_c == ME_SMALL or (inclusive and low_c == SAME)
+    var high_c = r.add(other: m_plus).cmp(you: s)
+    var high = high_c == ME_LARGE or (inclusive and high_c == SAME)
+    if low and high
+      # Both d and d + 1 read back correctly: keep the one closer to the exact value, even on a tie.
+      var half = r.shl(bits: 1_s32).cmp(you: s)
+      if half == ME_LARGE or (half == SAME and LLVM::int_ne(a: LLVM::bit_and(a: d, b: 1u64), b: 0u64))
+        d = d + 1u64
+      done = true
+    elseif high
+      d = d + 1u64
+      done = true
+    elseif low
+      done = true
+    digits = digits + int_to_text(mag: d, negative: false)
+  return FloatDigits(digits: digits, point_exp: k - 1_s64)
+
+### Renders the shortest decimal that reads back as the same float, in `%g` layout: scientific when
+### the leading digit's exponent is below -4 or at least `sci_from`, otherwise positional.
+### :param neg: Whether the sign bit is set.
+### :param m: The full significand (zero for a zero value).
+### :param e2: The binary exponent of the significand's last bit.
+### :param lower_closer: Whether the float below is half as far away as the float above.
+### :param sci_from: The leading-digit exponent from which scientific form is used.
+### :returns: The rendered `Text` ("0" / "-0" for zero).
+routine format_shortest(neg: Bool, m: Integer, e2: S64, lower_closer: Bool, sci_from: U64) -> Text
+  if m.is_zero()
+    if neg
+      return "-0"
+    return "0"
+  var pr = shortest_float_digits(m: m, e2: e2, lower_closer: lower_closer)
+  return assemble_decimal(neg: neg, digits: pr.digits, ee: pr.point_exp, sig: sci_from)
+
+### Renders the raw bits of a B16/B32/B64 as the shortest decimal that reads back as the same value.
+### The shortest digits depend on the SOURCE format's spacing, so the bits are decoded in that format
+### (never widened first).
+### :param raw: The IEEE 754 bit pattern in the low bits.
+### :param fmt: 0 = B64, 1 = B32, 2 = B16.
+### :returns: The rendered `Text`. Specials: "NaN" / "inf" / "-inf".
+routine format_binary_shortest(raw: U64, fmt: S32) -> Text
+  # mant_bits = stored fraction bits, exp_bits = exponent field width, sci_from = the leading-digit
+  # exponent where scientific form starts (the format's DIG + 1, as C's %g at DIG + 1 digits would).
+  var mant_bits = 52u64
+  var exp_bits = 11u64
+  var sci_from = 16u64
+  if fmt == 1_s32
+    mant_bits = 23u64
+    exp_bits = 8u64
+    sci_from = 7u64
+  elseif fmt == 2_s32
+    mant_bits = 10u64
+    exp_bits = 5u64
+    sci_from = 4u64
+  var exp_all_ones = LLVM::sub(a: LLVM::shift_left(1u64, exp_bits), b: 1u64)
+  var bias = LLVM::reinterpret_bits[U64, S64](LLVM::shift_right_unsigned(exp_all_ones, 1u64))
+  var neg = LLVM::int_ne(a: LLVM::shift_right_unsigned(raw, LLVM::add(a: mant_bits, b: exp_bits)), b: 0u64)
+  var ef = LLVM::bit_and(a: LLVM::shift_right_unsigned(raw, mant_bits), b: exp_all_ones)
+  var mf = LLVM::bit_and(a: raw, b: LLVM::sub(a: LLVM::shift_left(1u64, mant_bits), b: 1u64))
+  var mbits = LLVM::reinterpret_bits[U64, S64](mant_bits)
+  if LLVM::int_eq(a: ef, b: exp_all_ones)
+    if LLVM::int_ne(a: mf, b: 0u64)
+      return "NaN"
+    if neg
+      return "-inf"
+    return "inf"
+  if LLVM::int_eq(a: ef, b: 0u64)
+    return format_shortest(neg: neg, m: Integer(value: mf), e2: 1_s64 - bias - mbits, lower_closer: false, sci_from: sci_from)
+  var m = LLVM::bit_or(a: mf, b: LLVM::shift_left(1u64, mant_bits))
+  var e2 = LLVM::reinterpret_bits[U64, S64](ef) - bias - mbits
+  var lower_closer = LLVM::int_eq(a: mf, b: 0u64) and LLVM::unsigned_gt(a: ef, b: 1u64)
+  return format_shortest(neg: neg, m: Integer(value: m), e2: e2, lower_closer: lower_closer, sci_from: sci_from)
+
+### Renders a B128 as the shortest decimal that reads back as the same value (scientific from a
+### leading-digit exponent of 34, FLT128_DIG + 1). Specials: "NaN" / "inf" / "-inf".
+### :param value: The value to render.
+### :returns: The rendered `Text`.
+routine format_b128_shortest(value: B128) -> Text
+  if value.is_nan()
+    return "NaN"
+  if value.is_infinite()
+    if value.signbit()
+      return "-inf"
+    return "inf"
+  var bits = value.to_bits()
+  var ef = LLVM::int_truncate[U128, U64](LLVM::bit_and(a: LLVM::shift_right_unsigned(bits, LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](0x7FFFu64)))
+  var mf = LLVM::bit_and(a: bits, b: LLVM::sub(a: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)), b: LLVM::zero_extend[U64, U128](1u64)))
+  if LLVM::int_eq(a: ef, b: 0u64)
+    return format_shortest(neg: value.signbit(), m: Integer(from: mf), e2: -16494_s64, lower_closer: false, sci_from: 34u64)
+  var m = LLVM::bit_or(a: mf, b: LLVM::shift_left(LLVM::zero_extend[U64, U128](1u64), LLVM::zero_extend[U64, U128](112u64)))
+  var lower_closer = LLVM::int_eq(a: mf, b: 0_u128) and LLVM::unsigned_gt(a: ef, b: 1u64)
+  return format_shortest(neg: value.signbit(), m: Integer(from: m), e2: LLVM::reinterpret_bits[U64, S64](ef) - 16495_s64, lower_closer: lower_closer, sci_from: 34u64)
 
 # ----------------------------------------------------------------------------
 # Fixed-point formatting: exactly `places` digits after the point

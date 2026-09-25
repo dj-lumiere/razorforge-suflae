@@ -3,7 +3,7 @@ qz norm: 1
 qz abs: 1
 rotate unit_x by 90deg z ~= unit_y: true
 qz * conj(qz): 1+0i+0j+0k
-qz reciprocal: 0.7071068+0i+0j-0.7071068k
+qz reciprocal: 0.7071068+0i+0j-0.70710677k
 a: 1+2i+3j+4k
 a + b: 6+8i+10j+12k
 a * b: -60+12i+30j+24k

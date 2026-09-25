@@ -280,6 +280,8 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
   **arbitrary-precision** `Real` and `Complex` still live in `module Numerics` and
   need an explicit `import Numerics` (the prelude imports just `Numerics { Integer }`
   so the default vocabulary resolves).
+- A `B16..B128` value shows as the SHORTEST decimal that reads back as the same value
+  (`0.1b64 + 0.2b64` shows `0.30000000000000004`), same as RF.
 - Mixing `Integer` ↔ a fixed-width type is an explicit, range-checked (throwing)
   conversion. `//` is floor division, `/` is true division — same as RF.
 
