@@ -280,6 +280,8 @@ Fatal messages name what the PROGRAM did, never the machine (no malloc/OS/signal
   **arbitrary-precision** `Real` and `Complex` still live in `module Numerics` and
   need an explicit `import Numerics` (the prelude imports just `Numerics { Integer }`
   so the default vocabulary resolves).
+- A hex float literal (`0x1.8p3`, `0x1p-23_b32`) is binary-float-only, exact, and defaults to `B64` even in
+  Suflae (never `Decimal`). Details in RAZORFORGE-FOR-AI §3.
 - A `B16..B128` value shows as the SHORTEST decimal that reads back as the same value
   (`0.1b64 + 0.2b64` shows `0.30000000000000004`), same as RF.
 - Mixing `Integer` ↔ a fixed-width type is an explicit, range-checked (throwing)

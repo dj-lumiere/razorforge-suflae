@@ -1,0 +1,22 @@
+module Tests/Stdlib/HexFloatLiteralApi
+import IO/Console
+
+# Hex float literals (0x1.8p3 = hex mantissa × 2^exponent) on every binary float, stored exactly,
+# plus hex integer literals whose digits look like a type suffix (0x1b16, 0xFF_AB).
+routine start()
+  show(0x1.8p3)
+  show(0x1p-23_b32)
+  var h: B16 = 0x1.ffcp15
+  show(h)
+  show(0x1.0000000000000000000000000001p0_b128)
+  show(0x1.fffffffffffffp1023)
+  show(0x1p-1074)
+  show(0x1.8p+1_b64 == 3.0)
+  var c: C128 = 0x1p-2
+  show(c)
+  show(0xFF.to_text(radix: 16))
+  show(0x1b16)
+  show(0xFF_AB)
+  show(0xFF_u8)
+  show(0x7Fs32)
+  return

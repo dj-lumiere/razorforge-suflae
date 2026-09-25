@@ -232,12 +232,26 @@ public partial class Tokenizer
     }
 
     /// <summary>
-    /// Scans the optional hex-float fractional part (e.g. the <c>.ABCD</c> in <c>0x1.ABCDp5</c>).
+    /// Scans the optional hex-float fractional part (e.g. the <c>.ABCD</c> in <c>0x1.ABCDp5</c>). A hex
+    /// float always carries its <c>p</c> exponent, so the <c>.</c> is a fraction point only when hex
+    /// digits and then a <c>p</c> exponent follow it; otherwise it is left alone, which keeps a member
+    /// call on a hex integer (<c>0xFF.abs()</c>) from being read as a fraction.
     /// </summary>
     /// <returns><c>true</c> if a fractional part was consumed.</returns>
     private bool ScanHexFractionalPart()
     {
         if (Peek() != '.' || !IsHexDigit(c: Peek(offset: 1)))
+        {
+            return false;
+        }
+
+        int lookAhead = 1;
+        while (IsHexDigit(c: Peek(offset: lookAhead)) || Peek(offset: lookAhead) == '_')
+        {
+            lookAhead++;
+        }
+
+        if (!IsBinaryExponentAt(offset: lookAhead))
         {
             return false;
         }
@@ -252,13 +266,30 @@ public partial class Tokenizer
     }
 
     /// <summary>
+    /// Whether a hex-float binary exponent (<c>p</c>/<c>P</c>, an optional sign, then at least one
+    /// decimal digit) starts <paramref name="offset"/> characters ahead.
+    /// </summary>
+    private bool IsBinaryExponentAt(int offset)
+    {
+        if (Peek(offset: offset) != 'p' && Peek(offset: offset) != 'P')
+        {
+            return false;
+        }
+
+        int digitAt = Peek(offset: offset + 1) is '+' or '-'
+            ? offset + 2
+            : offset + 1;
+        return char.IsDigit(c: Peek(offset: digitAt));
+    }
+
+    /// <summary>
     /// Scans the optional hex-float binary exponent (<c>p</c>/<c>P</c> with optional sign and
     /// decimal exponent digits, e.g. the <c>p5</c> in <c>0x1.0p5</c>).
     /// </summary>
     /// <returns><c>true</c> if a binary exponent was consumed.</returns>
     private bool ScanHexBinaryExponent()
     {
-        if (Peek() != 'p' && Peek() != 'P')
+        if (!IsBinaryExponentAt(offset: 0))
         {
             return false;
         }

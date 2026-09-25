@@ -130,6 +130,11 @@ binding RazorForge has.
 
 - Signed ints: `S8 S16 S32 S64 S128 S256` · unsigned: `U8 U16 U32 U64 U128 U256`
 - Binary floats: `B16 B32 B64 B128` (literal suffixes `b16`/`b32`/`b64`/`b128`) · decimals: `D32 D64 D128`
+- Hex float literals (binary floats ONLY): `0x1.8p3` = hex mantissa × 2^exponent (= 12), `0x1p-23_b32`,
+  `0x1.fffffep+127_b32`. The `p` exponent is required (`0x1.8` is not a float). The value must fit the type
+  EXACTLY: too many significant bits or a bit below the smallest subnormal is RF-S018, not a rounding. On a
+  `D32`/`D64`/`D128`/`Decimal` type it is RF-S017. Unsuffixed it takes a binary float context, else `B64`
+  (in Suflae too).
 - Arbitrary precision: `Integer` (literal suffix `n`), `Decimal` (`dn`), `Real` (binary), `Complex`
 - Complex (total-bit): `C64` (2×B32) `C128` (2×B64) `C256` (2×B128). Imaginary literal is the width-less
   `i` (also `_i`): `3 + 4i`. Width/radix comes from context (a `C64`/`Complex` slot); with no context it

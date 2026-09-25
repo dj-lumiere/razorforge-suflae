@@ -214,7 +214,10 @@ public sealed partial class SemanticVerifier
             TokenType.UndecidedInteger => UsesSuflaeNumericDefaults(literal: literal)
                 ? IntegerTypeName
                 : "S64",
-            TokenType.UndecidedDecimal => UsesSuflaeNumericDefaults(literal: literal)
+            // A hex float (0x1.8p3) is binary-only, so it defaults to B64 in Suflae too.
+            TokenType.UndecidedDecimal => UsesSuflaeNumericDefaults(literal: literal) &&
+                                          !(literal.Value is string raw &&
+                                            NumericLiteralParser.IsHexFloatText(text: raw))
                 ? "Decimal"
                 : "B64",
 
@@ -478,6 +481,14 @@ public sealed partial class SemanticVerifier
     private ParsedLiteral? ParseDeferredLiteral(LiteralExpression literal, string rawValue,
         string resolvedTypeName)
     {
+        // A hex float literal (0x1.8p3) is binary-only and exact, whatever its suffix or context.
+        if (NumericLiteralParser.IsHexFloatText(text: rawValue))
+        {
+            return ParseHexFloatLiteral(literal: literal,
+                rawValue: rawValue,
+                resolvedTypeName: resolvedTypeName);
+        }
+
         // A bare int/float literal SA promoted to a complex type (the real component of `3 + 4i`) is
         // already valid as a scalar from its first analysis; LiteralLoweringPass rebuilds the complex
         // constructor from the raw text, so no parsed-value cache entry is needed. Route it away from
@@ -645,6 +656,111 @@ public sealed partial class SemanticVerifier
                 location: literal.Location);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Checks and encodes a hexadecimal float literal (<c>0x1.8p3</c>). Only a binary float takes one
+    /// (B16/B32/B64/B128, or a C64/C128/C256 component), and its value must fit that format exactly.
+    /// Returns null for a complex target, whose constructor LiteralLoweringPass rebuilds from the text.
+    /// </summary>
+    private ParsedLiteral? ParseHexFloatLiteral(LiteralExpression literal, string rawValue,
+        string resolvedTypeName)
+    {
+        string formatName = resolvedTypeName switch
+        {
+            "C64" => "B32",
+            "C128" => "B64",
+            "C256" => "B128",
+            _ => resolvedTypeName
+        };
+        (int MantBits, int ExpBits)? format = formatName switch
+        {
+            "B16" => (10, 5),
+            "B32" => (23, 8),
+            "B64" => (52, 11),
+            "B128" => (112, 15),
+            _ => null
+        };
+        if (format is not { } fmt)
+        {
+            ReportError(code: SemanticDiagnosticCode.HexFloatLiteralNotBinaryFloat,
+                message:
+                $"The hex float literal '{rawValue}' is used as {resolvedTypeName} here, but a hex float spells a power-of-two value exactly, so only B16, B32, B64 and B128 take one. Write the value in decimal, or give it a binary float type (for example '{StripHexFloatSuffix(rawValue: rawValue)}_b64').",
+                location: literal.Location);
+            return null;
+        }
+
+        string cleaned = CleanNumericLiteral(value: StripHexFloatSuffix(rawValue: rawValue));
+        switch (NumericLiteralParser.TryEncodeHexFloat(cleaned: cleaned,
+                    mantBits: fmt.MantBits,
+                    expBits: fmt.ExpBits,
+                    bits: out UInt128 bits))
+        {
+            case NumericLiteralParser.HexFloatStatus.Malformed:
+                ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
+                    message:
+                    $"'{rawValue}' is not a well-formed hex float literal. Write 0x, hex digits with an optional '.' fraction, then 'p' and a decimal power of two, as in 0x1.8p3.",
+                    location: literal.Location);
+                return null;
+            case NumericLiteralParser.HexFloatStatus.Overflow:
+                ReportError(code: SemanticDiagnosticCode.FloatLiteralOverflow,
+                    message: $"{formatName} literal '{rawValue}' overflows the representable range.",
+                    location: literal.Location);
+                return null;
+            case NumericLiteralParser.HexFloatStatus.Inexact:
+                ReportError(code: SemanticDiagnosticCode.HexFloatLiteralInexact,
+                    message:
+                    $"The hex float literal '{rawValue}' has more significant bits than {formatName}'s {fmt.MantBits + 1}, so it would not be stored exactly. Drop the extra digits, or use a wider binary float.",
+                    location: literal.Location);
+                return null;
+            case NumericLiteralParser.HexFloatStatus.BelowSubnormal:
+                ReportError(code: SemanticDiagnosticCode.HexFloatLiteralInexact,
+                    message:
+                    $"The hex float literal '{rawValue}' has a bit below {formatName}'s smallest subnormal, 0x1p{2 - (1 << fmt.ExpBits - 1) - fmt.MantBits}, so it would not be stored exactly. Use a wider binary float.",
+                    location: literal.Location);
+                return null;
+        }
+
+        return formatName != resolvedTypeName
+            ? null
+            : formatName switch
+            {
+                "B16" => new ParsedFloat(Location: literal.Location,
+                    TypeName: "B16",
+                    Value: (double)BitConverter.UInt16BitsToHalf(value: (ushort)bits)),
+                "B32" => new ParsedFloat(Location: literal.Location,
+                    TypeName: "B32",
+                    Value: BitConverter.UInt32BitsToSingle(value: (uint)bits)),
+                "B64" => new ParsedFloat(Location: literal.Location,
+                    TypeName: "B64",
+                    Value: BitConverter.UInt64BitsToDouble(value: (ulong)bits)),
+                _ => new ParsedB128(Location: literal.Location, Lo: (ulong)bits, Hi: (ulong)(bits >> 64))
+            };
+    }
+
+    /// <summary>
+    /// Drops a hex float literal's type suffix (<c>_b32</c>, <c>b64</c>, <c>i</c>, …): the literal
+    /// body ends with the decimal digits of its <c>p</c> exponent, and the suffix is whatever follows.
+    /// </summary>
+    internal static string StripHexFloatSuffix(string rawValue)
+    {
+        int end = rawValue.IndexOfAny(anyOf: ['p', 'P']) + 1;
+        if (end == 0)
+        {
+            return rawValue;
+        }
+
+        if (end < rawValue.Length && rawValue[index: end] is '+' or '-')
+        {
+            end++;
+        }
+
+        while (end < rawValue.Length && char.IsDigit(c: rawValue[index: end]))
+        {
+            end++;
+        }
+
+        return rawValue[..end];
     }
 
     /// <summary>
@@ -1078,12 +1194,7 @@ public sealed partial class SemanticVerifier
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b16");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
-        Half value;
-        if (TryParseHexFloat(value: cleanedValue, result: out double hexVal))
-        {
-            value = (Half)hexVal;
-        }
-        else if (!Half.TryParse(s: cleanedValue, result: out value))
+        if (!Half.TryParse(s: cleanedValue, result: out Half value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
                 message: $"Invalid B16 literal: '{rawValue}'",
@@ -1124,12 +1235,7 @@ public sealed partial class SemanticVerifier
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b32");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
-        float value;
-        if (TryParseHexFloat(value: cleanedValue, result: out double hexVal32))
-        {
-            value = (float)hexVal32;
-        }
-        else if (!float.TryParse(s: cleanedValue, result: out value))
+        if (!float.TryParse(s: cleanedValue, result: out float value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
                 message: $"Invalid B32 literal: '{rawValue}'",
@@ -1168,12 +1274,7 @@ public sealed partial class SemanticVerifier
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "b64");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
-        double value;
-        if (TryParseHexFloat(value: cleanedValue, result: out double hexVal64))
-        {
-            value = hexVal64;
-        }
-        else if (!double.TryParse(s: cleanedValue, result: out value))
+        if (!double.TryParse(s: cleanedValue, result: out double value))
         {
             ReportError(code: SemanticDiagnosticCode.NumericLiteralParseFailed,
                 message: $"Invalid B64 literal: '{rawValue}'",
@@ -1432,93 +1533,6 @@ public sealed partial class SemanticVerifier
             acc = acc * numericBase + digit;
         }
 
-        return true;
-    }
-
-    /// <summary>
-    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
-    /// </summary>
-    private static bool TryParseHexFloat(string value, out double result)
-    {
-        result = 0;
-        if (!value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            value.Length <= 2)
-        {
-            return false;
-        }
-
-        string body = value[2..];
-        int pIndex = body.IndexOfAny(anyOf: ['p', 'P']);
-        if (pIndex < 0)
-        {
-            return false;
-        }
-
-        string mantissaStr = body[..pIndex];
-        string exponentStr = body[(pIndex + 1)..];
-
-        if (!int.TryParse(s: exponentStr, result: out int exponent))
-        {
-            return false;
-        }
-
-        if (!TryParseHexMantissa(mantissaStr: mantissaStr, mantissa: out double mantissa))
-        {
-            return false;
-        }
-
-        result = Math.ScaleB(x: mantissa, n: exponent);
-        return !double.IsNaN(d: result) && !double.IsInfinity(d: result);
-    }
-
-    /// <summary>
-    /// Parses the (possibly fractional) hex mantissa of a C99 hex float — the part before the
-    /// <c>p</c>/<c>P</c> exponent marker. Returns false only when a whole-number mantissa fails to parse.
-    /// </summary>
-    private static bool TryParseHexMantissa(string mantissaStr, out double mantissa)
-    {
-        mantissa = 0;
-        int dotIndex = mantissaStr.IndexOf(value: '.');
-
-        if (dotIndex >= 0)
-        {
-            string intPart = mantissaStr[..dotIndex];
-            string fracPart = mantissaStr[(dotIndex + 1)..];
-
-            if (intPart.Length > 0 && ulong.TryParse(s: intPart,
-                    style: NumberStyles.HexNumber,
-                    provider: null,
-                    result: out ulong intVal))
-            {
-                mantissa = intVal;
-            }
-
-            double scale = 1.0 / 16;
-            foreach (char c in fracPart)
-            {
-                int digit = c switch
-                {
-                    >= '0' and <= '9' => c - '0',
-                    >= 'a' and <= 'f' => c - 'a' + 10,
-                    >= 'A' and <= 'F' => c - 'A' + 10,
-                    _ => 0
-                };
-                mantissa += digit * scale;
-                scale /= 16;
-            }
-
-            return true;
-        }
-
-        if (!ulong.TryParse(s: mantissaStr,
-                style: NumberStyles.HexNumber,
-                provider: null,
-                result: out ulong wholeVal))
-        {
-            return false;
-        }
-
-        mantissa = wholeVal;
         return true;
     }
 

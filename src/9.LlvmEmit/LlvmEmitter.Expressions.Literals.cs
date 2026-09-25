@@ -190,8 +190,18 @@ public partial class LlvmEmitter
         {
             // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_b32").
             // Check LiteralType first to handle them as numbers, not string constants.
+            // The arbitrary-precision `n` suffix is not in the fixed-width suffix table (a plain `n`
+            // would also match the end of `nan`), so an Integer literal drops it here.
+            case string s when literal.LiteralType == TokenType.IntegerLiteral:
+                return StripNumericSuffix(text: s.TrimEnd('n').TrimEnd('_'));
             case string s when IsIntegerLiteralType(type: literal.LiteralType):
                 return StripNumericSuffix(text: s);
+            case string s when IsFloatLiteralType(type: literal.LiteralType) &&
+                               NumericLiteralParser.IsHexFloatText(text: s):
+                return EmitHexFloatLiteral(
+                    cleaned: SemanticVerifier.StripHexFloatSuffix(rawValue: s)
+                                            .Replace(oldValue: "_", newValue: ""),
+                    literalType: literal.LiteralType);
             case string s when IsFloatLiteralType(type: literal.LiteralType):
                 return EmitFloatLiteral(numericValue: StripNumericSuffix(text: s),
                     literalType: literal.LiteralType);
@@ -492,30 +502,51 @@ public partial class LlvmEmitter
     /// </summary>
     private static string StripNumericSuffix(string text)
     {
-        // First try: underscore-separated suffix (e.g., "1_s32" "1")
-        for (int i = text.Length - 1; i >= 0; i--)
+        return ConvertPrefixedToDecimal(value: text[..NumericBodyLength(text: text)]
+           .Replace(oldValue: "_", newValue: ""));
+    }
+
+    /// <summary>
+    /// The length of a numeric literal's text before its type suffix, following the tokenizer's
+    /// rules: an underscore followed by a known suffix running to the end (<c>1_s32</c>,
+    /// <c>0xFF_u8</c>), or a known suffix written straight after the digits (<c>0u64</c>,
+    /// <c>0x7Fs32</c>). In a hex literal the digits a-f are never a suffix, so <c>0x1b16</c> is the
+    /// number 0x1B16 and <c>0xFF_AB</c> is 0xFFAB.
+    /// </summary>
+    private static int NumericBodyLength(string text)
+    {
+        int underscore = text.LastIndexOf(value: '_');
+        if (underscore >= 0 && IsNumericSuffix(suffix: text[(underscore + 1)..]))
         {
-            if (text[index: i] == '_' && i + 1 < text.Length &&
-                char.IsLetter(c: text[index: i + 1]))
-            {
-                return ConvertPrefixedToDecimal(value: text[..i]
-                   .Replace(oldValue: "_", newValue: ""));
-            }
+            return underscore;
         }
 
-        // Second try: direct suffix without underscore (e.g., "0u64" "0", "0x7Fu32" "127")
+        string magnitude = text.TrimStart('+', '-');
+        if (magnitude.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            int i = text.Length - magnitude.Length + 2;
+            while (i < text.Length && (Uri.IsHexDigit(character: text[index: i]) || text[index: i] == '_'))
+            {
+                i++;
+            }
+
+            return IsNumericSuffix(suffix: text[i..])
+                ? i
+                : text.Length;
+        }
+
         string lower = text.ToLowerInvariant();
         string? matchedSuffix =
             NumericSuffixes.FirstOrDefault(predicate: s => lower.EndsWith(value: s));
-        if (matchedSuffix != null)
-        {
-            string numPart = text[..^matchedSuffix.Length]
-               .Replace(oldValue: "_", newValue: "");
-            return ConvertPrefixedToDecimal(value: numPart);
-        }
+        return matchedSuffix != null
+            ? text.Length - matchedSuffix.Length
+            : text.Length;
+    }
 
-        // No suffix found ? just remove underscores
-        return ConvertPrefixedToDecimal(value: text.Replace(oldValue: "_", newValue: ""));
+    /// <summary>Whether <paramref name="suffix"/> is one of the known numeric type suffixes.</summary>
+    private static bool IsNumericSuffix(string suffix)
+    {
+        return NumericSuffixes.Contains(value: suffix.ToLowerInvariant());
     }
 
     /// <summary>
@@ -538,12 +569,6 @@ public partial class LlvmEmitter
         {
             NumericLiteralParser.B128 b128 = NumericLiteralParser.ParseB128(str: numericValue);
             return $"u0x{b128.Hi:X16}{b128.Lo:X16}";
-        }
-
-        // Try hex float format first (0x1.ABCDp5)
-        if (TryParseHexFloat(value: numericValue, result: out double hexFloatVal))
-        {
-            return EmitDoubleAsLlvmHex(d: hexFloatVal, literalType: literalType);
         }
 
         if (double.TryParse(s: numericValue,
@@ -605,81 +630,36 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
-    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
+    /// Emits a hex float literal (<c>0x1.8p3</c>) as the exact bits the verifier already checked it
+    /// encodes to: half as <c>0xH</c>, float/double in LLVM's double hex form, B128 as its i128 carrier.
     /// </summary>
-    private static bool TryParseHexFloat(string value, out double result)
+    private static string EmitHexFloatLiteral(string cleaned, TokenType literalType)
     {
-        result = 0;
-        if (!value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) ||
-            value.Length <= 2)
+        (int mantBits, int expBits) = literalType switch
         {
-            return false;
+            TokenType.B16Literal => (10, 5),
+            TokenType.B32Literal => (23, 8),
+            TokenType.B128Literal => (112, 15),
+            _ => (52, 11)
+        };
+        if (NumericLiteralParser.TryEncodeHexFloat(cleaned: cleaned,
+                mantBits: mantBits,
+                expBits: expBits,
+                bits: out UInt128 bits) != NumericLiteralParser.HexFloatStatus.Exact)
+        {
+            throw new InvalidOperationException(
+                message:
+                $"Hex float literal '{cleaned}' reached the LLVM emitter without an exact {literalType} encoding; the verifier should have rejected it.");
         }
 
-        string body = value[2..];
-        int pIndex = body.IndexOfAny(anyOf: ['p', 'P']);
-        if (pIndex < 0)
+        return literalType switch
         {
-            return false;
-        }
-
-        string mantissaStr = body[..pIndex];
-        if (!int.TryParse(s: body[(pIndex + 1)..], result: out int exponent) ||
-            !TryParseHexMantissa(mantissaStr: mantissaStr, mantissa: out double mantissa))
-        {
-            return false;
-        }
-
-        result = Math.ScaleB(x: mantissa, n: exponent);
-        return !double.IsNaN(d: result) && !double.IsInfinity(d: result);
-    }
-
-    /// <summary>
-    /// Parses the hex mantissa of a C99 hex float — either a whole hex integer or an
-    /// <c>int.frac</c> form (fractional digits scaled by successive powers of 1/16).
-    /// </summary>
-    private static bool TryParseHexMantissa(string mantissaStr, out double mantissa)
-    {
-        mantissa = 0;
-        int dotIndex = mantissaStr.IndexOf(value: '.');
-        if (dotIndex < 0)
-        {
-            if (!ulong.TryParse(s: mantissaStr,
-                    style: NumberStyles.HexNumber,
-                    provider: null,
-                    result: out ulong intOnly))
-            {
-                return false;
-            }
-
-            mantissa = intOnly;
-            return true;
-        }
-
-        string intPart = mantissaStr[..dotIndex];
-        if (intPart.Length > 0 && ulong.TryParse(s: intPart,
-                style: NumberStyles.HexNumber,
-                provider: null,
-                result: out ulong intVal))
-        {
-            mantissa = intVal;
-        }
-
-        double scale = 1.0 / 16;
-        foreach (char c in mantissaStr[(dotIndex + 1)..])
-        {
-            int digit = c switch
-            {
-                >= '0' and <= '9' => c - '0',
-                >= 'a' and <= 'f' => c - 'a' + 10,
-                >= 'A' and <= 'F' => c - 'A' + 10,
-                _ => 0
-            };
-            mantissa += digit * scale;
-            scale /= 16;
-        }
-
-        return true;
+            TokenType.B16Literal => $"0xH{(ushort)bits:X4}",
+            TokenType.B32Literal =>
+                $"0x{BitConverter.DoubleToInt64Bits(value: BitConverter.UInt32BitsToSingle(value: (uint)bits)):X16}",
+            TokenType.B128Literal => $"u0x{(ulong)(bits >> 64):X16}{(ulong)bits:X16}",
+            _ => $"0x{(ulong)bits:X16}"
+        };
     }
 
     /// <summary>

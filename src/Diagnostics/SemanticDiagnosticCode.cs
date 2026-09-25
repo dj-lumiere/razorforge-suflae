@@ -83,6 +83,18 @@ public enum SemanticDiagnosticCode
     /// </summary>
     NoneOutsideCarrierSlot = 16,
 
+    /// <summary>
+    /// A hexadecimal float literal (<c>0x1.8p3</c>) was given a type that is not a binary float.
+    /// Hex float literals spell a power-of-two value exactly, so only B16/B32/B64/B128 take them.
+    /// </summary>
+    HexFloatLiteralNotBinaryFloat = 17,
+
+    /// <summary>
+    /// A hexadecimal float literal needs more significand bits (or a smaller exponent) than its
+    /// binary float type has, so it would not be stored exactly.
+    /// </summary>
+    HexFloatLiteralInexact = 18,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BINARY AND UNARY OPERATOR ERRORS (RF-S050 - RF-S099)
     // ═══════════════════════════════════════════════════════════════════════════
