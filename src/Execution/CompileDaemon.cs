@@ -410,6 +410,7 @@ internal partial class Program
                 _ = GetWarm(language: InvokedAsSuflae
                     ? Language.Suflae
                     : Language.RazorForge);
+                PrepareForNextBuild();
             }
             catch (Exception ex)
             {
@@ -508,6 +509,30 @@ internal partial class Program
                 ? HandleIr(req: req)
                 : HandleBuild(req: req);
             WriteMessage(stream: server, value: resp);
+
+            // The client already has its answer. Use the gap before the next edit to get the next build ready.
+            // Not after a ping: a client pings and then sends its build request right away.
+            PrepareForNextBuild();
+        }
+
+        /// <summary>Between requests: clones the next build's stdlib programs (SemanticVerifier.PrepareNextRestore)
+        /// and then collects garbage, so neither the ~60-90 ms clone nor the collections its allocations cause
+        /// land inside the next build.</summary>
+        private static void PrepareForNextBuild()
+        {
+            try
+            {
+                foreach (SemanticVerifier.CompiledStdlibState state in WarmCache.Values)
+                {
+                    SemanticVerifier.PrepareNextRestore(warm: state);
+                }
+
+                GC.Collect();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"[daemon] preparing the next build failed: {ex.Message}");
+            }
         }
 
         /// <summary>Runs one warm build, capturing all build diagnostics (Console.Out + Console.Error, in

@@ -80,6 +80,65 @@ public partial class SemanticVerifier
         /// </summary>
         public Dictionary<string, CachedFileAnalysis> AnalyzedFileCache { get; init; } =
             new(comparer: StringComparer.Ordinal);
+
+        /// <summary>Bumped on every write to <see cref="AnalyzedFileCache"/>, so a prepared restore can tell
+        /// whether it still matches the cache.</summary>
+        internal int AnalyzedFileCacheVersion { get; set; }
+
+        /// <summary>The next build's cloned programs, prepared by the daemon between requests (see
+        /// <see cref="PrepareNextRestore"/>). Taken by exactly one warm build.</summary>
+        internal PreparedRestore? Prepared { get; set; }
+    }
+
+    /// <summary>One warm build's private copy of the stdlib programs (see the warm constructor) and the files
+    /// it may treat as already demand-analyzed, built for <see cref="CacheVersion"/> of the analyzed-file cache.</summary>
+    internal sealed record PreparedRestore(
+        int CacheVersion,
+        List<(Program Program, string FilePath, string Module)> Programs,
+        List<string> DemandAnalyzedFiles);
+
+    /// <summary>
+    /// Builds the next warm build's program copies ahead of time. Cloning every stdlib program costs ~60-90 ms
+    /// and its allocations trigger collections that land inside the following phases, so the daemon calls this
+    /// after answering a request, while it waits for the next one. The warm constructor takes the result
+    /// instead of cloning on the critical path. No-op when an up-to-date restore is already prepared.
+    /// </summary>
+    public static void PrepareNextRestore(CompiledStdlibState warm)
+    {
+        if (warm.Prepared is { } prepared && prepared.CacheVersion == warm.AnalyzedFileCacheVersion)
+        {
+            return;
+        }
+
+        warm.Prepared = BuildRestore(warm: warm);
+    }
+
+    /// <summary>Clones every stdlib program for one build: a file a prior build already analyzed on demand is
+    /// cloned from its cached analyzed program and listed as demand-analyzed, every other file from the
+    /// snapshot.</summary>
+    private static PreparedRestore BuildRestore(CompiledStdlibState warm)
+    {
+        var demandAnalyzed = new List<string>();
+        var programs = new List<(Program Program, string FilePath, string Module)>(
+            capacity: warm.StdlibPrograms.Count);
+        foreach ((Program program, string filePath, string module) in warm.StdlibPrograms)
+        {
+            if (warm.AnalyzedFileCache.TryGetValue(key: filePath,
+                    value: out CachedFileAnalysis? cachedFile))
+            {
+                demandAnalyzed.Add(item: filePath);
+                programs.Add(item: (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
+                    program: cachedFile.AnalyzedProgram), filePath, module));
+                continue;
+            }
+
+            programs.Add(item: (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(program: program),
+                filePath, module));
+        }
+
+        return new PreparedRestore(CacheVersion: warm.AnalyzedFileCacheVersion,
+            Programs: programs,
+            DemandAnalyzedFiles: demandAnalyzed);
     }
 
     /// <summary>
@@ -195,21 +254,18 @@ public partial class SemanticVerifier
         // PRE-MARK the file demand-analyzed so AnalyzeStdlibProgramOnDemand skips re-running SA+lower + repair.
         // Installing an analyzed program for a file THIS build never reaches is harmless — codegen only emits
         // REACHED bodies (liveness), same as the un-analyzed programs already in StdlibPrograms.
-        _registry.RestoreStdlibPrograms(programs: warm.StdlibPrograms
-           .Select(selector: e =>
-            {
-                if (warm.AnalyzedFileCache.TryGetValue(key: e.FilePath,
-                        value: out CachedFileAnalysis? cachedFile))
-                {
-                    _demandAnalyzedFiles.Add(item: e.FilePath);
-                    return (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
-                        program: cachedFile.AnalyzedProgram), e.FilePath, e.Module);
-                }
-
-                return (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(program: e.Program),
-                    e.FilePath, e.Module);
-            })
-           .ToList());
+        // The daemon usually prepared this copy between requests (PrepareNextRestore). A stale or missing one
+        // (the cache changed since, or the first build) is built here. Either way the copy is this build's own.
+        PreparedRestore restore = warm.Prepared is { } prepared &&
+                                  prepared.CacheVersion == warm.AnalyzedFileCacheVersion
+            ? prepared
+            : BuildRestore(warm: warm);
+        warm.Prepared = null;
+        _registry.RestoreStdlibPrograms(programs: restore.Programs);
+        foreach (string filePath in restore.DemandAnalyzedFiles)
+        {
+            _demandAnalyzedFiles.Add(item: filePath);
+        }
         // Re-lazy the primed whole-stdlib instance closure so this warm compile re-discovers only what the
         // USER program reaches (like cold), instead of GMP re-processing all ~638 primed instances (cold
         // reaches ~378, codegen keeps ~122). User-reachability un-lazies via MaterializeIfLazy. The lazy set is

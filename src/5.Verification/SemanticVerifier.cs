@@ -1829,6 +1829,7 @@ public sealed partial class SemanticVerifier
                 program: program),
             VariantBodies: variantDelta,
             SynthBodies: synthDelta);
+        _warmState.AnalyzedFileCacheVersion++;
     }
 
     /// <summary>
