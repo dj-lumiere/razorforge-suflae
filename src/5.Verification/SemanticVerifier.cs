@@ -1543,6 +1543,11 @@ public sealed partial class SemanticVerifier
 
     private readonly HashSet<string> _demandAnalyzedFiles = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>Stdlib files this build restored already analyzed from the warm cache
+    /// (<see cref="CompiledStdlibState.AnalyzedFileCache"/>). Reaching one replays what its analysis would
+    /// have left behind instead of analyzing it again (see <see cref="ReplayCachedFileAnalysis"/>).</summary>
+    private readonly HashSet<string> _warmCachedFiles = new(comparer: StringComparer.Ordinal);
+
     /// <summary>Set once the EAGER <see cref="AnalyzeStdlibBodies"/> sweep has run — while true, the
     /// demand hook is a no-op (the eager pass already analyzed every stdlib file). The Stage-5 flip stops
     /// calling the eager sweep, leaving this false, so <see cref="AnalyzeStdlibProgramOnDemand"/> becomes
@@ -1592,6 +1597,11 @@ public sealed partial class SemanticVerifier
             return null;
         }
 
+        if (_warmCachedFiles.Contains(item: entry.FilePath))
+        {
+            return ReplayCachedFileAnalysis(program: entry.Program, filePath: entry.FilePath);
+        }
+
         Language savedLanguage = _registry.Language;
         string previousFilePath = _currentFilePath;
         string? previousModuleName = _currentModuleName;
@@ -1615,9 +1625,8 @@ public sealed partial class SemanticVerifier
         // into the user build and fails it — the demand-only regression across the stdlib fixtures.
         int errorsBeforeStdlib = _errors.Count;
         int warningsBeforeStdlib = _warnings.Count;
-        // Warm AnalyzedFileCache (daemon-lifetime): a cached file was PRE-MARKED demand-analyzed in the warm
-        // ctor (its analyzed+lowered program + variant/synth bodies restored), so control never reaches here
-        // for it — the `_demandAnalyzedFiles.Add` gate above already returned null. This is a MISS: analyze
+        // Warm AnalyzedFileCache (daemon-lifetime): a cached file was restored analyzed+lowered (with its
+        // variant/synth bodies) in the warm ctor and took the replay branch above. This is a MISS: analyze
         // fully, then store the result for the next build. Snapshot the variant/synth keys before analysis so
         // the store captures exactly the bodies THIS file's analysis adds.
         bool cacheThisFile = _warmState != null &&
@@ -1628,6 +1637,9 @@ public sealed partial class SemanticVerifier
         HashSet<string>? synthKeysBefore = cacheThisFile
             ? new HashSet<string>(collection: _synthesizedBodies.Keys,
                 comparer: StringComparer.Ordinal)
+            : null;
+        HashSet<string>? routineBodyKeysBefore = cacheThisFile
+            ? new HashSet<string>(collection: _routineBodies.Keys, comparer: StringComparer.Ordinal)
             : null;
         // Reset the repair flag so we can tell if THIS file's analysis re-keyed a cross-module-lazy signature
         // (which makes the file uncacheable — the repair is per-build; see StdlibSignatureRepairOccurred).
@@ -1715,12 +1727,13 @@ public sealed partial class SemanticVerifier
         // added (the delta since the pre-analysis snapshot); monomorphized INSTANCES are never cached (they
         // stay per-build demand → no define-set pollution, no eager runaway).
         if (cacheThisFile && variantKeysBefore != null && synthKeysBefore != null &&
-            !_registry.StdlibSignatureRepairOccurred)
+            routineBodyKeysBefore != null && !_registry.StdlibSignatureRepairOccurred)
         {
             StoreAnalyzedFileInWarmCache(filePath: entry.FilePath,
                 program: entry.Program,
                 variantKeysBefore: variantKeysBefore,
-                synthKeysBefore: synthKeysBefore);
+                synthKeysBefore: synthKeysBefore,
+                routineBodyKeysBefore: routineBodyKeysBefore);
         }
 
         return entry.Program; // analyzed+desugared a NEW file → collector re-indexes THAT program's decls
@@ -1815,7 +1828,8 @@ public sealed partial class SemanticVerifier
     /// snapshot); monomorphized INSTANCES are never cached (they stay per-build demand).
     /// </summary>
     private void StoreAnalyzedFileInWarmCache(string filePath, Program program,
-        HashSet<string> variantKeysBefore, HashSet<string> synthKeysBefore)
+        HashSet<string> variantKeysBefore, HashSet<string> synthKeysBefore,
+        HashSet<string> routineBodyKeysBefore)
     {
         List<KeyValuePair<string, Statement>> variantDelta = _variantBodies
            .Where(predicate: kv => !variantKeysBefore.Contains(item: kv.Key))
@@ -1828,8 +1842,78 @@ public sealed partial class SemanticVerifier
             AnalyzedProgram: Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
                 program: program),
             VariantBodies: variantDelta,
-            SynthBodies: synthDelta);
+            SynthBodies: synthDelta,
+            RoutineBodyKeys: _routineBodies.Keys
+                                           .Where(predicate: key => !routineBodyKeysBefore.Contains(item: key))
+                                           .ToList());
         _warmState.AnalyzedFileCacheVersion++;
+    }
+
+    /// <summary>
+    /// The cache-hit counterpart of analyzing a reached stdlib file. Analysis leaves the file's failable
+    /// routine bodies in <c>_routineBodies</c>, where protocol-extension lowering prefers them over the raw
+    /// snapshot templates (<c>Iterable[T].min!</c> specialized for <c>List[S64]</c> must clone the ANALYZED body,
+    /// whose <c>value &lt; result</c> is already a resolved <c>lt</c> call). A cache hit skipped that analysis, so
+    /// the same keys are pointed at this build's copy of the cached analyzed program, at the moment the file
+    /// is first reached, just as a miss would add them. Returns the program so the collector indexes it like a
+    /// freshly analyzed one.
+    /// </summary>
+    private Program ReplayCachedFileAnalysis(Program program, string filePath)
+    {
+        CachedFileAnalysis cached = _warmState!.AnalyzedFileCache[key: filePath];
+        var wanted = new HashSet<string>(collection: cached.RoutineBodyKeys, comparer: StringComparer.Ordinal);
+        foreach (RoutineDeclaration decl in DeclaredRoutines(program: program))
+        {
+            if (decl.ResolvedInfo is { } info && wanted.Contains(item: info.RegistryKey))
+            {
+                _routineBodies[key: info.RegistryKey] = decl.Body;
+            }
+        }
+
+        return program;
+    }
+
+    /// <summary>Every routine declared in <paramref name="program"/>: top-level ones and the member routines
+    /// written inside type declarations.</summary>
+    private static IEnumerable<RoutineDeclaration> DeclaredRoutines(Program program)
+    {
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            switch (node)
+            {
+                case RoutineDeclaration routine:
+                    yield return routine;
+                    break;
+                case EntityDeclaration entity:
+                    foreach (RoutineDeclaration member in entity.Members.OfType<RoutineDeclaration>())
+                    {
+                        yield return member;
+                    }
+
+                    break;
+                case RecordDeclaration record:
+                    foreach (RoutineDeclaration member in record.Members.OfType<RoutineDeclaration>())
+                    {
+                        yield return member;
+                    }
+
+                    break;
+                case CrashableDeclaration crashable:
+                    foreach (RoutineDeclaration member in crashable.Members.OfType<RoutineDeclaration>())
+                    {
+                        yield return member;
+                    }
+
+                    break;
+                case ChoiceDeclaration choice:
+                    foreach (RoutineDeclaration member in choice.MemberRoutines)
+                    {
+                        yield return member;
+                    }
+
+                    break;
+            }
+        }
     }
 
     /// <summary>

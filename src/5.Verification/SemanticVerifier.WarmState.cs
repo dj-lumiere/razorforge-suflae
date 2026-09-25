@@ -91,11 +91,12 @@ public partial class SemanticVerifier
     }
 
     /// <summary>One warm build's private copy of the stdlib programs (see the warm constructor) and the files
-    /// it may treat as already demand-analyzed, built for <see cref="CacheVersion"/> of the analyzed-file cache.</summary>
+    /// restored already analyzed from the cache, built for <see cref="CacheVersion"/> of the analyzed-file cache.</summary>
     internal sealed record PreparedRestore(
         int CacheVersion,
         List<(Program Program, string FilePath, string Module)> Programs,
-        List<string> DemandAnalyzedFiles);
+        List<string> CachedFiles,
+        Dictionary<string, Statement> TemplateBodies);
 
     /// <summary>
     /// Builds the next warm build's program copies ahead of time. Cloning every stdlib program costs ~60-90 ms
@@ -114,11 +115,10 @@ public partial class SemanticVerifier
     }
 
     /// <summary>Clones every stdlib program for one build: a file a prior build already analyzed on demand is
-    /// cloned from its cached analyzed program and listed as demand-analyzed, every other file from the
-    /// snapshot.</summary>
+    /// cloned from its cached analyzed program and listed as cached, every other file from the snapshot.</summary>
     private static PreparedRestore BuildRestore(CompiledStdlibState warm)
     {
-        var demandAnalyzed = new List<string>();
+        var cachedFiles = new List<string>();
         var programs = new List<(Program Program, string FilePath, string Module)>(
             capacity: warm.StdlibPrograms.Count);
         foreach ((Program program, string filePath, string module) in warm.StdlibPrograms)
@@ -126,7 +126,7 @@ public partial class SemanticVerifier
             if (warm.AnalyzedFileCache.TryGetValue(key: filePath,
                     value: out CachedFileAnalysis? cachedFile))
             {
-                demandAnalyzed.Add(item: filePath);
+                cachedFiles.Add(item: filePath);
                 programs.Add(item: (Builder.Instantiation.StdlibProgramBodyCloner.CloneBodies(
                     program: cachedFile.AnalyzedProgram), filePath, module));
                 continue;
@@ -136,9 +136,28 @@ public partial class SemanticVerifier
                 filePath, module));
         }
 
+        // The stdlib routine bodies templates are cloned from (protocol-extension lowering, on-demand variant
+        // synthesis) must be THIS build's program bodies, the nodes on-demand analysis annotates in place, as
+        // in a cold build. The snapshot's own bodies were captured before anything was reached, so they are
+        // raw: cloning `Iterable[T].first_or_default` from one lowered its `when` without analysis and returned
+        // 0 instead of the default. A key with no declaration in the programs keeps the snapshot body.
+        var templateBodies = new Dictionary<string, Statement>(dictionary: warm.RoutineBodies,
+            comparer: StringComparer.Ordinal);
+        foreach ((Program program, string _, string _) in programs)
+        {
+            foreach (RoutineDeclaration decl in DeclaredRoutines(program: program))
+            {
+                if (decl.ResolvedInfo is { } info && templateBodies.ContainsKey(key: info.RegistryKey))
+                {
+                    templateBodies[key: info.RegistryKey] = decl.Body;
+                }
+            }
+        }
+
         return new PreparedRestore(CacheVersion: warm.AnalyzedFileCacheVersion,
             Programs: programs,
-            DemandAnalyzedFiles: demandAnalyzed);
+            CachedFiles: cachedFiles,
+            TemplateBodies: templateBodies);
     }
 
     /// <summary>
@@ -149,7 +168,8 @@ public partial class SemanticVerifier
     public sealed record CachedFileAnalysis(
         Program AnalyzedProgram,
         IReadOnlyList<KeyValuePair<string, Statement>> VariantBodies,
-        IReadOnlyList<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> SynthBodies);
+        IReadOnlyList<KeyValuePair<string, (RoutineInfo Routine, Statement Body)>> SynthBodies,
+        IReadOnlyList<string> RoutineBodyKeys);
 
     /// <summary>
     /// Runs one full compile of a minimal program to fully process the stdlib, then captures the
@@ -250,8 +270,9 @@ public partial class SemanticVerifier
         // cloned program (StdlibPrograms serves this list), so there is no shared-vs-clone split.
         // CACHE-AWARE restore: if a prior build already analyzed this file on demand, clone the CACHED
         // analyzed+lowered program (annotations preserved by the cloner — they point at the shared snapshot
-        // routine/type objects, valid across builds) instead of the snapshot's un-body-analyzed one, and
-        // PRE-MARK the file demand-analyzed so AnalyzeStdlibProgramOnDemand skips re-running SA+lower + repair.
+        // routine/type objects, valid across builds) instead of the snapshot's un-body-analyzed one, and list
+        // the file as cached so AnalyzeStdlibProgramOnDemand, on first reach, replays what its analysis would
+        // have left behind (ReplayCachedFileAnalysis) instead of re-running SA+lower + repair.
         // Installing an analyzed program for a file THIS build never reaches is harmless — codegen only emits
         // REACHED bodies (liveness), same as the un-analyzed programs already in StdlibPrograms.
         // The daemon usually prepared this copy between requests (PrepareNextRestore). A stale or missing one
@@ -262,9 +283,9 @@ public partial class SemanticVerifier
             : BuildRestore(warm: warm);
         warm.Prepared = null;
         _registry.RestoreStdlibPrograms(programs: restore.Programs);
-        foreach (string filePath in restore.DemandAnalyzedFiles)
+        foreach (string filePath in restore.CachedFiles)
         {
-            _demandAnalyzedFiles.Add(item: filePath);
+            _warmCachedFiles.Add(item: filePath);
         }
         // Re-lazy the primed whole-stdlib instance closure so this warm compile re-discovers only what the
         // USER program reaches (like cold), instead of GMP re-processing all ~638 primed instances (cold
@@ -355,7 +376,7 @@ public partial class SemanticVerifier
                 comparer: StringComparer.Ordinal),
             RestoredInstantiationKeys: new HashSet<string>(collection: restoredInst.Keys,
                 comparer: StringComparer.Ordinal),
-            WarmStdlibRoutineBodies: warm.RoutineBodies);
+            WarmStdlibRoutineBodies: restore.TemplateBodies);
         if (Diagnostics.DiagnosticFlags.PhaseTiming)
         {
             Console.Error.WriteLine(
