@@ -415,7 +415,14 @@ internal partial class Program
         IReadOnlyCollection<string>? ResidentSymbols = null,
         // Resident-JIT base/delta: RegistryKeys already built into the base object (the base's collected
         // instance set). Threaded to the demand collector so it skips re-building/analyzing/expanding them.
-        IReadOnlySet<string>? ResidentInstanceKeys = null);
+        IReadOnlySet<string>? ResidentInstanceKeys = null,
+        // Called after a normal (non-lazy) emit with the build's codegen inputs and the routine symbols the
+        // emitted module defined. The daemon uses it to grow its resident layers (CompileDaemon.ResidentLayer).
+        Action<BuildObservation>? BuildObserver = null);
+
+    /// <summary>What a finished build hands <see cref="WarmProviders.BuildObserver"/>: its codegen inputs and the
+    /// routine symbols the emitted module DEFINED.</summary>
+    internal sealed record BuildObservation(LazyJitInputs Inputs, IReadOnlyCollection<string> DefinedSymbols);
 
     /// <summary>
     /// Bundles the inputs that drive Phase 2 (semantic analysis) of the multi-file pipeline,
@@ -455,7 +462,8 @@ internal partial class Program
         Action<string>? IrCallback,
         Stopwatch? SwPhase,
         Action<LazyJitInputs>? LazyJitSink = null,
-        IReadOnlyCollection<string>? ResidentSymbols = null);
+        IReadOnlyCollection<string>? ResidentSymbols = null,
+        Action<BuildObservation>? BuildObserver = null);
 
     /// <summary>
     /// The fully-resolved build configuration for a <c>build</c>/<c>buildandrun</c>/<c>check</c> invocation:
@@ -1362,6 +1370,7 @@ internal partial class Program
         Func<TypeModel.Symbols.RoutineInfo, bool>? instanceCheckSkip = warm?.InstanceCheckSkip;
         IReadOnlyCollection<string>? residentSymbols = warm?.ResidentSymbols;
         IReadOnlySet<string>? residentInstanceKeys = warm?.ResidentInstanceKeys;
+        Action<BuildObservation>? buildObserver = warm?.BuildObserver;
         // C libraries declared in source via `@link("...")` on `C::` externs, gathered from the files
         // that actually compile (post `@target` gate) and surfaced to the link step. Assigned once the
         // AST is available; stays empty on the early-error paths below.
@@ -1450,7 +1459,8 @@ internal partial class Program
                     IrCallback: irCallback,
                     SwPhase: _swPhase,
                     LazyJitSink: lazyJitSink,
-                    ResidentSymbols: residentSymbols),
+                    ResidentSymbols: residentSymbols,
+                    BuildObserver: buildObserver),
                 orderedFiles: orderedFiles,
                 unitsByFile: unitsByFile,
                 result: result);
@@ -1797,6 +1807,13 @@ internal partial class Program
 
         WriteCodegenOutput(llvmIr: llvmIr, irCallback: irCallback, outputFile: outputFile,
             entryFile: entryFile, showBuildStages: showBuildStages);
+        p3.BuildObserver?.Invoke(obj: new BuildObservation(
+            Inputs: new LazyJitInputs(UserPrograms: userPrograms,
+                Result: result,
+                Target: target,
+                BuildMode: buildMode,
+                EntryModule: entryModule),
+            DefinedSymbols: generator.GetEmittedRoutineSymbols()));
 
         if (showBuildStages)
         {
@@ -2448,7 +2465,8 @@ internal partial class Program
                 IrCallback: s => captured = s,
                 StdlibIndexProvider: warm?.StdlibIndexProvider,
                 ResidentSymbols: warm?.ResidentSymbols,
-                ResidentInstanceKeys: warm?.ResidentInstanceKeys));
+                ResidentInstanceKeys: warm?.ResidentInstanceKeys,
+                BuildObserver: warm?.BuildObserver));
         ir = captured;
         return rc;
     }

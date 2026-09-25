@@ -27,7 +27,17 @@ internal static unsafe partial class OrcContiguousMemoryManager
     private const nuint SlabSize = 64 * 1024 * 1024;
 
     // ── Win32 virtual memory ────────────────────────────────────────────────────────────────────
-    private const uint MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_RELEASE = 0x8000;
+    private const uint MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_DECOMMIT = 0x4000,
+        MEM_RELEASE = 0x8000;
+
+    // Every slab is carved from ONE reserved region, so all objects the JIT links lie within ±2 GB of each
+    // other. An AOT-compiled object (the resident base, a resident layer) reaches data in another object
+    // through 32-bit PC-relative relocations; calls get stubs, data references do not, so two slabs placed
+    // >2 GB apart would silently wrap such a reference. 30 slabs; any two region addresses are < 2^31 apart.
+    private const nuint RegionSize = 30 * SlabSize;
+    private static byte* _region;
+    private static nuint _regionUsed;
+    private static readonly Lock RegionLock = new();
     private const uint PAGE_READWRITE = 0x04, PAGE_EXECUTE_READWRITE = 0x40;
 
     [LibraryImport(libraryName: "kernel32", SetLastError = true)]
@@ -51,6 +61,41 @@ internal static unsafe partial class OrcContiguousMemoryManager
     {
         public byte* Base;
         public nuint Offset;
+
+        /// <summary>True when the slab was carved from the shared region (decommitted, not released).</summary>
+        public bool InRegion;
+    }
+
+    /// <summary>Commits the next slab of the shared region, reserving the region on first use. Falls back to
+    /// an independent allocation (the old behavior) once the region is used up.</summary>
+    private static byte* AllocateSlab(out bool inRegion)
+    {
+        lock (RegionLock)
+        {
+            _region = _region != null
+                ? _region
+                : (byte*)VirtualAlloc(addr: null, size: RegionSize, type: MEM_RESERVE,
+                    protect: PAGE_READWRITE);
+            if (_region != null && _regionUsed + SlabSize <= RegionSize)
+            {
+                void* carved = VirtualAlloc(addr: _region + _regionUsed,
+                    size: SlabSize,
+                    type: MEM_COMMIT,
+                    protect: PAGE_READWRITE);
+                if (carved != null)
+                {
+                    _regionUsed += SlabSize;
+                    inRegion = true;
+                    return (byte*)carved;
+                }
+            }
+        }
+
+        inRegion = false;
+        return (byte*)VirtualAlloc(addr: null,
+            size: SlabSize,
+            type: MEM_RESERVE | MEM_COMMIT,
+            protect: PAGE_READWRITE);
     }
 
     private static byte* Bump(Slab slab, nuint size, uint alignment)
@@ -77,16 +122,13 @@ internal static unsafe partial class OrcContiguousMemoryManager
     {
         try
         {
-            void* baseAddr = VirtualAlloc(addr: null,
-                size: SlabSize,
-                type: MEM_RESERVE | MEM_COMMIT,
-                protect: PAGE_READWRITE);
+            byte* baseAddr = AllocateSlab(inRegion: out bool inRegion);
             if (baseAddr == null)
             {
                 return null;
             }
 
-            var slab = new Slab { Base = (byte*)baseAddr, Offset = 0 };
+            var slab = new Slab { Base = baseAddr, Offset = 0, InRegion = inRegion };
             return (void*)(nint)GCHandle.Alloc(value: slab);
         }
         catch
@@ -171,7 +213,9 @@ internal static unsafe partial class OrcContiguousMemoryManager
             {
                 // Return value indicates Win32 success/failure; failure during teardown is non-recoverable
                 // (best-effort release — the OS will reclaim the reservation when the process exits).
-                _ = VirtualFree(addr: slab.Base, size: 0, type: MEM_RELEASE);
+                _ = slab.InRegion
+                    ? VirtualFree(addr: slab.Base, size: SlabSize, type: MEM_DECOMMIT)
+                    : VirtualFree(addr: slab.Base, size: 0, type: MEM_RELEASE);
             }
 
             h.Free();

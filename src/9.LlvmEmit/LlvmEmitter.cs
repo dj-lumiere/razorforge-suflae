@@ -1087,22 +1087,17 @@ public partial class LlvmEmitter
     /// </summary>
     private static void AppendShadowStackHelpers(StringBuilder output, bool deltaMode = false)
     {
-        output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
-        // Delta build references the base's TLS globals (extern, no initializer); base/normal defines them.
         if (deltaMode)
         {
-            output.AppendLine(
-                value:
-                "@_rf_trace_stack = external thread_local global [32 x { ptr, ptr, i32, i32 }]");
-            output.AppendLine(value: "@_rf_trace_depth = external thread_local global i32");
+            AppendShadowStackForwarders(output: output);
+            return;
         }
-        else
-        {
-            output.AppendLine(
-                value:
-                "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
-            output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
-        }
+
+        output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
+        output.AppendLine(
+            value:
+            "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
+        output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
 
         output.AppendLine();
         // push helper — branchless: mask index to [0,31] with AND
@@ -1184,6 +1179,48 @@ public partial class LlvmEmitter
         output.AppendLine(value: RetVoidInstruction);
         output.AppendLine(value: "}");
         output.AppendLine();
+
+        // Exported entry points for the modules that do not own the stack (see AppendShadowStackForwarders).
+        foreach ((string name, string parameters, string arguments) in ShadowStackHelpers)
+        {
+            output.AppendLine(value: $"define void @{name}_shared({parameters}) {{");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: $"  call void @{name}({arguments})");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+        }
+    }
+
+    /// <summary>The shadow-stack helpers as (name, LLVM parameter list, forwarded argument list).</summary>
+    private static readonly (string Name, string Parameters, string Arguments)[] ShadowStackHelpers =
+    [
+        ("_rf_trace_push", "ptr %r, ptr %f, i32 %ln, i32 %col", "ptr %r, ptr %f, i32 %ln, i32 %col"),
+        ("_rf_trace_pop", "", ""),
+        ("_rf_trace_update_loc", "i32 %ln, i32 %col", "i32 %ln, i32 %col"),
+        ("_rf_print_trace_stack", "", "")
+    ];
+
+    /// <summary>
+    /// The shadow-stack helpers of a module that does not own the stack (a resident-JIT delta or layer): each
+    /// forwards to the owning module's exported <c>_shared</c> entry point, so only the owner ever touches the
+    /// thread-local stack. Referencing the owner's thread-locals directly broke once such a module was
+    /// AOT-compiled: under emulated TLS the object file defines its own copy of each control block, the JIT's
+    /// object loader does not merge them, and the module crashed on its first push.
+    /// </summary>
+    private static void AppendShadowStackForwarders(StringBuilder output)
+    {
+        output.AppendLine(value: "; Shadow stack (owned by the resident base — forward to it)");
+        foreach ((string name, string parameters, string arguments) in ShadowStackHelpers)
+        {
+            output.AppendLine(value: $"declare void @{name}_shared({parameters})");
+            output.AppendLine(value: $"define private void @{name}({parameters}) alwaysinline {{");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: $"  call void @{name}_shared({arguments})");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+        }
     }
 
     /// <summary>

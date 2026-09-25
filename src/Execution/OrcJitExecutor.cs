@@ -451,7 +451,7 @@ internal static unsafe class OrcJitExecutor
     /// Returns the program exit code.
     /// </summary>
     public static int JitAndRunSplitWithBaseObject(string baseObjectPath, string deltaIr,
-        string programName, string[] programArgs)
+        string programName, string[] programArgs, IReadOnlyList<string>? layerObjectPaths = null)
     {
         if (!TryInitialize(error: out string? error))
         {
@@ -485,6 +485,13 @@ internal static unsafe class OrcJitExecutor
 
         // Load the precompiled stdlib base object — linked into the dylib, NOT JIT-compiled.
         AddObjectFile(jit: jit, dylib: dylib, objectPath: baseObjectPath);
+        // The daemon's resident layers: stdlib routines earlier builds needed beyond the base, AOT'd the
+        // same way, so the delta extern-declares them too.
+        foreach (string layerObjectPath in layerObjectPaths ?? [])
+        {
+            AddObjectFile(jit: jit, dylib: dylib, objectPath: layerObjectPath);
+        }
+
         JitStage(s: "base object loaded");
 
         // JIT ONLY the delta; its extern declares for base symbols resolve to the object's defines.

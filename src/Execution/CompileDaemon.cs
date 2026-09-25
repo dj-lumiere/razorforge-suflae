@@ -115,6 +115,10 @@ internal partial class Program
             /// before JIT-ing <see cref="Ir"/> (the delta). Null on the normal full-IR path.</summary>
             public string? BaseObjectPath { get; set; }
 
+            /// <summary>Resident-JIT layer objects to load after <see cref="BaseObjectPath"/> (see
+            /// <see cref="ResidentLayer"/>). Empty when no layer has been built yet.</summary>
+            public List<string> LayerObjectPaths { get; set; } = [];
+
             /// <summary>Server-side wall-clock ms of the warm compile itself (excludes IPC/transfer), so a
             /// client can report where dev-loop latency goes: round-trip − CompileMs = transfer.</summary>
             public long CompileMs { get; set; }
@@ -126,6 +130,7 @@ internal partial class Program
                 WriteNullable(writer: writer, value: ExePath);
                 WriteNullable(writer: writer, value: Ir);
                 WriteNullable(writer: writer, value: BaseObjectPath);
+                WriteList(writer: writer, values: LayerObjectPaths);
                 writer.Write(value: CompileMs);
             }
 
@@ -138,6 +143,7 @@ internal partial class Program
                     ExePath = ReadNullable(reader: reader),
                     Ir = ReadNullable(reader: reader),
                     BaseObjectPath = ReadNullable(reader: reader),
+                    LayerObjectPaths = ReadList(reader: reader),
                     CompileMs = reader.ReadInt64()
                 };
             }
@@ -522,6 +528,11 @@ internal partial class Program
         {
             try
             {
+                foreach (ResidentLayer layer in ResidentLayers.Values)
+                {
+                    layer.StartPendingBuild();
+                }
+
                 foreach (SemanticVerifier.CompiledStdlibState state in WarmCache.Values)
                 {
                     SemanticVerifier.PrepareNextRestore(warm: state);
@@ -609,6 +620,7 @@ internal partial class Program
             int exit;
             string ir;
             string? baseObjectPath = null;
+            List<string> layerObjectPaths = [];
             try
             {
                 Console.SetOut(newOut: captured);
@@ -618,6 +630,7 @@ internal partial class Program
                 // full IR if the base can't be built, so the client path stays correct either way.
                 IReadOnlyCollection<string>? residentSymbols = null;
                 IReadOnlySet<string>? residentInstanceKeys = null;
+                ResidentLayer? layer = null;
                 if (req.BaseDelta)
                 {
                     Language lang = InvokedAsSuflae
@@ -628,9 +641,18 @@ internal partial class Program
                             EnsureBaseArtifact(language: lang, buildMode: (RfBuildMode)req.BuildMode);
                     if (baseArtifact is { } ba)
                     {
-                        residentSymbols = ba.Syms;
-                        residentInstanceKeys = ba.InstanceKeys;
+                        layer = LayerFor(language: lang, buildMode: (RfBuildMode)req.BuildMode);
+                        layer.AdoptFinished();
+                        residentSymbols = layer.Symbols.Count > 0
+                            ? new HashSet<string>(collection: ba.Syms.Concat(second: layer.Symbols),
+                                comparer: StringComparer.Ordinal)
+                            : ba.Syms;
+                        residentInstanceKeys = layer.InstanceKeys.Count > 0
+                            ? new HashSet<string>(collection: ba.InstanceKeys.Concat(second: layer.InstanceKeys),
+                                comparer: StringComparer.Ordinal)
+                            : ba.InstanceKeys;
                         baseObjectPath = ba.ObjPath;
+                        layerObjectPaths = [.. layer.ObjectPaths];
                     }
                 }
 
@@ -647,7 +669,12 @@ internal partial class Program
                         IrCallback: null,
                         StdlibIndexProvider: GetStdlibIndex,
                         ResidentSymbols: residentSymbols,
-                        ResidentInstanceKeys: residentInstanceKeys));
+                        ResidentInstanceKeys: residentInstanceKeys,
+                        BuildObserver: layer == null || residentSymbols == null
+                            ? null
+                            : observation => layer.Observe(observation: observation,
+                                residentSymbols: residentSymbols,
+                                residentInstanceKeys: residentInstanceKeys!)));
             }
             catch (Exception ex)
             {
@@ -675,7 +702,10 @@ internal partial class Program
                     : null,
                 BaseObjectPath = exit == 0
                     ? baseObjectPath
-                    : null
+                    : null,
+                LayerObjectPaths = exit == 0
+                    ? layerObjectPaths
+                    : []
             };
         }
 
@@ -799,7 +829,7 @@ internal partial class Program
             int rc = 0;
             bool haveIr = resolved.UseDaemon &&
                           TryGetWarmDaemonIr(resolved: resolved, ir: out ir, exitCode: out rc,
-                              baseObjectPath: out _);
+                              baseObjectPath: out _, layerObjectPaths: out _);
             if (!haveIr)
             {
                 rc = BuildToIr(entryFile: Path.GetFullPath(path: resolved.EntryFile),
@@ -860,9 +890,11 @@ internal partial class Program
             if (resolved.UseDaemon &&
                 TryGetWarmDaemonIr(resolved: resolved, ir: out string daemonIr,
                     exitCode: out int daemonRc, baseObjectPath: out string? daemonBaseObj,
+                    layerObjectPaths: out List<string> daemonLayerObjs,
                     allowBaseDelta: true) &&
                 TryRunWarmDaemonIr(daemonRc: daemonRc, daemonIr: daemonIr,
-                    daemonBaseObj: daemonBaseObj, entryFull: entryFull, exitCode: out exitCode))
+                    daemonBaseObj: daemonBaseObj, daemonLayerObjs: daemonLayerObjs,
+                    entryFull: entryFull, exitCode: out exitCode))
             {
                 return true;
             }
@@ -934,7 +966,7 @@ internal partial class Program
         /// shipped, otherwise full IR). Returns true when it handled the request (setting <paramref
         /// name="exitCode"/> — including a non-zero daemon build error or a JIT-execution failure).</summary>
         private static bool TryRunWarmDaemonIr(int daemonRc, string daemonIr, string? daemonBaseObj,
-            string entryFull, out int exitCode)
+            List<string> daemonLayerObjs, string entryFull, out int exitCode)
         {
             exitCode = 0;
             if (daemonRc != 0)
@@ -952,7 +984,8 @@ internal partial class Program
                     ? OrcJitExecutor.JitAndRunSplitWithBaseObject(baseObjectPath: daemonBaseObj,
                         deltaIr: daemonIr,
                         programName: entryFull,
-                        programArgs: [])
+                        programArgs: [],
+                        layerObjectPaths: daemonLayerObjs)
                     : OrcJitExecutor.JitAndRun(llvmIr: daemonIr,
                         programName: entryFull,
                         programArgs: []);
@@ -979,11 +1012,13 @@ internal partial class Program
         /// spawn+warm wait and the IPC-transfer timing separately. Returns false (cold fallback) when the
         /// daemon can't be reached or the fetch fails.</summary>
         private static bool TryGetWarmDaemonIr(ResolvedEntry resolved, out string ir,
-            out int exitCode, out string? baseObjectPath, bool allowBaseDelta = false)
+            out int exitCode, out string? baseObjectPath, out List<string> layerObjectPaths,
+            bool allowBaseDelta = false)
         {
             ir = "";
             exitCode = 0;
             baseObjectPath = null;
+            layerObjectPaths = [];
             if (!EnsureDaemonRunning(warmWaitMs: out long warmWaitMs, spawned: out bool spawned))
             {
                 return false;
@@ -1006,6 +1041,7 @@ internal partial class Program
                     exitCode: out exitCode,
                     serverCompileMs: out long serverCompileMs,
                     baseObjectPath: out baseObjectPath,
+                    layerObjectPaths: out layerObjectPaths,
                     allowBaseDelta: allowBaseDelta))
             {
                 return false;
@@ -1027,12 +1063,14 @@ internal partial class Program
         /// unreachable. On success, writes the daemon's captured build diagnostics to the console and yields
         /// the IR + build exit code.</summary>
         private static bool TryDaemonIr(ResolvedEntry resolved, out string ir, out int exitCode,
-            out long serverCompileMs, out string? baseObjectPath, bool allowBaseDelta = false)
+            out long serverCompileMs, out string? baseObjectPath, out List<string> layerObjectPaths,
+            bool allowBaseDelta = false)
         {
             ir = "";
             exitCode = 0;
             serverCompileMs = 0;
             baseObjectPath = null;
+            layerObjectPaths = [];
             var req = new DaemonRequest
             {
                 Verb = "ir",
@@ -1061,6 +1099,7 @@ internal partial class Program
                 exitCode = resp.ExitCode;
                 serverCompileMs = resp.CompileMs;
                 baseObjectPath = resp.BaseObjectPath;
+                layerObjectPaths = resp.LayerObjectPaths;
                 return true;
             }
             catch
