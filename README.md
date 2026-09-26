@@ -193,11 +193,12 @@ With no entry file given, the CLI searches the current and parent directories fo
 
 ### Platform support
 
-| Platform       | Status                                       |
-|----------------|----------------------------------------------|
-| Windows x86-64 | Working (primary development platform)       |
-| Linux x86-64   | Working (CI-verified on every commit)        |
-| macOS / ARM64  | Target definitions exist, **not yet tested** |
+| Platform                    | Status                                       |
+|-----------------------------|----------------------------------------------|
+| Windows x86-64              | Working (primary development platform)       |
+| Linux x86-64                | Working (CI-verified on every commit)        |
+| macOS ARM64 (Apple Silicon) | Working (CI-verified on every commit)        |
+| Linux ARM64, macOS x86-64   | Target definitions exist, **not yet tested** |
 
 On x86-64, programs are built for **x86-64-v3** (Intel Haswell 2013+, AMD Excavator 2015+, every Ryzen):
 the correctly rounded float math relies on hardware FMA. Older CPUs, and low-end Pentium/Celeron/Atom
@@ -270,7 +271,7 @@ RazorForge/
 - [x] Ownership model, failable-routine variants, generics, collections, 128-bit numerics
 - [x] Fully green CI: unit tests + end-to-end output-snapshot fixtures
 - [x] Diagnostics polish: source excerpts with carets, "did you mean" suggestions
-- [x] Prebuilt release packages (win-x64, linux-x64)
+- [x] Prebuilt release packages (win-x64, linux-x64, osx-arm64)
 
 ### In development (v0.2.0)
 
@@ -283,7 +284,7 @@ RazorForge/
 - Channels and structured concurrency
 - Suflae standard library and runtime (actor model + GC)
 - Language server (LSP) and editor tooling beyond syntax highlighting
-- macOS and ARM64 support
+- Linux ARM64 support
 - Package management story
 
 ### Future

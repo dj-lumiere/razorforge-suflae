@@ -45,11 +45,19 @@ public sealed partial class SemanticVerifier
     private readonly Dictionary<RoutineDeclaration, HashSet<string>> _reshapeEffects =
         new(comparer: ReferenceEqualityComparer.Instance);
 
-    private readonly HashSet<RoutineDeclaration> _reshapeEffectsInProgress =
-        new(comparer: ReferenceEqualityComparer.Instance);
-
     /// <summary>A container whose shape must stay still: its access path, its type, and why.</summary>
-    private sealed record ShapeGuard(string Path, TypeSymbol? Type, bool IsLoop);
+    private sealed record ShapeGuard(string Path, TypeSymbol? Type, bool IsLoop)
+    {
+        /// <summary>The path as a message shows it.</summary>
+        public string Shown => ShownPath(path: Path);
+    }
+
+    /// <summary>How a shape path reads in a message. The index of an element is not tracked, so an element
+    /// path (<c>grid[]</c>) reads <c>grid[...]</c>, and the source excerpt under the message points at it.</summary>
+    private static string ShownPath(string path)
+    {
+        return path.Replace(oldValue: "[]", newValue: "[...]", comparisonType: StringComparison.Ordinal);
+    }
 
     /// <summary>Runs the shape checks over the user programs (RazorForge only).</summary>
     private void CheckShapeEffects(IEnumerable<Program> programs)
@@ -67,6 +75,8 @@ public sealed partial class SemanticVerifier
                 _userRoutineDeclarations.TryAdd(key: info.RegistryKey, value: routine);
             }
         }
+
+        ComputeReshapeEffects();
 
         foreach (RoutineDeclaration routine in userPrograms.SelectMany(selector: EnumerateRoutines))
         {
@@ -143,28 +153,48 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// The parameters (and <c>me</c>) whose shape <paramref name="routine"/>'s body may change: every
-    /// parameter it hands to a changed slot of a call, or to a routine value. Memoized. A recursive cycle
-    /// sees the partial result, which only grows, so the fixpoint is reached by the time the cycle
-    /// unwinds for self-recursion and simple mutual recursion.
+    /// Gives every user routine its reshape effect: the parameters (and <c>me</c>) whose shape its body may
+    /// change, i.e. every one it hands to a changed slot of a call or to a routine value. Solved as a
+    /// fixpoint over all routines at once. Effects only grow, so the iteration ends, and a routine in a
+    /// recursive cycle gets the whole cycle's effect. (Memoizing the first, partial answer seen inside a
+    /// cycle left a routine reached only through the cycle with too small an effect.)
     /// </summary>
+    private void ComputeReshapeEffects()
+    {
+        foreach (RoutineDeclaration decl in _userRoutineDeclarations.Values)
+        {
+            _reshapeEffects.TryAdd(key: decl, value: new HashSet<string>(comparer: StringComparer.Ordinal));
+        }
+
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach ((RoutineDeclaration decl, HashSet<string> slots) in _reshapeEffects.ToList())
+            {
+                foreach (string slot in DirectlyReshapedSlots(routine: decl))
+                {
+                    changed |= slots.Add(item: slot);
+                }
+            }
+        }
+    }
+
+    /// <summary>The routine's reshape effect (see <see cref="ComputeReshapeEffects"/>).</summary>
     private HashSet<string> InferReshapedSlots(RoutineDeclaration routine)
     {
-        if (_reshapeEffects.TryGetValue(key: routine, value: out HashSet<string>? known))
-        {
-            return known;
-        }
+        return _reshapeEffects.TryGetValue(key: routine, value: out HashSet<string>? known)
+            ? known
+            : [];
+    }
 
-        var slots = new HashSet<string>(comparer: StringComparer.Ordinal);
-        _reshapeEffects[key: routine] = slots;
-        if (!_reshapeEffectsInProgress.Add(item: routine))
-        {
-            return slots;
-        }
-
+    /// <summary>The slots <paramref name="routine"/>'s body changes given the callee effects known so far.</summary>
+    private List<string> DirectlyReshapedSlots(RoutineDeclaration routine)
+    {
         var own = new HashSet<string>(
             collection: routine.Parameters.Select(selector: p => p.Name).Append(element: MeSlot),
             comparer: StringComparer.Ordinal);
+        var found = new List<string>();
         AstWalker.WalkExpressions(root: routine.Body,
             visit: e =>
             {
@@ -177,12 +207,11 @@ public sealed partial class SemanticVerifier
                 {
                     if (ShapePath(expr: arg) is { } path && own.Contains(item: RootName(path: path)))
                     {
-                        slots.Add(item: RootName(path: path));
+                        found.Add(item: RootName(path: path));
                     }
                 }
             });
-        _reshapeEffectsInProgress.Remove(item: routine);
-        return slots;
+        return found;
     }
 
     /// <summary>
@@ -259,6 +288,11 @@ public sealed partial class SemanticVerifier
                 ShapePath(expr: inner) is { } prefix
                     ? $"{prefix}.{field}"
                     : null,
+            // Any element of a container (`grid[0]`, `grid[i]`) is `grid[]`: the index is not tracked.
+            IndexExpression { Object: var container } =>
+                ShapePath(expr: container) is { } owner
+                    ? $"{owner}[]"
+                    : null,
             CallExpression
             {
                 Callee: MemberExpression { Object: var receiver, MemberName: var verb },
@@ -270,17 +304,17 @@ public sealed partial class SemanticVerifier
 
     private static string RootName(string path)
     {
-        int dot = path.IndexOf(value: '.');
-        return dot < 0
+        int end = path.IndexOfAny(anyOf: ['.', '[']);
+        return end < 0
             ? path
-            : path[..dot];
+            : path[..end];
     }
 
     // ---- Guarded regions ------------------------------------------------------------------------------
 
     /// <summary>
     /// Walks a statement, checking the calls in every region where a container's shape must stay still:
-    /// the body of an <c>each</c> loop over a named container, and a statement that works on an entity
+    /// the body of an <c>each</c> loop over a container it can name as a path, and a statement that works on an entity
     /// element of a named container in place.
     /// </summary>
     private void CheckStatementShapes(Statement stmt, List<ShapeGuard> guards,
@@ -305,11 +339,11 @@ public sealed partial class SemanticVerifier
             case LoopStatement loop:
             {
                 List<ShapeGuard> inner = guards;
-                if (loop.IterationSourceName is { } name)
+                string? sourcePath = loop.IterationSourcePath ?? loop.IterationSourceName;
+                if (sourcePath != null)
                 {
-                    inner = [.. guards, new ShapeGuard(Path: name,
-                        Type: LoopSourceType(name: name, preceding: preceding),
-                        IsLoop: true)];
+                    TypeSymbol? sourceType = LoopSourceType(path: sourcePath, preceding: preceding);
+                    inner = [.. guards, new ShapeGuard(Path: sourcePath, Type: sourceType, IsLoop: true)];
                 }
 
                 CheckStatementShapes(stmt: loop.Body, guards: inner, preceding: []);
@@ -442,6 +476,9 @@ public sealed partial class SemanticVerifier
         foreach ((Expression operand, string callee) in ChangedOperands(call: call))
         {
             string? path = ShapePath(expr: operand);
+            string shown = path != null
+                ? ShownPath(path: path)
+                : "";
             foreach (ShapeGuard g in guards)
             {
                 // The direct `@reshaping` call on the loop variable itself is RF-S625 at the call site.
@@ -454,11 +491,11 @@ public sealed partial class SemanticVerifier
                 if (path != null && IsPathPrefixOrEqual(prefix: path, path: g.Path))
                 {
                     string attempt = callee.Length == 0
-                        ? $"pass '{path}' to a routine value"
-                        : operand is IdentifierExpression or MemberExpression &&
+                        ? $"pass '{shown}' to a routine value"
+                        : operand is IdentifierExpression or MemberExpression or IndexExpression &&
                           call.Callee is MemberExpression { Object: var r } && ReferenceEquals(objA: r, objB: operand)
-                            ? $"call '{path}.{callee}()'"
-                            : $"pass '{path}' to '{callee}'";
+                            ? $"call '{shown}.{callee}()'"
+                            : $"pass '{shown}' to '{callee}'";
                     string why = callee.Length == 0
                         ? "the builder cannot tell whether that routine adds to or removes from it"
                         : $"'{callee}' can add to or remove from it";
@@ -468,9 +505,9 @@ public sealed partial class SemanticVerifier
                 {
                     ReportShapeChange(guard: g,
                         attempt: callee.Length == 0
-                            ? $"pass '{path}' to a routine value"
-                            : $"change '{path}' through '{callee}'",
-                        why: $"'{path}' and '{g.Path}' are both shared handles to a " +
+                            ? $"pass '{shown}' to a routine value"
+                            : $"change '{shown}' through '{callee}'",
+                        why: $"'{shown}' and '{g.Shown}' are both shared handles to a " +
                              $"{SharedHandleInner(type: g.Type!)!.Name}, so they may be the same one",
                         location: call.Location);
                 }
@@ -500,7 +537,7 @@ public sealed partial class SemanticVerifier
         {
             ReportError(code: SemanticDiagnosticCode.ReshapingDuringIteration,
                 message:
-                $"You are trying to {attempt} while an `each` loop is going through '{guard.Path}': {why}. " +
+                $"You are trying to {attempt} while an `each` loop is going through '{guard.Shown}': {why}. " +
                 "After such a change the loop could no longer trust that its next element is really the " +
                 "next one. Make the change after the loop.",
                 location: location);
@@ -509,15 +546,15 @@ public sealed partial class SemanticVerifier
 
         ReportError(code: SemanticDiagnosticCode.TokenSourceReplaced,
             message:
-            $"You are trying to {attempt} while this statement works on an element of '{guard.Path}' in " +
+            $"You are trying to {attempt} while this statement works on an element of '{guard.Shown}' in " +
             $"place: {why}. That could move or free the element under it. Do it in a separate statement " +
             "before or after.",
             location: location);
     }
 
-    /// <summary>The type of an <c>each</c> loop's named source, read from its iterator declaration among
-    /// the statements before the loop (<c>var _iter = xs.iter()</c>).</summary>
-    private static TypeSymbol? LoopSourceType(string name, List<Statement> preceding)
+    /// <summary>The type of an <c>each</c> loop's source, read from its iterator declaration among the
+    /// statements before the loop (<c>var _iter = xs.iter()</c>): the analyzed expression with that path.</summary>
+    private static TypeSymbol? LoopSourceType(string path, List<Statement> preceding)
     {
         for (int i = preceding.Count - 1; i >= 0; i--)
         {
@@ -533,7 +570,7 @@ public sealed partial class SemanticVerifier
             AstWalker.WalkExpressions(root: init,
                 visit: e =>
                 {
-                    if (e is IdentifierExpression { ResolvedType: { } t } id && id.Name == name)
+                    if (e.ResolvedType is { } t && ShapePath(expr: e) == path)
                     {
                         found ??= t;
                     }

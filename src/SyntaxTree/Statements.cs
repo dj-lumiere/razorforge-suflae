@@ -422,6 +422,14 @@ public record LoopStatement(Statement Body, SourceLocation Location)
     /// populate its active-iteration set.
     /// </summary>
     public string? IterationSourceName { get; init; }
+
+    /// <summary>
+    /// For a lowered <c>each x in ...</c> loop whose source is a name, field chain or element, its path
+    /// (<c>"a"</c>, <c>"me.items"</c>, <c>"grid[]"</c> for <c>grid[0]</c>: the index is not tracked); otherwise
+    /// <c>null</c>. The build-time shape check guards the source through it. A path, not the expression
+    /// itself: the expression is lowered afterwards, and a stale copy here would reach backend validation.
+    /// </summary>
+    public string? IterationSourcePath { get; init; }
 }
 
 /// <summary>

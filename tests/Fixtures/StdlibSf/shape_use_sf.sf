@@ -4,13 +4,23 @@ import IO/Console
 # Suflae containers are shared handles, so a change hidden behind a call cannot be traced at build time: an
 # `each` loop marks its list's shape as in use and a change during the loop crashes at runtime
 # (tests/Meta/ContainerShapeUseTests.cs). These are the paths that must NOT crash: a change after a loop,
-# after `break`, and after a `return` out of a loop (the return closes the use).
+# after `break`, after a `return` out of a loop (the return closes the use), and after a loop over a field.
 
 routine first_big(xs: List[Integer]) -> Integer
   each x in xs
     if x > 5
       return x
   return 0
+
+entity Bag
+  items: List[Integer]
+
+routine Bag.sum_then_add() -> Integer
+  var sum = 0
+  each x in me.items
+    sum = sum + x
+  me.items.add_last(value: sum)
+  return sum
 
 routine start()
   var nums = List[Integer]()
@@ -27,5 +37,10 @@ routine start()
   var big = first_big(xs: nums)
   nums.add_last(value: 12)
   show(f"total={total} big={big} count={nums.count()}")
+  var bag = Bag(items: List[Integer]())
+  bag.items.add_last(value: 2)
+  bag.items.add_last(value: 3)
+  var bag_sum = bag.sum_then_add()
+  show(f"bag sum={bag_sum} count={bag.items.count()}")
   show("DONE")
   return

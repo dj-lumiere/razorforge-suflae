@@ -1,0 +1,26 @@
+module Tests/ShapeUse/IndirectReshapeFieldEach
+import IO/Console
+
+# The loop goes through a field (`me.items`), not a plain name, and `grow` adds to that same list through
+# another handle. The loop still marks the list's shape as in use, so `add_last` crashes with
+# ReshapingWhileInUseError instead of the loop silently skipping the new element.
+
+entity Bag
+  items: List[Integer]
+
+routine grow(xs: List[Integer])
+  xs.add_last(value: 99)
+  return
+
+routine Bag.spin()
+  each x in me.items
+    show(f"visiting {x}")
+    grow(xs: me.items)
+  show("not reached")
+  return
+
+routine start()
+  var b = Bag(items: List[Integer]())
+  b.items.add_last(value: 1)
+  b.spin()
+  return

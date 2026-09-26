@@ -485,12 +485,14 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 loc: loc,
                 names: new ForElseNames(ElseVarName: elseVarName,
                     ExhaustedName: $"_lf_exhausted_{n}",
-                    IterationSourceName: iterationSourceName))
+                    IterationSourceName: iterationSourceName,
+                    IterationSourcePath: IterationSourcePathOf(source: eachStmt.Iterable)))
             : BuildPlainFor(tryNextCall: tryNextCall,
                 elseBody: elseBody,
                 elseVarName: elseVarName,
                 iterVarStmt: iterVarStmt,
                 iterationSourceName: iterationSourceName,
+                iterationSourcePath: IterationSourcePathOf(source: eachStmt.Iterable),
                 loc: loc);
     }
 
@@ -603,7 +605,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     private readonly record struct ForElseNames(
         string? ElseVarName,
         string ExhaustedName,
-        string? IterationSourceName);
+        string? IterationSourceName,
+        string? IterationSourcePath);
 
     private static BlockStatement BuildForElse(Statement elseBranchLowered, Expression tryNextCall,
         Statement elseBody, Statement iterVarStmt, ForElseNames names,
@@ -612,6 +615,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         string? elseVarName = names.ElseVarName;
         string exhaustedName = names.ExhaustedName;
         string? iterationSourceName = names.IterationSourceName;
+        string? iterationSourcePath = names.IterationSourcePath;
         // For-else: set exhausted flag, then break
         Statement noneBody = new BlockStatement(Statements:
             [
@@ -640,7 +644,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             new LoopStatement(Body: new BlockStatement(Statements: [whenStmt], Location: loc),
                 Location: loc)
             {
-                IsIteratorEachLoop = true, IterationSourceName = iterationSourceName
+                IsIteratorEachLoop = true, IterationSourceName = iterationSourceName,
+                IterationSourcePath = iterationSourcePath
             };
 
         // var _lf_exhausted_N: Bool = false
@@ -667,10 +672,32 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     }
 
     /// <summary>
+    /// The shape path of an <c>each</c> source: a name, a field chain (<c>me.items</c>) or an element
+    /// (<c>grid[0]</c> is <c>grid[]</c>, the index is not tracked). Null for any other source.
+    /// </summary>
+    private static string? IterationSourcePathOf(Expression source)
+    {
+        return source switch
+        {
+            IdentifierExpression id => id.Name,
+            MemberExpression { Object: var inner, MemberName: var field } =>
+                IterationSourcePathOf(source: inner) is { } prefix
+                    ? $"{prefix}.{field}"
+                    : null,
+            IndexExpression { Object: var container } =>
+                IterationSourcePathOf(source: container) is { } owner
+                    ? $"{owner}[]"
+                    : null,
+            _ => null
+        };
+    }
+
+    /// <summary>
     /// Builds the plain for lowering (no else branch): the <c>None</c> arm breaks directly.
     /// </summary>
     private static BlockStatement BuildPlainFor(Expression tryNextCall, Statement elseBody,
         string? elseVarName, Statement iterVarStmt, string? iterationSourceName,
+        string? iterationSourcePath,
         SourceLocation loc)
     {
         // Plain for (no else branch)
@@ -693,7 +720,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             new LoopStatement(Body: new BlockStatement(Statements: [whenStmt], Location: loc),
                 Location: loc)
             {
-                IsIteratorEachLoop = true, IterationSourceName = iterationSourceName
+                IsIteratorEachLoop = true, IterationSourceName = iterationSourceName,
+                IterationSourcePath = iterationSourcePath
             };
 
         return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);

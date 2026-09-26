@@ -163,4 +163,76 @@ public class ShapeEffectTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+
+    [Fact]
+    public void Analyze_LoopOverAnElementChangesThatElement_Errors()
+    {
+        string source = Prelude + """
+                                  routine start()
+                                    var grid = List[List[S64]]()
+                                    grid.add_last(value: List[S64]())
+                                    each x in grid[0]
+                                      grid[0].add_last(value: x)
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "You are trying to call 'grid[...].add_last()'");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReshapingDuringIteration);
+    }
+
+    [Fact]
+    public void Analyze_LoopOverAFieldChangesThatField_Errors()
+    {
+        string source = Prelude + """
+                                  entity Bag
+                                    items: List[S64]
+
+                                  routine Bag.spin()
+                                    each x in me.items
+                                      me.items.add_last(value: x)
+                                    return
+
+                                  routine start()
+                                    var b = Bag(items: List[S64]())
+                                    b.spin()
+                                    return
+                                  """;
+
+        AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "You are trying to call 'me.items.add_last()'");
+    }
+
+    /// <summary>
+    /// A routine reached only through a recursive cycle gets the whole cycle's effect. The effects used to
+    /// be memoized on first sight, so `pong` (seen while `ping` was still being inferred) kept an empty one.
+    /// </summary>
+    [Fact]
+    public void Analyze_EffectOfARoutineInsideARecursiveCycle_Errors()
+    {
+        string source = Prelude + """
+                                  routine ping(xs: Modifying[List[S64]], n: S64)
+                                    if n > 0
+                                      pong(xs: xs, n: n - 1)
+                                    xs.add_last(value: 1)
+                                    return
+
+                                  routine pong(xs: Modifying[List[S64]], n: S64)
+                                    ping(xs: xs, n: n)
+                                    return
+
+                                  routine start()
+                                    var nums = List[S64]()
+                                    each x in nums
+                                      ping(xs: nums.modify(), n: 0)
+                                    each y in nums
+                                      pong(xs: nums.modify(), n: 0)
+                                    return
+                                  """;
+
+        AnalysisResult result = AssertHasErrorSa(source: source,
+            expectedErrorSubstring: "You are trying to pass 'nums' to 'pong'");
+        Assert.Contains(collection: result.Errors, filter: e => e.Message.Contains(value: "to 'ping'"));
+    }
 }

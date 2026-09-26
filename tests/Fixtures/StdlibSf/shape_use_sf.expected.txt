@@ -1,2 +1,3 @@
 total=8 big=7 count=5
+bag sum=5 count=3
 DONE

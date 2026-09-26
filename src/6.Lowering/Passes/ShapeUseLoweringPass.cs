@@ -149,7 +149,9 @@ internal sealed class ShapeUseLoweringPass(PostprocessingContext ctx)
     {
         Expression? source = loop.IterationSourceName is { } name
             ? LoopSource(name: name, preceding: preceding)
-            : null;
+            : loop.IterationSourcePath is { } path
+                ? LoopSourceByPath(path: path, preceding: preceding)
+                : null;
         if (source == null || !HasShapeUse(container: source))
         {
             return [loop with { Body = LowerNested(stmt: loop.Body) }];
@@ -286,6 +288,71 @@ internal sealed class ShapeUseLoweringPass(PostprocessingContext ctx)
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A field-chain or element source of an <c>each</c> loop (<c>me.items</c>, <c>grid[0]</c>): the analyzed
+    /// receiver of its iterator declaration among the statements before the loop, copied so the shape-use
+    /// calls read it again without sharing the declaration's nodes.
+    /// </summary>
+    private static Expression? LoopSourceByPath(string path, List<Statement> preceding)
+    {
+        for (int i = preceding.Count - 1; i >= 0; i--)
+        {
+            if (preceding[index: i] is not DeclarationStatement
+                {
+                    Declaration: VariableDeclaration { Initializer: { } init }
+                })
+            {
+                continue;
+            }
+
+            Expression? found = null;
+            AstWalker.WalkExpressions(root: init,
+                visit: e =>
+                {
+                    if (found == null && e.ResolvedType != null && SourcePath(expr: e) == path)
+                    {
+                        found = e;
+                    }
+                });
+            if (found != null)
+            {
+                return CopyReadPath(expr: found);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The path of a name, field chain or element read (<c>grid[0]</c> is <c>grid[]</c>), as
+    /// ControlFlowLoweringPass records it on the loop.</summary>
+    private static string? SourcePath(Expression expr)
+    {
+        return expr switch
+        {
+            IdentifierExpression id => id.Name,
+            MemberExpression { Object: var inner, MemberName: var field } =>
+                SourcePath(expr: inner) is { } prefix
+                    ? $"{prefix}.{field}"
+                    : null,
+            IndexExpression { Object: var container } =>
+                SourcePath(expr: container) is { } owner
+                    ? $"{owner}[]"
+                    : null,
+            _ => null
+        };
+    }
+
+    /// <summary>A fresh copy of a name / field chain / element read, keeping every level's resolved type.</summary>
+    private static Expression CopyReadPath(Expression expr)
+    {
+        return expr switch
+        {
+            MemberExpression member => member with { Object = CopyReadPath(expr: member.Object) },
+            IndexExpression index => index with { Object = CopyReadPath(expr: index.Object) },
+            _ => expr with { }
+        };
     }
 
     private bool HasShapeUse(Expression container)

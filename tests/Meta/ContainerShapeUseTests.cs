@@ -30,6 +30,22 @@ public sealed class ContainerShapeUseTests
         Assert.Contains(expectedSubstring: "ReshapingWhileInUseError", actualString: stderr);
     }
 
+    /// <summary>
+    /// The loop source is a field (<c>me.items</c>), not a plain name. It used to go unbracketed, so the loop
+    /// silently skipped the element added behind it.
+    /// </summary>
+    [Fact]
+    public void IndirectReshapeDuringEachOverAField_CrashesWithReshapingWhileInUse()
+    {
+        (int exit, string stdout, string stderr) = RunFixture(fixture: "indirect_reshape_field_each.sf");
+
+        Assert.True(condition: exit != 0,
+            userMessage: $"expected a crash, got exit 0\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        Assert.Contains(expectedSubstring: "visiting 1", actualString: stdout);
+        Assert.DoesNotContain(expectedSubstring: "not reached", actualString: stdout);
+        Assert.Contains(expectedSubstring: "ReshapingWhileInUseError", actualString: stderr);
+    }
+
     private static (int Exit, string Stdout, string Stderr) RunFixture(string fixture)
     {
         string rfPath = Path.Combine(paths: [RepoRoot, "tests", "Fixtures", "ShapeUse", fixture]);

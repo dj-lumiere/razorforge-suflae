@@ -666,7 +666,8 @@ public sealed partial class SemanticVerifier
 
     private static bool IsPathPrefixOrEqual(string prefix, string path)
     {
-        return path == prefix || path.StartsWith(value: prefix + ".");
+        return path == prefix || path.StartsWith(value: prefix + ".") ||
+               path.StartsWith(value: prefix + "[");
     }
 
     /// <summary>Every expression inside <paramref name="expr"/>, itself included.</summary>
