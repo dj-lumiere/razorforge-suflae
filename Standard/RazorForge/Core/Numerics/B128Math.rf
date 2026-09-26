@@ -1,14 +1,17 @@
 module Core
 
 # ============================================================================
-# B128 transcendentals — faithful ports of TLFloat's Quad math. The cores are
-# WIDTH-GENERIC member routines on UnpackedFloat[N, N2]. EVERY B128 transcendental
-# now computes on the UNIFORM W=192 engine (UnpackedFloat[3, 6]): a 192-bit
-# mantissa carries 79 guard bits over B128's 113-bit significand, so all of them are
-# faithfully ~1 ULP. (B128 DIRECT arithmetic add/sub/mul/div stays on the W=128 packed
-# core; only the transcendentals route through W=192.) Constants/coefficients come from
-# B128Const.rf (W-dispatched; every table has a W==192 branch). Each B128 method casts
-# in via me.to_uf192() and out via .to_b128().
+# B128 transcendentals. The functions CORE-MATH provides for binary128 (acos, asin, atan,
+# atan2, cbrt, cos, exp, exp10, exp2, expm1, hypot, log, sin, sqrt) are correctly rounded
+# integer ports in CoreMath/B128*.rf. The rest (tan, sinh/cosh/tanh, asinh/acosh/atanh,
+# log2/log10/log1p, pow, sinpi/cospi/tanpi, erf/erfc, tgamma/lgamma) are ports of TLFloat's
+# Quad math on the W=192 engine (UnpackedFloat[3, 6]): a 192-bit mantissa carries 79 guard
+# bits over B128's 113-bit significand, so they are faithful (within 1 ULP). Against MPFR on
+# 20000 inputs each (2026-09-26) all of them were correctly rounded except 3 sinpi/cospi
+# results off by 1 ULP, but that is measured, not proven. The cores are WIDTH-GENERIC member
+# routines on UnpackedFloat[N, N2] (D64/D128/Decimal use them too). Constants/coefficients
+# come from B128Const.rf (W-dispatched; every table has a W==192 branch). Each B128 method
+# casts in via me.to_uf192() and out via .to_b128().
 # ============================================================================
 
 ### exp on the unpacked engine (TLFloat exp_, N=20, M=1).
@@ -428,7 +431,10 @@ routine UnpackedFloat[N, N2].asinh() -> UnpackedFloat[N, N2]
   # n=24 gives ~2^-130 (> B128's 113-bit / D128's 34-digit target) with NO reduction
   # sqrt. The old m=1 paid a SECOND wide-engine sqrt (~1126 ns) on top of the inherent
   # sqrt(x^2+1) for precision nothing downstream uses. atanh already runs m=0 here.
-  var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else d.sub(you: one).add(you: y).log1p(n: 24_s64, m: 0_s64)
+  # For |x| <= 1 the log1p argument is y + y^2/(1 + sqrt(1 + y^2)), which equals sqrt(1 + y^2) - 1 + y but
+  # subtracts nothing: the old `d - 1 + y` added sqrt's last-bit error (~2^-190) to a small y, so below
+  # |x| ~ 2^-76 the result lost its last bits and for tiny x came back as a negative ~-2^-190.
+  var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else y.mul(you: y).div(you: d.add(you: one)).add(you: y).log1p(n: 24_s64, m: 0_s64)
   if me.sign()
     res = res.neg()
   return res
@@ -469,10 +475,6 @@ routine B128.exp!() -> B128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### `e^me` with raw IEEE propagation (NaN -> qNaN, +inf -> +inf, -inf -> +0). No crash.
-routine B128.exp_unchecked() -> B128
-  return me.exp_unchecked_n(n: 20_s64)
-
 ### `e^me` raw IEEE, with the exp-series explicit atanh/exp-series term count `n`.
 routine B128.exp_unchecked_n(n: S64) -> B128
   if me.is_nan()
@@ -491,10 +493,6 @@ routine B128.log!() -> B128
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### `ln(me)` with raw IEEE (NaN/0 -> -inf, x<0 -> qNaN, +inf -> +inf). No crash.
-routine B128.log_unchecked() -> B128
-  return me.log_unchecked_n(n: 23_s64)
 
 ### `ln(me)` raw IEEE, with the atanh-series term count sized to a TARGET precision (bits) rather
 ### than the full 128-bit width — the operation owns its iteration count, keyed on what the caller
@@ -520,10 +518,6 @@ routine B128.expm1!() -> B128
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### `e^me - 1` with raw IEEE (NaN -> qNaN, -inf -> -1, +inf -> +inf). No crash.
-routine B128.expm1_unchecked() -> B128
-  return me.expm1_unchecked_n(n: 21_s64)
 
 ### `e^me - 1` raw IEEE, explicit atanh/exp-series term count `n`.
 routine B128.expm1_unchecked_n(n: S64) -> B128
@@ -613,12 +607,6 @@ routine B128.log10_unchecked_n(n: S64) -> B128
     return me
   return me.to_uf192().log(n: n, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[3, 6].recip_ln10()).to_b128()
 
-### Returns the cube root `cbrt(me)`.
-routine B128.cbrt() -> B128
-  if me.is_zero() or me.is_infinite() or me.is_nan()
-    return me
-  return me.to_uf192().cbrt().to_b128()
-
 ### Returns `2^me` (computed on the W=192 engine).
 routine B128.exp2!() -> B128
   var rr = me.exp2_unchecked()
@@ -628,16 +616,6 @@ routine B128.exp2!() -> B128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### `2^me` with raw IEEE (W=192: e^(me*ln2)). No crash.
-routine B128.exp2_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_infinite()
-    if me.is_negative()
-      return B128.from_bits(bits: 0_u128)
-    return me
-  return me.to_uf192().mul(you: UnpackedFloat[3, 6].ln2()).exp(n: 20_s64).to_b128()
-
 ### Returns `10^me` (computed on the W=192 engine).
 routine B128.exp10!() -> B128
   var rr = me.exp10_unchecked()
@@ -646,16 +624,6 @@ routine B128.exp10!() -> B128
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### `10^me` with raw IEEE (W=192: e^(me*ln10)). No crash.
-routine B128.exp10_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_infinite()
-    if me.is_negative()
-      return B128.from_bits(bits: 0_u128)
-    return me
-  return me.to_uf192().mul(you: UnpackedFloat[3, 6].ln10()).exp(n: 20_s64).to_b128()
 
 ### Returns `me ^ you` (computed on the W=192 engine).
 routine B128.pow!(you: B128) -> B128
@@ -744,12 +712,6 @@ routine B128.pow_unchecked_p(you: B128, logn: S64, expn: S64, fast: Bool) -> B12
     z = z.neg()
   return z.to_b128()
 
-### Returns `atan(me)`.
-routine B128.atan() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  return me.to_uf192().atan().to_b128()
-
 ### Returns `asin(me)`.
 routine B128.asin!() -> B128
   var rr = me.asin_unchecked()
@@ -759,12 +721,6 @@ routine B128.asin!() -> B128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### `asin(me)` with raw IEEE (|me|>1 -> qNaN). No crash.
-routine B128.asin_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  return me.to_uf192().asin().to_b128()
-
 ### Returns `acos(me)`.
 routine B128.acos!() -> B128
   var rr = me.acos_unchecked()
@@ -773,33 +729,6 @@ routine B128.acos!() -> B128
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### `acos(me)` with raw IEEE (|me|>1 -> qNaN). No crash.
-routine B128.acos_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  return me.to_uf192().acos().to_b128()
-
-### Returns `atan2(y, x)`.
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-routine atan2(y: B128, x: B128) -> B128
-  if y.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: y.to_bits()))
-  if x.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: x.to_bits()))
-  var yu = y.to_uf192()
-  var xu = x.to_uf192()
-  if y.is_infinite() or x.is_infinite()
-    var one = UnpackedFloat[3, 6].from_s64(src: 1_s64)
-    var negone = one.neg()
-    var yinf = if y.is_negative() then negone else one
-    var yfin = UnpackedFloat[3, 6].zero(sign: y.is_negative())
-    yu = if y.is_infinite() then yinf else yfin
-    var xinf = if x.is_negative() then negone else one
-    var xfin = UnpackedFloat[3, 6].zero(sign: x.is_negative())
-    xu = if x.is_infinite() then xinf else xfin
-  return yu.atan2(x0: xu).to_b128()
 
 ### Degree/depth-reduced inverse-trig for sub-113-bit targets (D64). atan/asin/acos all funnel
 ### through atan2; these thread reduced `deg`/`depth` to the B128-width core. Already B128 width
@@ -1085,10 +1014,6 @@ routine UnpackedFloat[N, N2].cos_n(cn: S64) -> UnpackedFloat[N, N2]
 routine UnpackedFloat[N, N2].cos() -> UnpackedFloat[N, N2]
   return me.cos_n(cn: 14_s64)
 
-### Returns `sin(me)`.
-routine B128.sin() -> B128
-  return me.sin_n(n: 14_s64)
-
 ### `sin(me)` with the series explicit atanh/exp-series term count `n`.
 routine B128.sin_n(n: S64) -> B128
   if me.is_nan()
@@ -1096,10 +1021,6 @@ routine B128.sin_n(n: S64) -> B128
   if me.is_infinite()
     return B128.from_bits(bits: b128_qnan())
   return me.to_uf192().sin(n: n).to_b128()
-
-### Returns `cos(me)`.
-routine B128.cos() -> B128
-  return me.cos_n(n: 14_s64)
 
 ### `cos(me)` with the cos-series explicit term count `n`.
 routine B128.cos_n(n: S64) -> B128
@@ -1200,18 +1121,6 @@ routine hypot!(x: B128, y: B128) -> B128
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### `sqrt(x^2 + y^2)` with raw IEEE (any inf -> +inf, any NaN -> qNaN). No crash.
-### :param x: One leg.
-### :param y: The other leg.
-routine hypot_unchecked(x: B128, y: B128) -> B128
-  var xx = x.to_uf192()
-  var yy = y.to_uf192()
-  if xx.isinf() or yy.isinf()
-    return B128.from_bits(bits: b128_inf(sign: 0_u64))
-  if xx.isnan() or yy.isnan()
-    return B128.from_bits(bits: b128_qnan())
-  return xx.mul(you: xx).add(you: yy.mul(you: yy)).sqrt().to_b128()
 
 ### Returns `sqrt(x^2 + y^2 + z^2)` without spurious overflow. Checked: crashes on non-finite.
 ### :param x: First leg.

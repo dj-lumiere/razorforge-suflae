@@ -1,0 +1,668 @@
+module Core
+
+# ============================================================================
+# Correctly rounded sine and cosine of B128: the shared pipeline
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/sin/sinq.c and src/binary128/cos/cosq.c
+# (https://core-math.gitlabpages.inria.fr/), themselves a C port of the binary128 sine/cosine of metallic-rs.
+# Copyright (c) 2026 Chen-Pang He <jdh863@gmail.com>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped).
+#
+# The sine is odd and the cosine even, so both run one pipeline on |x| in unsigned fixed point:
+# 1. Reduce: x*2/pi is formed as the exact product of the 113-bit significand with a window of 2/pi cut
+#    from 64-bit limbs at the exponent (Payne-Hanek), six limbs on the fast path and ten on the accurate one.
+# 2. Split: n = round(256*x/pi) mod 512 gives the quadrant n>>7 and a breakpoint j = n & 127, leaving a
+#    signed residual g with |g| <= 1/256, normalized into a floating fraction at its own exponent.
+# 3. Evaluate: sin(theta) and 1 - cos(theta) for theta = g*pi/2 by short polynomials (fast path, 128 bits)
+#    or eighteen Taylor terms summed in three tiers of 128, 256 and 384 bits (accurate path).
+# 4. Recombine with tables of sin(j*pi/256) and cos(j*pi/256).
+# 5. Round: the fast path keeps a 15-bit guard and hands anything within 16 units of the rounding midpoint
+#    to the 384-bit path, which rounds outright.
+# Below |x| = 2^-8 there is nothing to reduce, and below 2^-57 sin(x) rounds to x and cos(x) to 1.
+#
+# Wide values are tuples of 128-bit limbs, least significant first: (l0, l1) for 256 bits and (l0, l1, l2)
+# for 384 bits.
+
+### The shared sine/cosine entry.
+### :param bits: The argument's bits.
+### :param cosine: True for the cosine, false for the sine.
+### :returns: The bits of the correctly rounded result.
+secret routine b128_trig(bits: U128, cosine: Bool) -> U128
+  var signmask = 1_u128 << 127
+  var expmask = 0x7FFF_u128 << 112
+  var implicit = 1_u128 << 112
+  var ax = bits & (signmask -% 1)
+  if ax >= expmask
+    if ax == expmask
+      # +-infinity: the positive default quiet NaN
+      return expmask | (1_u128 << 111)
+    # NaN: quiet it, keep sign and payload
+    return bits | (1_u128 << 111)
+  if ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
+    # |x| < 2^-57: sin(x) rounds to x, cos(x) to 1
+    if cosine
+      return 0x3FFF_u128 << 112
+    return bits
+  var m = (ax & (implicit -% 1)) | implicit
+  var sign = 0_u128
+  if not cosine
+    sign = bits & signmask
+  var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
+  var fr = b128_trig_fast(m: m, e: e, cosine: cosine)
+  if fr.item0
+    # round on the fixed 15-bit guard unless it sits within 16 units of the midpoint
+    var frac = fr.item1
+    var rest = LLVM::int_truncate[U128, U64](frac) & 0x7FFF_u64
+    if ((rest +% 16_u64 -% 0x4000_u64) & 0x7FFF_u64) > 32_u64
+      var up = 0_u128
+      if rest > 0x4000_u64
+        up = 1
+      var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](fr.item2 +% 16382)) << 112
+      return (sign ^ fr.item3) | (((ex +% (frac >>> 15)) -% implicit) +% up)
+  return b128_trig_accurate(m: m, e: e, cosine: cosine, sign: sign)
+
+### A shift amount as the U32 the shift operators take.
+@inline
+secret routine b128_trig_sh(n: S64) -> U32
+  return LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](n))
+
+### Builds a 128-bit integer from two 64-bit halves.
+@inline
+secret routine b128_trig_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### Leading zeros of a 128-bit value, 128 when it is zero.
+@inline
+secret routine b128_trig_clz128(x: U128) -> S64
+  var h = LLVM::int_truncate[U128, U64](x >>> 64)
+  if h != 0
+    return LLVM::reinterpret_bits[U64, S64](h.leading_zeros())
+  var l = LLVM::int_truncate[U128, U64](x)
+  if l != 0
+    return 64 +% LLVM::reinterpret_bits[U64, S64](l.leading_zeros())
+  return 128
+
+### The low 64 bits of (high:low) >> shift, for shift < 64.
+@inline
+secret routine b128_trig_funnel(low: U64, high: U64, shift: U32) -> U64
+  return (low >>> shift) | ((high << 1) << (63_u32 -% shift))
+
+### Full 128x128-bit product.
+### :returns: The high and low halves.
+@inline
+secret routine b128_trig_wmul(x: U128, y: U128) -> (U128, U128)
+  var mask = 0xFFFFFFFFFFFFFFFF_u128
+  var xl = x & mask
+  var xh = x >>> 64
+  var yl = y & mask
+  var yh = y >>> 64
+  var ll = xl *% yl
+  var lh = xl *% yh
+  var hl = xh *% yl
+  var hh = xh *% yh
+  var mid = ((ll >>> 64) +% (lh & mask)) +% (hl & mask)
+  var low = (mid << 64) | (ll & mask)
+  var high = ((hh +% (lh >>> 64)) +% (hl >>> 64)) +% (mid >>> 64)
+  return (high, low)
+
+### Approximate high half of a 128x128-bit product from three 64-bit products: up to two units short of the
+### exact high half, never over.
+@inline
+secret routine b128_trig_mhi(x: U128, y: U128) -> U128
+  var mask = 0xFFFFFFFFFFFFFFFF_u128
+  var xh = x >>> 64
+  var xl = x & mask
+  var yh = y >>> 64
+  var yl = y & mask
+  return ((xh *% yh) +% ((xh *% yl) >>> 64)) +% ((xl *% yh) >>> 64)
+
+@inline
+secret routine b128_trig_add256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
+  var r0 = a.item0 +% b.item0
+  var c = 0_u128
+  if r0 < a.item0
+    c = 1
+  return (r0, (a.item1 +% b.item1) +% c)
+
+@inline
+secret routine b128_trig_sub256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
+  var c = 0_u128
+  if a.item0 < b.item0
+    c = 1
+  return (a.item0 -% b.item0, (a.item1 -% b.item1) -% c)
+
+### f << shift in the 256-bit frame, for shift < 128.
+@inline
+secret routine b128_trig_place256(f: U128, shift: S64) -> (U128, U128)
+  return (f << b128_trig_sh(n: shift), (f >>> 1) >>> b128_trig_sh(n: 127 -% shift))
+
+### The top 128 bits of s << shift, for shift < 64.
+@inline
+secret routine b128_trig_top256(s: (U128, U128), shift: S64) -> U128
+  return (s.item1 << b128_trig_sh(n: shift)) | ((s.item0 >>> 1) >>> b128_trig_sh(n: 127 -% shift))
+
+secret routine b128_trig_add384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
+  var r0 = a.item0 +% b.item0
+  var c0 = 0_u128
+  if r0 < a.item0
+    c0 = 1
+  var r1 = a.item1 +% b.item1
+  var c1 = 0_u128
+  if r1 < a.item1
+    c1 = 1
+  var r1b = r1 +% c0
+  var c2 = 0_u128
+  if r1b < r1
+    c2 = 1
+  return (r0, r1b, ((a.item2 +% b.item2) +% c1) +% c2)
+
+secret routine b128_trig_sub384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
+  var c0 = 0_u128
+  if a.item0 < b.item0
+    c0 = 1
+  var r1 = a.item1 -% b.item1
+  var c1 = 0_u128
+  if a.item1 < b.item1
+    c1 = 1
+  var c2 = 0_u128
+  if r1 < c0
+    c2 = 1
+  return (a.item0 -% b.item0, r1 -% c0, ((a.item2 -% b.item2) -% c1) -% c2)
+
+### x << shift, discarding whatever leaves the window, for shift < 384.
+secret routine b128_trig_shl384(x: (U128, U128, U128), shift: S64) -> (U128, U128, U128)
+  var word = (shift >> 7)
+  var bits = (shift & 127)
+  var b = b128_trig_sh(n: bits)
+  var cb = b128_trig_sh(n: 128 -% bits)
+  if word == 0
+    if bits == 0
+      return x
+    return (x.item0 << b, (x.item1 << b) | (x.item0 >>> cb), (x.item2 << b) | (x.item1 >>> cb))
+  if word == 1
+    if bits == 0
+      return (0_u128, x.item0, x.item1)
+    return (0_u128, x.item0 << b, (x.item1 << b) | (x.item0 >>> cb))
+  return (0_u128, 0_u128, x.item0 << b)
+
+### x >> shift, saturating to zero past the window.
+secret routine b128_trig_shr384(x: (U128, U128, U128), shift: S64) -> (U128, U128, U128)
+  if shift >= 384
+    return (0_u128, 0_u128, 0_u128)
+  var word = (shift >> 7)
+  var bits = (shift & 127)
+  var b = b128_trig_sh(n: bits)
+  var cb = b128_trig_sh(n: 128 -% bits)
+  if word == 0
+    if bits == 0
+      return x
+    return ((x.item0 >>> b) | (x.item1 << cb), (x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b)
+  if word == 1
+    if bits == 0
+      return (x.item1, x.item2, 0_u128)
+    return ((x.item1 >>> b) | (x.item2 << cb), x.item2 >>> b, 0_u128)
+  return (x.item2 >>> b, 0_u128, 0_u128)
+
+### Leading zeros of a 384-bit value, 384 when it is zero.
+secret routine b128_trig_lz384(x: (U128, U128, U128)) -> S64
+  if x.item2 != 0
+    return b128_trig_clz128(x: x.item2)
+  if x.item1 != 0
+    return 128 +% b128_trig_clz128(x: x.item1)
+  return 256 +% b128_trig_clz128(x: x.item0)
+
+### High 384 bits of a 384x384-bit product: the dropped tail leaves it up to four units short of the exact
+### value, never over.
+secret routine b128_trig_mul384(a: (U128, U128, U128), b: (U128, U128, U128)) -> (U128, U128, U128)
+  var p02 = b128_trig_wmul(x: a.item0, y: b.item2)
+  var p11 = b128_trig_wmul(x: a.item1, y: b.item1)
+  var p20 = b128_trig_wmul(x: a.item2, y: b.item0)
+  var p12 = b128_trig_wmul(x: a.item1, y: b.item2)
+  var p21 = b128_trig_wmul(x: a.item2, y: b.item1)
+  var p22 = b128_trig_wmul(x: a.item2, y: b.item2)
+  # the diagonal one limb below the window contributes its high halves plus the carry of its low halves
+  var sum = p02.item1 +% p11.item1
+  var carries = 0_u128
+  if sum < p02.item1
+    carries = carries +% 1
+  var sum2 = sum +% p20.item1
+  if sum2 < sum
+    carries = carries +% 1
+  var diag = p02.item0 +% p11.item0
+  var hc = 0_u128
+  if diag < p02.item0
+    hc = hc +% 1
+  var diag2 = diag +% p20.item0
+  if diag2 < diag
+    hc = hc +% 1
+  var diag3 = diag2 +% carries
+  if diag3 < diag2
+    hc = hc +% 1
+  var t12 = b128_trig_add384(a: (p12.item1, p12.item0, 0_u128), b: (p21.item1, p21.item0, 0_u128))
+  var t34 = b128_trig_add384(a: (0_u128, p22.item1, p22.item0), b: (diag3, hc, 0_u128))
+  return b128_trig_add384(a: t12, b: t34)
+
+### High 256 bits of a 256x256-bit product: the dropped tail leaves it up to one unit short of the exact
+### value, never over.
+secret routine b128_trig_mul256(a: (U128, U128), b: (U128, U128)) -> (U128, U128)
+  var hh = b128_trig_wmul(x: a.item1, y: b.item1)
+  var cr = b128_trig_wmul(x: a.item1, y: b.item0)
+  var ot = b128_trig_wmul(x: a.item0, y: b.item1)
+  # the two cross terms and the top of a0*b0 land one limb below the window: only their carry survives
+  var sum = cr.item1 +% ot.item1
+  var carry = 0_u128
+  if sum < cr.item1
+    carry = 1
+  var sum2 = sum +% b128_trig_mhi(x: a.item0, y: b.item0)
+  if sum2 < sum
+    carry = carry +% 1
+  var middle = cr.item0 +% ot.item0
+  var hc = 0_u128
+  if middle < cr.item0
+    hc = 1
+  var middle2 = middle +% carry
+  if middle2 < middle
+    hc = hc +% 1
+  var low = hh.item1 +% middle2
+  if low < middle2
+    hc = hc +% 1
+  return (low, hh.item0 +% hc)
+
+### Limb `limb` (0 = least significant) of sin(j*pi/256) (w = 0) or cos(j*pi/256) (w = 1) times 2^384.
+@inline
+secret routine b128_trig_sincos(j: S64, w: S64, limb: S64) -> U128
+  var idx = LLVM::reinterpret_bits[S64, U64](((j *% 2 +% w) *% 3 +% limb) *% 2)
+  return b128_trig_u128(hi: B128_TRIG_SINCOS[idx], lo: B128_TRIG_SINCOS[idx +% 1])
+
+@inline
+secret routine b128_trig_sincos384(j: S64, w: S64) -> (U128, U128, U128)
+  return (b128_trig_sincos(j: j, w: w, limb: 0), b128_trig_sincos(j: j, w: w, limb: 1), b128_trig_sincos(j: j, w: w, limb: 2))
+
+### Limb `limb` of the Taylor coefficient k of the sine (cosine false) or cosine (cosine true) series.
+@inline
+secret routine b128_trig_coef(cosine: Bool, k: S64, limb: S64) -> U128
+  var idx = LLVM::reinterpret_bits[S64, U64]((k *% 3 +% limb) *% 2)
+  if cosine
+    return b128_trig_u128(hi: B128_TRIG_COS_COEF[idx], lo: B128_TRIG_COS_COEF[idx +% 1])
+  return b128_trig_u128(hi: B128_TRIG_SIN_COEF[idx], lo: B128_TRIG_SIN_COEF[idx +% 1])
+
+### m*win as W+3 little-endian 64-bit limbs, for the window of W limbs of 2/pi starting at limb `wo` (most
+### significant first): the product fills W+2 of them and the spare top limb stays zero.
+secret routine b128_trig_product(m: U128, wo: U64, w: S64) -> Array[U64, 13]
+  var p = Array[U64, 13]()
+  var low = m & 0xFFFFFFFFFFFFFFFF_u128
+  var high = m >>> 64
+  var carry = 0_u128
+  var c = 0_s64
+  while c < w +% 3
+    var cur = 0_u128
+    if c < w
+      cur = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% 1 -% c)])
+    var prev = 0_u128
+    if c >= 1 and c <= w
+      prev = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% LLVM::reinterpret_bits[S64, U64](w -% c)])
+    # high < 2^49 keeps the first sum under 2^114, only the second can spill
+    var acc = (high *% prev) +% carry
+    var t = acc +% (low *% cur)
+    var spill = 0_u128
+    if t < acc
+      spill = 1_u128 << 64
+    p[LLVM::reinterpret_bits[S64, U64](c)] = LLVM::int_truncate[U128, U64](t)
+    carry = (t >>> 64) | spill
+    c = c +% 1
+  return p
+
+### One column of the product m*window: (high*prev + carry) + low*cur, whose low 64 bits are the column's limb.
+### :returns: The limb and the carry into the next column.
+@inline
+secret routine b128_trig_pstep(low: U128, high: U128, cur: U128, prev: U128, carry: U128) -> (U64, U128)
+  # high < 2^49 keeps the first sum under 2^114, only the second can spill
+  var acc = (high *% prev) +% carry
+  var t = acc +% (low *% cur)
+  var spill = 0_u128
+  if t < acc
+    spill = 1_u128 << 64
+  return (LLVM::int_truncate[U128, U64](t), (t >>> 64) | spill)
+
+### The 2/pi window for x = m*2^(e-112): bits of 2/pi above position e-114 contribute multiples of 4 to
+### x*2/pi, so the window starts at the limb holding bit e-113.
+### :returns: The window's first limb and how far the units bit of x*2/pi sits below the product's bit
+### 64*W-2 (negative below |x| = 2^114, where the window is the top of 2/pi).
+@inline
+secret routine b128_trig_window(e: S64) -> (U64, S64)
+  var big = e -% 114
+  if big >= 0
+    return (LLVM::reinterpret_bits[S64, U64]((big >> 6)), (big & 63))
+  return (0_u64, big)
+
+### Payne-Hanek on six limbs of 2/pi.
+### :returns: Whether the residual keeps at least 136 of the fraction's 192 bits, n = round(256*x/pi) mod
+### 512, whether g < 0, and the reduced angle theta = |g|*pi/2 as t1*2^(et-128).
+secret routine b128_trig_reduce(m: U128, e: S64) -> (Bool, S64, Bool, U128, S64)
+  var win = b128_trig_window(e: e)
+  # m times the six-limb window, unrolled: limb c of the product is p_c (p8 is the spare top limb, always 0)
+  var wo = win.item0
+  var w0 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo])
+  var w1 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 1])
+  var w2 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 2])
+  var w3 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 3])
+  var w4 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 4])
+  var w5 = LLVM::zero_extend[U64, U128](B128_TRIG_FRAC_2_PI[wo +% 5])
+  var ml = m & 0xFFFFFFFFFFFFFFFF_u128
+  var mh = m >>> 64
+  var s0 = b128_trig_pstep(low: ml, high: mh, cur: w5, prev: 0_u128, carry: 0_u128)
+  var s1 = b128_trig_pstep(low: ml, high: mh, cur: w4, prev: w5, carry: s0.item1)
+  var s2 = b128_trig_pstep(low: ml, high: mh, cur: w3, prev: w4, carry: s1.item1)
+  var s3 = b128_trig_pstep(low: ml, high: mh, cur: w2, prev: w3, carry: s2.item1)
+  var s4 = b128_trig_pstep(low: ml, high: mh, cur: w1, prev: w2, carry: s3.item1)
+  var s5 = b128_trig_pstep(low: ml, high: mh, cur: w0, prev: w1, carry: s4.item1)
+  var s6 = b128_trig_pstep(low: ml, high: mh, cur: 0_u128, prev: w0, carry: s5.item1)
+  var p7 = LLVM::int_truncate[U128, U64](s6.item1)
+  # the fraction is the 192 bits below the units bit, the quadrant the two above: limbs i ..= i+4, 1 <= i <= 4
+  var base = 190 -% win.item1
+  var i = (base >> 6) & 7
+  var bits = b128_trig_sh(n: (base & 63))
+  var a0 = s1.item0
+  var a1 = s2.item0
+  var a2 = s3.item0
+  var a3 = s4.item0
+  var a4 = s5.item0
+  if i == 2
+    a0 = s2.item0
+    a1 = s3.item0
+    a2 = s4.item0
+    a3 = s5.item0
+    a4 = s6.item0
+  elseif i == 3
+    a0 = s3.item0
+    a1 = s4.item0
+    a2 = s5.item0
+    a3 = s6.item0
+    a4 = p7
+  elseif i == 4
+    a0 = s4.item0
+    a1 = s5.item0
+    a2 = s6.item0
+    a3 = p7
+    a4 = 0_u64
+  var f0 = b128_trig_funnel(low: a0, high: a1, shift: bits)
+  var f1 = b128_trig_funnel(low: a1, high: a2, shift: bits)
+  var f2 = b128_trig_funnel(low: a2, high: a3, shift: bits)
+  var quadrant = b128_trig_funnel(low: a3, high: a4, shift: bits) & 3
+  # n = round(256*x/pi), the residual's top limb becomes signed
+  var top = b128_trig_u128(hi: quadrant, lo: f2)
+  var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
+  var n = LLVM::reinterpret_bits[U64, S64](nu)
+  f2 = f2 -% ((nu & 127) << 57)
+  var negative = (f2 >>> 63) != 0
+  var mask = 0_u64
+  var neg1 = 0_u64
+  if negative
+    mask = 0xFFFFFFFFFFFFFFFF_u64
+    neg1 = 1
+  var g0 = (f0 ^ mask) +% neg1
+  var c0 = 0_u64
+  if g0 < neg1
+    c0 = 1
+  var g1 = (f1 ^ mask) +% c0
+  var c1 = 0_u64
+  if g1 < c0
+    c1 = 1
+  var g2 = (f2 ^ mask) +% c1
+  if g2 == 0
+    return (false, 0_s64, false, 0_u128, 0_s64)
+  var lz = LLVM::reinterpret_bits[U64, S64](g2.leading_zeros())
+  if lz > 56
+    return (false, 0_s64, false, 0_u128, 0_s64)
+  # |g| <= 1/256 leaves at least seven leading zeros, so every shift below is in range
+  var sl = b128_trig_sh(n: lz)
+  var sr = b128_trig_sh(n: 64 -% lz)
+  var high = (g2 << sl) | (g1 >>> sr)
+  var low = (g1 << sl) | (g0 >>> sr)
+  var g = b128_trig_u128(hi: high, lo: low)
+  var pp = b128_trig_wmul(x: g, y: 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
+  var lzt = b128_trig_clz128(x: pp.item0)
+  var t1 = b128_trig_top256(s: (pp.item1, pp.item0), shift: lzt)
+  return (true, n, negative, t1, 1 -% (lz +% lzt))
+
+### theta^2 rounded into a 2^-128 word (u), theta^4 likewise (v), and the unshifted theta^2 =
+### u1*2^(2*et-128) the cosine's correction rides on.
+### :returns: (u, v, u1).
+@inline
+secret routine b128_trig_squares(t1: U128, et: S64) -> (U128, U128, U128)
+  var u1 = b128_trig_mhi(x: t1, y: t1)
+  var s = 0 -% (et +% et)
+  var u = (u1 >>> b128_trig_sh(n: s)) | ((u1 >>> b128_trig_sh(n: s -% 1)) & 1)
+  return (u, b128_trig_mhi(x: u, y: u), u1)
+
+### sin(theta) in theta's own floating form: t1*(1 - u*(A - u*B)) with the even and odd halves of a
+### degree-four minimax for (1 - sin(sqrt(u))/sqrt(u))/u in v.
+@inline
+secret routine b128_trig_sin_frac(t1: U128, u: U128, v: U128) -> U128
+  var s0 = 0x2AAAAAAAAAAAAAAAAAAAAAAAAAAA8B20_u128
+  var s1 = 0x02222222222222222222221FA2FD1243_u128
+  var s2 = 0x000D00D00D00D00D00C7F4BE42E1A641_u128
+  var s3 = 0x00002E3BC74AAD85378E3E9D9C3058A3_u128
+  var s4 = 0x0000006B99115EA3FD77EEA5743FF7BE_u128
+  var a = s0 +% b128_trig_mhi(x: v, y: s2 +% b128_trig_mhi(x: v, y: s4))
+  var b = s1 +% b128_trig_mhi(x: v, y: s3)
+  return t1 -% b128_trig_mhi(x: b128_trig_mhi(x: t1, y: u), y: a -% b128_trig_mhi(x: u, y: b))
+
+### 1 - cos(theta) as the floating fraction c1*2^(2*et-128): theta^2*(1/2 - u*W) with W the even and odd
+### halves of sum (-1)^k u^k/(2k+4)! in v, six terms.
+@inline
+secret routine b128_trig_cos_corr(u1: U128, u: U128, v: U128) -> U128
+  var c0 = b128_trig_coef(cosine: true, k: 0, limb: 2)
+  var c1 = b128_trig_coef(cosine: true, k: 1, limb: 2)
+  var c2 = b128_trig_coef(cosine: true, k: 2, limb: 2)
+  var c3 = b128_trig_coef(cosine: true, k: 3, limb: 2)
+  var c4 = b128_trig_coef(cosine: true, k: 4, limb: 2)
+  var c5 = b128_trig_coef(cosine: true, k: 5, limb: 2)
+  var e = c1 +% b128_trig_mhi(x: v, y: c3 +% b128_trig_mhi(x: v, y: c5))
+  var o = c2 +% b128_trig_mhi(x: v, y: c4)
+  return b128_trig_mhi(x: u1, y: c0 -% b128_trig_mhi(x: u, y: e -% b128_trig_mhi(x: u, y: o)))
+
+### The fast path.
+### :returns: Whether the reduction vouches for the result, the magnitude as a floating 128-bit fraction
+### frac*2^(e2-128), e2, and the sign it contributes.
+secret routine b128_trig_fast(m: U128, e: S64, cosine: Bool) -> (Bool, U128, S64, U128)
+  var signmask = 1_u128 << 127
+  if e < -8
+    # below 2^-8 the argument is its own reduced angle
+    var t1 = m << 15
+    var et = e +% 1
+    var sq = b128_trig_squares(t1: t1, et: et)
+    if cosine
+      var all = (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128)
+      var cc = b128_trig_place256(f: b128_trig_cos_corr(u1: sq.item2, u: sq.item0, v: sq.item1), shift: 2 *% et +% 128)
+      return (true, b128_trig_sub256(a: all, b: cc).item1, 0_s64, 0_u128)
+    # sin(theta) < theta drops a leading bit when t1 starts a binade
+    var s1 = b128_trig_sin_frac(t1: t1, u: sq.item0, v: sq.item1)
+    var lz = b128_trig_clz128(x: s1)
+    return (true, s1 << b128_trig_sh(n: lz), et -% lz, 0_u128)
+  var r = b128_trig_reduce(m: m, e: e)
+  if not r.item0
+    return (false, 0_u128, 0_s64, 0_u128)
+  var n = r.item1
+  var negative = r.item2
+  var rt1 = r.item3
+  var ret = r.item4
+  var sq2 = b128_trig_squares(t1: rt1, et: ret)
+  var s1b = b128_trig_sin_frac(t1: rt1, u: sq2.item0, v: sq2.item1)
+  # the cosine is the sine a quadrant on: the top bit of the quadrant is the sign, the low bit which of
+  # sin A and cos A is wanted
+  var k = (n >> 7)
+  if cosine
+    k = k +% 1
+  var want_cos = k & 1
+  var j = n & 127
+  var flip = 0_u128
+  if (k & 2) != 0
+    flip = signmask
+  if j == 0 and want_cos == 0
+    var lz2 = b128_trig_clz128(x: s1b)
+    if negative
+      flip = flip ^ signmask
+    return (true, s1b << b128_trig_sh(n: lz2), ret -% lz2, flip)
+  var c1 = b128_trig_cos_corr(u1: sq2.item2, u: sq2.item0, v: sq2.item1)
+  var first1 = b128_trig_sincos(j: j, w: want_cos, limb: 1)
+  var first2 = b128_trig_sincos(j: j, w: want_cos, limb: 2)
+  var second2 = b128_trig_sincos(j: j, w: 1 -% want_cos, limb: 2)
+  var c = b128_trig_place256(f: b128_trig_mhi(x: first2, y: c1), shift: 2 *% ret +% 128)
+  var s = b128_trig_place256(f: b128_trig_mhi(x: second2, y: s1b), shift: ret +% 128)
+  var bc = b128_trig_sub256(a: (first1, first2), b: c)
+  var f = b128_trig_add256(a: bc, b: s)
+  if negative != (want_cos != 0)
+    f = b128_trig_sub256(a: bc, b: s)
+  var lz3 = b128_trig_clz128(x: f.item1)
+  return (true, b128_trig_top256(s: f, shift: lz3), 0 -% lz3, flip)
+
+### reduce() on ten limbs of 2/pi and a 448-bit fraction.
+### :returns: n, whether g < 0, and the residual as a normalized 384-bit fraction t*2^(et-384) with et.
+secret routine b128_trig_reduce_wide(m: U128, e: S64) -> (S64, Bool, (U128, U128, U128), S64)
+  var win = b128_trig_window(e: e)
+  var p = b128_trig_product(m: m, wo: win.item0, w: 10)
+  var base = 190 -% win.item1
+  var i = LLVM::reinterpret_bits[S64, U64](((base >> 6)) & 7)
+  var bits = b128_trig_sh(n: (base & 63))
+  var f = Array[U64, 7]()
+  var k = 0_u64
+  while k < 7
+    f[k] = b128_trig_funnel(low: p[i +% k], high: p[i +% k +% 1], shift: bits)
+    k = k +% 1
+  var quadrant = b128_trig_funnel(low: p[i +% 7], high: p[i +% 8], shift: bits) & 3
+  var top = b128_trig_u128(hi: quadrant, lo: f[6])
+  var nu = LLVM::int_truncate[U128, U64]((top +% (1_u128 << 56)) >>> 57) & 511
+  f[6] = f[6] -% ((nu & 127) << 57)
+  var negative = (f[6] >>> 63) != 0
+  var mask = 0_u64
+  var carry = 0_u64
+  if negative
+    mask = 0xFFFFFFFFFFFFFFFF_u64
+    carry = 1
+  k = 0
+  while k < 7
+    var sv = (f[k] ^ mask) +% carry
+    if sv < carry
+      carry = 1
+    else
+      carry = 0
+    f[k] = sv
+    k = k +% 1
+  var lz = 448_s64
+  var kk = 6_s64
+  while kk >= 0
+    var fk = f[LLVM::reinterpret_bits[S64, U64](kk)]
+    if fk != 0
+      lz = 64 *% (6 -% kk) +% LLVM::reinterpret_bits[U64, S64](fk.leading_zeros())
+      break
+    kk = kk -% 1
+  # no binary128 comes within 2^-124 of a multiple of pi/2, so the residual keeps over 300 of its 448 bits
+  var word = LLVM::reinterpret_bits[S64, U64]((lz >> 6))
+  var wbits = (lz & 63)
+  var s = Array[U64, 7]()
+  var q = word
+  while q < 7
+    var cv = 0_u64
+    if wbits != 0 and q != word
+      cv = f[q -% word -% 1] >>> b128_trig_sh(n: 64 -% wbits)
+    s[q] = (f[q -% word] << b128_trig_sh(n: wbits)) | cv
+    q = q +% 1
+  var g = (b128_trig_u128(hi: s[2], lo: s[1]), b128_trig_u128(hi: s[4], lo: s[3]), b128_trig_u128(hi: s[6], lo: s[5]))
+  var pio2 = (0x514A08798E3404DDEF9519B3CD3A431B_u128, 0x29024E088A67CC74020BBEA63B139B22_u128, 0xC90FDAA22168C234C4C6628B80DC1CD1_u128)
+  var tt = b128_trig_mul384(a: g, b: pio2)
+  var lzt = b128_trig_clz128(x: tt.item2)
+  return (LLVM::reinterpret_bits[U64, S64](nu), negative, b128_trig_shl384(x: tt, shift: lzt), 1 -% (lz +% lzt))
+
+### sum_{k>=0} (-1)^k coef[k]*u^k, eighteen terms by Horner in three tiers: terms 11..17 at 128 bits, 2..10
+### at 256 and 0..1 at 384; every step stays positive because u*coef[k+1] < coef[k].
+secret routine b128_trig_alternating(u: (U128, U128, U128), cosine: Bool) -> (U128, U128, U128)
+  var narrow = b128_trig_coef(cosine: cosine, k: 17, limb: 2)
+  var k = 16_s64
+  while k >= 11
+    narrow = b128_trig_coef(cosine: cosine, k: k, limb: 2) -% b128_trig_mhi(x: u.item2, y: narrow)
+    k = k -% 1
+  var middle = (0_u128, narrow)
+  var u2 = (u.item1, u.item2)
+  k = 10
+  while k >= 2
+    var c = (b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
+    middle = b128_trig_sub256(a: c, b: b128_trig_mul256(a: u2, b: middle))
+    k = k -% 1
+  var q = (0_u128, middle.item0, middle.item1)
+  k = 1
+  while k >= 0
+    var c3 = (b128_trig_coef(cosine: cosine, k: k, limb: 0), b128_trig_coef(cosine: cosine, k: k, limb: 1), b128_trig_coef(cosine: cosine, k: k, limb: 2))
+    q = b128_trig_sub384(a: c3, b: b128_trig_mul384(a: u, b: q))
+    k = k -% 1
+  return q
+
+### Rounds a normalized 384-bit fraction frac*2^(e2-384) to binary128, to nearest with ties to even. The
+### result is never subnormal here: |x| >= 2^-57 keeps it above 2^-124.
+secret routine b128_trig_round384(frac: (U128, U128, U128), e2: S64, sign: U128) -> U128
+  var mantissa = frac.item2 >>> 15
+  var round_bit = (frac.item2 >>> 14) & 1
+  var sticky = ((frac.item2 & 0x3FFF_u128) | frac.item1 | frac.item0) != 0
+  var up = 0_u128
+  if round_bit != 0 and (sticky or (mantissa & 1) != 0)
+    up = 1
+  var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](e2 +% 16382)) << 112
+  return sign | ((ex +% (mantissa -% (1_u128 << 112))) +% up)
+
+### The 384-bit path: everything the fast path would not decide.
+secret routine b128_trig_accurate(m: U128, e: S64, cosine: Bool, sign: U128) -> U128
+  var signmask = 1_u128 << 127
+  var n = 0_s64
+  var negative = false
+  var t = (0_u128, 0_u128, m << 15)
+  var et = e +% 1
+  if e >= -8
+    var rw = b128_trig_reduce_wide(m: m, e: e)
+    n = rw.item0
+    negative = rw.item1
+    t = rw.item2
+    et = rw.item3
+  var u = b128_trig_shr384(x: b128_trig_mul384(a: t, b: t), shift: 0 -% (et +% et))
+  var k = n >> 7
+  if cosine
+    k = k +% 1
+  var want_cos = k & 1
+  var j = n & 127
+  var sg = sign
+  if (k & 2) != 0
+    sg = sg ^ signmask
+  # sin(theta) = theta*(1 - u*Q) keeps theta's floating form, at most one bit short
+  var s = b128_trig_sub384(a: t, b: b128_trig_mul384(a: t, b: b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: false))))
+  var lzs = b128_trig_lz384(x: s)
+  s = b128_trig_shl384(x: s, shift: lzs)
+  var es = et -% lzs
+  if j == 0 and want_cos == 0
+    if negative
+      return b128_trig_round384(frac: s, e2: es, sign: sg ^ signmask)
+    return b128_trig_round384(frac: s, e2: es, sign: sg)
+  # 1 - cos(theta) = u*Q, so T*cos(theta) = T - T*(u*Q) never overflows the frame
+  var c = b128_trig_mul384(a: u, b: b128_trig_alternating(u: u, cosine: true))
+  var first = b128_trig_sincos384(j: j, w: want_cos)
+  var second = b128_trig_sincos384(j: j, w: 1 -% want_cos)
+  var base = b128_trig_sub384(a: first, b: b128_trig_mul384(a: first, b: c))
+  var term = b128_trig_shr384(x: b128_trig_mul384(a: second, b: s), shift: 0 -% es)
+  var f = b128_trig_add384(a: base, b: term)
+  if negative != (want_cos != 0)
+    f = b128_trig_sub384(a: base, b: term)
+  var lz = b128_trig_lz384(x: f)
+  return b128_trig_round384(frac: b128_trig_shl384(x: f, shift: lz), e2: 0 -% lz, sign: sg)
+
+# 2/pi as 64-bit limbs: B128_TRIG_FRAC_2_PI[i] holds bits 64i+1 ..= 64i+64 after the binary point, most
+# significant limb first (264 limbs: a window of 10 limbs must reach exponent 16383).
+secret preset B128_TRIG_FRAC_2_PI: Array[U64, 264] = [0xa2f9836e4e441529_u64, 0xfc2757d1f534ddc0_u64, 0xdb6295993c439041_u64, 0xfe5163abdebbc561_u64, 0xb7246e3a424dd2e0_u64, 0x06492eea09d1921c_u64, 0xfe1deb1cb129a73e_u64, 0xe88235f52ebb4484_u64, 0xe99c7026b45f7e41_u64, 0x3991d639835339f4_u64, 0x9c845f8bbdf9283b_u64, 0x1ff897ffde05980f_u64, 0xef2f118b5a0a6d1f_u64, 0x6d367ecf27cb09b7_u64, 0x4f463f669e5fea2d_u64, 0x7527bac7ebe5f17b_u64, 0x3d0739f78a5292ea_u64, 0x6bfb5fb11f8d5d08_u64, 0x56033046fc7b6bab_u64, 0xf0cfbc209af4361d_u64, 0xa9e391615ee61b08_u64, 0x6599855f14a06840_u64, 0x8dffd8804d732731_u64, 0x06061556ca73a8c9_u64, 0x60e27bc08c6b47c4_u64, 0x19c367cddce8092a_u64, 0x8359c4768b961ca6_u64, 0xddaf44d15719053e_u64, 0xa5ff07053f7e33e8_u64, 0x32c2de4f98327dbb_u64, 0xc33d26ef6b1e5ef8_u64, 0x9f3a1f35caf27f1d_u64, 0x87f121907c7c246a_u64, 0xfa6ed5772d30433b_u64, 0x15c614b59d19c3c2_u64, 0xc4ad414d2c5d000c_u64, 0x467d862d71e39ac6_u64, 0x9b0062337cd2b497_u64, 0xa7b4d55537f63ed7_u64, 0x1810a3fc764d2a9d_u64, 0x64abd770f87c6357_u64, 0xb07ae715175649c0_u64, 0xd9d63b3884a7cb23_u64, 0x24778ad623545ab9_u64, 0x1f001b0af1dfce19_u64, 0xff319f6a1e666157_u64, 0x9947fbacd87f7eb7_u64, 0x652289e83260bfe6_u64, 0xcdc4ef09366cd43f_u64, 0x5dd7de16de3b5892_u64, 0x9bde2822d2e88628_u64, 0x4d58e232cac616e3_u64, 0x08cb7de050c017a7_u64, 0x1df35be01834132e_u64, 0x6212830148835b8e_u64, 0xf57fb0adf2e91e43_u64, 0x4a48d36710d8ddaa_u64, 0x425faece616aa428_u64, 0x0ab499d3f2a6067f_u64, 0x775c83c2a3883c61_u64, 0x78738a5a8cafbdd7_u64, 0x6f63a62dcbbff4ef_u64, 0x818d67c12645ca55_u64, 0x36d9cad2a8288d61_u64, 0xc277c9121426049b_u64, 0x4612c459c444c5c8_u64, 0x91b24df31700ad43_u64, 0xd4e5492910d5fdfc_u64, 0xbe00cc941eeece70_u64, 0xf53e1380f1ecc3e7_u64, 0xb328f8c79405933e_u64, 0x71c1b3092ef3450b_u64, 0x9c12887b20ab9fb5_u64, 0x2ec292472f327b6d_u64, 0x550c90a7721fe76b_u64, 0x96cb314a1679e279_u64, 0x4189dff49794e884_u64, 0xe6e29731996bed88_u64, 0x365f5f0efdbbb49a_u64, 0x486ca46742727132_u64, 0x5d8db8159f09e5bc_u64, 0x25318d3974f71c05_u64, 0x30010c0d68084b58_u64, 0xee2c90aa4702e774_u64, 0x24d6bda67df77248_u64, 0x6eef169fa6948ef6_u64, 0x91b45153d1f20acf_u64, 0x3398207e4bf56863_u64, 0xb25f3edd035d407f_u64, 0x8985295255c06437_u64, 0x10d86d324832754c_u64, 0x5bd4714e6e5445c1_u64, 0x090b69f52ad56614_u64, 0x9d072750045ddb3b_u64, 0xb4c576ea17f9877d_u64, 0x6b49ba271d296996_u64, 0xacccc65414ad6ae2_u64, 0x9089d98850722cbe_u64, 0xa4049407777030f3_u64, 0x27fc00a871ea49c2_u64, 0x663de06483dd9797_u64, 0x3fa3fd94438c860d_u64, 0xde41319d39928c70_u64, 0xdde7b7173bdf082b_u64, 0x3715a0805c93805a_u64, 0x921110d8e80faf80_u64, 0x6c4bffdb0f903876_u64, 0x185915a562bbcb61_u64, 0xb989c7bd401004f2_u64, 0xd2277549f6b6ebbb_u64, 0x22dbaa140a2f2689_u64, 0x768364333b091a94_u64, 0x0eaa3a51c2a31dae_u64, 0xedaf12265c4dc26d_u64, 0x9c7a2d9756c0833f_u64, 0x03f6f0098c402b99_u64, 0x316d07b43915200c_u64, 0x5bc3d8c492f54bad_u64, 0xc6a5ca4ecd37a736_u64, 0xa9e69492ab6842dd_u64, 0xde6319ef8c76528b_u64, 0x6837dbfcaba1ae31_u64, 0x15dfa1ae00dafb0c_u64, 0x664d64b705ed3065_u64, 0x29bf56573aff47b9_u64, 0xf96af3be75df9328_u64, 0x3080abf68c6615cb_u64, 0x040622fa1de4d9a4_u64, 0xb33d8f1b5709cd36_u64, 0xe9424ea4be13b523_u64, 0x331aaaf0a8654fa5_u64, 0xc1d20f3f0bcd785b_u64, 0x76f923048b7b7217_u64, 0x8953a6c6e26e6f00_u64, 0xebef584a9bb7dac4_u64, 0xba66aacfcf761d02_u64, 0xd12df1b1c1998c77_u64, 0xadc3da4886a05df7_u64, 0xf480c62ff0ac9aec_u64, 0xddbc5c3f6dded01f_u64, 0xc790b6db2a3a25a3_u64, 0x9aaf009353ad0457_u64, 0xb6b42d297e804ba7_u64, 0x07da0eaa76a1597b_u64, 0x2a12162db7dcfde5_u64, 0xfafedb89fdbe896c_u64, 0x76e4fca90670803e_u64, 0x156e85ff87fd073e_u64, 0x2833676186182aea_u64, 0xbd4dafe7b36e6d8f_u64, 0x3967955bbf3148d7_u64, 0x8416df30432dc735_u64, 0x6125ce70c9b8cb30_u64, 0xfd6cbfa200a4e46c_u64, 0x05a0dd5a476f21d2_u64, 0x1262845cb9496170_u64, 0xe0566b0152993755_u64, 0x50b7d51ec4f1335f_u64, 0x6e13e4305da92e85_u64, 0xc3b21d3632a1a4b7_u64, 0x08d4b1ea21f716e4_u64, 0x698f77ff2780030c_u64, 0x2d408da0cd4f99a5_u64, 0x20d3a2b30a5d2f42_u64, 0xf9b4cbda11d0be7d_u64, 0xc1db9bbd17ab81a2_u64, 0xca5c6a0817552e55_u64, 0x0027f0147f8607e1_u64, 0x640b148d4196debe_u64, 0x872afddab6256b34_u64, 0x897bfef3059ebfb9_u64, 0x4f6a68a82a4a5ac4_u64, 0x4fbcf82d985ad795_u64, 0xc7f48d4d0da63a20_u64, 0x5f57a4b13f149538_u64, 0x800120cc86dd71b6_u64, 0xdec9f560bf11654d_u64, 0x6b0701acb08cd0c0_u64, 0xb24855510efb1ec3_u64, 0x72953b06a33540c0_u64, 0x7bdc06cc45e0fa29_u64, 0x4ec8cad641f3e8de_u64, 0x647cd8649b31bed9_u64, 0xc397a4d45877c5e3_u64, 0x6913daf03c3aba46_u64, 0x18465f7555f5bdd2_u64, 0xc6926e5d2eaced44_u64, 0x0e423e1c87c461e9_u64, 0xfd29f3d6e7ca7c22_u64, 0x35916fc5e0088dd7_u64, 0xffe26a6ec6fdb0c1_u64, 0x0893745d7cb2ad6b_u64, 0x9d6ecd7b723e6a11_u64, 0xc6a9cff7df7329ba_u64, 0xc9b55100b70db2e2_u64, 0x24ba74607de58ad8_u64, 0x742c150d0c188194_u64, 0x667e162901767a9f_u64, 0xbefdfdef4556367e_u64, 0xd913d9ecb9ba8bfc_u64, 0x97c427a831c36ef1_u64, 0x36c59456a8d8b5a8_u64, 0xb40ecccf2d891234_u64, 0x576f89562ce3ce99_u64, 0xb920d6aa5e6b9c2a_u64, 0x3ecc5f114a0bfdfb_u64, 0xf4e16d3b8e2c86e2_u64, 0x84d4e9a9b4fcd1ee_u64, 0xefc9352e61392f44_u64, 0x2138c8d91b0afc81_u64, 0x6a4afbd81c2f84b4_u64, 0x538c994ecc2254dc_u64, 0x552ad6c6c096190b_u64, 0xb8701a649569605a_u64, 0x26ee523f0f117f11_u64, 0xb5f4f5cbfc2dbc34_u64, 0xeebc34cc5de8605e_u64, 0xdd9b8e67ef3392b8_u64, 0x17c99b5861bc57e1_u64, 0xc68351103ed84871_u64, 0xdddd1c2da118af46_u64, 0x2c21d7f359987ad9_u64, 0xc0549efa864ffc06_u64, 0x56ae79e536228922_u64, 0xad38dc9367aae855_u64, 0x3826829be7caa40d_u64, 0x51b133990ed7a948_u64, 0x0569f0b265a7887f_u64, 0x974c8836d1f9b392_u64, 0x214a827b21cf98dc_u64, 0x9f405547dc3a74e1_u64, 0x42eb67df9dfe5fd4_u64, 0x5ea4677b7aacbaa2_u64, 0xf65523882b55ba41_u64, 0x086e59862a218347_u64, 0x39e6e389d49ee540_u64, 0xfb49e956ffca0f1c_u64, 0x8a59c52bfa94c5c1_u64, 0xd3cfc50fae5adb86_u64, 0xc5476243853b8621_u64, 0x94792c8761107b4c_u64, 0x2a1a2c8012bf4390_u64, 0x2688893c78e4c4a8_u64, 0x7bdbe5c23ac4eaf4_u64, 0x268a67f7bf920d2b_u64, 0xa365b1933d0b7cbd_u64, 0xdc51a463dd27dde1_u64, 0x6919949a9529a828_u64, 0xce68b4ed09209f44_u64, 0xca984e638270237c_u64, 0x7e32b90f8ef5a7e7_u64, 0x561408f1212a9db5_u64, 0x4d7e6f5119a5abf9_u64, 0xb5d6df8261dd9602_u64, 0x36169f3ac4a1a283_u64, 0x6ded727a8d39a9b8_u64, 0x825c326b5b2746ed_u64, 0x34007700d255f4fc_u64, 0x4d59018071e0e13f_u64, 0x89b295f364a8f1ae_u64, 0xa74b38fc4ceab2bb_u64, 0x47270babc3a734ba_u64, 0x6052dd34f8563aeb_u64, 0x7e8a31bb365895b7_u64]
+# [sin(j*pi/256), cos(j*pi/256)] * 2^384, rounded to nearest: entry ((j*2 + w)*3 + limb)*2 is the high and the
+# next one the low 64 bits of 128-bit limb `limb` (0 = least significant) of the sine (w = 0) or cosine (w = 1);
+# cos(0) saturates to 2^384 - 1.
+secret preset B128_TRIG_SINCOS: Array[U64, 1536] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0xe36885f0fd7b869a_u64, 0x35b064282559db48_u64, 0xf0257406fa2c2f25_u64, 0x06e03a898ebf83db_u64, 0x03243a3f9bd8f08c_u64, 0xc3c75f41b6ce7aa7_u64, 0xc7e9f8e9e7f57263_u64, 0xfc29714c032279b1_u64, 0xff8d89566a2181db_u64, 0xab255bf76857a287_u64, 0xfffb10b4dc96dabb_u64, 0xb47903f7a19f8ee1_u64, 0xa8390bc33658b7d6_u64, 0x4cf0323d7cbf0eb5_u64, 0x62652f9e1aa508ac_u64, 0x0cf31ac036de81c6_u64, 0x0648557de8d99f7e_u64, 0x4e29cf6e5fed0679_u64, 0xab5dc1a419785764_u64, 0xb707f21199fe9209_u64, 0x568fb69282182f32_u64, 0xef6f30da8fe307e8_u64, 0xffec4304266865d9_u64, 0x5657552366961732_u64, 0x02881e6ab9834899_u64, 0xfc79c4beab7508d1_u64, 0x036d93dfef35cbd6_u64, 0xe4df8597c03c05d2_u64, 0x096c32baca2ae68b_u64, 0x437b2dd49d5fca3c_u64, 0x831dcf0e30781c87_u64, 0xde3ad81725b27622_u64, 0x30bd6fbe3cdfb585_u64, 0x2fb15c7502f6de78_u64, 0xffd3977ff7bae4e9_u64, 0x664649b4d541b9c5_u64, 0xa8902b24fdd1fb46_u64, 0x72e72bf5af6010c4_u64, 0x1216769fcda0d0eb_u64, 0xf36fc97b1fef1fde_u64, 0x0c8fb2f886ec09f3_u64, 0x76a17954b2b7c517_u64, 0x1bf58f6a90d520d5_u64, 0xa94ff9046c34d4e4_u64, 0xcf53e4baa403250b_u64, 0x5750700a6df26524_u64, 0xffb10f1bcb6bef1d_u64, 0x421e8edaaf59453d_u64, 0x9684b763f409ea33_u64, 0x3d124a454239f979_u64, 0xfb3691daa4fc8f5c_u64, 0xec1cd0d9c7c3b699_u64, 0x0fb2b73cfc106ff6_u64, 0x8f0a0e36a000c734_u64, 0xa7ba18398767930a_u64, 0x1018736805f7bf87_u64, 0x3cb04da7e6b0bbc3_u64, 0x369ca2e0608be070_u64, 0xff84ab2c738d6a03_u64, 0x519c314973ccae6b_u64, 0x83d904a423e340df_u64, 0xfd367461499ea9fe_u64, 0x825261edb7445e11_u64, 0x5b93892877537a40_u64, 0x12d52092ce19f5cc_u64, 0xbeeeae8129a786b8_u64, 0x3b7c57bc5c735193_u64, 0xf1419bcc0ff7192e_u64, 0x91cf862e7fad71ee_u64, 0x964aad96d95ae9fb_u64, 0xff4e6d680c41d0a9_u64, 0x0f668633f1ab8589_u64, 0x46f9278d36fb08fe_u64, 0xdbff81d194ca39fa_u64, 0xa360bea372e455ef_u64, 0x2eafd08a7f7fc6c4_u64, 0x15f6d00a9aa418c1_u64, 0x7fba5f8126cb2985_u64, 0x7fa801bea5d4c3cb_u64, 0xbd57ce6223df6540_u64, 0x5f063781804a271a_u64, 0x287f3f198f7cd53c_u64, 0xff0e57e5ead848d1_u64, 0x1f1901544271c3f8_u64, 0x01af208bbd6f4012_u64, 0xa801974079e03914_u64, 0x21030810a8ddd093_u64, 0xd9abe105fe0fbea3_u64, 0x1917a6bc29b42be1_u64, 0xd8e72d912977ee71_u64, 0xa0e9ee7a85258e45_u64, 0x485224a982a7c85a_u64, 0x5a2c976d196a3567_u64, 0xb2681b468efba361_u64, 0xfec46d1e89292cf0_u64, 0x41390efdc726e9ef_u64, 0xd07230f388861771_u64, 0x4b3f495dc82a7a68_u64, 0x39773c54cb0e9276_u64, 0x209abd55453a49b8_u64, 0x1c3785c79ec2d4f5_u64, 0x86310766026f8dcc_u64, 0x12e11c21cf9985c6_u64, 0x3ac4eca2fbd267bb_u64, 0xff4bd7de3aae3a28_u64, 0x7faf2efdd7ae4acc_u64, 0xfe70afeb6d33d6a2_u64, 0x2907cf2b3f6feac1_u64, 0xdafc53bdb0f3ad5e_u64, 0x98b1eed416377b10_u64, 0xe2427477a6ecf31e_u64, 0xf0c8a6bf13a12290_u64, 0x1f564e56a9730e34_u64, 0x4e08e535cadaf146_u64, 0x300e707e9a9a66e5_u64, 0xf65d64ce2ea940ee_u64, 0xcc9d5d787e81f867_u64, 0x92ae1e5d881f153b_u64, 0xfe1323870cfe9a3d_u64, 0x90cd1d959db674ee_u64, 0xe0692c1d4d6a90c2_u64, 0xdd411df178eb7d1e_u64, 0x04e60cacc98164d7_u64, 0xcfe841fd3b113802_u64, 0x2273e19db5eaed56_u64, 0xe5e597261830d391_u64, 0xd3bd6558940206cb_u64, 0xd94accf74de23b6d_u64, 0x9569c48a4106edf0_u64, 0xc35ed177651ddbb9_u64, 0xfdabcb8caeba091b_u64, 0xfac7397cc07a646f_u64, 0x8e8799e6913803e0_u64, 0x37dd74aaaeb56c5a_u64, 0x9fe14048be786e10_u64, 0x3c6f72706b194b88_u64, 0x259020dd1cc27444_u64, 0xc002a2684781f07f_u64, 0x673171e6a6554f35_u64, 0xb393be74c8381589_u64, 0xa19702d6d140d729_u64, 0x62b817621ff0f760_u64, 0xfd3aabf84528b50b_u64, 0xeae6bd951c1dabbd_u64, 0x26ace06db55ecfbd_u64, 0x063c572324d01a61_u64, 0xfcd3974462ee60e3_u64, 0xd0dcfa34d1aa337f_u64, 0x28aaed62527cb3b5_u64, 0xe976fb98213b8497_u64, 0xeab2d4b6c97209b7_u64, 0xcf685093ab467d00_u64, 0x39dbeb5c2d2cbf8e_u64, 0x8b70e81ea4598ee8_u64, 0xfcbfc926484cd43a_u64, 0xa3e22b4d38917e73_u64, 0x712beb01d32241b1_u64, 0x1b51a3cdad65a191_u64, 0x23d5a2b8dc1e0341_u64, 0xdc32fb8507a753b5_u64, 0x2bc42889167f8ca9_u64, 0x8ffbbceed62c7c43_u64, 0x184b1d6fccfc856e_u64, 0x9c1991b686a00c7d_u64, 0x246ddc4e63f59390_u64, 0xb859505a0b301225_u64, 0xfc3b27d38a5d49ab_u64, 0x256778ffcb5c1769_u64, 0x767dfafab5ba9092_u64, 0x655e186472be5455_u64, 0xabcc11744430db5e_u64, 0x8767e77e76440759_u64, 0x2edbb3bca17e628e_u64, 0xaf776280d975ac74_u64, 0xe1d49c2b973c884c_u64, 0x1046bcdcf4fccd05_u64, 0xf68925b421c48b09_u64, 0xa1971c56ebc10d90_u64, 0xfbaccd1d0903bb09_u64, 0xe63ae8632b84473b_u64, 0xa28fbdbe7eb1987e_u64, 0x24859793181c3718_u64, 0xf394e58d12972f1d_u64, 0x39438767895414c1_u64, 0x31f17078d34c156c_u64, 0x9732300393f33613_u64, 0x947a5373353c45a4_u64, 0x8d5b15eaa58368ef_u64, 0xc5f40e3fd8f18ae1_u64, 0xb1997321b48e8b1b_u64, 0xfb14be7fbae58156_u64, 0x2172a361fd2a722e_u64, 0xd0fcf9cf13165ffe_u64, 0xf465ff2dcbe8ac4b_u64, 0x8c47e96b350b7c3f_u64, 0x6e7693d88171a2b4_u64, 0x3505404b6008a13c_u64, 0x37d0017bda992a80_u64, 0x8df64f3218965d3c_u64, 0xee268c7681608ebc_u64, 0x7865a49bdcd7f074_u64, 0x45770c9f804efeec_u64, 0xfa7301d859796671_u64, 0x1fe196a53fb5b237_u64, 0x276234f6f3e1e1eb_u64, 0xa623a2a80c4cb131_u64, 0x2c9b801c691e71bb_u64, 0x813b716e71055e67_u64, 0x381704d4fc9ec5f9_u64, 0x43af186b79b2a0f3_u64, 0xa87cf32ce084af6a_u64, 0x5af910ded9deeb17_u64, 0x79b567a67cde8b61_u64, 0x61e63b20928c47af_u64, 0xf9c79d63272c4628_u64, 0x4504ae08d19b2980_u64, 0x8f7f5e200d41a580_u64, 0x8dee643bbbd353d6_u64, 0xc138ad021532194d_u64, 0x04eaaaab0d4998ea_u64, 0x3b269fca8a8622ba_u64, 0xdc913b883d64660e_u64, 0x09c93255bc853ced_u64, 0x705a76d3418f2b4f_u64, 0x2e09716dff309c62_u64, 0x61e131e94ae140be_u64, 0xf91297bbb1d6cdbe_u64, 0x68fc6e4d6a920bd2_u64, 0xa9bf1fae55e97289_u64, 0x4ffaeb22d748d6d4_u64, 0x5580085f9c2247b3_u64, 0x76ceee5dee6d2d54_u64, 0x3e33f2f642be355e_u64, 0x90887712e9dc9663_u64, 0x18da934f3fc63793_u64, 0x9958f29a37efd515_u64, 0x95a1acb343363fb2_u64, 0x6d1932845f3813dd_u64, 0xf853f7dc9186b952_u64, 0xc7adc6b4988891ba_u64, 0xa3808a70a1da1d66_u64, 0x0fa8580dc2529179_u64, 0xcb01c0a806a3322e_u64, 0xce36ba75ab4ffe02_u64, 0x413ee038dff6b7fd_u64, 0x7da6491b4f867803_u64, 0x600449cd14f8b1ec_u64, 0x52bfd4ada717a31c_u64, 0x4f10d75812d26a6d_u64, 0x901915a71344b708_u64, 0xf78bc51f239e12c6_u64, 0x214cffcee9dd33ca_u64, 0x2098bb3f6852d2b1_u64, 0xfd197afa03c1844e_u64, 0xf735312b47773c26_u64, 0x6a6e3a60fdae388e_u64, 0x4447498ac7d9dd82_u64, 0x4c20ab7aa99a2182_u64, 0xafdc40732a1b03f6_u64, 0x0f46e91acb4eeab8_u64, 0xb06854a7d3139b87_u64, 0xf2f68677a56efb23_u64, 0xf6ba073b424b19e8_u64, 0x2c791f59cc1ffc22_u64, 0xa75ab2ef3590737e_u64, 0x5257cf0b424aab42_u64, 0x2b110165bc3ba0b2_u64, 0xe1a97db3c5d0fc6c_u64, 0x474d10fd336cf746_u64, 0xf95f1f657313c4ea_u64, 0xd727e908a1cc5001_u64, 0xd24303f2f370d960_u64, 0xcb773db17e36deb8_u64, 0xa64033468f47f60f_u64, 0xf5dec646f85ba1c6_u64, 0xc8c615e72768d6b4_u64, 0x96e8a93742139e47_u64, 0x76c746094bca11de_u64, 0xc70534171bf68a81_u64, 0x1c561ea3e50849c2_u64, 0x4a5018bb567c16a2_u64, 0xd725d3b9ed35fba9_u64, 0xd5fd8a1cafb2cce5_u64, 0x2a53096f0c1278a8_u64, 0x5ee4b09989a11728_u64, 0x8e77ee63670fa090_u64, 0xf4fa0ab6316ed2ec_u64, 0x163c5c7f03b718c5_u64, 0xda3ec2ec26e111aa_u64, 0x1ce81f6a7938f852_u64, 0xe9b81d82d31b3987_u64, 0x29694eddb5afbcc9_u64, 0x4d50430b860546c3_u64, 0x4ffd0691f9e13630_u64, 0x5fd41175e0c39c34_u64, 0xb336c99ce723d817_u64, 0xd861a7ef2e855f75_u64, 0xe59aad1cf16cdb2b_u64, 0xf40bdd5a6688662f_u64, 0x5019794a1f5896e4_u64, 0x16af5c057a216a8c_u64, 0x08371289cb79dce7_u64, 0x7b0a0a42f45c41bd_u64, 0x64895285f2b7e950_u64, 0x504d72505d98050c_u64, 0x97c4afa25181e605_u64, 0xc3d4240d5d9a890a_u64, 0xe285567b61bd57d7_u64, 0x6cc90b7d06c506d8_u64, 0x511aacdcd3b8eb99_u64, 0xf314476247088f74_u64, 0xa5486bdc455d56a2_u64, 0x9dea4afc821a9730_u64, 0xf90d930343d33002_u64, 0xddf9e1806cdc80ef_u64, 0x18e2bc14c8ed3c36_u64, 0x53478909e39da892_u64, 0x0b90c3c942bfa62c_u64, 0xd7166cd3d924d607_u64, 0xb942b718144c51cb_u64, 0x83ef188365e5681d_u64, 0x40e0ba89720e6c81_u64, 0xf21352595e0bf350_u64, 0xe7112e89103cc0c6_u64, 0x7d9d0af68fc06e7f_u64, 0x3b27dffbfc02ab2f_u64, 0x1a157ced9b54e454_u64, 0xe1e5b755b8291558_u64, 0x563e69d6ac7f73f8_u64, 0x408fca9cc277fc1f_u64, 0xd2cfecddd6b7ba8a_u64, 0xb39accc3025a1b44_u64, 0x89dab2e0fe03a229_u64, 0x894c0e9aac77bfe4_u64, 0xf1090827b43725fd_u64, 0x67127db35b287315_u64, 0x70648748c0e93f2f_u64, 0xa093129e5604b25c_u64, 0xa162f122c751ffbe_u64, 0xe448924574962b91_u64, 0x5931f774fc9f1844_u64, 0x34ad29990485d84d_u64, 0x878499cdabe3cdfd_u64, 0xb477fbf5eadcd513_u64, 0xf01bb72d7bcdcefb_u64, 0x3be1d154823575ea_u64, 0xeff573116df1555d_u64, 0x62aef7b55319d1d3_u64, 0xe83c1ffda3ec476f_u64, 0x39bf1307dd6481f6_u64, 0xef75477f5dbb812b_u64, 0x2b7d0ea00521b3d9_u64, 0x5c2214c3e9167abb_u64, 0x4e61f79b3a36f1db_u64, 0x0e0ea289950add57_u64, 0xa8acc772534bbb89_u64, 0xfc4facdfd3d64e3f_u64, 0xb6a4dec498e3fbc3_u64, 0xeed89db66611e307_u64, 0x86f8c20fb664b01a_u64, 0xf46e8417ae1b7ac7_u64, 0x023ec85e7e723382_u64, 0x4633259b16954dad_u64, 0xd07cf3484aacca02_u64, 0x5f0ea4c477339c06_u64, 0x68fc87bcfa363f00_u64, 0x6479184fd64fdd03_u64, 0xfff5ac40eec5dd32_u64, 0x6f340fabaa13780e_u64, 0xee2ea72f6796aab4_u64, 0xedb29311c504d652_u64, 0x11815196b9fbf5df_u64, 0x6d12d59bba9c4881_u64, 0x7b8a103264edaf26_u64, 0xbdf1f5b4ab3de24c_u64, 0x3a3c159062718f71_u64, 0x61f78a9abaa58b46_u64, 0x98916152cf7eee1b_u64, 0xa6340cb65c4b11d5_u64, 0xb1ec03e9739998c9_u64, 0xf0a83d3cd0dae9b5_u64, 0xdb897c2384083746_u64, 0xec835e79946a3145_u64, 0x7e610231ac1d6180_u64, 0x2a51bb803173c218_u64, 0x09e7f29df29795a8_u64, 0xce241f5bddec213c_u64, 0x823518ea88a51741_u64, 0x64dca98ef24f5cb4_u64, 0x218cf2d6ad86e5c1_u64, 0x15a1ef23b6fcbe7c_u64, 0x5d2c60a38e3f1513_u64, 0xef30f42455269f35_u64, 0xd67b03c2e02269d4_u64, 0xeb4b0b9e4f345617_u64, 0x39e39c6c2ab3655c_u64, 0x128cfed9c6a525ac_u64, 0x154b74a5668d058d_u64, 0x16fec586e008e2c9_u64, 0x76c8c1d21cfb8d44_u64, 0x67bde50ea3b628b6_u64, 0xd409485edd56b172_u64, 0x23cb86a3c7b29248_u64, 0xe4f7620cff6de0c8_u64, 0x3d5705f10a9a7f6f_u64, 0x2397ea24d5049427_u64, 0xea09a68a6e49cd62_u64, 0x15ad45b4a1b5e823_u64, 0xad30468299d12a94_u64, 0xd31ec3e562d38d68_u64, 0x8680b929c2af992e_u64, 0xb6224cac9d2fde72_u64, 0x6a9b20adb4ff262a_u64, 0x0ef911a3308e35a5_u64, 0x1ac1087622ce6519_u64, 0x9f45710178447ede_u64, 0x18801dd8eb6d0389_u64, 0xe02cade99a642003_u64, 0xe8bf3ba1f1aedfbb_u64, 0xf8972affb3d98e1f_u64, 0x5e7a1201472731cd_u64, 0x28a927836f80a344_u64, 0x041e72879f2cc28a_u64, 0x9b2affa69c693d13_u64, 0x6d744027857300ad_u64, 0x9b165cba0c171818_u64, 0xc924411252c09e83_u64, 0xc0a76c669f14305b_u64, 0x2f1bb3282663e451_u64, 0x09de14efea575873_u64, 0xe76bd7a1e63b9786_u64, 0x125129529d48a92f_u64, 0xfdd30e2b653cf05e_u64, 0x5197dc55b37b71a1_u64, 0x26d02c91483d2b98_u64, 0x2f03ab4c7a03bca6_u64, 0x70492760047b9a7e_u64, 0xc5544aeadf9f4275_u64, 0x760a98a3a5e7070a_u64, 0x2f1f5397d9b3bd20_u64, 0x83dad966df1f6a5b_u64, 0xac14cdda015a2273_u64, 0xe60f879fe7e2e1e5_u64, 0x7613b68f6ab0312f_u64, 0x6f830a878ee71525_u64, 0xa4aaec3e753e8319_u64, 0x5a5c9453fa24a534_u64, 0x4bf6e0e57669d638_u64, 0x7319ba64c711785a_u64, 0x1439670dfe3d68e6_u64, 0xb858fec82022732f_u64, 0x4995e362e423e0b2_u64, 0x8743f3fe219a6a8f_u64, 0x27902aa36084a51b_u64, 0xe4aa5909a08fa7b4_u64, 0x122785ae67f5515c_u64, 0xdeb7639b7fda6317_u64, 0x504841dbc1bc33cb_u64, 0xd6a30f214c6f5661_u64, 0x94211e282444d411_u64, 0x75e5dd6e1b8e2555_u64, 0x0ec87bc0574a889f_u64, 0x00c457882d61331a_u64, 0xb59d28224cf60b9a_u64, 0xda3dac309974fa5b_u64, 0xcd6367a773e9c0fc_u64, 0xe33c59a4439cd8ec_u64, 0x36563e2ffad83519_u64, 0x1ac961f0b0786c8e_u64, 0x974624fbb7dd5944_u64, 0xd68aad829daca0d0_u64, 0xca819ced385cb98a_u64, 0x78ad74e01bd8ec78_u64, 0x362474f1a105878e_u64, 0xf775e41ec0015d69_u64, 0xc80f46beaf1a70b6_u64, 0xfdea3ff0dc053327_u64, 0x82c4fe35f8f29cea_u64, 0xe1c5978c05ed8691_u64, 0xf4e8a8372f8c580f_u64, 0x7be9be180f7ad019_u64, 0x7c972f8498cc190a_u64, 0x2cc10e25c2a714b5_u64, 0xa2b8a0351e3a7882_u64, 0x7b70654bbde35622_u64, 0xf083cc12119ff7a3_u64, 0xc22923054710b10b_u64, 0xf38130f5b4f7d5a8_u64, 0xc9985ae9491098ca_u64, 0xb0d96a3a40821766_u64, 0xe046213392aa486c_u64, 0x55ff6038a5197366_u64, 0xa8b8ac3a1aad3732_u64, 0x3d2d1ef3b7418052_u64, 0xb55ae104d717a04b_u64, 0xd37a87fa45ce838b_u64, 0x7e2e936fe26ae7ed_u64, 0x13e03e4889485c68_u64, 0xa01d809beb9cbef8_u64, 0xacd64cce066f8326_u64, 0xd4a257966e116379_u64, 0x86a3422b18230d41_u64, 0xdebe05637ca94cfb_u64, 0x4b19aa71fec3ae6c_u64, 0x9d3488db15ba9684_u64, 0xea356b71f2fa5f76_u64, 0xbabcfdf74f528666_u64, 0xedeb672dfdaf228c_u64, 0x80e7e43a61f5b6cb_u64, 0x5ca183dc973abc21_u64, 0xb1b75f774b427ef6_u64, 0x7c175bc3672f2209_u64, 0x7866f911e19bddc7_u64, 0x6a0a4b9a9f65b5ec_u64, 0xdd2d5339ac8692fd_u64, 0x49c6e0ea76cbcaac_u64, 0x718fb60d736dce7c_u64, 0xc4e8dac740710c18_u64, 0xd6bc7fe57653aec3_u64, 0x2d3bfe70d9ab409a_u64, 0x839c3cc917ff6cb4_u64, 0xbfd79717f2880abe_u64, 0xa71857fd6a653db4_u64, 0xcba1e4ca9b20ef6b_u64, 0xb67292cbdf4cb882_u64, 0xf8ae9c38d38a7789_u64, 0xdb941a28cb71ec87_u64, 0x2c19b63253da43fb_u64, 0x68298f5e656cddcf_u64, 0xaee3fde7196372b6_u64, 0xa4087bb61a5a1571_u64, 0x43fdc5fb3261bde9_u64, 0x864b826aec4c74e5_u64, 0x85043222c9bdd18c_u64, 0x31cd467b273c3b6b_u64, 0xcfa21aafbc4af64e_u64, 0x768df376f0edc304_u64, 0xf2abc04130b0a03c_u64, 0xd9f269f7aab88c29_u64, 0x28e81dcb6dab91ac_u64, 0xdd549bb352a247b8_u64, 0x275c1d521f91ca92_u64, 0x1ddc902c4a28d838_u64, 0x5c00d180c7655a29_u64, 0x88f59aa0da591421_u64, 0xb892ca8361d8c84c_u64, 0xf20994c8b2e8f9f4_u64, 0x2220cf60307904fb_u64, 0xdd2c2b52901fe500_u64, 0x17b15cb0a701425b_u64, 0xd84852c0a80ffcdb_u64, 0x24b9fe00663574a3_u64, 0x7634f0497dec9f3e_u64, 0x3b1787b920908215_u64, 0xd10e572017ce8920_u64, 0x2b0f5e038c54e982_u64, 0x8b9a6b1ef6da4502_u64, 0x21a6675f51580bc3_u64, 0x23cdeac1b5fa0870_u64, 0xdbc56a93033d7336_u64, 0xfea24fa6ea109da0_u64, 0x25ac706da7d56ce0_u64, 0xd695e4f10ea88570_u64, 0x083f082b570611d6_u64, 0x7f9152cba72ae50c_u64, 0xdf93eac8ec561d41_u64, 0x7ca7d749adfba33e_u64, 0xca996068c296fd79_u64, 0x8e39d9cd73464364_u64, 0xbba4cfecbff54867_u64, 0x3f46de4fbafdc08b_u64, 0xc63df891efb87d5c_u64, 0xb4691d2f99ec9eaa_u64, 0xac08e58a7cd39544_u64, 0xd4db3148750d1819_u64, 0xf630e8b6dac83e68_u64, 0xcd26e7a833103d93_u64, 0x0b752332c193a8c6_u64, 0x0e3328f9a15a9849_u64, 0x3074ee8cf7cef350_u64, 0x90d3ccc99f5ac58b_u64, 0x09d1072e09b72292_u64, 0x724b33af23a1acea_u64, 0x15b92eb32a15e942_u64, 0x725b3942ea886124_u64, 0xad809b6779bb56e3_u64, 0xd31848d817d70e16_u64, 0xeeeaddb72f00e0dd_u64, 0x4f95ec5747e09033_u64, 0x085d722683513df8_u64, 0x44b562fe29a53a66_u64, 0x7ad1253f5ec14ff0_u64, 0x93682a66e896f544_u64, 0xb17821911e71c16e_u64, 0x18e858d225187bd4_u64, 0x5b311ee0c5a1e4f3_u64, 0xe386cbda4f76d559_u64, 0x39d956bcfe9a5d9a_u64, 0xd14d3d02313c0eed_u64, 0x744fea20e8abef91_u64, 0x783a89bea38a8e02_u64, 0x462b8681663dbe77_u64, 0x567fb901bd502162_u64, 0xa01118815237a72a_u64, 0x95f6d92fd79f4fba_u64, 0xd9f8e1a446e973b9_u64, 0x7a32f1837ac516a6_u64, 0xfbf6cc6456873c0b_u64, 0xd6f34524a4c3da3d_u64, 0x8a787c40acca14e4_u64, 0xcf7a1f794d7ca1b1_u64, 0xdfcb60445c1bf972_u64, 0x01acd947a1647870_u64, 0x51694c2422e6a3fe_u64, 0x6b714df5a5e72d4f_u64, 0x1d9ce3a2743a1804_u64, 0x987fbfe70b81a708_u64, 0x19cec845ac87a5c6_u64, 0x6c2162f37c431f7f_u64, 0xa9aac44fb4486325_u64, 0x9d02f0e6caa17d3d_u64, 0xc881a55027476af7_u64, 0xcd9f023f9c3a059e_u64, 0x23af31db7179a4a9_u64, 0xc3599ef0b50ef59a_u64, 0xe1fc7518e80713ca_u64, 0x6ced068130b67332_u64, 0x76dcd42f6c39e4db_u64, 0x9b02c58832cf95c0_u64, 0x698b94f50326a043_u64, 0x8cd967bccea9addc_u64, 0xc609e5033a767a21_u64, 0x9cf6385be759c799_u64, 0x5bd241c2de422690_u64, 0xcbbbf7a63eba0dd5_u64, 0x70cbb7f3343451bd_u64, 0xc54b364f1553b6cc_u64, 0x81cb56de48333065_u64, 0x87424855daf5d9f3_u64, 0x21f5f9a3921b151e_u64, 0x9d7fd1490285c9e3_u64, 0xe25e39549638ae67_u64, 0xa0fa0954d3d040bb_u64, 0x7c863e3c5fb24298_u64, 0x4bfc4d9abfeb5f9f_u64, 0x3e33f4230b848c8a_u64, 0xc9d1124c931fda7a_u64, 0x8335241be1693225_u64, 0xa0ceb403f2c524af_u64, 0xa3eb8e405ca8a3df_u64, 0xe77e3c6814fd92a5_u64, 0x4562bb5fb2e2154d_u64, 0x9ff6ca9a2ab6a26d_u64, 0x22cc118a0c118a9f_u64, 0x1dce62094d77050c_u64, 0x5738dbfa159676c9_u64, 0x5ccea1083f804b74_u64, 0x005c4b0e953e4fff_u64, 0xc7de651f7ca06749_u64, 0x02b31bc86877fd2c_u64, 0xa7de0615a7501006_u64, 0x15370b1dff515e33_u64, 0xc381700bdf757600_u64, 0x04c7b378b215b01d_u64, 0xa267992848eeb0c0_u64, 0x3b5167ee359a234d_u64, 0x810c85a6661d3baf_u64, 0x0e2f6071f0d41621_u64, 0xd47437d3710b81d7_u64, 0x9bcdaef02b673f05_u64, 0xc5e40358a8ba05a7_u64, 0x43da25d99267326a_u64, 0xa9cf80d2cce37a8d_u64, 0x31444caabc2bc91e_u64, 0xbec67a81b0f50a90_u64, 0x0b73385ac3b53a36_u64, 0xa4d224dcd849c5b0_u64, 0x23d251cc8d7975cb_u64, 0xece93ff45353cd2a_u64, 0x547e3a0451e4bef2_u64, 0x9bb528d632279b92_u64, 0x173f3b2935cb89e7_u64, 0xc3e2007dd175f5a4_u64, 0xa87e78136665cdb1_u64, 0xe237eeaa1b32dac2_u64, 0xa8aa22ab31e036a8_u64, 0x9aab00f488eea6ad_u64, 0x3d517247a54a9ea8_u64, 0xa73655df1f2f489e_u64, 0x149f6e75993468a2_u64, 0x4203b9bff4935afd_u64, 0x6c34a47eddd9d480_u64, 0xd785c0cfc7c2e7a2_u64, 0x164c59c4fc989f35_u64, 0xc1d8705ffcbb6e90_u64, 0xbdf0715cb8b20bd6_u64, 0x36880f67db05c705_u64, 0x2aff44eacb27bb10_u64, 0xa78b957f2ae93736_u64, 0xbbbdccbb12ab1287_u64, 0xa99414951aacae5e_u64, 0xd147625fda929af7_u64, 0x4a009b490f31716f_u64, 0xf0e5064107bb6bf2_u64, 0xa4b71762aa6a622d_u64, 0xd3810198147748ad_u64, 0xbfc7671ab8bb84c6_u64, 0xe4e62d86dd136e77_u64, 0x3c2ea3be7e7a3226_u64, 0x307f343eb7973bb4_u64, 0x2fd0f3859abecff4_u64, 0x64742ca428c80c16_u64, 0xabeb49a46764fd15_u64, 0x1becda8089c1a94c_u64, 0x6a8e73990ff51f79_u64, 0xe9fd235a467a6348_u64, 0x9c677149abc2caaf_u64, 0xe0bd35686bed05f0_u64, 0xbdaef913557d76f0_u64, 0xac85320f528d6d5c_u64, 0xca706e5b8e5b2095_u64, 0xc1f13d3b7843aa10_u64, 0xd900f1364fee42ca_u64, 0x4f62ddb564e462a3_u64, 0xae3bddf3280c620d_u64, 0x3d53817865422564_u64, 0xe8b420ef309aa397_u64, 0x8b55149872e53d35_u64, 0x7ddf4124fc561794_u64, 0xf7ae3fc5d25b394f_u64, 0xbb8f3af81b93095c_u64, 0xfce8d84068e825b6_u64, 0xfebc57d474cf8ba5_u64, 0xdc1da8030635a8b3_u64, 0xa642438dce55e433_u64, 0xc0570800fb967a6b_u64, 0xb085baa8e966f6da_u64, 0xe4cad00d5c94bcd1_u64, 0xf052b35906eac2ee_u64, 0xc7b22e5647b309c5_u64, 0x43b1297eff842a9f_u64, 0xd1ab4f851f6104b5_u64, 0xb96841bf7ffcb21a_u64, 0x9de1e3b22b8bf4db_u64, 0xa1306e034b29ec45_u64, 0xb909acbac4dd556f_u64, 0xa29d2dcf89c9bd9c_u64, 0x6d245d9bdb619aca_u64, 0xb2c8c92f83c1eb87_u64, 0xac9f7ebbc469ef58_u64, 0x54443ef10e6e2695_u64, 0xba6be5f86b9c3528_u64, 0xe4069d20fb3c443d_u64, 0x084ba203841cbb20_u64, 0xb73a22a755457448_u64, 0x7f86f63bb23f4969_u64, 0x4afc83043ab8a2c3_u64, 0xa8b1fe6fdc83db39_u64, 0x1d6f60ba893ba84c_u64, 0xed17ac8583339915_u64, 0xb504f333f9de6484_u64, 0x597d89b3754abe9f_u64, 0x4afc83043ab8a2c3_u64, 0xa8b1fe6fdc83db39_u64, 0x1d6f60ba893ba84c_u64, 0xed17ac8583339915_u64, 0xb504f333f9de6484_u64, 0x597d89b3754abe9f_u64, 0x54443ef10e6e2695_u64, 0xba6be5f86b9c3528_u64, 0xe4069d20fb3c443d_u64, 0x084ba203841cbb20_u64, 0xb73a22a755457448_u64, 0x7f86f63bb23f4969_u64, 0xa1306e034b29ec45_u64, 0xb909acbac4dd556f_u64, 0xa29d2dcf89c9bd9c_u64, 0x6d245d9bdb619aca_u64, 0xb2c8c92f83c1eb87_u64, 0xac9f7ebbc469ef58_u64, 0xf052b35906eac2ee_u64, 0xc7b22e5647b309c5_u64, 0x43b1297eff842a9f_u64, 0xd1ab4f851f6104b5_u64, 0xb96841bf7ffcb21a_u64, 0x9de1e3b22b8bf4db_u64, 0xfebc57d474cf8ba5_u64, 0xdc1da8030635a8b3_u64, 0xa642438dce55e433_u64, 0xc0570800fb967a6b_u64, 0xb085baa8e966f6da_u64, 0xe4cad00d5c94bcd1_u64, 0xe8b420ef309aa397_u64, 0x8b55149872e53d35_u64, 0x7ddf4124fc561794_u64, 0xf7ae3fc5d25b394f_u64, 0xbb8f3af81b93095c_u64, 0xfce8d84068e825b6_u64, 0xca706e5b8e5b2095_u64, 0xc1f13d3b7843aa10_u64, 0xd900f1364fee42ca_u64, 0x4f62ddb564e462a3_u64, 0xae3bddf3280c620d_u64, 0x3d53817865422564_u64, 0x6a8e73990ff51f79_u64, 0xe9fd235a467a6348_u64, 0x9c677149abc2caaf_u64, 0xe0bd35686bed05f0_u64, 0xbdaef913557d76f0_u64, 0xac85320f528d6d5c_u64, 0x3c2ea3be7e7a3226_u64, 0x307f343eb7973bb4_u64, 0x2fd0f3859abecff4_u64, 0x64742ca428c80c16_u64, 0xabeb49a46764fd15_u64, 0x1becda8089c1a94c_u64, 0x4a009b490f31716f_u64, 0xf0e5064107bb6bf2_u64, 0xa4b71762aa6a622d_u64, 0xd3810198147748ad_u64, 0xbfc7671ab8bb84c6_u64, 0xe4e62d86dd136e77_u64, 0x36880f67db05c705_u64, 0x2aff44eacb27bb10_u64, 0xa78b957f2ae93736_u64, 0xbbbdccbb12ab1287_u64, 0xa99414951aacae5e_u64, 0xd147625fda929af7_u64, 0x4203b9bff4935afd_u64, 0x6c34a47eddd9d480_u64, 0xd785c0cfc7c2e7a2_u64, 0x164c59c4fc989f35_u64, 0xc1d8705ffcbb6e90_u64, 0xbdf0715cb8b20bd6_u64, 0xe237eeaa1b32dac2_u64, 0xa8aa22ab31e036a8_u64, 0x9aab00f488eea6ad_u64, 0x3d517247a54a9ea8_u64, 0xa73655df1f2f489e_u64, 0x149f6e75993468a2_u64, 0xece93ff45353cd2a_u64, 0x547e3a0451e4bef2_u64, 0x9bb528d632279b92_u64, 0x173f3b2935cb89e7_u64, 0xc3e2007dd175f5a4_u64, 0xa87e78136665cdb1_u64, 0xa9cf80d2cce37a8d_u64, 0x31444caabc2bc91e_u64, 0xbec67a81b0f50a90_u64, 0x0b73385ac3b53a36_u64, 0xa4d224dcd849c5b0_u64, 0x23d251cc8d7975cb_u64, 0x810c85a6661d3baf_u64, 0x0e2f6071f0d41621_u64, 0xd47437d3710b81d7_u64, 0x9bcdaef02b673f05_u64, 0xc5e40358a8ba05a7_u64, 0x43da25d99267326a_u64, 0xa7de0615a7501006_u64, 0x15370b1dff515e33_u64, 0xc381700bdf757600_u64, 0x04c7b378b215b01d_u64, 0xa267992848eeb0c0_u64, 0x3b5167ee359a234d_u64, 0x1dce62094d77050c_u64, 0x5738dbfa159676c9_u64, 0x5ccea1083f804b74_u64, 0x005c4b0e953e4fff_u64, 0xc7de651f7ca06749_u64, 0x02b31bc86877fd2c_u64, 0xa0ceb403f2c524af_u64, 0xa3eb8e405ca8a3df_u64, 0xe77e3c6814fd92a5_u64, 0x4562bb5fb2e2154d_u64, 0x9ff6ca9a2ab6a26d_u64, 0x22cc118a0c118a9f_u64, 0xa0fa0954d3d040bb_u64, 0x7c863e3c5fb24298_u64, 0x4bfc4d9abfeb5f9f_u64, 0x3e33f4230b848c8a_u64, 0xc9d1124c931fda7a_u64, 0x8335241be1693225_u64, 0xc54b364f1553b6cc_u64, 0x81cb56de48333065_u64, 0x87424855daf5d9f3_u64, 0x21f5f9a3921b151e_u64, 0x9d7fd1490285c9e3_u64, 0xe25e39549638ae67_u64, 0x8cd967bccea9addc_u64, 0xc609e5033a767a21_u64, 0x9cf6385be759c799_u64, 0x5bd241c2de422690_u64, 0xcbbbf7a63eba0dd5_u64, 0x70cbb7f3343451bd_u64, 0xc3599ef0b50ef59a_u64, 0xe1fc7518e80713ca_u64, 0x6ced068130b67332_u64, 0x76dcd42f6c39e4db_u64, 0x9b02c58832cf95c0_u64, 0x698b94f50326a043_u64, 0x6c2162f37c431f7f_u64, 0xa9aac44fb4486325_u64, 0x9d02f0e6caa17d3d_u64, 0xc881a55027476af7_u64, 0xcd9f023f9c3a059e_u64, 0x23af31db7179a4a9_u64, 0x01acd947a1647870_u64, 0x51694c2422e6a3fe_u64, 0x6b714df5a5e72d4f_u64, 0x1d9ce3a2743a1804_u64, 0x987fbfe70b81a708_u64, 0x19cec845ac87a5c6_u64, 0x7a32f1837ac516a6_u64, 0xfbf6cc6456873c0b_u64, 0xd6f34524a4c3da3d_u64, 0x8a787c40acca14e4_u64, 0xcf7a1f794d7ca1b1_u64, 0xdfcb60445c1bf972_u64, 0x783a89bea38a8e02_u64, 0x462b8681663dbe77_u64, 0x567fb901bd502162_u64, 0xa01118815237a72a_u64, 0x95f6d92fd79f4fba_u64, 0xd9f8e1a446e973b9_u64, 0x18e858d225187bd4_u64, 0x5b311ee0c5a1e4f3_u64, 0xe386cbda4f76d559_u64, 0x39d956bcfe9a5d9a_u64, 0xd14d3d02313c0eed_u64, 0x744fea20e8abef91_u64, 0x4f95ec5747e09033_u64, 0x085d722683513df8_u64, 0x44b562fe29a53a66_u64, 0x7ad1253f5ec14ff0_u64, 0x93682a66e896f544_u64, 0xb17821911e71c16e_u64, 0x724b33af23a1acea_u64, 0x15b92eb32a15e942_u64, 0x725b3942ea886124_u64, 0xad809b6779bb56e3_u64, 0xd31848d817d70e16_u64, 0xeeeaddb72f00e0dd_u64, 0xcd26e7a833103d93_u64, 0x0b752332c193a8c6_u64, 0x0e3328f9a15a9849_u64, 0x3074ee8cf7cef350_u64, 0x90d3ccc99f5ac58b_u64, 0x09d1072e09b72292_u64, 0x3f46de4fbafdc08b_u64, 0xc63df891efb87d5c_u64, 0xb4691d2f99ec9eaa_u64, 0xac08e58a7cd39544_u64, 0xd4db3148750d1819_u64, 0xf630e8b6dac83e68_u64, 0x7f9152cba72ae50c_u64, 0xdf93eac8ec561d41_u64, 0x7ca7d749adfba33e_u64, 0xca996068c296fd79_u64, 0x8e39d9cd73464364_u64, 0xbba4cfecbff54867_u64, 0x23cdeac1b5fa0870_u64, 0xdbc56a93033d7336_u64, 0xfea24fa6ea109da0_u64, 0x25ac706da7d56ce0_u64, 0xd695e4f10ea88570_u64, 0x083f082b570611d6_u64, 0x7634f0497dec9f3e_u64, 0x3b1787b920908215_u64, 0xd10e572017ce8920_u64, 0x2b0f5e038c54e982_u64, 0x8b9a6b1ef6da4502_u64, 0x21a6675f51580bc3_u64, 0xf20994c8b2e8f9f4_u64, 0x2220cf60307904fb_u64, 0xdd2c2b52901fe500_u64, 0x17b15cb0a701425b_u64, 0xd84852c0a80ffcdb_u64, 0x24b9fe00663574a3_u64, 0xdd549bb352a247b8_u64, 0x275c1d521f91ca92_u64, 0x1ddc902c4a28d838_u64, 0x5c00d180c7655a29_u64, 0x88f59aa0da591421_u64, 0xb892ca8361d8c84c_u64, 0x31cd467b273c3b6b_u64, 0xcfa21aafbc4af64e_u64, 0x768df376f0edc304_u64, 0xf2abc04130b0a03c_u64, 0xd9f269f7aab88c29_u64, 0x28e81dcb6dab91ac_u64, 0x68298f5e656cddcf_u64, 0xaee3fde7196372b6_u64, 0xa4087bb61a5a1571_u64, 0x43fdc5fb3261bde9_u64, 0x864b826aec4c74e5_u64, 0x85043222c9bdd18c_u64, 0xa71857fd6a653db4_u64, 0xcba1e4ca9b20ef6b_u64, 0xb67292cbdf4cb882_u64, 0xf8ae9c38d38a7789_u64, 0xdb941a28cb71ec87_u64, 0x2c19b63253da43fb_u64, 0x718fb60d736dce7c_u64, 0xc4e8dac740710c18_u64, 0xd6bc7fe57653aec3_u64, 0x2d3bfe70d9ab409a_u64, 0x839c3cc917ff6cb4_u64, 0xbfd79717f2880abe_u64, 0xb1b75f774b427ef6_u64, 0x7c175bc3672f2209_u64, 0x7866f911e19bddc7_u64, 0x6a0a4b9a9f65b5ec_u64, 0xdd2d5339ac8692fd_u64, 0x49c6e0ea76cbcaac_u64, 0x9d3488db15ba9684_u64, 0xea356b71f2fa5f76_u64, 0xbabcfdf74f528666_u64, 0xedeb672dfdaf228c_u64, 0x80e7e43a61f5b6cb_u64, 0x5ca183dc973abc21_u64, 0xa01d809beb9cbef8_u64, 0xacd64cce066f8326_u64, 0xd4a257966e116379_u64, 0x86a3422b18230d41_u64, 0xdebe05637ca94cfb_u64, 0x4b19aa71fec3ae6c_u64, 0xa8b8ac3a1aad3732_u64, 0x3d2d1ef3b7418052_u64, 0xb55ae104d717a04b_u64, 0xd37a87fa45ce838b_u64, 0x7e2e936fe26ae7ed_u64, 0x13e03e4889485c68_u64, 0xc22923054710b10b_u64, 0xf38130f5b4f7d5a8_u64, 0xc9985ae9491098ca_u64, 0xb0d96a3a40821766_u64, 0xe046213392aa486c_u64, 0x55ff6038a5197366_u64, 0x7be9be180f7ad019_u64, 0x7c972f8498cc190a_u64, 0x2cc10e25c2a714b5_u64, 0xa2b8a0351e3a7882_u64, 0x7b70654bbde35622_u64, 0xf083cc12119ff7a3_u64, 0xf775e41ec0015d69_u64, 0xc80f46beaf1a70b6_u64, 0xfdea3ff0dc053327_u64, 0x82c4fe35f8f29cea_u64, 0xe1c5978c05ed8691_u64, 0xf4e8a8372f8c580f_u64, 0x1ac961f0b0786c8e_u64, 0x974624fbb7dd5944_u64, 0xd68aad829daca0d0_u64, 0xca819ced385cb98a_u64, 0x78ad74e01bd8ec78_u64, 0x362474f1a105878e_u64, 0x00c457882d61331a_u64, 0xb59d28224cf60b9a_u64, 0xda3dac309974fa5b_u64, 0xcd6367a773e9c0fc_u64, 0xe33c59a4439cd8ec_u64, 0x36563e2ffad83519_u64, 0xdeb7639b7fda6317_u64, 0x504841dbc1bc33cb_u64, 0xd6a30f214c6f5661_u64, 0x94211e282444d411_u64, 0x75e5dd6e1b8e2555_u64, 0x0ec87bc0574a889f_u64, 0xb858fec82022732f_u64, 0x4995e362e423e0b2_u64, 0x8743f3fe219a6a8f_u64, 0x27902aa36084a51b_u64, 0xe4aa5909a08fa7b4_u64, 0x122785ae67f5515c_u64, 0x6f830a878ee71525_u64, 0xa4aaec3e753e8319_u64, 0x5a5c9453fa24a534_u64, 0x4bf6e0e57669d638_u64, 0x7319ba64c711785a_u64, 0x1439670dfe3d68e6_u64, 0x760a98a3a5e7070a_u64, 0x2f1f5397d9b3bd20_u64, 0x83dad966df1f6a5b_u64, 0xac14cdda015a2273_u64, 0xe60f879fe7e2e1e5_u64, 0x7613b68f6ab0312f_u64, 0xfdd30e2b653cf05e_u64, 0x5197dc55b37b71a1_u64, 0x26d02c91483d2b98_u64, 0x2f03ab4c7a03bca6_u64, 0x70492760047b9a7e_u64, 0xc5544aeadf9f4275_u64, 0xc924411252c09e83_u64, 0xc0a76c669f14305b_u64, 0x2f1bb3282663e451_u64, 0x09de14efea575873_u64, 0xe76bd7a1e63b9786_u64, 0x125129529d48a92f_u64, 0x5e7a1201472731cd_u64, 0x28a927836f80a344_u64, 0x041e72879f2cc28a_u64, 0x9b2affa69c693d13_u64, 0x6d744027857300ad_u64, 0x9b165cba0c171818_u64, 0x1ac1087622ce6519_u64, 0x9f45710178447ede_u64, 0x18801dd8eb6d0389_u64, 0xe02cade99a642003_u64, 0xe8bf3ba1f1aedfbb_u64, 0xf8972affb3d98e1f_u64, 0xad30468299d12a94_u64, 0xd31ec3e562d38d68_u64, 0x8680b929c2af992e_u64, 0xb6224cac9d2fde72_u64, 0x6a9b20adb4ff262a_u64, 0x0ef911a3308e35a5_u64, 0x23cb86a3c7b29248_u64, 0xe4f7620cff6de0c8_u64, 0x3d5705f10a9a7f6f_u64, 0x2397ea24d5049427_u64, 0xea09a68a6e49cd62_u64, 0x15ad45b4a1b5e823_u64, 0x128cfed9c6a525ac_u64, 0x154b74a5668d058d_u64, 0x16fec586e008e2c9_u64, 0x76c8c1d21cfb8d44_u64, 0x67bde50ea3b628b6_u64, 0xd409485edd56b172_u64, 0x15a1ef23b6fcbe7c_u64, 0x5d2c60a38e3f1513_u64, 0xef30f42455269f35_u64, 0xd67b03c2e02269d4_u64, 0xeb4b0b9e4f345617_u64, 0x39e39c6c2ab3655c_u64, 0x2a51bb803173c218_u64, 0x09e7f29df29795a8_u64, 0xce241f5bddec213c_u64, 0x823518ea88a51741_u64, 0x64dca98ef24f5cb4_u64, 0x218cf2d6ad86e5c1_u64, 0xa6340cb65c4b11d5_u64, 0xb1ec03e9739998c9_u64, 0xf0a83d3cd0dae9b5_u64, 0xdb897c2384083746_u64, 0xec835e79946a3145_u64, 0x7e610231ac1d6180_u64, 0x6d12d59bba9c4881_u64, 0x7b8a103264edaf26_u64, 0xbdf1f5b4ab3de24c_u64, 0x3a3c159062718f71_u64, 0x61f78a9abaa58b46_u64, 0x98916152cf7eee1b_u64, 0x6479184fd64fdd03_u64, 0xfff5ac40eec5dd32_u64, 0x6f340fabaa13780e_u64, 0xee2ea72f6796aab4_u64, 0xedb29311c504d652_u64, 0x11815196b9fbf5df_u64, 0xf46e8417ae1b7ac7_u64, 0x023ec85e7e723382_u64, 0x4633259b16954dad_u64, 0xd07cf3484aacca02_u64, 0x5f0ea4c477339c06_u64, 0x68fc87bcfa363f00_u64, 0x0e0ea289950add57_u64, 0xa8acc772534bbb89_u64, 0xfc4facdfd3d64e3f_u64, 0xb6a4dec498e3fbc3_u64, 0xeed89db66611e307_u64, 0x86f8c20fb664b01a_u64, 0xe83c1ffda3ec476f_u64, 0x39bf1307dd6481f6_u64, 0xef75477f5dbb812b_u64, 0x2b7d0ea00521b3d9_u64, 0x5c2214c3e9167abb_u64, 0x4e61f79b3a36f1db_u64, 0x878499cdabe3cdfd_u64, 0xb477fbf5eadcd513_u64, 0xf01bb72d7bcdcefb_u64, 0x3be1d154823575ea_u64, 0xeff573116df1555d_u64, 0x62aef7b55319d1d3_u64, 0x70648748c0e93f2f_u64, 0xa093129e5604b25c_u64, 0xa162f122c751ffbe_u64, 0xe448924574962b91_u64, 0x5931f774fc9f1844_u64, 0x34ad29990485d84d_u64, 0xd2cfecddd6b7ba8a_u64, 0xb39accc3025a1b44_u64, 0x89dab2e0fe03a229_u64, 0x894c0e9aac77bfe4_u64, 0xf1090827b43725fd_u64, 0x67127db35b287315_u64, 0x7d9d0af68fc06e7f_u64, 0x3b27dffbfc02ab2f_u64, 0x1a157ced9b54e454_u64, 0xe1e5b755b8291558_u64, 0x563e69d6ac7f73f8_u64, 0x408fca9cc277fc1f_u64, 0xd7166cd3d924d607_u64, 0xb942b718144c51cb_u64, 0x83ef188365e5681d_u64, 0x40e0ba89720e6c81_u64, 0xf21352595e0bf350_u64, 0xe7112e89103cc0c6_u64, 0x9dea4afc821a9730_u64, 0xf90d930343d33002_u64, 0xddf9e1806cdc80ef_u64, 0x18e2bc14c8ed3c36_u64, 0x53478909e39da892_u64, 0x0b90c3c942bfa62c_u64, 0xc3d4240d5d9a890a_u64, 0xe285567b61bd57d7_u64, 0x6cc90b7d06c506d8_u64, 0x511aacdcd3b8eb99_u64, 0xf314476247088f74_u64, 0xa5486bdc455d56a2_u64, 0x16af5c057a216a8c_u64, 0x08371289cb79dce7_u64, 0x7b0a0a42f45c41bd_u64, 0x64895285f2b7e950_u64, 0x504d72505d98050c_u64, 0x97c4afa25181e605_u64, 0x5fd41175e0c39c34_u64, 0xb336c99ce723d817_u64, 0xd861a7ef2e855f75_u64, 0xe59aad1cf16cdb2b_u64, 0xf40bdd5a6688662f_u64, 0x5019794a1f5896e4_u64, 0xda3ec2ec26e111aa_u64, 0x1ce81f6a7938f852_u64, 0xe9b81d82d31b3987_u64, 0x29694eddb5afbcc9_u64, 0x4d50430b860546c3_u64, 0x4ffd0691f9e13630_u64, 0xd5fd8a1cafb2cce5_u64, 0x2a53096f0c1278a8_u64, 0x5ee4b09989a11728_u64, 0x8e77ee63670fa090_u64, 0xf4fa0ab6316ed2ec_u64, 0x163c5c7f03b718c5_u64, 0x96e8a93742139e47_u64, 0x76c746094bca11de_u64, 0xc70534171bf68a81_u64, 0x1c561ea3e50849c2_u64, 0x4a5018bb567c16a2_u64, 0xd725d3b9ed35fba9_u64, 0xd727e908a1cc5001_u64, 0xd24303f2f370d960_u64, 0xcb773db17e36deb8_u64, 0xa64033468f47f60f_u64, 0xf5dec646f85ba1c6_u64, 0xc8c615e72768d6b4_u64, 0xa75ab2ef3590737e_u64, 0x5257cf0b424aab42_u64, 0x2b110165bc3ba0b2_u64, 0xe1a97db3c5d0fc6c_u64, 0x474d10fd336cf746_u64, 0xf95f1f657313c4ea_u64, 0xafdc40732a1b03f6_u64, 0x0f46e91acb4eeab8_u64, 0xb06854a7d3139b87_u64, 0xf2f68677a56efb23_u64, 0xf6ba073b424b19e8_u64, 0x2c791f59cc1ffc22_u64, 0x2098bb3f6852d2b1_u64, 0xfd197afa03c1844e_u64, 0xf735312b47773c26_u64, 0x6a6e3a60fdae388e_u64, 0x4447498ac7d9dd82_u64, 0x4c20ab7aa99a2182_u64, 0x600449cd14f8b1ec_u64, 0x52bfd4ada717a31c_u64, 0x4f10d75812d26a6d_u64, 0x901915a71344b708_u64, 0xf78bc51f239e12c6_u64, 0x214cffcee9dd33ca_u64, 0xa3808a70a1da1d66_u64, 0x0fa8580dc2529179_u64, 0xcb01c0a806a3322e_u64, 0xce36ba75ab4ffe02_u64, 0x413ee038dff6b7fd_u64, 0x7da6491b4f867803_u64, 0x18da934f3fc63793_u64, 0x9958f29a37efd515_u64, 0x95a1acb343363fb2_u64, 0x6d1932845f3813dd_u64, 0xf853f7dc9186b952_u64, 0xc7adc6b4988891ba_u64, 0xa9bf1fae55e97289_u64, 0x4ffaeb22d748d6d4_u64, 0x5580085f9c2247b3_u64, 0x76ceee5dee6d2d54_u64, 0x3e33f2f642be355e_u64, 0x90887712e9dc9663_u64, 0x09c93255bc853ced_u64, 0x705a76d3418f2b4f_u64, 0x2e09716dff309c62_u64, 0x61e131e94ae140be_u64, 0xf91297bbb1d6cdbe_u64, 0x68fc6e4d6a920bd2_u64, 0x8f7f5e200d41a580_u64, 0x8dee643bbbd353d6_u64, 0xc138ad021532194d_u64, 0x04eaaaab0d4998ea_u64, 0x3b269fca8a8622ba_u64, 0xdc913b883d64660e_u64, 0xa87cf32ce084af6a_u64, 0x5af910ded9deeb17_u64, 0x79b567a67cde8b61_u64, 0x61e63b20928c47af_u64, 0xf9c79d63272c4628_u64, 0x4504ae08d19b2980_u64, 0x276234f6f3e1e1eb_u64, 0xa623a2a80c4cb131_u64, 0x2c9b801c691e71bb_u64, 0x813b716e71055e67_u64, 0x381704d4fc9ec5f9_u64, 0x43af186b79b2a0f3_u64, 0x8df64f3218965d3c_u64, 0xee268c7681608ebc_u64, 0x7865a49bdcd7f074_u64, 0x45770c9f804efeec_u64, 0xfa7301d859796671_u64, 0x1fe196a53fb5b237_u64, 0xd0fcf9cf13165ffe_u64, 0xf465ff2dcbe8ac4b_u64, 0x8c47e96b350b7c3f_u64, 0x6e7693d88171a2b4_u64, 0x3505404b6008a13c_u64, 0x37d0017bda992a80_u64, 0x947a5373353c45a4_u64, 0x8d5b15eaa58368ef_u64, 0xc5f40e3fd8f18ae1_u64, 0xb1997321b48e8b1b_u64, 0xfb14be7fbae58156_u64, 0x2172a361fd2a722e_u64, 0xa28fbdbe7eb1987e_u64, 0x24859793181c3718_u64, 0xf394e58d12972f1d_u64, 0x39438767895414c1_u64, 0x31f17078d34c156c_u64, 0x9732300393f33613_u64, 0xe1d49c2b973c884c_u64, 0x1046bcdcf4fccd05_u64, 0xf68925b421c48b09_u64, 0xa1971c56ebc10d90_u64, 0xfbaccd1d0903bb09_u64, 0xe63ae8632b84473b_u64, 0x767dfafab5ba9092_u64, 0x655e186472be5455_u64, 0xabcc11744430db5e_u64, 0x8767e77e76440759_u64, 0x2edbb3bca17e628e_u64, 0xaf776280d975ac74_u64, 0x184b1d6fccfc856e_u64, 0x9c1991b686a00c7d_u64, 0x246ddc4e63f59390_u64, 0xb859505a0b301225_u64, 0xfc3b27d38a5d49ab_u64, 0x256778ffcb5c1769_u64, 0x712beb01d32241b1_u64, 0x1b51a3cdad65a191_u64, 0x23d5a2b8dc1e0341_u64, 0xdc32fb8507a753b5_u64, 0x2bc42889167f8ca9_u64, 0x8ffbbceed62c7c43_u64, 0xeab2d4b6c97209b7_u64, 0xcf685093ab467d00_u64, 0x39dbeb5c2d2cbf8e_u64, 0x8b70e81ea4598ee8_u64, 0xfcbfc926484cd43a_u64, 0xa3e22b4d38917e73_u64, 0x26ace06db55ecfbd_u64, 0x063c572324d01a61_u64, 0xfcd3974462ee60e3_u64, 0xd0dcfa34d1aa337f_u64, 0x28aaed62527cb3b5_u64, 0xe976fb98213b8497_u64, 0x673171e6a6554f35_u64, 0xb393be74c8381589_u64, 0xa19702d6d140d729_u64, 0x62b817621ff0f760_u64, 0xfd3aabf84528b50b_u64, 0xeae6bd951c1dabbd_u64, 0x8e8799e6913803e0_u64, 0x37dd74aaaeb56c5a_u64, 0x9fe14048be786e10_u64, 0x3c6f72706b194b88_u64, 0x259020dd1cc27444_u64, 0xc002a2684781f07f_u64, 0xd3bd6558940206cb_u64, 0xd94accf74de23b6d_u64, 0x9569c48a4106edf0_u64, 0xc35ed177651ddbb9_u64, 0xfdabcb8caeba091b_u64, 0xfac7397cc07a646f_u64, 0xe0692c1d4d6a90c2_u64, 0xdd411df178eb7d1e_u64, 0x04e60cacc98164d7_u64, 0xcfe841fd3b113802_u64, 0x2273e19db5eaed56_u64, 0xe5e597261830d391_u64, 0x300e707e9a9a66e5_u64, 0xf65d64ce2ea940ee_u64, 0xcc9d5d787e81f867_u64, 0x92ae1e5d881f153b_u64, 0xfe1323870cfe9a3d_u64, 0x90cd1d959db674ee_u64, 0xdafc53bdb0f3ad5e_u64, 0x98b1eed416377b10_u64, 0xe2427477a6ecf31e_u64, 0xf0c8a6bf13a12290_u64, 0x1f564e56a9730e34_u64, 0x4e08e535cadaf146_u64, 0x12e11c21cf9985c6_u64, 0x3ac4eca2fbd267bb_u64, 0xff4bd7de3aae3a28_u64, 0x7faf2efdd7ae4acc_u64, 0xfe70afeb6d33d6a2_u64, 0x2907cf2b3f6feac1_u64, 0xd07230f388861771_u64, 0x4b3f495dc82a7a68_u64, 0x39773c54cb0e9276_u64, 0x209abd55453a49b8_u64, 0x1c3785c79ec2d4f5_u64, 0x86310766026f8dcc_u64, 0xa0e9ee7a85258e45_u64, 0x485224a982a7c85a_u64, 0x5a2c976d196a3567_u64, 0xb2681b468efba361_u64, 0xfec46d1e89292cf0_u64, 0x41390efdc726e9ef_u64, 0x01af208bbd6f4012_u64, 0xa801974079e03914_u64, 0x21030810a8ddd093_u64, 0xd9abe105fe0fbea3_u64, 0x1917a6bc29b42be1_u64, 0xd8e72d912977ee71_u64, 0x7fa801bea5d4c3cb_u64, 0xbd57ce6223df6540_u64, 0x5f063781804a271a_u64, 0x287f3f198f7cd53c_u64, 0xff0e57e5ead848d1_u64, 0x1f1901544271c3f8_u64, 0x46f9278d36fb08fe_u64, 0xdbff81d194ca39fa_u64, 0xa360bea372e455ef_u64, 0x2eafd08a7f7fc6c4_u64, 0x15f6d00a9aa418c1_u64, 0x7fba5f8126cb2985_u64, 0x3b7c57bc5c735193_u64, 0xf1419bcc0ff7192e_u64, 0x91cf862e7fad71ee_u64, 0x964aad96d95ae9fb_u64, 0xff4e6d680c41d0a9_u64, 0x0f668633f1ab8589_u64, 0x83d904a423e340df_u64, 0xfd367461499ea9fe_u64, 0x825261edb7445e11_u64, 0x5b93892877537a40_u64, 0x12d52092ce19f5cc_u64, 0xbeeeae8129a786b8_u64, 0xa7ba18398767930a_u64, 0x1018736805f7bf87_u64, 0x3cb04da7e6b0bbc3_u64, 0x369ca2e0608be070_u64, 0xff84ab2c738d6a03_u64, 0x519c314973ccae6b_u64, 0x9684b763f409ea33_u64, 0x3d124a454239f979_u64, 0xfb3691daa4fc8f5c_u64, 0xec1cd0d9c7c3b699_u64, 0x0fb2b73cfc106ff6_u64, 0x8f0a0e36a000c734_u64, 0x1bf58f6a90d520d5_u64, 0xa94ff9046c34d4e4_u64, 0xcf53e4baa403250b_u64, 0x5750700a6df26524_u64, 0xffb10f1bcb6bef1d_u64, 0x421e8edaaf59453d_u64, 0xa8902b24fdd1fb46_u64, 0x72e72bf5af6010c4_u64, 0x1216769fcda0d0eb_u64, 0xf36fc97b1fef1fde_u64, 0x0c8fb2f886ec09f3_u64, 0x76a17954b2b7c517_u64, 0x831dcf0e30781c87_u64, 0xde3ad81725b27622_u64, 0x30bd6fbe3cdfb585_u64, 0x2fb15c7502f6de78_u64, 0xffd3977ff7bae4e9_u64, 0x664649b4d541b9c5_u64, 0x02881e6ab9834899_u64, 0xfc79c4beab7508d1_u64, 0x036d93dfef35cbd6_u64, 0xe4df8597c03c05d2_u64, 0x096c32baca2ae68b_u64, 0x437b2dd49d5fca3c_u64, 0xab5dc1a419785764_u64, 0xb707f21199fe9209_u64, 0x568fb69282182f32_u64, 0xef6f30da8fe307e8_u64, 0xffec4304266865d9_u64, 0x5657552366961732_u64, 0xa8390bc33658b7d6_u64, 0x4cf0323d7cbf0eb5_u64, 0x62652f9e1aa508ac_u64, 0x0cf31ac036de81c6_u64, 0x0648557de8d99f7e_u64, 0x4e29cf6e5fed0679_u64, 0xc7e9f8e9e7f57263_u64, 0xfc29714c032279b1_u64, 0xff8d89566a2181db_u64, 0xab255bf76857a287_u64, 0xfffb10b4dc96dabb_u64, 0xb47903f7a19f8ee1_u64, 0xe36885f0fd7b869a_u64, 0x35b064282559db48_u64, 0xf0257406fa2c2f25_u64, 0x06e03a898ebf83db_u64, 0x03243a3f9bd8f08c_u64, 0xc3c75f41b6ce7aa7_u64]
+# 1/(2k+3)! * 2^384 for k = 0..17: sin(t)/t = 1 - sum_k (-1)^k c_k (t^2)^(k+1); entry (k*3 + limb)*2 is the high and
+# the next one the low 64 bits of 128-bit limb `limb` (0 = least significant).
+secret preset B128_TRIG_SIN_COEF: Array[U64, 108] = [0xaaaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaab_u64, 0xaaaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaaa_u64, 0x2aaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaaa_u64, 0x2222222222222222_u64, 0x2222222222222222_u64, 0x2222222222222222_u64, 0x2222222222222222_u64, 0x0222222222222222_u64, 0x2222222222222222_u64, 0x00d00d00d00d00d0_u64, 0x0d00d00d00d00d01_u64, 0x0d00d00d00d00d00_u64, 0xd00d00d00d00d00d_u64, 0x000d00d00d00d00d_u64, 0x00d00d00d00d00d0_u64, 0x4aad8e671f558391_u64, 0x1ca002e3bc74aad9_u64, 0xe3bc74aad8e671f5_u64, 0x583911ca002e3bc7_u64, 0x00002e3bc74aad8e_u64, 0x671f5583911ca002_u64, 0x8ea47ca3d8b8a1c7_u64, 0x232b58766f185556_u64, 0x71c7880adcbc46da_u64, 0xaab1643c04a7fbe3_u64, 0x0000006b99159fd5_u64, 0x138e3f9d1f92e0df_u64, 0x12f7354fd1ccabb4_u64, 0x25f8129e4c33071c_u64, 0xd7b4269d9babdfa2_u64, 0x38e3994206980d1a_u64, 0x00000000b092309d_u64, 0x43684be51c198e91_u64, 0xc5937680614dc64d_u64, 0xa868cce37f24d07e_u64, 0x774657f48f5eaf63_u64, 0x83ed943c0c38ccdc_u64, 0x0000000000d73f9f_u64, 0x399dc0f88ec32b58_u64, 0x938cc7061e79b29c_u64, 0x855335758ad20488_u64, 0xcbbb8d7ff53ba468_u64, 0xd621d08b83cf4484_u64, 0x000000000000ca96_u64, 0x3b81856a53593028_u64, 0x88aa546b0f0f539c_u64, 0x2750563cf9ab47df_u64, 0xf61dbdcb3a5abf5b_u64, 0xa0d03143c6bf7bb5_u64, 0x0000000000000097_u64, 0xa4da340a0ab92650_u64, 0x7866ce3854c2797e_u64, 0x8b10a5feed16f5cf_u64, 0xbc51bf3b9b914861_u64, 0x21e81d5fdb4ad15c_u64, 0x0000000000000000_u64, 0x5c6e3bdb73d5c62f_u64, 0xcb9f1098e6defe37_u64, 0x6575ea11330fbaab_u64, 0xb2f70e09bafec4f3_u64, 0x09adfe08ca4c8b09_u64, 0x0000000000000000_u64, 0x002ec368262c7033_u64, 0x4bdbff99dad68eee_u64, 0x2c1da2f33a89d6ed_u64, 0xa8d4e44a419776f1_u64, 0x0b893fff294c1301_u64, 0x0000000000000000_u64, 0x000013f3ccdd165f_u64, 0xf8732f68269a3287_u64, 0x449f0a1409edf676_u64, 0x33a8c82a6863c575_u64, 0x09dcd281d2798b54_u64, 0x0000000000000000_u64, 0x0000000746ac70b7_u64, 0x93da4f30fec9552f_u64, 0x750cce83ced4786c_u64, 0x686b15af57c61cee_u64, 0xcde2523accdebb20_u64, 0x0000000000000000_u64, 0x00000000024b3f31_u64, 0x6db749db7122598d_u64, 0xd0811d668aaebfb7_u64, 0x973c1fade2170f72_u64, 0x37d35fe1c89db179_u64, 0x0000000000000000_u64, 0x000000000000a1a6_u64, 0x824924ad0e690091_u64, 0xd4cdb2b1cb48686d_u64, 0x3024a9ba1aa36a70_u64, 0x59bff52e844faa1b_u64, 0x0000000000000000_u64, 0x0000000000000027_u64, 0x7ed1981ffbecba15_u64, 0xa29957b4daf43a9a_u64, 0x086e2ce38b6c8f94_u64, 0x19e3fad3f0311d9d_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0xf3fcb2a927344305_u64, 0xc831b36193c49a91_u64, 0x00019ec8d1c94e85_u64, 0xaf4c78b15c3d89d2_u64, 0x0000000000000000_u64, 0x0000000000000000_u64]
+# 1/(2k+2)! * 2^384 for k = 0..17: 1 - cos(t) = sum_k (-1)^k c_k (t^2)^(k+1); same layout as B128_TRIG_SIN_COEF.
+secret preset B128_TRIG_COS_COEF: Array[U64, 108] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x0000000000000000_u64, 0xaaaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaab_u64, 0xaaaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaaa_u64, 0x0aaaaaaaaaaaaaaa_u64, 0xaaaaaaaaaaaaaaaa_u64, 0x05b05b05b05b05b0_u64, 0x5b05b05b05b05b06_u64, 0x5b05b05b05b05b05_u64, 0xb05b05b05b05b05b_u64, 0x005b05b05b05b05b_u64, 0x05b05b05b05b05b0_u64, 0xa01a01a01a01a01a_u64, 0x01a01a01a01a01a0_u64, 0x01a01a01a01a01a0_u64, 0x1a01a01a01a01a01_u64, 0x0001a01a01a01a01_u64, 0xa01a01a01a01a01a_u64, 0x21115b0a4feef38e_u64, 0x82dccd16c60baaaf_u64, 0xe392d8777c170b65_u64, 0x559f4e943337d2c7_u64, 0x0000049f93edde27_u64, 0xd71cbbc05b4fa999_u64, 0xf68db50da764b825_u64, 0xed98f209de975c72_u64, 0xf425f600e7ba5b3c_u64, 0xe38ec85a55b8aa52_u64, 0x00000008f76c77fc_u64, 0x6c4bdaa26d4c3d67_u64, 0x93a3f185b38e9e8c_u64, 0xde2401547328375d_u64, 0xfd1f2754668c46d4_u64, 0xbaebaf84b75400ef_u64, 0x000000000c9cba54_u64, 0x603e4e905d6f8a2e_u64, 0xcc5937680614dc64_u64, 0xda868cce37f24d08_u64, 0x8774657f48f5eaf6_u64, 0x383ed943c0c38ccd_u64, 0x00000000000d73f9_u64, 0xf399dc0f88ec32b5_u64, 0x24a443f21e233496_u64, 0xeaf6668687b65596_u64, 0x4435161554bc33cc_u64, 0xef73a807c0362e79_u64, 0x0000000000000b41_u64, 0x3c31dcbecbbdd802_u64, 0xe06eea9ef3f3f761_u64, 0x685d9de972e229fe_u64, 0x72b4afe3c2eaeff7_u64, 0xc80a68dcfd232c95_u64, 0x0000000000000007_u64, 0x950ae900808941ea_u64, 0x4b4a7dbcbe08d6fa_u64, 0x1d98078b9669c55b_u64, 0x143242dfcce3b1d5_u64, 0xdea1d2ca2ce07de1_u64, 0x0000000000000000_u64, 0x04338e5b6dfe14a5_u64, 0x687bf6065ef3f542_u64, 0x4ee4e9c0b775fd1c_u64, 0x7cca4b4067ca9d8a_u64, 0x20673feb086ddb20_u64, 0x0000000000000000_u64, 0x0001f2cf01972f57_u64, 0x3425fffc12435444_u64, 0x3cc6101d0c18fe6c_u64, 0x72cd1c790285d358_u64, 0x0a4a33b132d1b1f6_u64, 0x0000000000000000_u64, 0x000000c4742fe352_u64, 0xbfbaf88cdccea660_u64, 0x427364ee6e11a43b_u64, 0xd42174dcf171470d_u64, 0x52a350a9353b32b0_u64, 0x0000000000000000_u64, 0x0000000042862898_u64, 0x4931f192b328d82c_u64, 0x3fa28f6acb293737_u64, 0x5047d60e60caded4_u64, 0xc2989c574b187db4_u64, 0x0000000000000000_u64, 0x000000000013932c_u64, 0xcb6dba4edb8912cc_u64, 0x6e8408eb345575fe_u64, 0x34b9e0fd6f10b87b_u64, 0x91be9aff0e44ed8b_u64, 0x0000000000000000_u64, 0x000000000000050d_u64, 0x56a7cc5f715d70f5_u64, 0x3af6fdb9ef640312_u64, 0x2710231c0fd7a13f_u64, 0x8a2b4af9d6b70c88_u64, 0x0000000000000000_u64, 0x0000000000000001_u64, 0x4385d272aa8dafd5_u64, 0xef2eed1a5b6a56f6_u64, 0x003bf30652185952_u64, 0x560d71a254e4eb7d_u64, 0x0000000000000000_u64, 0x0000000000000000_u64]

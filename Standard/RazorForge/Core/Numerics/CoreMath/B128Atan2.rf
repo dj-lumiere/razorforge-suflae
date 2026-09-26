@@ -1,0 +1,366 @@
+module Core
+
+# ============================================================================
+# Correctly rounded two-argument arc tangent of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/atan2/atan2q.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2026 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped).
+# The helpers, tables and series kernels shared with atan live in B128AtanShared.rf.
+
+### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded to
+### the nearest `B128` (ties to even), identical on every platform. The result lies in [-pi, pi]; the signs
+### of zero and infinite coordinates select the quadrant as in IEEE 754, and a NaN coordinate gives NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle in radians.
+routine atan2(y: B128, x: B128) -> B128
+  var ux = LLVM::reinterpret_bits[B128, U128](x)
+  var uy = LLVM::reinterpret_bits[B128, U128](y)
+  var xh = b128_atanfam_hi(v: ux)
+  var yh = b128_atanfam_hi(v: uy)
+  var xsgn = xh >>> 63
+  var ysgn = yh & 0x8000000000000000_u64
+  xh = xh & 0x7FFFFFFFFFFFFFFF_u64
+  yh = yh & 0x7FFFFFFFFFFFFFFF_u64
+  if yh >= 0x7FFF000000000000_u64 or xh >= 0x7FFF000000000000_u64
+    # NaN or infinity
+    return b128_atan2_special(y: y, x: x)
+  var red = b128_atan2_reduce(xa: b128_atanfam_mk(hi: xh, lo: b128_atanfam_lo(v: ux)), ya: b128_atanfam_mk(hi: yh, lo: b128_atanfam_lo(v: uy)))
+  if red.zero
+    # x = 짹0 or y = 짹0
+    return b128_atan2_special(y: y, x: x)
+  var g = red.g
+  var isct = red.isct
+  var dn = red.dn
+  var f = b128_atanfam_fast_core(kn: red.kn, kd: b128_atanfam_mk(hi: red.kd2, lo: red.kd1), dn: dn)
+  var xn = 0_s64
+  var v = 0_u128
+  var rnd = 0_u64
+  if isct != 0 or g or xsgn != 0
+    var f0 = 0_u64
+    var f1 = b128_atanfam_lo(v: f)
+    var f2 = b128_atanfam_hi(v: f)
+    dn = dn +% 1
+    if dn < 64
+      var sd = b128_atanfam_sa(n: dn)
+      var sl = b128_atanfam_sa(n: 64 -% dn)
+      f0 = f1 << sl
+      f1 = (f1 >>> sd) | (f2 << sl)
+      f2 = f2 >>> sd
+    else
+      var fa = Array[U64, 8]()
+      fa[1] = f1
+      fa[2] = f2
+      fa = b128_atanfam_shr(a: fa, n: 3_u64, k: dn)
+      f0 = fa[0]
+      f1 = fa[1]
+      f2 = fa[2]
+    var s = b128_atanfam_add3(a0: B128_ATANFAM_PHI0[6 *% isct +% 3], a1: B128_ATANFAM_PHI0[6 *% isct +% 4], a2: B128_ATANFAM_PHI0[6 *% isct +% 5], b0: f0, b1: f1, b2: f2)
+    var msk = 0_u64
+    if g != (xsgn != 0)
+      msk = 0xFFFFFFFFFFFFFFFF_u64
+    var q = b128_atan2_quadrant(g: g, xsgn: xsgn)
+    s = b128_atanfam_add3(a0: B128_ATANFAM_QOFF[6 *% q +% 3], a1: B128_ATANFAM_QOFF[6 *% q +% 4], a2: B128_ATANFAM_QOFF[6 *% q +% 5], b0: s.item0 ^ msk, b1: s.item1 ^ msk, b2: s.item2 ^ msk)
+    f0 = s.item0
+    f1 = s.item1
+    f2 = s.item2
+    var k = b128_atanfam_clz(v: f2)
+    rnd = (f1 >>> b128_atanfam_sa(n: 14 -% k)) & 1
+    var t = b128_atanfam_mk(hi: f1, lo: f0) +% 0x0CA2339C0EBEDFA4_u128
+    var th = b128_atanfam_hi(v: t)
+    var tl = b128_atanfam_lo(v: t)
+    th = th & ((1_u64 << b128_atanfam_sa(n: 15 -% k)) -% 1)
+    th = th ^ (1_u64 << b128_atanfam_sa(n: 14 -% k))
+    if th == 0 and tl < 0x194467381D7DBF48_u64
+      return b128_atan2_accurate(y: y, x: x)
+    xn = 0x3FFF -% k
+    var v0 = (f1 >>> b128_atanfam_sa(n: 15 -% k)) | (f2 << b128_atanfam_sa(n: 49 +% k))
+    v = b128_atanfam_mk(hi: f2 >>> b128_atanfam_sa(n: 15 -% k), lo: v0)
+  else
+    v = f
+    var w0 = b128_atanfam_lo(v: f)
+    var w1 = b128_atanfam_hi(v: f)
+    var k = b128_atanfam_clz(v: w1)
+    xn = 0x3FFE -% dn -% k
+    if xn > 0
+      var tl = (w0 +% 6) & (0xFFFFFFFFFFFFFFFF_u64 >>> b128_atanfam_sa(n: 49 +% k))
+      tl = tl ^ (1_u64 << b128_atanfam_sa(n: 14 -% k))
+      if tl <= 15
+        return b128_atan2_accurate(y: y, x: x)
+      rnd = (w0 >>> b128_atanfam_sa(n: 14 -% k)) & 1
+      var v0 = (w0 >>> b128_atanfam_sa(n: 15 -% k)) | (w1 << b128_atanfam_sa(n: 49 +% k))
+      v = b128_atanfam_mk(hi: w1 >>> b128_atanfam_sa(n: 15 -% k), lo: v0)
+    else
+      # subnormal result
+      xn = 0
+      var ks = 15 -% 0x3FFE +% dn
+      if ks < 128
+        var tt = (v +% 6) & ((1_u128 << b128_atanfam_sa(n: ks)) -% 1)
+        tt = tt ^ (1_u128 << b128_atanfam_sa(n: ks -% 1))
+        if tt <= 15
+          return b128_atan2_accurate(y: y, x: x)
+        rnd = LLVM::int_truncate[U128, U64]((v >>> b128_atanfam_sa(n: ks -% 1)) & 1)
+        v = v >>> b128_atanfam_sa(n: ks)
+      else
+        if ks == 128
+          rnd = LLVM::int_truncate[U128, U64](v >>> 127)
+        else
+          rnd = 0
+        v = 0
+  v = v +% b128_atanfam_mk(hi: LLVM::reinterpret_bits[S64, U64](xn) << 48, lo: rnd)
+  return LLVM::reinterpret_bits[U128, B128](v | b128_atanfam_mk(hi: ysgn, lo: 0_u64))
+
+# index of the quadrant offset: 0 (none), 1 (pi/2 when |x| < |y|), 2 (pi when x < 0 and |x| >= |y|)
+@inline
+secret routine b128_atan2_quadrant(g: Bool, xsgn: U64) -> U64
+  if g
+    return 1
+  if xsgn != 0
+    return 2
+  return 0
+
+# the argument reduction shared by the fast and the accurate path
+secret record B128Atan2Reduction
+  zero: Bool
+  g: Bool
+  isct: U64
+  dn: S64
+  kn: U128
+  kd0: U64
+  kd1: U64
+  kd2: U64
+
+# a = max(|x|, |y|), b = min(|x|, |y|) (sign-stripped bits); reduces b/a against the table angle
+# atan(tn[isct] / 2^15): kn / kd * 2^-dn = (b/a - tn/2^15) / (1 + b/a * tn/2^15), kd normalized to 192 bits
+@inline
+secret routine b128_atan2_reduce(xa: U128, ya: U128) -> B128Atan2Reduction
+  var g = xa < ya
+  var a = xa
+  var b = ya
+  if g
+    a = ya
+    b = xa
+  var xn = LLVM::reinterpret_bits[U64, S64](b128_atanfam_hi(v: a) >>> 48)
+  var yn = LLVM::reinterpret_bits[U64, S64](b128_atanfam_hi(v: b) >>> 48)
+  if yn == 0
+    var ns = -15
+    var bh = b128_atanfam_hi(v: b)
+    var bl = b128_atanfam_lo(v: b)
+    if bh != 0
+      ns = ns +% b128_atanfam_clz(v: bh)
+    else
+      if bl != 0
+        ns = ns +% b128_atanfam_clz(v: bl) +% 64
+      else
+        return B128Atan2Reduction(zero: true, g: g, isct: 0_u64, dn: 0_s64, kn: 0_u128, kd0: 0_u64, kd1: 0_u64, kd2: 0_u64)
+    yn = 1 -% ns
+    b = b << b128_atanfam_sa(n: ns)
+    if xn == 0
+      ns = -15
+      var ah = b128_atanfam_hi(v: a)
+      if ah != 0
+        ns = ns +% b128_atanfam_clz(v: ah)
+      else
+        ns = ns +% b128_atanfam_clz(v: b128_atanfam_lo(v: a)) +% 64
+      xn = 1 -% ns
+      a = a << b128_atanfam_sa(n: ns)
+  var dn = xn -% yn
+  var ah = (b128_atanfam_hi(v: a) & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  var bh = (b128_atanfam_hi(v: b) & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  var al = b128_atanfam_lo(v: a)
+  a = b128_atanfam_mk(hi: ah, lo: al)
+  b = b128_atanfam_mk(hi: bh, lo: b128_atanfam_lo(v: b))
+  var inda = (ah >>> 41) & 127
+  var rsc = 2_u64
+  if inda == 0
+    rsc = rsc +% 1
+  if inda < 43
+    rsc = rsc +% 1
+  var rcpx = (rsc << 8) | B128_ATAN2_RCP[inda]
+  var k = ((bh >>> 10) *% rcpx) >>> 41
+  if dn < 64
+    k = k >>> b128_atanfam_sa(n: dn)
+  else
+    k = 0
+  var isct = B128_ATAN2_IND[k]
+  if dn < 64
+    if ((ah >>> 15) *% B128_ATANFAM_TN[isct +% 1]) < (bh >>> b128_atanfam_sa(n: dn))
+      isct = isct +% 1
+  var kn = 0_u128
+  var kd0 = 0_u64
+  var kd1 = 0_u64
+  var kd2 = 0_u64
+  if isct == 0
+    kn = b << 15
+    var ka = a << 15
+    kd2 = b128_atanfam_hi(v: ka)
+    kd1 = b128_atanfam_lo(v: ka)
+  else
+    if isct == 64
+      isct = 63
+    var sdn = b128_atanfam_sa(n: dn)
+    kn = (b << 15) -% ((a *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])) << sdn)
+    if (kn >>> 127) != 0
+      isct = isct -% 1
+      kn = (b << 15) -% ((a *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])) << sdn)
+    var knh = b128_atanfam_hi(v: kn)
+    var nzn = 0_s64
+    if kn != 0
+      if knh != 0
+        nzn = b128_atanfam_clz(v: knh)
+      else
+        nzn = 64 +% b128_atanfam_clz(v: b128_atanfam_lo(v: kn))
+    kn = kn << b128_atanfam_sa(n: nzn)
+    var sl = b128_atanfam_sa(n: 15 +% dn)
+    var sr = b128_atanfam_sa(n: 49 -% dn)
+    kd2 = ah >>> sr
+    kd1 = (al >>> sr) | (ah << sl)
+    kd0 = al << sl
+    var bt = b *% LLVM::zero_extend[U64, U128](B128_ATANFAM_TN[isct])
+    var s = b128_atanfam_add3(a0: kd0, a1: kd1, a2: kd2, b0: b128_atanfam_lo(v: bt), b1: b128_atanfam_hi(v: bt), b2: 0_u64)
+    kd0 = s.item0
+    kd1 = s.item1
+    kd2 = s.item2
+    # normalize the 192-bit kd so its top bit is set
+    var nzd = 0_s64
+    if kd2 == 0
+      kd2 = kd1
+      kd1 = kd0
+      kd0 = 0
+      nzd = 64
+    var z = b128_atanfam_clz(v: kd2)
+    var zl = b128_atanfam_sa(n: z)
+    var zr = b128_atanfam_sa(n: (z ^ -1) & 63)
+    nzd = nzd +% z
+    kd2 = (kd2 << zl) | ((kd1 >>> 1) >>> zr)
+    kd1 = (kd1 << zl) | ((kd0 >>> 1) >>> zr)
+    kd0 = kd0 << zl
+    dn = nzn -% nzd +% 64
+  return B128Atan2Reduction(zero: false, g: g, isct: isct, dn: dn, kn: kn, kd0: kd0, kd1: kd1, kd2: kd2)
+
+# the accurate path, taken when the fast result is too close to a rounding boundary
+secret routine b128_atan2_accurate(y: B128, x: B128) -> B128
+  var ux = LLVM::reinterpret_bits[B128, U128](x)
+  var uy = LLVM::reinterpret_bits[B128, U128](y)
+  var xh = b128_atanfam_hi(v: ux)
+  var yh = b128_atanfam_hi(v: uy)
+  var xsgn = xh >>> 63
+  var ysgn = yh & 0x8000000000000000_u64
+  xh = xh & 0x7FFFFFFFFFFFFFFF_u64
+  yh = yh & 0x7FFFFFFFFFFFFFFF_u64
+  var red = b128_atan2_reduce(xa: b128_atanfam_mk(hi: xh, lo: b128_atanfam_lo(v: ux)), ya: b128_atanfam_mk(hi: yh, lo: b128_atanfam_lo(v: uy)))
+  var g = red.g
+  var isct = red.isct
+  var dn = red.dn
+  var f = b128_atanfam_accurate_core(kn: red.kn, kd0: red.kd0, kd1: red.kd1, kd2: red.kd2, dn: dn)
+  if isct != 0 or g or xsgn != 0
+    f = b128_atanfam_shr(a: f, n: 6_u64, k: dn +% 1)
+    f = b128_atanfam_add(a: b128_atanfam_phi0(i: isct), b: f, n: 6_u64)
+    if g != (xsgn != 0)
+      var i = 0_u64
+      while i < 6
+        f[i] = f[i] ^ 0xFFFFFFFFFFFFFFFF_u64
+        i = i +% 1
+    f = b128_atanfam_add(a: b128_atanfam_qoff(i: b128_atan2_quadrant(g: g, xsgn: xsgn)), b: f, n: 6_u64)
+    dn = -1
+  var v = b128_atanfam_mk(hi: f[5], lo: f[4])
+  var k = b128_atanfam_clz(v: f[5])
+  v = v << b128_atanfam_sa(n: k)
+  var xn = 0x3FFE -% dn -% k
+  var rnd = 0_u64
+  if xn > 0
+    rnd = (b128_atanfam_lo(v: v) >>> 14) & 1
+    v = v >>> 15
+  else
+    var ks = 15 -% xn
+    if ks < 128
+      rnd = LLVM::int_truncate[U128, U64]((v >>> b128_atanfam_sa(n: ks -% 1)) & 1)
+      v = v >>> b128_atanfam_sa(n: ks)
+    else
+      if ks == 128
+        rnd = LLVM::int_truncate[U128, U64](v >>> 127)
+      else
+        rnd = 0
+      v = 0
+    xn = 0
+  v = v +% b128_atanfam_mk(hi: LLVM::reinterpret_bits[S64, U64](xn) << 48, lo: rnd)
+  return LLVM::reinterpret_bits[U128, B128](v | b128_atanfam_mk(hi: ysgn, lo: 0_u64))
+
+# NaN, infinite or zero arguments
+secret routine b128_atan2_special(y: B128, x: B128) -> B128
+  var ux = LLVM::reinterpret_bits[B128, U128](x)
+  var uy = LLVM::reinterpret_bits[B128, U128](y)
+  var xs = b128_atanfam_hi(v: ux) >>> 63
+  var ys = b128_atanfam_hi(v: uy) >>> 63
+  var ix = ux & 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+  var iy = uy & 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+  var xnan = b128_atanfam_class(xh: b128_atanfam_hi(v: ix), xl: b128_atanfam_lo(v: ix))
+  var ynan = b128_atanfam_class(xh: b128_atanfam_hi(v: iy), xl: b128_atanfam_lo(v: iy))
+  if xnan == 2 or ynan == 2
+    # signaling NaN: the default NaN of an invalid operation
+    return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: 0xFFFF800000000000_u64, lo: 0_u64))
+  if ynan == 3
+    return y
+  if xnan == 3
+    return x
+  # the angle as fixed point with 2 integer bits: 0, pi, 3pi/4, pi/4, pi/2
+  var idx = 4_u64
+  if xnan == 1 and ynan == 1
+    idx = 3 -% xs
+  elseif xnan == 1
+    idx = xs
+  elseif ynan == 1
+    idx = 4
+  elseif iy == 0
+    idx = xs
+  var oh = B128_ATAN2_RS[2 *% idx +% 1]
+  var ol = B128_ATAN2_RS[2 *% idx]
+  if oh == 0
+    return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: ys << 63, lo: 0_u64))
+  var k = b128_atanfam_clz(v: oh)
+  var rnd = (ol >>> b128_atanfam_sa(n: 14 -% k)) & 1
+  var frac = ol << b128_atanfam_sa(n: 49 +% k)
+  var xn = 0x4000 -% k
+  var v0 = (ol >>> b128_atanfam_sa(n: 15 -% k)) | (oh << b128_atanfam_sa(n: 49 +% k))
+  var v1 = oh >>> b128_atanfam_sa(n: 15 -% k)
+  if frac == 0
+    rnd = 0
+  var dv = b128_atanfam_mk(hi: (LLVM::reinterpret_bits[S64, U64](xn) << 48) | (ys << 63), lo: rnd)
+  return LLVM::reinterpret_bits[U128, B128](b128_atanfam_mk(hi: v1, lo: v0) +% dv)
+
+# 0, pi, 3pi/4, pi/4, pi/2 as (lo, hi) pairs of fixed point with 2 integer bits
+secret preset B128_ATAN2_RS: Array[U64, 10] = [
+  0x0000000000000000_u64, 0x0000000000000000_u64,
+  0x62633145C06E0E69_u64, 0x6487ED5110B4611A_u64,
+  0xC9CA64F450528ACE_u64, 0x4B65F1FCCC8748D3_u64,
+  0x9898CC51701B839A_u64, 0x1921FB54442D1846_u64,
+  0x313198A2E0370734_u64, 0x3243F6A8885A308D_u64
+]
+
+# reciprocal estimates of the top mantissa bits of max(|x|, |y|) for the table-index guess
+secret preset B128_ATAN2_RCP: Array[U64, 128] = [
+  0_u64, 248_u64, 240_u64, 232_u64, 224_u64, 217_u64, 210_u64, 202_u64, 195_u64, 188_u64, 181_u64, 174_u64, 168_u64, 161_u64, 155_u64, 148_u64,
+  142_u64, 135_u64, 129_u64, 123_u64, 117_u64, 111_u64, 105_u64, 100_u64, 94_u64, 88_u64, 83_u64, 77_u64, 72_u64, 66_u64, 61_u64, 56_u64,
+  51_u64, 46_u64, 41_u64, 36_u64, 31_u64, 26_u64, 21_u64, 16_u64, 12_u64, 7_u64, 3_u64, 254_u64, 250_u64, 245_u64, 241_u64, 236_u64,
+  232_u64, 228_u64, 224_u64, 220_u64, 216_u64, 212_u64, 208_u64, 204_u64, 200_u64, 196_u64, 192_u64, 188_u64, 185_u64, 181_u64, 177_u64, 174_u64,
+  170_u64, 167_u64, 163_u64, 160_u64, 156_u64, 153_u64, 149_u64, 146_u64, 143_u64, 140_u64, 136_u64, 133_u64, 130_u64, 127_u64, 124_u64, 121_u64,
+  118_u64, 115_u64, 112_u64, 109_u64, 106_u64, 103_u64, 100_u64, 97_u64, 94_u64, 92_u64, 89_u64, 86_u64, 83_u64, 81_u64, 78_u64, 75_u64,
+  73_u64, 70_u64, 67_u64, 65_u64, 62_u64, 60_u64, 57_u64, 55_u64, 52_u64, 50_u64, 48_u64, 45_u64, 43_u64, 41_u64, 38_u64, 36_u64,
+  34_u64, 31_u64, 29_u64, 27_u64, 25_u64, 22_u64, 20_u64, 18_u64, 16_u64, 14_u64, 12_u64, 10_u64, 8_u64, 6_u64, 4_u64, 2_u64
+]
+
+# table index from the estimated ratio min/max * 2^7
+secret preset B128_ATAN2_IND: Array[U64, 129] = [
+  0_u64, 0_u64, 1_u64, 1_u64, 2_u64, 3_u64, 3_u64, 4_u64, 5_u64, 5_u64, 6_u64, 6_u64, 7_u64, 8_u64, 8_u64, 9_u64,
+  10_u64, 10_u64, 11_u64, 11_u64, 12_u64, 13_u64, 13_u64, 14_u64, 15_u64, 15_u64, 16_u64, 16_u64, 17_u64, 18_u64, 18_u64, 19_u64,
+  19_u64, 20_u64, 21_u64, 21_u64, 22_u64, 22_u64, 23_u64, 23_u64, 24_u64, 25_u64, 25_u64, 26_u64, 26_u64, 27_u64, 27_u64, 28_u64,
+  29_u64, 29_u64, 30_u64, 30_u64, 31_u64, 31_u64, 32_u64, 32_u64, 33_u64, 33_u64, 34_u64, 34_u64, 35_u64, 36_u64, 36_u64, 37_u64,
+  37_u64, 38_u64, 38_u64, 39_u64, 39_u64, 40_u64, 40_u64, 41_u64, 41_u64, 41_u64, 42_u64, 42_u64, 43_u64, 43_u64, 44_u64, 44_u64,
+  45_u64, 45_u64, 46_u64, 46_u64, 47_u64, 47_u64, 47_u64, 48_u64, 48_u64, 49_u64, 49_u64, 50_u64, 50_u64, 50_u64, 51_u64, 51_u64,
+  52_u64, 52_u64, 52_u64, 53_u64, 53_u64, 54_u64, 54_u64, 54_u64, 55_u64, 55_u64, 56_u64, 56_u64, 56_u64, 57_u64, 57_u64, 57_u64,
+  58_u64, 58_u64, 58_u64, 59_u64, 59_u64, 60_u64, 60_u64, 60_u64, 61_u64, 61_u64, 61_u64, 62_u64, 62_u64, 62_u64, 63_u64, 63_u64,
+  63_u64
+]

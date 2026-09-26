@@ -1,0 +1,185 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cube root of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/cbrt/cbrtq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception flags and directed-rounding branches are dropped). The computation works on 64-bit and
+# 128-bit integers, like the original, and never uses the software B128 arithmetic.
+
+### Returns the cube root of this value, correctly rounded: the exact cube root rounded to the nearest
+### `B128` (ties to even), identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN
+### map to themselves (a signaling NaN is quieted).
+### :returns: The correctly rounded cube root.
+routine B128.cbrt() -> B128
+  var u = me.to_bits()
+  var hi = LLVM::int_truncate[U128, U64](u >>> 64)
+  var lo = LLVM::int_truncate[U128, U64](u)
+  var sign = hi >>> 63
+  var e = (hi >>> 48) & 0x7FFF_u64
+  var e3 = 0_u64
+  var i = 0_u64
+  if e == 0
+    # subnormal or ±0: normalize the significand
+    var ns = -15_s64
+    hi = hi & 0x7FFFFFFFFFFFFFFF_u64
+    if hi != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](hi.leading_zeros())
+    elseif lo != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](lo.leading_zeros()) +% 64
+    else
+      return me
+    e = LLVM::reinterpret_bits[S64, U64](121 -% ns)
+    e3 = e // 3 +% 10882
+    i = e % 3
+    u = b128_cbrt_u128(hi: hi, lo: lo) << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+  elseif e == 0x7FFF
+    # NaN or ±infinity: a signaling NaN is quieted, the rest map to themselves
+    if ((hi << 16) | lo) != 0 and (hi & 0x0000800000000000_u64) == 0
+      return B128.from_bits(bits: b128_cbrt_u128(hi: hi | 0x0000800000000000_u64, lo: lo))
+    return me
+  else
+    e3 = e // 3 +% 10922
+    i = e % 3
+  u = u << 16
+  var v = b128_cbrt_icbrt(x: u, i: i)
+  var b1 = LLVM::int_truncate[U128, U64](v >>> 64)
+  var b0 = LLVM::int_truncate[U128, U64](v)
+  var rbit = (b0 >>> 15) & 1_u64
+  b0 = (b0 >>> 16) | (b1 << 48)
+  b1 = b1 >>> 16
+  var dv = b128_cbrt_u128(hi: (e3 << 48) | (sign << 63), lo: rbit)
+  return B128.from_bits(bits: b128_cbrt_u128(hi: b1, lo: b0) +% dv)
+
+### Builds a U128 from its high and low 64-bit words.
+@inline
+secret routine b128_cbrt_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### The high word of the unsigned 64x64-bit product.
+@inline
+secret routine b128_cbrt_mhuu(a: U64, b: U64) -> U64
+  return LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)) >>> 64)
+
+### The high word of the signed 64x64-bit product (operands and result as two's-complement bits).
+@inline
+secret routine b128_cbrt_mhii(x: U64, y: U64) -> U64
+  var h = b128_cbrt_mhuu(a: x, b: y)
+  if (x >>> 63) != 0
+    h = h -% y
+  if (y >>> 63) != 0
+    h = h -% x
+  return h
+
+### Arithmetic right shift of two's-complement bits.
+@inline
+secret routine b128_cbrt_sar(x: U64, s: U32) -> U64
+  return LLVM::reinterpret_bits[S64, U64](LLVM::reinterpret_bits[U64, S64](x) >> s)
+
+### Approximate high part of the unsigned 128x128-bit product.
+@inline
+secret routine b128_cbrt_mhUU(a: U128, b: U128) -> U128
+  var a0 = LLVM::int_truncate[U128, U64](a)
+  var a1 = LLVM::int_truncate[U128, U64](a >>> 64)
+  var b0 = LLVM::int_truncate[U128, U64](b)
+  var b1 = LLVM::int_truncate[U128, U64](b >>> 64)
+  var a1b0 = LLVM::zero_extend[U64, U128](a1) *% LLVM::zero_extend[U64, U128](b0)
+  var a0b1 = LLVM::zero_extend[U64, U128](a0) *% LLVM::zero_extend[U64, U128](b1)
+  var a1b1 = LLVM::zero_extend[U64, U128](a1) *% LLVM::zero_extend[U64, U128](b1)
+  return (a1b1 +% (a1b0 >>> 64)) +% (a0b1 >>> 64)
+
+### High part of the 64x128-bit product.
+@inline
+secret routine b128_cbrt_mhuU(y: U64, x: U128) -> U128
+  var xy0 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](x)) *% LLVM::zero_extend[U64, U128](y)
+  var xy1 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](x >>> 64)) *% LLVM::zero_extend[U64, U128](y)
+  return xy1 +% (xy0 >>> 64)
+
+### Full 256-bit product of two U128 values, as (high, low).
+secret routine b128_cbrt_mUU(a: U128, b: U128) -> (U128, U128)
+  var a0 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](a))
+  var a1 = a >>> 64
+  var b0 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](b))
+  var b1 = b >>> 64
+  var a1b0 = a1 *% b0
+  var a0b1 = a0 *% b1
+  var a1b1 = a1 *% b1
+  var a0b0 = a0 *% b0
+  var mid = a1b0 +% a0b1
+  var cmid = 0_u128
+  if mid < a1b0
+    cmid = 1_u128 << 64
+  var lo = a0b0 +% (mid << 64)
+  var clo = 0_u128
+  if lo < a0b0
+    clo = 1_u128
+  return (((a1b1 +% (mid >>> 64)) +% cmid) +% clo, lo)
+
+### 1 + r ~ 1/cbrt(m), with r signed (two's-complement bits), from the high significand word m.
+secret routine b128_cbrt_rcbrt(m: U64) -> U64
+  var indx = m >>> 60
+  var cc = B128_CBRT_KNST[indx]
+  var c3 = B128_CBRT_KNSTH[indx]
+  var c0 = cc << 36
+  var c1 = (cc << 13) >>> 37
+  var c2 = cc >>> 42
+  var d = b128_cbrt_sar(x: (m << 4) -% 0x8000000000000000_u64, s: 32)
+  var d2 = (d *% d) >>> 32
+  var re = c0 +% (d2 *% c2)
+  var ro = d *% (c1 +% ((d2 *% c3) >>> 22))
+  var r = re -% ro
+  var r2 = b128_cbrt_mhuu(a: r, b: r)
+  var r3 = b128_cbrt_mhuu(a: r2, b: r)
+  var h = b128_cbrt_mhuu(a: m, b: r3) +% r3
+  h = h << 22
+  h = b128_cbrt_mhii(x: h, y: 0x5555555555555555_u64)
+  var h2 = b128_cbrt_mhii(x: h, y: h)
+  h = h -% (h2 >>> 21)
+  var hr = b128_cbrt_mhii(x: h, y: r) +% h
+  return r -% b128_cbrt_sar(x: hr, s: 22)
+
+### The cube root of the significand x (scaled by 2^i), refined by one Newton step, with the final rounding
+### decided exactly when the approximation is too close to a rounding boundary.
+secret routine b128_cbrt_icbrt(x: U128, i: U64) -> U128
+  var r = b128_cbrt_rcbrt(m: LLVM::int_truncate[U128, U64](x >>> 64))
+  if (r >>> 63) == 0
+    r = 0xFFFFFFFFFFFFFFFF_u64
+  r = b128_cbrt_mhuu(a: r, b: B128_CBRT_RCBRT_I[i])
+  var r2 = LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](r)
+  var xs = (x >>> LLVM::int_truncate[U64, U32](3 -% i)) | (1_u128 << LLVM::int_truncate[U64, U32](125 +% i))
+  var sx = b128_cbrt_mhUU(a: r2, b: xs)
+  var h = LLVM::int_truncate[U128, U64](b128_cbrt_mhuU(y: r, x: sx))
+  var m = b128_cbrt_sar(x: h, s: 63)
+  # h3 = h * 2/3
+  var h3 = b128_cbrt_mhuu(a: h, b: 0xAAAAAAAAAAAAAAAB_u64) -% (m & 0xAAAAAAAAAAAAAAAB_u64)
+  var mm = LLVM::zero_extend[U64, U128](m) | (LLVM::zero_extend[U64, U128](m) << 64)
+  var xy1 = (sx >>> 64) *% LLVM::zero_extend[U64, U128](h3)
+  var xy0 = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](sx)) *% LLVM::zero_extend[U64, U128](h3)
+  var t = (xy1 -% (mm & sx)) +% (xy0 >>> 64)
+  var ds = LLVM::reinterpret_bits[S128, U128](LLVM::reinterpret_bits[U128, S128](t) >> 53)
+  sx = sx << 5
+  var sx1 = sx -% ds
+  var dd = ((LLVM::int_truncate[U128, U64](sx1) << 1) +% 511_u64) & 0xFFFF_u64
+  if dd < 1023
+    # the result may be close to a rounding boundary: decide it exactly from c^3 - x
+    var c = ((sx1 +% (1_u128 << 14)) >>> 15) | (1_u128 << 113)
+    var cc = b128_cbrt_mUU(a: c, b: c)
+    var p = b128_cbrt_mUU(a: cc.item1, b: c)
+    var r31 = ((cc.item0 *% c) +% p.item0) -% (xs << 86)
+    var r30 = p.item1
+    sx1 = c << 15
+    if (r31 >>> 127) != 0
+      sx1 = sx1 +% 1_u128
+    elseif r31 != 0
+      sx1 = sx1 -% 1_u128
+    elseif r30 != 0
+      sx1 = sx1 -% 1_u128
+  return sx1
+
+secret preset B128_CBRT_KNST: Array[U64, 16] = [0xD3ED1E72EFD6337B_u64, 0xB8BCBB918F877572_u64, 0xA244650B6F3E7F80_u64, 0x8F8418C89EFA9D5E_u64, 0x7FB3D5217EBB3895_u64, 0x724398C31E7FD263_u64, 0x66C3629B4E47FF19_u64, 0x5CD331CA2E136288_u64, 0x543B0596EDE1AD3B_u64, 0x4CBADD683DB29A42_u64, 0x4622B8BD8D85ED78_u64, 0x4052972A5D5B7219_u64, 0x3B327852AD32F99E_u64, 0x369A5BE7FD0C5AD6_u64, 0x328241A6BCE7711B_u64, 0x2EDA2954ACC41BB2_u64]
+secret preset B128_CBRT_KNSTH: Array[U64, 16] = [0xA0_u64, 0x83_u64, 0x6D_u64, 0x5C_u64, 0x4E_u64, 0x42_u64, 0x39_u64, 0x31_u64, 0x2B_u64, 0x25_u64, 0x21_u64, 0x1D_u64, 0x1A_u64, 0x17_u64, 0x15_u64, 0x13_u64]
+# 2^63 / cbrt(2^i)
+secret preset B128_CBRT_RCBRT_I: Array[U64, 3] = [0x8000000000000000_u64, 0x6597FA94F5B8F20B_u64, 0x50A28BE635CA2B89_u64]

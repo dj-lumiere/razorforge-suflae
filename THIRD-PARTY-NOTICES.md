@@ -138,8 +138,10 @@ For more information, please refer to <https://unlicense.org/>
 Used by the RazorForge `B16`, `B32`, and `B64` math routines under
 `Standard/RazorForge/Core/Numerics/CoreMath/` (acos, acosh, asin, asinh, atan, atan2, atanh, cbrt, cos,
 cosh, cospi, erf, erfc, exp, exp10, exp2, expm1, hypot, lgamma, log, log10, log1p, log2, pow, sin, sinh,
-sinpi, tan, tanh, tanpi, tgamma). Each routine is a port of the CORE-MATH C implementation for that
-format (round-to-nearest path only) and returns the correctly rounded result. Every port file names its
+sinpi, tan, tanh, tanpi, tgamma), and by the `B128` routines acos, asin, atan, atan2, cbrt, cos, exp,
+exp10, exp2, expm1, hypot, log, sin and sqrt (the binary128 functions CORE-MATH provides). Each routine
+is a port of the CORE-MATH C implementation for that format (round-to-nearest path only) and returns the
+correctly rounded result. Every port file names its
 upstream source file and repeats that file's copyright line, and `LICENSE-CORE-MATH` sits next to them.
 
 - Project: **CORE-MATH** — https://core-math.gitlabpages.inria.fr/

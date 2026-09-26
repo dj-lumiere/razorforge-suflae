@@ -1,0 +1,56 @@
+module Core
+
+# ============================================================================
+# Correctly rounded base-2 exponential 2^x of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/exp2/exp2q.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception-flag and errno handling are dropped).
+# The work is done on 64-bit words. The tables, the 2^x evaluation and the fallback paths are shared with
+# the exp and exp10 ports (B128ExpShared.rf).
+
+### Returns 2 raised to this value, correctly rounded: the exact power rounded to the nearest `B128`
+### (ties to even), identical on every platform, exact for integer arguments, with raw IEEE 754
+### propagation (overflow -> +infinity, `exp2(-infinity) == 0`, NaN -> quiet NaN). No crash.
+### :returns: The correctly rounded power of two, possibly +infinity.
+routine B128.exp2_unchecked() -> B128
+  var u = me.to_bits()
+  var hi = b128_expfam_hi(u: u)
+  var lo = b128_expfam_lo(u: u)
+  var b1 = hi & 0x7FFFFFFFFFFFFFFF_u64
+  # |x| tiny: 2^x rounds to 1
+  if b1 < 0x3F8D71547652B82F_u64
+    return B128.from_bits(bits: 0x3FFF0000000000000000000000000000_u128)
+  if b1 >= 0x400D000000000000_u64
+    # infinity: 2^+inf = +inf, 2^-inf = +0
+    if b1 == 0x7FFF000000000000_u64 and lo == 0
+      if hi >>> 63 == 0
+        return me
+      return B128.from_bits(bits: 0_u128)
+    # NaN: quiet it, keeping sign and payload
+    if b1 >= 0x7FFF000000000000_u64
+      return B128.from_bits(bits: u | (1_u128 << 111))
+    # x >= 2^14: overflow
+    if hi >>> 63 == 0 and u >= 0x400D0000000000000000000000000000_u128
+      return B128.from_bits(bits: 0x7FFF0000000000000000000000000000_u128)
+    # x <= -0x1.01bcp+14: underflow to +0
+    if u >= 0xC00D01BC000000000000000000000000_u128
+      return B128.from_bits(bits: 0_u128)
+  var e = (hi >>> 48) & 0x7FFF_u64
+  var sm = b128_expfam_sar(v: hi, n: 63_u64)
+  var mh = (hi & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  # integer x: the result is an exact power of two (normal or subnormal)
+  if e >= 16383 and lo == 0 and b128_expfam_shl(v: hi, n: e - 16367) == 0
+    var eru = (b128_expfam_shr(v: mh, n: 16431_u64 - e) ^ sm) -% sm
+    var er = LLVM::reinterpret_bits[U64, S64](eru) + 16383
+    if er > 0
+      return B128.from_bits(bits: b128_expfam_w(hi: LLVM::reinterpret_bits[S64, U64](er) << 48, lo: 0_u64))
+    var sh = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](-er))
+    return B128.from_bits(bits: b128_expfam_w(hi: 0x0000800000000000_u64, lo: 0_u64) >>> sh)
+  # x itself is the fixed-point multiple of log2(2): 2's complement, then the exponent shift
+  var smw = b128_expfam_w(hi: sm, lo: sm)
+  var m = (b128_expfam_w(hi: mh, lo: lo) ^ smw) -% smw
+  var r = b128_expfam_ars3(w0: 0_u64, w1: b128_expfam_lo(u: m), w2: b128_expfam_hi(u: m), n: 0x401B_u64 -% e)
+  return b128_expfam_finish(fs0: r.item0, fs1: r.item1, fs2: r.item2, x0: u, kind: 1_u64)

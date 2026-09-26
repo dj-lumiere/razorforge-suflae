@@ -1,0 +1,565 @@
+module Core
+
+# ============================================================================
+# Correctly rounded exp(x) - 1 of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/expm1/expm1q.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception flags, errno and directed-rounding branches are dropped). The computation works on 64-bit and
+# 128-bit integer words, like the original, and never uses the software B128 arithmetic. The multi-word
+# helpers (b128_wide_*) live in B128Wide.rf.
+
+### `e^me - 1`, correctly rounded: the exact value rounded to the nearest `B128` (ties to even), identical on
+### every platform, and accurate near 0. Raw IEEE 754 propagation, no crash: NaN -> quiet NaN,
+### -infinity -> -1, +infinity -> +infinity, overflow -> +infinity.
+### :returns: The correctly rounded `e^me - 1`.
+routine B128.expm1_unchecked() -> B128
+  var u = me.to_bits()
+  var uh = b128_wide_hi(x: u)
+  var ul = b128_wide_lo(x: u)
+  var b1 = uh & 0x7FFFFFFFFFFFFFFF_u64
+  if b1 < 0x3FFE000000000000_u64
+    return b128_expm1_small(x: u)
+  if b1 >= 0x400C62E42FEFA39E_u64
+    # NaN, infinity, overflow
+    if b1 == 0x7FFF000000000000_u64 and ul == 0
+      if (uh >>> 63) == 0
+        return me
+      return B128.from_bits(bits: b128_wide_u128(hi: 0xBFFF000000000000_u64, lo: 0_u64))
+    if b1 > 0x7FFF000000000000_u64 or (b1 == 0x7FFF000000000000_u64 and ul != 0)
+      return B128.from_bits(bits: b128_wide_u128(hi: uh | 0x0000800000000000_u64, lo: ul))
+    if (uh >>> 63) == 0 and u >= b128_wide_u128(hi: 0x400C62E42FEFA39E_u64, lo: 0xF35793C7673007E6_u64)
+      return B128.from_bits(bits: b128_wide_u128(hi: 0x7FFF000000000000_u64, lo: 0_u64))
+  if u >= b128_wide_u128(hi: 0xC0053C133AB16DB9_u64, lo: 0x90B9FF9D97E6C709_u64)
+    # large negative x: exp(x) - 1 rounds to -1
+    return B128.from_bits(bits: b128_wide_u128(hi: 0xBFFF000000000000_u64, lo: 0_u64))
+  var sm = b128_wide_sar(x: uh, s: 63)
+  var mh = (uh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  var fs = b128_expm1_mhu3xu2(a0: B128_WIDE_ILN2[4], a1: B128_WIDE_ILN2[5], a2: B128_WIDE_ILN2[6], b: b128_wide_u128(hi: mh, lo: ul))
+  fs = b128_expm1_arsu3(o0: fs.item0 ^ sm, o1: fs.item1 ^ sm, o2: fs.item2 ^ sm, n: 0x401A_u64 -% ((uh >>> 48) & 0x7FFF))
+  var fs2 = fs.item2
+  var el = b128_expm1_int(x: b128_wide_sar(x: fs2, s: 20))
+  var i0 = (fs2 >>> 15) & 31
+  var i1 = (fs2 >>> 10) & 31
+  var i2 = (fs2 >>> 5) & 31
+  var i3 = fs2 & 31
+  var z = fs.item1
+  var f0 = b128_wide_mhuu(a: z, b: B128_EXPM1_C[6] +% b128_wide_mhuu(a: z, b: B128_EXPM1_C[8] +% b128_wide_mhuu(a: z, b: B128_EXPM1_C[10])))
+  var res = b128_wide_u128(hi: B128_EXPM1_C[5], lo: B128_EXPM1_C[4]) +% LLVM::zero_extend[U64, U128](f0)
+  res = b128_expm1_mahuUU(a: z, b: res, c: b128_wide_u128(hi: B128_EXPM1_C[3], lo: B128_EXPM1_C[2]))
+  res = b128_expm1_mahuUU(a: z, b: res, c: b128_wide_u128(hi: B128_EXPM1_C[1], lo: B128_EXPM1_C[0]))
+  var t0 = b128_wide_u128(hi: B128_EXPM1_R0[2 *% i0 +% 1], lo: B128_EXPM1_R0[2 *% i0])
+  var t1 = b128_wide_u128(hi: B128_EXPM1_R1[2 *% i1 +% 1], lo: B128_EXPM1_R1[2 *% i1])
+  var t2 = b128_wide_u128(hi: B128_EXPM1_R2[2 *% i2 +% 1], lo: B128_EXPM1_R2[2 *% i2])
+  var t3 = b128_wide_u128(hi: B128_EXPM1_R3[2 *% i3 +% 1], lo: B128_EXPM1_R3[2 *% i3])
+  var m = b128_wide_mhUU(a: b128_wide_mhUU(a: t0, b: t1), b: b128_wide_mhUU(a: t2, b: t3))
+  var k = b128_wide_mhuu(a: 0xB17217F7D1CF79AC_u64, b: fs.item0)
+  m = m +% (b128_wide_muu(a: b128_wide_hi(x: m), b: k) >>> 84)
+  res = b128_wide_mhUU(a: res, b: m)
+  var s = -5_s64 -% el
+  var rnd = 0_u64
+  if s < 0
+    # (x > -2.772589 and x < -0.5) or (x > 0.5 and x < xmax)
+    if 123 -% el >= 0
+      res = res -% (1_u128 << LLVM::int_truncate[S64, U32](123 -% el))
+    res = res ^ b128_wide_u128(hi: sm, lo: sm)
+    res = res -% b128_wide_u128(hi: sm, lo: sm)
+    var nz = b128_wide_hi(x: res).leading_zeros()
+    if nz > 14
+      nz = 14
+    var z0 = (res +% (1_u128 << b128_wide_s(n: 14 -% nz))) +% LLVM::zero_extend[U64, U128](6_u64 & (sm ^ 0xFFFFFFFFFFFFFFFF_u64))
+    var tm = ((1_u128 << b128_wide_s(n: 15 -% nz)) -% 1_u128) & z0
+    if tm <= 6
+      var ac = b128_expm1_accurate(el: el, x0: u)
+      el = ac.item0
+      res = ac.item1
+      rnd = (b128_wide_lo(x: res) >>> 14) & 1
+      res = res >>> 15
+    else
+      rnd = (b128_wide_lo(x: res) >>> b128_wide_s(n: 14 -% nz)) & 1
+      res = res >>> b128_wide_s(n: 15 -% nz)
+      el = el -% (LLVM::reinterpret_bits[U64, S64](nz) -% 4)
+    el = el +% 16382
+  else
+    # x < -2.772589 or exp(x) < 1/16
+    res = 0_u128 -% res
+    el = -1_s64
+    var rb = 0_u128
+    var tm = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+    if 14 +% s <= 127
+      rb = 1_u128 << LLVM::int_truncate[S64, U32](14 +% s)
+      if 15 +% s <= 127
+        tm = (1_u128 << LLVM::int_truncate[S64, U32](15 +% s)) -% 1_u128
+      else
+        tm = 0_u128
+    var z0 = res +% rb
+    tm = tm & z0
+    if tm <= 6
+      var ac = b128_expm1_accurate(el: el, x0: u)
+      el = ac.item0
+      res = ac.item1
+    elseif s < 128
+      res = LLVM::reinterpret_bits[S128, U128](LLVM::reinterpret_bits[U128, S128](res) >> LLVM::int_truncate[S64, U32](s))
+    else
+      res = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+    rnd = (b128_wide_lo(x: res) >>> 14) & 1
+    res = res >>> 15
+    el = el +% 16382
+  var dh = (LLVM::reinterpret_bits[S64, U64](el) << 48) | (sm << 63)
+  return B128.from_bits(bits: res +% b128_wide_u128(hi: dh, lo: rnd))
+
+### A C `int` result: the low 32 bits of x, sign-extended.
+@inline
+secret routine b128_expm1_int(x: U64) -> S64
+  return LLVM::sign_extend[S32, S64](LLVM::int_truncate[U64, S32](x))
+
+### A non-negative shift amount held in an S64, as the U32 the shift operators take.
+@inline
+secret routine b128_expm1_s(n: S64) -> U32
+  return LLVM::int_truncate[S64, U32](n)
+
+### mahuUU: ((a * b) >> 64) + c with a 64-bit a and 128-bit b and c.
+@inline
+secret routine b128_expm1_mahuUU(a: U64, b: U128, c: U128) -> U128
+  var cc = c +% (b128_wide_muu(a: a, b: b128_wide_lo(x: b)) >>> 64)
+  return (LLVM::zero_extend[U64, U128](a) *% (b >>> 64)) +% cc
+
+### mhu3xu2: the words of the 3x2-word product (a2, a1, a0) * b at or above word 2, as (w0, w1, w2).
+secret routine b128_expm1_mhu3xu2(a0: U64, a1: U64, a2: U64, b: U128) -> (U64, U64, U64)
+  var b0 = b128_wide_lo(x: b)
+  var b1 = b128_wide_hi(x: b)
+  var a1b0 = b128_wide_muu(a: a1, b: b0)
+  var a2b0 = b128_wide_muu(a: a2, b: b0)
+  var a0b1 = b128_wide_muu(a: a0, b: b1)
+  var a1b1 = b128_wide_muu(a: a1, b: b1)
+  var a2b1 = b128_wide_muu(a: a2, b: b1)
+  var s = (LLVM::zero_extend[U64, U128](b128_wide_lo(x: a1b1)) +% (a0b1 >>> 64)) +% (LLVM::zero_extend[U64, U128](b128_wide_lo(x: a2b0)) +% (a1b0 >>> 64))
+  var o0 = b128_wide_lo(x: s)
+  s = ((LLVM::zero_extend[U64, U128](b128_wide_lo(x: a2b1)) +% (a1b1 >>> 64)) +% (a2b0 >>> 64)) +% (s >>> 64)
+  var o1 = b128_wide_lo(x: s)
+  var o2 = b128_wide_hi(x: a2b1) +% b128_wide_hi(x: s)
+  return (o0, o1, o2)
+
+### arsu3: arithmetic right shift of the 3-word number (o2, o1, o0) by n bits (n < 192).
+secret routine b128_expm1_arsu3(o0: U64, o1: U64, o2: U64, n: U64) -> (U64, U64, U64)
+  var h = b128_wide_sar(x: o2, s: 63)
+  if n < 64
+    if n == 0
+      return (o0, o1, o2)
+    var lk = b128_wide_s(n: 64 -% n)
+    var rn = b128_wide_s(n: n)
+    return ((o1 << lk) | (o0 >>> rn), (o2 << lk) | (o1 >>> rn), b128_wide_sar(x: o2, s: n))
+  var rk = n & 63
+  if n < 128
+    if rk == 0
+      return (o1, o2, h)
+    return ((o2 << b128_wide_s(n: 64 -% rk)) | (o1 >>> b128_wide_s(n: rk)), b128_wide_sar(x: o2, s: rk), h)
+  if rk == 0
+    return (o2, h, h)
+  return (b128_wide_sar(x: o2, s: rk), h, h)
+
+### arsu4: arithmetic right shift of a 4-word number by n bits (n < 256).
+secret routine b128_expm1_arsu4(x: Array[U64, 4], n: U64) -> Array[U64, 4]
+  var o = x
+  var rk = n & 63
+  var qk = n >>> 6
+  var h = o[3]
+  var hs = b128_wide_sar(x: h, s: 63)
+  var i = 0_u64
+  while qk +% i <= 3
+    var hiw = hs
+    if qk +% i +% 1 <= 3
+      hiw = o[qk +% i +% 1]
+    if qk +% i == 3
+      o[i] = b128_wide_sar(x: h, s: rk)
+    elseif rk == 0
+      o[i] = o[qk +% i]
+    else
+      o[i] = (hiw << b128_wide_s(n: 64 -% rk)) | (o[qk +% i] >>> b128_wide_s(n: rk))
+    i = i +% 1
+  while i < 4
+    o[i] = hs
+    i = i +% 1
+  return o
+
+### mhu3u3u3: the approximate high 3 words of the 3x3-word product a * b (every partial-product half at or
+### above word 3, summed exactly modulo 2^192).
+secret routine b128_expm1_mhu3(b: Array[U64, 3], a: Array[U64, 3]) -> Array[U64, 3]
+  var o = Array[U64, 3]()
+  var carry = 0_u128
+  var w = 0_u64
+  while w < 3
+    var p = w +% 3
+    var s = carry
+    var i = 0_u64
+    while i < 3
+      if p -% i -% 1 <= 2
+        s = s +% (b128_wide_muu(a: a[i], b: b[p -% i -% 1]) >>> 64)
+      if p -% i <= 2
+        s = s +% LLVM::zero_extend[U64, U128](b128_wide_lo(x: b128_wide_muu(a: a[i], b: b[p -% i])))
+      i = i +% 1
+    o[w] = b128_wide_lo(x: s)
+    carry = s >>> 64
+    w = w +% 1
+  return o
+
+### mahu1u3u3 on arrays: ((a * b) >> 64) + c over 3 words.
+@inline
+secret routine b128_expm1_mahu3a(a: U64, b: Array[U64, 3], c: Array[U64, 3]) -> Array[U64, 3]
+  var r = b128_wide_mahu3(a: a, b0: b[0], b1: b[1], b2: b[2], c0: c[0], c1: c[1], c2: c[2])
+  var o = Array[U64, 3]()
+  o[0] = r.item0
+  o[1] = r.item1
+  o[2] = r.item2
+  return o
+
+### One 3-word row of a table stored as consecutive words.
+@inline
+secret routine b128_expm1_row3(t: U64, i: U64) -> Array[U64, 3]
+  var o = Array[U64, 3]()
+  if t == 0
+    o[0] = B128_EXPM1_ATBL0[3 *% i]
+    o[1] = B128_EXPM1_ATBL0[3 *% i +% 1]
+    o[2] = B128_EXPM1_ATBL0[3 *% i +% 2]
+  elseif t == 1
+    o[0] = B128_EXPM1_ATBL1[3 *% i]
+    o[1] = B128_EXPM1_ATBL1[3 *% i +% 1]
+    o[2] = B128_EXPM1_ATBL1[3 *% i +% 2]
+  else
+    o[0] = B128_EXPM1_AC[3 *% i]
+    o[1] = B128_EXPM1_AC[3 *% i +% 1]
+    o[2] = B128_EXPM1_AC[3 *% i +% 2]
+  return o
+
+### expm1 for |x| < 0.5 (about): table-driven reduction for |x| >= 2^-11, a direct polynomial below.
+secret routine b128_expm1_small(x: U128) -> B128
+  var uh = b128_wide_hi(x: x)
+  var ul = b128_wide_lo(x: x)
+  var b1 = uh & 0x7FFFFFFFFFFFFFFF_u64
+  var mh = (uh & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64
+  var ml = ul
+  var sm = uh >>> 63
+  var e = LLVM::reinterpret_bits[U64, S64](b1 >>> 48) -% 16383
+  var sj = 37 -% e
+  var eout = 0_s64
+  var res = 0_u128
+  if sj < 49
+    # 2^-11 < |x| < 0.5 (about)
+    var j = mh >>> b128_expm1_s(n: sj)
+    var j0 = j >>> 5
+    var j1 = j & 31
+    var e0 = LLVM::reinterpret_bits[U64, S64](B128_EXPM1_E0Z[32 *% sm +% j0])
+    var e1 = LLVM::reinterpret_bits[U64, S64](B128_EXPM1_E1Z[32 *% sm +% j1])
+    var el = e1
+    var st = 0_s64
+    if j0 != 0
+      el = e0
+      st = e1 -% el
+    var sp = e1
+    eout = -el -% 1
+    var r0i = 2 *% (32 *% sm +% j0)
+    var r1i = 2 *% (32 *% sm +% j1)
+    res = b128_wide_u128(hi: B128_EXPM1_R0Z[r0i +% 1], lo: B128_EXPM1_R0Z[r0i])
+    var r1 = b128_wide_u128(hi: B128_EXPM1_R1Z[r1i +% 1], lo: B128_EXPM1_R1Z[r1i])
+    var pp = b128_wide_mhUU(a: res, b: r1)
+    var ph = b128_wide_hi(x: pp)
+    var pl = b128_wide_lo(x: pp)
+    pl = (pl >>> b128_expm1_s(n: sp)) | (ph << b128_expm1_s(n: (64 -% sp) & 63))
+    ph = ph >>> b128_expm1_s(n: sp)
+    pp = b128_wide_u128(hi: ph, lo: pl)
+    var th = b128_wide_hi(x: r1)
+    var tl = b128_wide_lo(x: r1)
+    # shift counts are taken modulo 64, like the x86 shifts of the original (st < 0 only when r1 is 0)
+    tl = (tl >>> b128_expm1_s(n: st & 63)) | ((th << 1) << b128_expm1_s(n: (st ^ -1_s64) & 63))
+    th = th >>> b128_expm1_s(n: st & 63)
+    var tt = b128_wide_u128(hi: th, lo: tl)
+    mh = (mh << b128_expm1_s(n: e +% 27)) | (ml >>> b128_expm1_s(n: sj))
+    ml = ml << b128_expm1_s(n: e +% 27)
+    var cb = 18 *% sm
+    if sm != 0
+      res = res +% (tt -% pp)
+      var f = b128_wide_u128(hi: B128_EXPM1_CB9[cb +% 9], lo: B128_EXPM1_CB9[cb +% 8])
+      f = f -% LLVM::zero_extend[U64, U128](b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 10] -% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 12] -% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 14] -% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 16], b: mh), b: mh), b: mh), b: mh))
+      var i = 4_u64
+      while i > 0
+        i = i -% 1
+        f = b128_wide_u128(hi: B128_EXPM1_CB9[cb +% 2 *% i +% 1], lo: B128_EXPM1_CB9[cb +% 2 *% i]) -% b128_wide_mhuU(a: mh, b: f)
+      f = b128_wide_mhuU(a: mh, b: f)
+      var hl = b128_wide_mhuu(a: ml, b: b128_wide_hi(x: f))
+      f = f +% LLVM::zero_extend[U64, U128]((ml >>> 1) -% (hl >>> 11))
+      res = res +% ((f >>> b128_expm1_s(n: 10 -% el)) -% (b128_wide_mhUU(a: res, b: f) >>> 10))
+    else
+      res = res +% (tt +% pp)
+      var f0 = B128_EXPM1_CB9[cb +% 8] +% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 10] +% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 12] +% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 14] +% b128_wide_mhuu(a: B128_EXPM1_CB9[cb +% 16], b: mh), b: mh), b: mh), b: mh)
+      var f = b128_wide_u128(hi: B128_EXPM1_CB9[cb +% 9], lo: f0)
+      var i = 4_u64
+      while i > 0
+        i = i -% 1
+        f = b128_wide_u128(hi: B128_EXPM1_CB9[cb +% 2 *% i +% 1], lo: B128_EXPM1_CB9[cb +% 2 *% i]) +% b128_wide_mhuU(a: mh, b: f)
+      f = b128_wide_mhuU(a: mh, b: f)
+      var hl = b128_wide_mhuu(a: ml, b: b128_wide_hi(x: f))
+      f = f +% LLVM::zero_extend[U64, U128]((ml >>> 1) +% (hl >>> 11))
+      res = res +% ((f >>> b128_expm1_s(n: 10 -% el)) +% (b128_wide_mhUU(a: res, b: f) >>> 10))
+  else
+    # |x| < 2^-11
+    if b1 < 0x3F8E6A09E667F3BC_u64
+      # exp(x) - 1 rounds to x
+      return B128.from_bits(bits: x)
+    eout = e
+    var m0 = b128_wide_u128(hi: mh, lo: ml) << 15
+    var m2 = b128_wide_mUU(a: m0, b: m0).item0
+    var m = m0 >>> b128_expm1_s(n: -(e +% 12))
+    var mh2 = b128_wide_hi(x: m)
+    var cb = 16 *% sm
+    if sm != 0
+      var f0 = B128_EXPM1_CB8[cb +% 8] -% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 10] -% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 12] -% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 14], b: mh2), b: mh2), b: mh2)
+      var f = b128_wide_u128(hi: B128_EXPM1_CB8[cb +% 9], lo: f0)
+      var i = 4_u64
+      while i > 0
+        i = i -% 1
+        f = b128_wide_u128(hi: B128_EXPM1_CB8[cb +% 2 *% i +% 1], lo: B128_EXPM1_CB8[cb +% 2 *% i]) -% b128_wide_mhUU(a: m, b: f)
+      f = b128_wide_mhUU(a: m2, b: f)
+      f = f >>> b128_expm1_s(n: -e -% 1)
+      res = m0 -% f
+    else
+      var f0 = B128_EXPM1_CB8[cb +% 8] +% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 10] +% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 12] +% b128_wide_mhuu(a: B128_EXPM1_CB8[cb +% 14], b: mh2), b: mh2), b: mh2)
+      var f = b128_wide_u128(hi: B128_EXPM1_CB8[cb +% 9], lo: f0)
+      var i = 4_u64
+      while i > 0
+        i = i -% 1
+        f = b128_wide_u128(hi: B128_EXPM1_CB8[cb +% 2 *% i +% 1], lo: B128_EXPM1_CB8[cb +% 2 *% i]) +% b128_wide_mhUU(a: m, b: f)
+      f = b128_wide_mhUU(a: m2, b: f)
+      f = f >>> b128_expm1_s(n: -e -% 1)
+      var sum = f +% m0
+      if sum < f
+        # the addition overflowed
+        res = (sum >>> 1) | (1_u128 << 127)
+        eout = eout +% 1
+      else
+        res = sum
+  var off = 4_u64 -% sm
+  var rnd = 0_u64
+  if (b128_wide_hi(x: res) >>> 63) != 0
+    var tm = ((b128_wide_lo(x: res) +% 0x4000_u64) +% off) & 0x7FFF_u64
+    if tm <= 6
+      var ac = b128_expm1_accurate(el: eout, x0: x)
+      eout = ac.item0
+      res = ac.item1
+    rnd = (b128_wide_lo(x: res) >>> 14) & 1
+    res = res >>> 15
+  else
+    eout = eout -% 1
+    var tm = ((b128_wide_lo(x: res) +% 0x2000_u64) +% off) & 0x3FFF_u64
+    if tm <= 6
+      var ac = b128_expm1_accurate(el: eout, x0: x)
+      eout = ac.item0
+      res = ac.item1
+      rnd = (b128_wide_lo(x: res) >>> 14) & 1
+      res = res >>> 15
+    else
+      rnd = (b128_wide_lo(x: res) >>> 13) & 1
+      res = res >>> 14
+  var dh = (sm << 63) | ((16382_u64 +% LLVM::reinterpret_bits[S64, U64](eout)) << 48)
+  return B128.from_bits(bits: res +% b128_wide_u128(hi: dh, lo: rnd))
+
+### The accurate step (about 190 bits), used when the fast path cannot decide the rounding. Returns the new
+### exponent and the significand with the round bit and sticky information in its low bits.
+secret routine b128_expm1_accurate(el: S64, x0: U128) -> (S64, U128)
+  var xh = b128_wide_hi(x: x0)
+  var sm = b128_wide_sar(x: xh, s: 63)
+  var t = (x0 & 0x0000FFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128) | (1_u128 << 112)
+  var a7 = Array[U64, 7]()
+  a7[0] = B128_WIDE_ILN2[3]
+  a7[1] = B128_WIDE_ILN2[4]
+  a7[2] = B128_WIDE_ILN2[5]
+  a7[3] = B128_WIDE_ILN2[6]
+  var x7 = b128_wide_mhu7xu2(a: a7, b: t)
+  var x = Array[U64, 4]()
+  x[0] = x7[0] ^ sm
+  x[1] = x7[1] ^ sm
+  x[2] = x7[2] ^ sm
+  x[3] = x7[3] ^ sm
+  x = b128_expm1_arsu4(x: x, n: 0x402E_u64 -% ((xh >>> 48) & 0x7FFF))
+  var e = b128_expm1_int(x: x[3])
+  var jt0 = x[2] >>> 60
+  var jt1 = (x[2] >>> 56) & 15
+  x[2] = x[2] & 0x00FFFFFFFFFFFFFF_u64
+  var ft = b128_expm1_mhu3(b: b128_expm1_row3(t: 0, i: jt0), a: b128_expm1_row3(t: 1, i: jt1))
+  # pol3 over the 15 coefficient rows
+  var f = b128_expm1_mahu3a(a: x[2], b: b128_expm1_row3(t: 2, i: 14), c: b128_expm1_row3(t: 2, i: 13))
+  var pi = 13_u64
+  loop
+    pi = pi -% 1
+    f = b128_expm1_mahu3a(a: x[2], b: f, c: b128_expm1_row3(t: 2, i: pi))
+    if pi <= 1
+      break
+  f = b128_expm1_mahu3a(a: x[2], b: f, c: b128_expm1_row3(t: 2, i: 0))
+  ft = b128_expm1_mhu3(b: f, a: ft)
+  var c1 = b128_wide_u128(hi: B128_EXPM1_AC[5], lo: B128_EXPM1_AC[4])
+  var f2 = b128_wide_mhUU(a: b128_wide_u128(hi: x[1], lo: x[0]), b: c1 +% LLVM::zero_extend[U64, U128](b128_wide_mhuu(a: B128_EXPM1_AC[8], b: x[1])))
+  var f1 = Array[U64, 3]()
+  f1[0] = b128_wide_lo(x: f2)
+  f1[1] = b128_wide_hi(x: f2)
+  f1[2] = B128_EXPM1_AC[2]
+  f = b128_expm1_mhu3(b: ft, a: f1)
+  var s = 60 -% e
+  var sl = s & 63
+  var sg = s >> 6
+  var nel = el
+  var m0 = 0_u64
+  var m1 = 0_u64
+  if sg <= 0
+    if sg >= -2
+      var idx = LLVM::reinterpret_bits[S64, U64](2 +% sg)
+      var sub = 1_u64 << b128_expm1_s(n: sl)
+      var br = 0_u64
+      if f[idx] < sub
+        br = 1_u64
+      f[idx] = f[idx] -% sub
+      var ii = idx +% 1
+      while ii < 3
+        var nb = 0_u64
+        if f[ii] < br
+          nb = 1_u64
+        f[ii] = f[ii] -% br
+        br = nb
+        ii = ii +% 1
+    f[0] = f[0] ^ sm
+    f[1] = f[1] ^ sm
+    f[2] = f[2] ^ sm
+    var i = 3_u64
+    loop
+      i = i -% 1
+      if f[i] != 0
+        break
+    var nz = LLVM::reinterpret_bits[U64, S64](f[i].leading_zeros() +% 64 *% (2 -% i))
+    nel = e -% (nz -% 3)
+    var mm = b128_wide_u128(hi: 0x3FFF_u64, lo: 0xFFFFFFFFFFFFFFFF_u64) >>> b128_expm1_s(n: nz)
+    var t0 = b128_wide_u128(hi: f[1], lo: f[0]) +% 8_u128
+    if (t0 & mm) <= 16
+      return b128_expm1_superaccurate(el: nel, x0: x0)
+    var k = LLVM::reinterpret_bits[S64, U64](nz >>> 6)
+    var ls = b128_expm1_s(n: nz & 63)
+    var rs = b128_expm1_s(n: (nz ^ -1_s64) & 63)
+    m0 = f[1 -% k] << ls
+    if k == 0
+      m0 = m0 | ((f[0] >>> 1) >>> rs)
+    m1 = (f[2 -% k] << ls) | ((f[1 -% k] >>> 1) >>> rs)
+  else
+    f[2] = f[2] ^ 0xFFFFFFFFFFFFFFFF_u64
+    f[1] = f[1] ^ 0xFFFFFFFFFFFFFFFF_u64
+    f[0] = f[0] ^ 0xFFFFFFFFFFFFFFFF_u64
+    nel = -1_s64
+    var s0 = LLVM::zero_extend[U64, U128](f[0]) +% 8_u128
+    var t00 = b128_wide_lo(x: s0)
+    var s1 = LLVM::zero_extend[U64, U128](f[1]) +% (s0 >>> 64)
+    var t01 = b128_wide_lo(x: s1)
+    var t02 = f[2] +% b128_wide_hi(x: s1)
+    var w = 74 -% e
+    var wl = w & 63
+    var wg = w >> 6
+    var tm1 = 0xFFFFFFFFFFFFFFFF_u64
+    var tm2 = 0_u64
+    if wg == 1
+      tm1 = (1_u64 << b128_expm1_s(n: wl)) -% 1
+    if wg == 2
+      tm2 = (1_u64 << b128_expm1_s(n: wl)) -% 1
+    t01 = t01 & tm1
+    t02 = t02 & tm2
+    if t02 == 0 and t01 == 0 and t00 <= 16
+      return b128_expm1_superaccurate(el: nel, x0: x0)
+    if sg == 1
+      m0 = ((f[2] << 1) << b128_expm1_s(n: (sl ^ -1_s64) & 63)) | (f[1] >>> b128_expm1_s(n: sl))
+      m1 = b128_wide_sar(x: f[2], s: LLVM::reinterpret_bits[S64, U64](sl))
+    elseif sg == 2
+      m0 = b128_wide_sar(x: f[2], s: LLVM::reinterpret_bits[S64, U64](sl))
+      m1 = 0xFFFFFFFFFFFFFFFF_u64
+    else
+      m0 = 0xFFFFFFFFFFFFFFFF_u64
+      m1 = 0xFFFFFFFFFFFFFFFF_u64
+  return (nel, b128_wide_u128(hi: m1, lo: m0))
+
+### The super-accurate step (about 380 bits), used when even the accurate step cannot decide the rounding.
+secret routine b128_expm1_superaccurate(el: S64, x0: U128) -> (S64, U128)
+  var xh = b128_wide_hi(x: x0)
+  var sm = b128_wide_sar(x: xh, s: 63)
+  var t = (x0 & 0x0000FFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128) | (1_u128 << 112)
+  var x = b128_wide_mhu7xu2(a: B128_WIDE_ILN2, b: t)
+  var i = 0_u64
+  while i < 7
+    x[i] = x[i] ^ sm
+    i = i +% 1
+  x = b128_wide_arsu7(x: x, n: 0x402E_u64 -% ((xh >>> 48) & 0x7FFF))
+  var e = b128_expm1_int(x: x[6])
+  var ft = b128_wide_exp2_frac(x: x)
+  var s = 60 -% e
+  var sl = s & 63
+  var sg = s >> 6
+  var nel = el
+  var m0 = 0_u64
+  var m1 = 0_u64
+  if sg <= 0
+    if sg >= -5
+      var idx = LLVM::reinterpret_bits[S64, U64](5 +% sg)
+      var sub = 1_u64 << b128_expm1_s(n: sl)
+      var br = 0_u64
+      if ft[idx] < sub
+        br = 1_u64
+      ft[idx] = ft[idx] -% sub
+      var ii = idx +% 1
+      while ii < 6
+        var nb = 0_u64
+        if ft[ii] < br
+          nb = 1_u64
+        ft[ii] = ft[ii] -% br
+        br = nb
+        ii = ii +% 1
+    i = 0_u64
+    while i < 6
+      ft[i] = ft[i] ^ sm
+      i = i +% 1
+    i = 6_u64
+    loop
+      i = i -% 1
+      if ft[i] != 0
+        break
+    var nz = LLVM::reinterpret_bits[U64, S64](ft[i].leading_zeros() +% 64 *% (5 -% i))
+    nel = e -% (nz -% 3)
+    var k = LLVM::reinterpret_bits[S64, U64](nz >>> 6)
+    var rs = b128_expm1_s(n: (nz ^ -1_s64) & 63)
+    var ls = b128_expm1_s(n: nz & 63)
+    m0 = (ft[4 -% k] << ls) | ((ft[3 -% k] >>> 1) >>> rs)
+    m1 = (ft[5 -% k] << ls) | ((ft[4 -% k] >>> 1) >>> rs)
+  else
+    ft[5] = ft[5] ^ 0xFFFFFFFFFFFFFFFF_u64
+    ft[4] = ft[4] ^ 0xFFFFFFFFFFFFFFFF_u64
+    nel = -1_s64
+    var ls = b128_expm1_s(n: (sl ^ -1_s64) & 63)
+    var sr = b128_expm1_s(n: sl)
+    if sg == 1
+      m0 = ((ft[5] << 1) << ls) | (ft[4] >>> sr)
+      m1 = ((0xFFFFFFFFFFFFFFFF_u64 << 1) << ls) | (ft[5] >>> sr)
+    elseif sg == 2
+      m0 = ((0xFFFFFFFFFFFFFFFF_u64 << 1) << ls) | (ft[5] >>> sr)
+      m1 = 0xFFFFFFFFFFFFFFFF_u64
+    else
+      m0 = 0xFFFFFFFFFFFFFFFF_u64
+      m1 = 0xFFFFFFFFFFFFFFFF_u64
+  return (nel, b128_wide_u128(hi: m1, lo: m0))
+
+secret preset B128_EXPM1_ATBL0: Array[U64, 48] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x148A0459E7585151_u64, 0xC5C95B8C2154C1B2_u64, 0x85AAC367CC487B14_u64, 0x1AA84FFBEBAC349F_u64, 0xFBE4628758A53C90_u64, 0x8B95C1E3EA8BD6E6_u64, 0x1942B34816FB4F26_u64, 0x0FD6D8E0AE5AC9D8_u64, 0x91C3D373AB11C336_u64, 0x5E139A1B14FA8178_u64, 0x46AD23182E42F6F6_u64, 0x9837F0518DB8A96F_u64, 0x65C15C122133E2A2_u64, 0xA0911F09EBB9FDD1_u64, 0x9EF5326091A111AD_u64, 0x1DD170ACE2BCFC17_u64, 0x1CBD7F621710701B_u64, 0xA5FED6A9B15138EA_u64, 0x6BE409407034FDED_u64, 0x4980A8C8F59A2EC4_u64, 0xAD583EEA42A14AC6_u64, 0x1D6F60BA893BA84C_u64, 0x597D89B3754ABE9F_u64, 0xB504F333F9DE6484_u64, 0x15B34BBCB0298F41_u64, 0xA8811FB66D0FAF7A_u64, 0xBD08A39F580C36BE_u64, 0x6B0F939998251A36_u64, 0x3E2AD0C964DD9F37_u64, 0xC5672A115506DADD_u64, 0x6F28610B8C36485A_u64, 0xE235838F95F2C6ED_u64, 0xCE248C151F8480E3_u64, 0x1D733AF522058B16_u64, 0x39A68BB9902D3FDE_u64, 0xD744FCCAD69D6AF4_u64, 0x224B251B33092002_u64, 0x065895048DD333CA_u64, 0xE0CCDEEC2A94E111_u64, 0xC4FAACE043B7F91C_u64, 0xD02D75B3706E54FA_u64, 0xEAC0C6E7DD24392E_u64, 0x6F510308677709F5_u64, 0x7B9D0C7AED980FC3_u64, 0xF5257D152486CC2C_u64]
+secret preset B128_EXPM1_ATBL1: Array[U64, 48] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x2ADC0C3F864BA0F5_u64, 0x94D589F608EE4AA2_u64, 0x8058D7D2D5E5F6B0_u64, 0x01F60261B05F1202_u64, 0x25335719B6E6FD20_u64, 0x80B1ED4FD999AB6C_u64, 0xA9C9FFC2CA67FFDE_u64, 0x0CEF03AB14A6654F_u64, 0x810B40A1D81406D4_u64, 0x9EB851655E2E5C4D_u64, 0x7BE56527BD14DEF4_u64, 0x8164D1F3BC030773_u64, 0xD5ABD77E8E1D3A02_u64, 0xA047BAB784691313_u64, 0x81BEA1708DDE6055_u64, 0x205DA5FE02D7B22A_u64, 0x9C7CD106D23F3768_u64, 0x8218AF4373FC25EB_u64, 0x352354079F8705C1_u64, 0x3793AA0D08C818FB_u64, 0x8272FB97B2A5894C_u64, 0x29F1A4AFBEFA5D7C_u64, 0x3E2A475B46520BFF_u64, 0x82CD8698AC2BA1D7_u64, 0xFF36264C3CAA8A43_u64, 0x90950CC78D29F056_u64, 0x83285071E0FC4546_u64, 0xE5C5849563AF188B_u64, 0xE201D4EC3D93F683_u64, 0x8383594EEFB6EE36_u64, 0x2AF66C991B2A1028_u64, 0x334544586FFE6D47_u64, 0x83DEA15B9541B132_u64, 0x0D96B414EC4C9D06_u64, 0x1AF92ECA13FD1582_u64, 0x843A28C3ACDE4046_u64, 0xFF8D63EF80157021_u64, 0xF38FFEB805E14189_u64, 0x8495EFB3303EFD2F_u64, 0x17011ED39873FE65_u64, 0x0F03062C26B5BA5D_u64, 0x84F1F656379C1A29_u64, 0xA23F7708CF218F12_u64, 0x16C873D1D378C1C9_u64, 0x854E3CD8F9C8C95D_u64]
+secret preset B128_EXPM1_AC: Array[U64, 45] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0xA079A193394C54E1_u64, 0xE4F1D9CC01F97B57_u64, 0x58B90BFBE8E7BCD5_u64, 0xA3A2751C329DEC63_u64, 0x6F16B06EC9735FCA_u64, 0x1EBFBDFF82C58EA8_u64, 0xA7AE236CCCDDAF6F_u64, 0xCCE9D8AECCAF4B7B_u64, 0x071AC235C1282FE2_u64, 0x724AC5C53418FAB2_u64, 0x9CCBBE0B53EEAC50_u64, 0x013B2AB6FBA4E772_u64, 0x42D10A63971B725E_u64, 0x20E2FED34A297D86_u64, 0x002BB0FFCF14CE62_u64, 0xD132FE878C97B1AC_u64, 0xDBD2C2A261AC8DBC_u64, 0x00050C244BE1B1E1_u64, 0xF9CE89AB39B2C8CF_u64, 0x1A1AC547321C73BE_u64, 0x00007FF2FF1622C3_u64, 0xD0096A8F975AE04E_u64, 0x11FEC7FF38D4399B_u64, 0x00000B160111D2E4_u64, 0x2965D6ECAB7D25BA_u64, 0x3E1ED24165E0982B_u64, 0x000000DA929E9CAF_u64, 0x96BE361027C23482_u64, 0xC76516F9CC9FACE5_u64, 0x0000000F267A8AC5_u64, 0xA8358F9D94F711B3_u64, 0x8DBB68C80B739EE8_u64, 0x00000000F465639A_u64, 0x4B1C3C1E37A9E553_u64, 0x947DDEE7032A7546_u64, 0x000000000E1DEB28_u64, 0xFB45FF03DE0DA11F_u64, 0x5FD29DC12646B116_u64, 0x0000000000C0B0BE_u64, 0xE66D2A5194015941_u64, 0x2DD5A6458BB23F71_u64, 0x0000000000098D9A_u64]
+secret preset B128_EXPM1_R0Z: Array[U64, 128] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x864B3E9044E6B457_u64, 0x4080AB55DE3917AB_u64, 0xBD083ABA80C97A6B_u64, 0x8205601127EC98E0_u64, 0x67F31EB2594AF50F_u64, 0x62491B414F45E149_u64, 0x8D00CF112E4D4A8E_u64, 0x8415ABBE9A76BEAD_u64, 0xF50CE3713CE2F053_u64, 0xA66A7E4C4E6B22AA_u64, 0xE8C66DD40755E14F_u64, 0xC949B83A7066B449_u64, 0x63D2699036180AFC_u64, 0x765AC3BFC39E4F45_u64, 0xB5A20E1381AE350A_u64, 0x8858116DBD733E73_u64, 0x5CC3002268382C93_u64, 0x9A9DE4FD80590AD7_u64, 0xDD9F031675F64D2A_u64, 0xAD2D62CDCB1E5404_u64, 0x572258D3FFD55F1C_u64, 0xC007B3D806BDC02F_u64, 0x831232DF19924D14_u64, 0xD32E05C2D60D4B53_u64, 0x1A79CBD0FC1DD545_u64, 0xE6A18AF4F04197DD_u64, 0xEF7B808180A2ADAF_u64, 0x7D31BD5423B97546_u64, 0x49A2F194B7A7D020_u64, 0x873A887EBE2B1DC7_u64, 0xF7876D37557CA69E_u64, 0x916BC787D030CCEC_u64, 0xA447D942E24D4070_u64, 0x9BC61D8423CC0276_u64, 0x5B3053246D3F6C9E_u64, 0xA64A3019F59EED94_u64, 0x3A4F005E4DBCBE83_u64, 0xB0F8A78B4F5E04EC_u64, 0x2648CA62EA880785_u64, 0xBBD22EC08BFEA76A_u64, 0xE618FB9246784C48_u64, 0xC6D77353064B09A4_u64, 0x5F3020A46F4E9661_u64, 0xD2092597F28659FB_u64, 0xAC99BBB97E6206FF_u64, 0xDD67F8AB63CEB693_u64, 0x8F16CB3612480B8B_u64, 0xE8F4A27B7DED4C46_u64, 0xFB5DB6E12F5900E9_u64, 0x7A57EDE9EA23DE33_u64, 0xCB9BB718894BD9D5_u64, 0x804D30347B545CBA_u64, 0xDC21BA14A55A2729_u64, 0x865A7772164C5415_u64, 0x4DB40ED853110BEF_u64, 0x8C802477B000FDC2_u64, 0x37FCF9D3F3C9F50B_u64, 0x92BE99A09BEFFB73_u64, 0x18F70534E8A0292F_u64, 0x99163AD4B1DCC137_u64, 0x817EBD721981E9D2_u64, 0x9F876D8E8C566505_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0xEF422AB152A55B9E_u64, 0x7F015401105B6D82_u64, 0x7FAA03444EC65172_u64, 0x7E054ABBA514375A_u64, 0xC429382DC397B13E_u64, 0xBB91CA809820271C_u64, 0x73807E7DB29D140B_u64, 0x7C15010E3F570C68_u64, 0x9C873B1D6A7A64D2_u64, 0x99E8DD8BEF9739E1_u64, 0xE7BDAF11163B1674_u64, 0xB74657F9A0FF532A_u64, 0xEEE8BCEE30F48D62_u64, 0xD42F46316CE09B5B_u64, 0x053B6583428AD415_u64, 0x7852BB624FBBCF0F_u64, 0xA567959734A0CB6C_u64, 0x8655588C5093BFD2_u64, 0x80A0A3D684AA2A09_u64, 0x94205AC1B67B3B0A_u64, 0x52950D30C54F86B4_u64, 0xA1B49EB3CB096B3B_u64, 0xD889BEB751068F85_u64, 0xAF12FDA7EF1087F4_u64, 0x5942513170762EEB_u64, 0xBC3C4D852F05FE1C_u64, 0xFEDD89484A194513_u64, 0xC93160E1A1850A8D_u64, 0xE2E0B994F8B308CB_u64, 0xD5F3070F90C1B05B_u64, 0xFA8D0D8A725C311A_u64, 0xE2820C2A6FBEA2F2_u64, 0xF589C99F44A28D9A_u64, 0xEEDF39239C157898_u64, 0x2EAB63020C0B59EF_u64, 0x7D85A9E7768EA16B_u64, 0x354D04AA6461C9FD_u64, 0x83838F77889C4021_u64, 0xBA08ABB1F108F56C_u64, 0x8969AD20DD081ECB_u64, 0xDC489D196856A508_u64, 0x8F386145CC3F9562_u64, 0xBF5975C0C01E274E_u64, 0x94F008D2147631DA_u64, 0x648A5E34BB5A56FB_u64, 0x9A90FF40A86959B0_u64, 0x4E48FF67BB7B117A_u64, 0xA01B9EA167171558_u64, 0x9D4AC13020834D98_u64, 0xA5903F9EBCC38175_u64, 0xD13EA0137C2F1EAB_u64, 0xAAEF39832DA6F6A8_u64, 0xE360AEE13882FA28_u64, 0xB038E23ECA9D934E_u64, 0xBB1525D6B07A7689_u64, 0xB56D8E6C902F729D_u64, 0x0493FD92C5262A34_u64, 0xBA8D9157B0478214_u64, 0x901B1EE2BD655E07_u64, 0xBF993D00C6ED911A_u64, 0x4379A3871C4A363F_u64, 0xC490E222FA56E6E7_u64]
+secret preset B128_EXPM1_E0Z: Array[U64, 64] = [0x0000000000000000_u64, 0x0000000000000004_u64, 0x0000000000000004_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000005_u64, 0x0000000000000004_u64, 0x0000000000000004_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64]
+secret preset B128_EXPM1_R1Z: Array[U64, 128] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0xB60C30C64C705563_u64, 0x4004002AAC000888_u64, 0x1CD9D0DD24EF54A9_u64, 0x801001556AABBBC7_u64, 0x9D1272CE89353C8C_u64, 0x6012024036040D0D_u64, 0x41D5BD72F4C8F39C_u64, 0x802005560011127D_u64, 0x0A449C83A3F0239B_u64, 0xA0320A6C4B897018_u64, 0x894E3DFC9A70CC05_u64, 0xC04812036081A9CE_u64, 0x54FEFB5FF4F0441F_u64, 0x70310E4DCB8C235E_u64, 0x1521693554F733DE_u64, 0x8040155AABBBE945_u64, 0xA2E4B3ED6D77D2E8_u64, 0x90511E688CEC6F85_u64, 0xCC773A8A236BC900_u64, 0xA06429B7B3420310_u64, 0xA1E8E3096C1B0B1C_u64, 0xB07937886AE9F5EE_u64, 0x2AC8F58CB02CD43E_u64, 0xC090481B081BA06F_u64, 0x43DD221634A28EAC_u64, 0xD0A95BAFE719627B_u64, 0xA8F6F454BCEA2039_u64, 0xE0C472876C31A505_u64, 0x1776BCD3098C1571_u64, 0x7870C67101DFEDCE_u64, 0x98E0AF1CDA274C9C_u64, 0x808055801116C30C_u64, 0x9D792386C4AD9F8E_u64, 0x8890E69121F9993A_u64, 0x720657AFAC5C5A75_u64, 0x90A279C476CCBF5C_u64, 0x7CBC088F40AA308C_u64, 0x98B50F3A55DD0D87_u64, 0x70C6D0754769D2E8_u64, 0xA0C8A713098065FB_u64, 0xA600339E2D45B098_u64, 0xA8DD416EE016364B_u64, 0x96D000BC58FE51FA_u64, 0xB0F2DE6E2C07F898_u64, 0x863FEB6E733A1C93_u64, 0xB9097E3143C9B4D9_u64, 0x5046873B9DB28B59_u64, 0xC12120D881DA8236_u64, 0x664F0A5772228CCD_u64, 0xC939C68444C50871_u64, 0xFA038020948E67A6_u64, 0xD1536F54EF200161_u64, 0x585F5405AE52042D_u64, 0xD96E1B6AE78EBA7E_u64, 0x77105E3DC8D9A7BA_u64, 0xE189CAE698C19676_u64, 0xB62CDC8A390615A4_u64, 0xE9A67DE871768EDE_u64, 0xD8450209A002CA60_u64, 0xF1C43490E479B5EA_u64, 0x996B84FE7A6373D8_u64, 0x7CF177803452DC1C_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x60B7AB74375A91D1_u64, 0x7FF8005552AABBBB_u64, 0xB0C308F0A6264045_u64, 0x7FF0015540011105_u64, 0x06F10BC8F4E5FE36_u64, 0xBFDC047F94081918_u64, 0xBEFA4FBC170B72C8_u64, 0x7FE00554AABBBA4F_u64, 0xEDBF7515D78D3F15_u64, 0x9FCE0A690A340FE8_u64, 0x22948720A76C67FA_u64, 0xBFB811FCA0818968_u64, 0xF2D4A234F29A53D5_u64, 0xDF9E1C8F15C29FB3_u64, 0xB87B9ED40F98E063_u64, 0x7FC015500110E394_u64, 0x6B85E0278E94EA08_u64, 0x8FAF1E5776EBB6FE_u64, 0x348E2E2E517198B2_u64, 0x9F9C299DA895FD2D_u64, 0xCBB85B13A51535F0_u64, 0xAF8737624A3CE423_u64, 0x3453ED31A010E103_u64, 0xBF7047E5081793A2_u64, 0x99D004BD4BB67730_u64, 0xCF575B6586682BD6_u64, 0x5890EF77417CB34B_u64, 0xDF3C7223617CC3EE_u64, 0x36A1AE85666C52C1_u64, 0xEF1F8C5E2DB06887_u64, 0x681D99ACEEF7A424_u64, 0x7F80552ABBB60D00_u64, 0x1E0D4CAD520669BD_u64, 0x876FE6246193E557_u64, 0xF5CF916E3D72FB8B_u64, 0x8F5E793BC6B5AE73_u64, 0xE55420797B145CF6_u64, 0x974C0E90A567D07E_u64, 0xD195B74B3798CEAD_u64, 0x9F38A642B3FFA984_u64, 0xE43C9457C5DADDAD_u64, 0xA7244071A4DC0C50_u64, 0x0713E6DB5E8CA4CD_u64, 0xAF0EDD3D2665BF36_u64, 0x874D58625B052467_u64, 0xB6F87CC4E30FFAC8_u64, 0xE28D9697A24D558E_u64, 0xBEE11F288158E887_u64, 0xBFBC848E23769952_u64, 0xC6C8C487A3CA2178_u64, 0x15937B6946CCF5CB_u64, 0xCEAF6D01E8F92CAF_u64, 0x80E3C2FF379FF634_u64, 0xD69518B6EB87FDC8_u64, 0xCC8F2BCEC927D50D_u64, 0xDE79C7C642257356_u64, 0xAD2C7469817CD27E_u64, 0xE65D7A4F7F8DD53A_u64, 0xB250E54104AF5985_u64, 0xEE403072328B52EE_u64, 0x6F784E9DAED415FB_u64, 0xF621EA4DE5F681C2_u64]
+secret preset B128_EXPM1_E1Z: Array[U64, 64] = [0x0000000000000000_u64, 0x0000000000000009_u64, 0x0000000000000009_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000005_u64, 0x0000000000000000_u64, 0x000000000000000A_u64, 0x0000000000000009_u64, 0x0000000000000009_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64]
+secret preset B128_EXPM1_CB9: Array[U64, 36] = [0x0000000000000000_u64, 0x8000000000000000_u64, 0x0000000000000000_u64, 0x0008000000000000_u64, 0x5555555555555558_u64, 0x0000005555555555_u64, 0xAAAAAAAAAAAAAA92_u64, 0x0000000002AAAAAA_u64, 0x1111111111111192_u64, 0x0000000000001111_u64, 0x5B05B05B05B05992_u64, 0x0000000000000000_u64, 0x0001A01A01A01C79_u64, 0x0000000000000000_u64, 0x0000000680680410_u64, 0x0000000000000000_u64, 0x0000000000171F31_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x0000000000000000_u64, 0x0008000000000000_u64, 0x5555555555555553_u64, 0x0000005555555555_u64, 0xAAAAAAAAAAAAAA92_u64, 0x0000000002AAAAAA_u64, 0x1111111111111090_u64, 0x0000000000001111_u64, 0x5B05B05B05B05992_u64, 0x0000000000000000_u64, 0x0001A01A01A0178B_u64, 0x0000000000000000_u64, 0x0000000680680410_u64, 0x0000000000000000_u64, 0x0000000000171C97_u64, 0x0000000000000000_u64]
+secret preset B128_EXPM1_CB8: Array[U64, 32] = [0xFFFFFFFFFFFFFE89_u64, 0x7FFFFFFFFFFFFFFF_u64, 0x5555555555557C59_u64, 0x0005555555555555_u64, 0xAAAAAAAAAAA91A1C_u64, 0x0000002AAAAAAAAA_u64, 0x1111111111191D15_u64, 0x0000000001111111_u64, 0x5B05B05B05991BD6_u64, 0x00000000000005B0_u64, 0x1A01A01A01C78CF6_u64, 0x0000000000000000_u64, 0x00006806804102A2_u64, 0x0000000000000000_u64, 0x0000000171F30906_u64, 0x0000000000000000_u64, 0xFFFFFFFFFFFFFE89_u64, 0x7FFFFFFFFFFFFFFF_u64, 0x5555555555552E54_u64, 0x0005555555555555_u64, 0xAAAAAAAAAAA91A3A_u64, 0x0000002AAAAAAAAA_u64, 0x11111111110905AE_u64, 0x0000000001111111_u64, 0x5B05B05B05991DB5_u64, 0x00000000000005B0_u64, 0x1A01A01A0178AA2B_u64, 0x0000000000000000_u64, 0x000068068041057E_u64, 0x0000000000000000_u64, 0x0000000171C96CD3_u64, 0x0000000000000000_u64]
+secret preset B128_EXPM1_R0: Array[U64, 64] = [0x0000000000000000_u64, 0x8000000000000000_u64, 0x3E2A475B46520BFF_u64, 0x82CD8698AC2BA1D7_u64, 0xC5C95B8C2154C1B2_u64, 0x85AAC367CC487B14_u64, 0x5DF8D76C98C67563_u64, 0x88980E8092DA8527_u64, 0xFBE4628758A53C90_u64, 0x8B95C1E3EA8BD6E6_u64, 0x2DC0144C8783D4C6_u64, 0x8EA4398B45CD53C0_u64, 0x0FD6D8E0AE5AC9D8_u64, 0x91C3D373AB11C336_u64, 0x2E8AFAD12551DE54_u64, 0x94F4EFA8FEF70961_u64, 0x46AD23182E42F6F6_u64, 0x9837F0518DB8A96F_u64, 0xA2A817A2A3CC3F1F_u64, 0x9B8D39B9D54E5538_u64, 0xA0911F09EBB9FDD1_u64, 0x9EF5326091A111AD_u64, 0x9B7A04EF80CFDEA8_u64, 0xA27043030C496818_u64, 0x1CBD7F621710701B_u64, 0xA5FED6A9B15138EA_u64, 0x541E24EC3531FA73_u64, 0xA9A15AB4EA7C0EF8_u64, 0x4980A8C8F59A2EC4_u64, 0xAD583EEA42A14AC6_u64, 0x87D037E96D215D8E_u64, 0xB123F581D2AC258F_u64, 0x597D89B3754ABE9F_u64, 0xB504F333F9DE6484_u64, 0x1B879778566B65A2_u64, 0xB8FBAF4762FB9EE9_u64, 0xA8811FB66D0FAF7A_u64, 0xBD08A39F580C36BE_u64, 0x7C457D59A50087B5_u64, 0xC12C4CCA66709456_u64, 0x3E2AD0C964DD9F37_u64, 0xC5672A115506DADD_u64, 0x80E1F92A0511697E_u64, 0xC9B9BD866E2F27A2_u64, 0xE235838F95F2C6ED_u64, 0xCE248C151F8480E3_u64, 0x12248E57C3DE4028_u64, 0xD2A81D91F12AE45A_u64, 0x39A68BB9902D3FDE_u64, 0xD744FCCAD69D6AF4_u64, 0x3D840D5A9E29AA64_u64, 0xDBFBB797DAF23755_u64, 0x065895048DD333CA_u64, 0xE0CCDEEC2A94E111_u64, 0x1E5E8F4A4EDBB0ED_u64, 0xE5B906E77C8348A8_u64, 0xD02D75B3706E54FB_u64, 0xEAC0C6E7DD24392E_u64, 0x46561CF6948DB913_u64, 0xEFE4B99BDCDAF5CB_u64, 0x7B9D0C7AED980FC3_u64, 0xF5257D152486CC2C_u64, 0x7C25BB14315D7FCD_u64, 0xFA83B2DB722A033A_u64]
+secret preset B128_EXPM1_R1: Array[U64, 64] = [0x0000000000000000_u64, 0x8000000000000000_u64, 0x3690DFE44D11D008_u64, 0x8016302F17467628_u64, 0xFF8CE94A6797B3CE_u64, 0x802C6436D0E04F50_u64, 0x49FC841AFBA9C3C6_u64, 0x80429C17D77C18ED_u64, 0x94D589F608EE4AA2_u64, 0x8058D7D2D5E5F6B0_u64, 0xE54EC5F966EB1872_u64, 0x806F17687707A7AF_u64, 0xA0CC0A49C10EA66B_u64, 0x80855AD965E88B83_u64, 0x4A8A4F44BB703DB6_u64, 0x809BA2264DADA76A_u64, 0x25335719B6E6FD20_u64, 0x80B1ED4FD999AB6C_u64, 0xB880575EA03548C1_u64, 0x80C83C56B50CF77F_u64, 0x3B13310F5AD57FB1_u64, 0x80DE8F3B8B85A0AF_u64, 0xE0ADC640ACAA6B0B_u64, 0x80F4E5FF089F763E_u64, 0x0CEF03AB14A66550_u64, 0x810B40A1D81406D4_u64, 0x6ABD3B0EAB9C7048_u64, 0x81219F24A5BAA59D_u64, 0xE885724F14131287_u64, 0x813801881D886F7B_u64, 0x99775205944EADC4_u64, 0x814E67CCEB90502C_u64, 0x7BE56527BD14DEF5_u64, 0x8164D1F3BC030773_u64, 0x24F1624278193C37_u64, 0x817B3FFD3B2F2E47_u64, 0x51AC3DAC02CA5008_u64, 0x8191B1EA15813BFD_u64, 0x5DD1CAF33588F2D3_u64, 0x81A827BAF7838B78_u64, 0xA047BAB784691314_u64, 0x81BEA1708DDE6055_u64, 0xAD87C8FB65A6993C_u64, 0x81D51F0B8557EC1C_u64, 0x801CF6EA3B3068F3_u64, 0x81EBA08C8AD4536F_u64, 0x875BB1F380439FEE_u64, 0x820225F44B55B33B_u64, 0x9C7CD106D23F3768_u64, 0x8218AF4373FC25EB_u64, 0xDE4357A774D13D5C_u64, 0x822F3C7AB205C89A_u64, 0x7354F57A2D982491_u64, 0x8245CD9AB2CEC048_u64, 0x336D3FDDC28165AD_u64, 0x825C62A423D13F0C_u64, 0x3793AA0D08C818FB_u64, 0x8272FB97B2A5894C_u64, 0x517C473948AF9A0C_u64, 0x828998760D01FAF3_u64, 0x6A3B68FCC424FF9F_u64, 0x82A0393FE0BB0CA8_u64, 0xC87433776C8B975C_u64, 0x82B6DDF5DBC35906_u64]
+secret preset B128_EXPM1_R2: Array[U64, 64] = [0x0000000000000000_u64, 0x8000000000000000_u64, 0xAA22BEACCA949013_u64, 0x8000B17292F702A3_u64, 0xE84C2E1A463473DA_u64, 0x800162E61BED4A48_u64, 0xE9B3D4C106428682_u64, 0x8002145A9AE42BF6_u64, 0xB6566A58C048BE1F_u64, 0x8002C5D00FDCFCB6_u64, 0x2EF8674028829792_u64, 0x800377467AD91193_u64, 0x0D2893E85AFFCA64_u64, 0x800428BDDBD9BF99_u64, 0xE3429843D1643041_u64, 0x8004DA3632E05BD6_u64, 0x1C718B38E549CB93_u64, 0x80058BAF7FEE3B5D_u64, 0xFCB28217DF49D908_u64, 0x80063D29C304B33D_u64, 0xA0D7201492B1D78A_u64, 0x8006EEA4FC25188D_u64, 0xFE8825C385E97278_u64, 0x8007A0212B50C061_u64, 0xE448009AA78E39CD_u64, 0x8008519E5088FFD2_u64, 0xF9755A75904A13F7_u64, 0x8009031C6BCF2BF9_u64, 0xBE4DA91D51695528_u64, 0x8009B49B7D2499F2_u64, 0x8BEFBDD3D03567F0_u64, 0x800A661B848A9EDA_u64, 0x945E54E2AE18F2F0_u64, 0x800B179C82028FD0_u64, 0xE282A52DBD92678A_u64, 0x800BC91E758DC1F5_u64, 0x5A2EEFC903F9E56B_u64, 0x800C7AA15F2D8A6D_u64, 0xB8210F92481F5ED7_u64, 0x800D2C253EE33E5B_u64, 0x920508CE2DC5E9B3_u64, 0x800DDDAA14B032E7_u64, 0x567798C8DE012934_u64, 0x800E8F2FE095BD39_u64, 0x4D08C57A3C79BC3E_u64, 0x800F40B6A295327B_u64, 0x963E6D2DA99D9C76_u64, 0x800FF23E5AAFE7D9_u64, 0x2B96D62D51C15A07_u64, 0x8010A3C708E73282_u64, 0xDF8B3E7109372044_u64, 0x80115550AD3C67A4_u64, 0x5D926B50B5606F22_u64, 0x801206DB47B0DC73_u64, 0x2A23393A42BF75CE_u64, 0x8012B866D845E621_u64, 0xA2B72B6B280CFA61_u64, 0x801369F35EFCD9E3_u64, 0xFDCCFBAD7657BAFD_u64, 0x80141B80DBD70CF1_u64, 0x4AEB2A187632347D_u64, 0x8014CD0F4ED5D485_u64, 0x72A28CD4D1F3BAE9_u64, 0x80157E9EB7FA85D8_u64]
+secret preset B128_EXPM1_R3: Array[U64, 64] = [0x0000000000000000_u64, 0x8000000000000000_u64, 0xECFC487503488BB2_u64, 0x8000058B90DE7E4C_u64, 0x8307016C1CD4E8B7_u64, 0x80000B1721FA7C18_u64, 0x6C292B5FBF0C0AB5_u64, 0x800010A2B353F965_u64, 0x526BE456600BDBE5_u64, 0x8000162E44EAF636_u64, 0xDFD867E27AF0ECB1_u64, 0x80001BB9D6BF728D_u64, 0xBE780F22911E236A_u64, 0x8000214568D16E6E_u64, 0x985450C12B846C01_u64, 0x800026D0FB20E9DB_u64, 0x1776C0F4DBEA67D6_u64, 0x80002C5C8DADE4D7_u64, 0xE5E911803E341D94_u64, 0x800031E820785F63_u64, 0xADB511B1F9AAA919_u64, 0x80003773B3805984_u64, 0x18E4AE64C243EB6D_u64, 0x80003CFF46C5D33C_u64, 0xD181F1FF59EA3AC5_u64, 0x8000428ADA48CC8C_u64, 0x8197047491C4129C_u64, 0x800048166E094579_u64, 0xD32E2B434B7BC3D3_u64, 0x80004DA202073E04_u64, 0x7051C9767A8724DB_u64, 0x8000532D9642B631_u64, 0x030C5FA5256F41FE_u64, 0x800058B92ABBAE02_u64, 0x35688BF267180DA2_u64, 0x80005E44BF722579_u64, 0xB1710A0D700810A8_u64, 0x800063D054661C99_u64, 0x2130B33187B01AD5_u64, 0x8000695BE9979366_u64, 0x2EB27E260DB2F346_u64, 0x80006EE77F0689E1_u64, 0x84017F3E7B2D08FA_u64, 0x8000747314B3000D_u64, 0xCB28E85A63FC235F_u64, 0x800079FEAA9CF5ED_u64, 0xAE3408E5780712FB_u64, 0x80007F8A40C46B84_u64, 0xD72E4DD784856215_u64, 0x80008515D72960D4_u64, 0xF02341B475470578_u64, 0x80008AA16DCBD5E0_u64, 0xA31E8C8C55FC0D3B_u64, 0x8000902D04ABCAAB_u64, 0x9A2BF3FB537C55A0_u64, 0x800095B89BC93F37_u64, 0x7F575B29BD0F37F7_u64, 0x80009B4433243387_u64, 0xFCACC2CC05B33B9C_u64, 0x8000A0CFCABCA79D_u64, 0xBC384922C565C6F3_u64, 0x8000A65B62929B7D_u64, 0x680629FABA6AD083_u64, 0x8000ABE6FAA60F29_u64]
+secret preset B128_EXPM1_C: Array[U64, 12] = [0xFFFFFFFFFFFFFFFF_u64, 0x7FFFFFFFFFFFFFFF_u64, 0x7BCD5E4F1D9CC01F_u64, 0x0000058B90BFBE8E_u64, 0xFF82C58EA86F16B0_u64, 0x00000000001EBFBD_u64, 0x71AC235C1282FE2C_u64, 0x0000000000000000_u64, 0x0000013B2AB6FBA4_u64, 0x0000000000000000_u64, 0x000000000002BB10_u64, 0x0000000000000000_u64]

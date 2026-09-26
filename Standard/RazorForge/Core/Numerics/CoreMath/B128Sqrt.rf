@@ -1,0 +1,140 @@
+module Core
+
+# ============================================================================
+# Correctly rounded square root of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/sqrt/sqrtq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped).
+# The whole computation runs on 64- and 128-bit integers: a cubic reciprocal-square-root seed, one Newton
+# step, then an exact check of the two candidate results when the rounding is too close to call.
+
+### Returns the square root, correctly rounded: the exact square root rounded to the nearest `B128` (ties to
+### even), identical on every platform, with raw IEEE 754 propagation (C `sqrt`): NaN for negatives and
+### NaN inputs, +infinity for +infinity, ±0 for ±0.
+### :returns: The correctly rounded square root.
+routine B128.sqrt_unchecked() -> B128
+  var ua = me.to_bits()
+  var hi = LLVM::int_truncate[U128, U64](ua >>> 64)
+  var lo = LLVM::int_truncate[U128, U64](ua)
+  var e = LLVM::reinterpret_bits[U64, S64](hi >>> 48)
+  if e == 0
+    # subnormal or +0: normalize the mantissa
+    var ns = -15_s64
+    if hi != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](hi.leading_zeros())
+    elseif lo != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](lo.leading_zeros()) +% 64
+    else
+      return me
+    e = 1 -% ns
+    ua = ua << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+  if e >= 0x7FFF
+    # -0, +infinity, negative numbers and NaN
+    if (ua << 1) == 0
+      return me
+    if ua == (0x7FFF_u128 << 112)
+      return me
+    if ua <= (0xFFFF_u128 << 112) and ua > (0x8000_u128 << 112)
+      # x < 0: the default NaN
+      return B128.from_bits(bits: 0x1FFFF_u128 << 111)
+    # NaN: quiet a signaling NaN, keep sign and payload
+    return B128.from_bits(bits: ua | (1_u128 << 111))
+  e = e +% 1
+  var q2 = e >> 1
+  var i = LLVM::reinterpret_bits[S64, U64](e & 1)
+  # exponent of the final result
+  var e2 = LLVM::reinterpret_bits[S64, U64](q2 +% 8190) << 48
+  ua = ua << 16
+  var rx = LLVM::int_truncate[U128, U64](ua >>> 64)
+  var r = b128_sqrt_rsqrt9(m: rx)
+  # 2^64/sqrt(2) for odd exponents
+  var rs = 0xFFFFFFFFFFFFFFFF_u64
+  if i != 0
+    rs = 0xB504F333F9DE6484_u64
+  var r2 = LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](rs)
+  ua = ua >>> LLVM::int_truncate[U64, U32](2 -% i)
+  ua = ua | (1_u128 << LLVM::int_truncate[U64, U32](126 +% i))
+  r = LLVM::int_truncate[U128, U64](r2 >>> 64)
+  var sx = b128_sqrt_mhuU(y: r, x: ua)
+  var h = b128_sqrt_mhuU(y: r, x: sx) << 2
+  # high part of the (signed h) x (unsigned sx) product
+  var ds = b128_sqrt_mhUU(a: sx, b: h)
+  if (h >>> 127) != 0
+    ds = ds -% sx
+  sx = sx << 1
+  var v = sx -% ds
+  var dd = LLVM::reinterpret_bits[U16, S16](LLVM::int_truncate[U128, U16](v << 2))
+  if not (dd < -37 or dd > 13)
+    # v is almost the final result, at most 1 ulp off: square the candidate and compare with the argument
+    v = v +% (1_u128 << 13)
+    var m = v >>> 14
+    var dm2 = LLVM::reinterpret_bits[U128, S128]((m *% m) -% (ua << 100))
+    v = v & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFC000_u128
+    if dm2 > 0
+      v = v -% 1
+    if dm2 < 0
+      v = v +% 1
+  # round to nearest, ties to even
+  var rnd = (v >>> 14) & 1
+  v = (v >>> 15) +% rnd
+  # place the exponent
+  v = v +% (LLVM::zero_extend[U64, U128](e2) << 64)
+  return B128.from_bits(bits: v)
+
+### Reciprocal square root of the mantissa m (1 <= m/2^63 < 2) to almost 64 bits: a cubic minimax seed per
+### 1/64 subrange followed by one Newton-Raphson step.
+### :param m: The mantissa with its leading bit at bit 63.
+### :returns: 2^64/sqrt(m/2^63) approximately.
+secret routine b128_sqrt_rsqrt9(m: U64) -> U64
+  var indx = (m >>> 58) *% 4
+  var c0 = B128_SQRT_RSQRT9[indx]
+  var c1 = B128_SQRT_RSQRT9[indx +% 1]
+  var c2 = B128_SQRT_RSQRT9[indx +% 2]
+  var c3 = B128_SQRT_RSQRT9[indx +% 3]
+  c0 = (c0 << 31) | 0x8000000000000000_u64
+  c1 = c1 << 25
+  # local coordinate in the subrange [0, 2^32]
+  var d = (m << 6) >>> 32
+  var d2 = (d *% d) >>> 32
+  # even part of the polynomial (positive)
+  var re = c0 +% ((d2 *% c2) >>> 13)
+  # odd part of the polynomial (negative)
+  var ro = (d *% ((c1 +% ((d2 *% c3) >>> 19)) >>> 26)) >>> 6
+  var r = re -% ro
+  # Newton-Raphson step: r1 = r0 - r0*(r0^2*x - 1)/2
+  var r2 = b128_sqrt_mhuu(a: r, b: r)
+  var h = LLVM::reinterpret_bits[U64, S64](b128_sqrt_mhuu(a: m, b: r2) +% r2)
+  var hr = LLVM::int_truncate[S128, S64]((LLVM::sign_extend[S64, S128](h) *% LLVM::sign_extend[S64, S128](LLVM::reinterpret_bits[U64, S64](r >>> 1))) >> 64)
+  r = r -% LLVM::reinterpret_bits[S64, U64](hr)
+  if r == 0
+    r = r -% 1
+  return r
+
+### High 64 bits of the unsigned product a*b.
+@inline
+secret routine b128_sqrt_mhuu(a: U64, b: U64) -> U64
+  return LLVM::int_truncate[U128, U64]((LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)) >>> 64)
+
+### High 128 bits of the 64x128-bit unsigned product y*x (the low partial product's low half dropped).
+@inline
+secret routine b128_sqrt_mhuU(y: U64, x: U128) -> U128
+  var y2 = LLVM::zero_extend[U64, U128](y)
+  var xy0 = (x & 0xFFFFFFFFFFFFFFFF_u128) *% y2
+  var xy1 = (x >>> 64) *% y2
+  return xy1 +% (xy0 >>> 64)
+
+### Approximate high 128 bits of the unsigned 128x128-bit product a*b (the low*low product dropped).
+@inline
+secret routine b128_sqrt_mhUU(a: U128, b: U128) -> U128
+  var a0 = a & 0xFFFFFFFFFFFFFFFF_u128
+  var a1 = a >>> 64
+  var b0 = b & 0xFFFFFFFFFFFFFFFF_u128
+  var b1 = b >>> 64
+  return ((a1 *% b1) +% ((a1 *% b0) >>> 64)) +% ((a0 *% b1) >>> 64)
+
+# The reciprocal-square-root seed table: for each of the 64 subranges of [1, 2), the cubic's four 32-bit
+# coefficients c0 c1 c2 c3 (c0 without its implicit leading bit).
+secret preset B128_SQRT_RSQRT9: Array[U64, 256] = [0xffffffff_u64, 0xfffff780_u64, 0xbff55815_u64, 0x9bb5b6e7_u64, 0xfc0bd889_u64, 0xfa1d6e7d_u64, 0xb8a95a89_u64, 0x938bf8f0_u64, 0xf82ec882_u64, 0xf473bea9_u64, 0xb1bf4705_u64, 0x8bed0079_u64, 0xf467f280_u64, 0xeefff2a1_u64, 0xab309d4a_u64, 0x84cdb431_u64, 0xf0b6848c_u64, 0xe9bf46f4_u64, 0xa4f76232_u64, 0x7e24037b_u64, 0xed19b75e_u64, 0xe4af2628_u64, 0x9f0e1340_u64, 0x77e6ca62_u64, 0xe990cdad_u64, 0xdfcd2521_u64, 0x996f9b96_u64, 0x720db8df_u64, 0xe61b138e_u64, 0xdb16ffde_u64, 0x94174a00_u64, 0x6c913cff_u64, 0xe2b7dddf_u64, 0xd68a967b_u64, 0x8f00c812_u64, 0x676a6f92_u64, 0xdf6689b7_u64, 0xd225ea80_u64, 0x8a281226_u64, 0x62930308_u64, 0xdc267bea_u64, 0xcde71c63_u64, 0x8589702c_u64, 0x5e05343e_u64, 0xd8f7208e_u64, 0xc9cc6948_u64, 0x81216f2e_u64, 0x59bbbcf8_u64, 0xd5d7ea91_u64, 0xc5d428ee_u64, 0x7cecdb76_u64, 0x55b1c7d6_u64, 0xd2c8534e_u64, 0xc1fccbc9_u64, 0x78e8bb45_u64, 0x51e2e592_u64, 0xcfc7da32_u64, 0xbe44d94a_u64, 0x75124a0a_u64, 0x4e4b0369_u64, 0xccd6045f_u64, 0xbaaaee41_u64, 0x7166f40f_u64, 0x4ae66284_u64, 0xc9f25c5c_u64, 0xb72dbb69_u64, 0x6de45288_u64, 0x47b19045_u64, 0xc71c71c7_u64, 0xb3cc040f_u64, 0x6a882804_u64, 0x44a95f5f_u64, 0xc453d90f_u64, 0xb0849cd4_u64, 0x67505d2a_u64, 0x41cae1a0_u64, 0xc1982b2e_u64, 0xad566a85_u64, 0x643afdc8_u64, 0x3f13625c_u64, 0xbee9056f_u64, 0xaa406113_u64, 0x6146361f_u64, 0x3c806169_u64, 0xbc46092e_u64, 0xa7418293_u64, 0x5e70506d_u64, 0x3a0f8e8e_u64, 0xb9aedba5_u64, 0xa458de58_u64, 0x5bb7b2b1_u64, 0x37bec572_u64, 0xb72325b7_u64, 0xa1859022_u64, 0x591adc9a_u64, 0x358c09e2_u64, 0xb4a293c2_u64, 0x9ec6bf52_u64, 0x569865a7_u64, 0x33758476_u64, 0xb22cd56d_u64, 0x9c1b9e36_u64, 0x542efb6a_u64, 0x31797f8a_u64, 0xafc19d86_u64, 0x9983695c_u64, 0x51dd5ffb_u64, 0x2f96647a_u64, 0xad60a1d1_u64, 0x96fd66f7_u64, 0x4fa2687c_u64, 0x2dcab91f_u64, 0xab099ae9_u64, 0x9488e64b_u64, 0x4d7cfbc9_u64, 0x2c151d8a_u64, 0xa8bc441a_u64, 0x92253f20_u64, 0x4b6c1139_u64, 0x2a7449ef_u64, 0xa6785b42_u64, 0x8fd1d14a_u64, 0x496eaf82_u64, 0x28e70cc3_u64, 0xa43da0ae_u64, 0x8d8e042a_u64, 0x4783eba7_u64, 0x276c4900_u64, 0xa20bd701_u64, 0x8b594648_u64, 0x45aae80a_u64, 0x2602f493_u64, 0x9fe2c315_u64, 0x89330ce4_u64, 0x43e2d382_u64, 0x24aa16ec_u64, 0x9dc22be4_u64, 0x871ad399_u64, 0x422ae88c_u64, 0x2360c7af_u64, 0x9ba9da6c_u64, 0x85101c05_u64, 0x40826c88_u64, 0x22262d7b_u64, 0x99999999_u64, 0x83126d70_u64, 0x3ee8af07_u64, 0x20f97cd2_u64, 0x97913630_u64, 0x81215480_u64, 0x3d5d0922_u64, 0x1fd9f714_u64, 0x95907eb8_u64, 0x7f3c62ef_u64, 0x3bdedce0_u64, 0x1ec6e994_u64, 0x93974369_u64, 0x7d632f45_u64, 0x3a6d94a9_u64, 0x1dbfacbb_u64, 0x91a55615_u64, 0x7b955498_u64, 0x3908a2be_u64, 0x1cc3a33b_u64, 0x8fba8a1c_u64, 0x79d2724e_u64, 0x37af80bf_u64, 0x1bd23960_u64, 0x8dd6b456_u64, 0x781a2be4_u64, 0x3661af39_u64, 0x1aeae458_u64, 0x8bf9ab07_u64, 0x766c28ba_u64, 0x351eb539_u64, 0x1a0d21a2_u64, 0x8a2345cc_u64, 0x74c813dd_u64, 0x33e61feb_u64, 0x19387676_u64, 0x88535d90_u64, 0x732d9bdc_u64, 0x32b7823a_u64, 0x186c6f3e_u64, 0x8689cc7e_u64, 0x719c7297_u64, 0x3192747d_u64, 0x17a89f21_u64, 0x84c66df1_u64, 0x70144d19_u64, 0x30769424_u64, 0x16ec9f89_u64, 0x83091e6a_u64, 0x6e94e36c_u64, 0x2f63836f_u64, 0x16380fbf_u64, 0x8151bb87_u64, 0x6d1df079_u64, 0x2e58e925_u64, 0x158a9484_u64, 0x7fa023f1_u64, 0x6baf31de_u64, 0x2d567053_u64, 0x14e3d7ba_u64, 0x7df43758_u64, 0x6a4867d3_u64, 0x2c5bc811_u64, 0x1443880e_u64, 0x7c4dd664_u64, 0x68e95508_u64, 0x2b68a346_u64, 0x13a958ab_u64, 0x7aace2b0_u64, 0x6791be86_u64, 0x2a7cb871_u64, 0x131500ee_u64, 0x79113ebc_u64, 0x66416b95_u64, 0x2997c17a_u64, 0x12863c29_u64, 0x777acde8_u64, 0x64f825a1_u64, 0x28b97b82_u64, 0x11fcc95c_u64, 0x75e9746a_u64, 0x63b5b822_u64, 0x27e1a6b4_u64, 0x11786b03_u64, 0x745d1746_u64, 0x6279f081_u64, 0x2710061d_u64, 0x10f8e6da_u64, 0x72d59c46_u64, 0x61449e06_u64, 0x26445f86_u64, 0x107e05ac_u64, 0x7152e9f4_u64, 0x601591be_u64, 0x257e7b4d_u64, 0x10079327_u64, 0x6fd4e793_u64, 0x5eec9e6b_u64, 0x24be2445_u64, 0x0f955da9_u64, 0x6e5b7d16_u64, 0x5dc9986e_u64, 0x24032795_u64, 0x0f273620_u64, 0x6ce6931d_u64, 0x5cac55b7_u64, 0x234d5496_u64, 0x0ebcefdb_u64, 0x6b7612ec_u64, 0x5b94adb2_u64, 0x229c7cbc_u64, 0x0e56606e_u64]

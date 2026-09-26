@@ -1,0 +1,319 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc sine of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/asin/asinq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2026 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception-flag and errno handling and directed-rounding branches are dropped).
+# Everything works on integers, never on the B128 arithmetic operators. The helpers and tables shared with
+# the arc cosine live in CoreMath/B128AsinFam.rf.
+#
+# For |x| >= 0.022 the argument is reduced with the table point s_j = sin(pi/2/72*j):
+# asin(x) = asin(s_j) + asin(x*sqrt(1 - s_j^2) - s_j*sqrt(1 - x^2)), and the small remainder goes through
+# an odd polynomial. A 128-bit fast path is checked against its error bound and falls back to a 320-bit
+# accurate path.
+
+### `asin(me)`, correctly rounded: the exact arc sine rounded to the nearest `B128` (ties to even),
+### identical on every platform. The result lies in [-pi/2, pi/2] and `asin(-x) == -asin(x)`. ±0 map to
+### themselves; |me| > 1, ±infinity and a signaling NaN give NaN, and a quiet NaN is returned unchanged.
+### No crash.
+### :returns: The correctly rounded arc sine in radians.
+routine B128.asin_unchecked() -> B128
+  var u = me.to_bits()
+  var xb0 = LLVM::int_truncate[U128, U64](u)
+  var xb1 = LLVM::int_truncate[U128, U64](u >>> 64)
+  var xsgn = xb1 & 0x8000000000000000_u64
+  xb1 = xb1 & 0x7FFFFFFFFFFFFFFF_u64
+  var xn = b128_asinfam_s(u: xb1 >>> 48)
+  # for |x| < 2^-56 the difference asin(x) - x is below half an ulp
+  if xn < 0x3FFF -% 56
+    return me
+  if xn >= 0x3FFF
+    # |x| >= 1, infinity or NaN
+    if xb0 == 0_u64 and xb1 == 0x3FFF000000000000_u64
+      return B128.from_bits(bits: b128_asinfam_join(hi: 0x3FFF921FB54442D1_u64 | xsgn, lo: 0x8469898CC51701B8_u64))
+    if xb1 >= 0x7FFF800000000000_u64
+      return me
+    return B128.from_bits(bits: b128_asinfam_join(hi: 0xFFFF800000000000_u64, lo: 0_u64))
+  var j = b128_asinfam_jget(x: xb1)
+  xb1 = xb1 | 0x0001000000000000_u64
+  var xa = b128_asinfam_join(hi: xb1, lo: xb0) << 15
+  xb0 = b128_asinfam_lo(u: xa)
+  xb1 = b128_asinfam_hi(u: xa)
+  var t = xa
+  var nz = 0x3FFF -% xn
+  var xc0 = 0_u64
+  var xc1 = 0_u64
+  var xc2 = 0_u64
+  if j != 0_u64
+    var red = b128_asinfam_fast_sqrt(x0: xb0, x1: xb1, nz: nz, mode: 0_u64)
+    var e = red.item3
+    var xs = xa >>> b128_asinfam_sh(n: nz)
+    var ci = j *% 5_u64
+    var p = b128_asinfam_mh3d(y0: b128_asinfam_lo(u: xs), y1: b128_asinfam_hi(u: xs), x0: B128_ASINFAM_CTH[ci +% 2_u64], x1: B128_ASINFAM_CTH[ci +% 3_u64], x2: B128_ASINFAM_CTH[ci +% 4_u64])
+    var sj = B128_ASINFAM_PTH[j]
+    var sp = 43 -% (e >> 1)
+    var sx0 = 0_u64
+    var sx1 = 0_u64
+    var sx2 = 0_u64
+    if sp >= 0
+      sj = sj << b128_asinfam_sh(n: sp)
+      var m = b128_asinfam_mh3w(y: sj, x0: red.item0, x1: red.item1, x2: red.item2)
+      sx0 = m.item0
+      sx1 = m.item1
+      sx2 = m.item2
+    else
+      var m = b128_asinfam_mh3w(y: sj, x0: red.item0, x1: red.item1, x2: red.item2)
+      var rk = b128_asinfam_sh(n: 0 -% sp)
+      var lk = b128_asinfam_sh(n: 64 +% sp)
+      sx0 = (m.item0 >>> rk) | (m.item1 << lk)
+      sx1 = (m.item1 >>> rk) | (m.item2 << lk)
+      sx2 = m.item2 >>> rk
+    var d = b128_asinfam_sub3(a0: p.item0, a1: p.item1, a2: p.item2, b0: sx0, b1: sx1, b2: sx2)
+    nz = b128_asinfam_clz(x: d.item2)
+    var l = b128_asinfam_sh(n: nz)
+    var r = b128_asinfam_sh(n: 0 -% nz)
+    t = b128_asinfam_join(hi: (d.item2 << l) | (d.item1 >>> r), lo: (d.item1 << l) | (d.item0 >>> r))
+    var pi = j *% 5_u64
+    var s = b128_asinfam_add3(a0: d.item0, a1: d.item1, a2: d.item2, b0: B128_ASIN_PHI0[pi +% 2_u64], b1: B128_ASIN_PHI0[pi +% 3_u64], b2: B128_ASIN_PHI0[pi +% 4_u64])
+    xc0 = s.item0
+    xc1 = s.item1
+    xc2 = s.item2
+  var f = b128_asinfam_fast_poly(t: t, s2: 2 *% (nz -% 6))
+  var v = 0_u128
+  var rnd = 0_u64
+  if j != 0_u64
+    var sf = 3 *% nz
+    var f2 = b128_asinfam_hi(u: f)
+    var f1 = b128_asinfam_lo(u: f)
+    var f0 = 0_u64
+    if sf < 64
+      f0 = f1 << b128_asinfam_sh(n: 0 -% sf)
+      f1 = (f1 >>> b128_asinfam_sh(n: sf)) | (f2 << b128_asinfam_sh(n: 0 -% sf))
+      f2 = f2 >>> b128_asinfam_sh(n: sf)
+    elseif sf < 128
+      var s1 = sf -% 64
+      f0 = (f1 >>> b128_asinfam_sh(n: s1)) | ((f2 << 1) << b128_asinfam_sh(n: s1 ^ -1))
+      f1 = f2 >>> b128_asinfam_sh(n: s1)
+      f2 = 0_u64
+    elseif sf < 192
+      f0 = f2 >>> b128_asinfam_sh(n: sf -% 128)
+      f1 = 0_u64
+      f2 = 0_u64
+    else
+      f1 = 0_u64
+      f2 = 0_u64
+    var s = b128_asinfam_add3(a0: xc0, a1: xc1, a2: xc2, b0: f0, b1: f1, b2: f2)
+    xc0 = s.item0
+    xc1 = s.item1
+    xc2 = s.item2
+    var k = b128_asinfam_clz(x: xc2)
+    rnd = (xc1 >>> b128_asinfam_sh(n: 14 -% k)) & 1_u64
+    xn = 0x3FFE -% k
+    var eps = 64_u64
+    if 3 *% nz -% 6 <= 57
+      eps = 0x8000000000000000_u64 >>> b128_asinfam_sh(n: 3 *% nz -% 6)
+    var msk = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128 >>> b128_asinfam_sh7(n: k +% 0x31 +% 1)
+    var tl = (b128_asinfam_join(hi: xc1, lo: xc0) +% LLVM::zero_extend[U64, U128](eps)) & msk
+    if tl < LLVM::zero_extend[U64, U128](eps *% 2_u64)
+      return b128_asin_accurate(x: me)
+    v = b128_asinfam_join(hi: xc2 >>> b128_asinfam_sh(n: 15 -% k), lo: (xc1 >>> b128_asinfam_sh(n: 15 -% k)) | (xc2 << b128_asinfam_sh(n: 49 +% k)))
+  else
+    var sf = 2 *% nz +% 1
+    var g3 = b128_asinfam_hi(u: f)
+    var g2 = b128_asinfam_lo(u: f)
+    var g1 = 0_u64
+    var g0 = 0_u64
+    if sf < 64
+      g1 = g2 << b128_asinfam_sh(n: 0 -% sf)
+      g2 = (g2 >>> b128_asinfam_sh(n: sf)) | (g3 << b128_asinfam_sh(n: 0 -% sf))
+      g3 = g3 >>> b128_asinfam_sh(n: sf)
+    elseif sf < 128
+      var s1 = sf -% 64
+      g0 = g2 << b128_asinfam_sh(n: 0 -% s1)
+      g1 = (g2 >>> b128_asinfam_sh(n: s1)) | ((g3 << 1) << b128_asinfam_sh(n: s1 ^ -1))
+      g2 = g3 >>> b128_asinfam_sh(n: s1)
+      g3 = 0_u64
+    elseif sf < 192
+      var s2 = sf -% 128
+      g0 = (g2 >>> b128_asinfam_sh(n: s2)) | ((g3 << 1) << b128_asinfam_sh(n: s2 ^ -1))
+      g1 = g2 >>> b128_asinfam_sh(n: s2)
+      g2 = 0_u64
+      g3 = 0_u64
+    else
+      g2 = 0_u64
+      g3 = 0_u64
+    var xh = xa >>> 1
+    var a2 = b128_asinfam_ac(a: b128_asinfam_lo(u: xh), b: g2, c: 0_u64)
+    var a3 = b128_asinfam_ac(a: b128_asinfam_hi(u: xh), b: g3, c: a2.item1)
+    g2 = a2.item0
+    g3 = a3.item0
+    v = b128_asinfam_join(hi: g3, lo: g2)
+    var k = b128_asinfam_s(u: g3 >>> 63)
+    rnd = (g2 >>> b128_asinfam_sh(n: 13 +% k)) & 1_u64
+    v = v >>> b128_asinfam_sh7(n: 14 +% k)
+    v = v & 0x0000FFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+    xn = xn +% k
+    var lk = 64 -% 13 -% k
+    var rk = 64 -% lk
+    var th = (g2 << b128_asinfam_sh(n: lk)) | (g1 >>> b128_asinfam_sh(n: rk))
+    var tlo = (g1 << b128_asinfam_sh(n: lk)) | (g0 >>> b128_asinfam_sh(n: rk))
+    var eps = 0x80000000000000000000000000000000_u128 >>> b128_asinfam_sh7(n: 8 +% 2 *% nz +% k)
+    var tt = b128_asinfam_join(hi: th, lo: tlo) +% eps
+    if tt < eps
+      return b128_asin_accurate(x: me)
+  v = v +% b128_asinfam_join(hi: (b128_asinfam_u(n: xn) << 48) | xsgn, lo: rnd)
+  return B128.from_bits(bits: v)
+
+### The 320-bit accurate path of `asin_unchecked` for the inputs whose fast result cannot be rounded
+### safely (the C as_asinq_accurate).
+### :param x: The argument, with 2^-57 <= |x| < 1.
+### :returns: The correctly rounded arc sine.
+secret routine b128_asin_accurate(x: B128) -> B128
+  var u = x.to_bits()
+  var xb0 = LLVM::int_truncate[U128, U64](u)
+  var xb1 = LLVM::int_truncate[U128, U64](u >>> 64)
+  var xsgn = xb1 & 0x8000000000000000_u64
+  xb1 = xb1 & 0x7FFFFFFFFFFFFFFF_u64
+  var xn = b128_asinfam_s(u: xb1 >>> 48)
+  var j = b128_asinfam_jget(x: xb1)
+  xb1 = xb1 | 0x0001000000000000_u64
+  var xa = b128_asinfam_join(hi: xb1, lo: xb0) << 15
+  xb0 = b128_asinfam_lo(u: xa)
+  xb1 = b128_asinfam_hi(u: xa)
+  var t = B128AsinFamW5(w0: 0_u64, w1: 0_u64, w2: 0_u64, w3: xb0, w4: xb1)
+  var nz = 0x3FFF -% xn
+  var xc = B128AsinFamW5(w0: 0_u64, w1: 0_u64, w2: 0_u64, w3: 0_u64, w4: 0_u64)
+  if j != 0_u64
+    var gc = b128_asinfam_getcos(ex: nz, x0: xb0, x1: xb1)
+    var sq = gc.item0
+    var e = gc.item1
+    var xs = xa >>> b128_asinfam_sh(n: nz)
+    xc = b128_asinfam_mh5d(b0: b128_asinfam_lo(u: xs), b1: b128_asinfam_hi(u: xs), a: b128_asinfam_cth(j: j))
+    var sj = B128_ASINFAM_PTH[j]
+    var sp = 43 -% (e >> 1)
+    if sp >= 0
+      sj = sj << b128_asinfam_sh(n: sp)
+    sq = b128_asinfam_mh5w(b0: sj, a: sq)
+    if sp < 0
+      sq = b128_asinfam_shrn5(a: sq, k: 0 -% sp)
+    xc = b128_asinfam_sub5(a: xc, b: sq)
+    t = xc
+    if t.w4 != 0_u64
+      nz = b128_asinfam_clz(x: t.w4)
+    elseif t.w3 != 0_u64
+      nz = b128_asinfam_clz(x: t.w3) +% 64
+    elseif t.w2 != 0_u64
+      nz = b128_asinfam_clz(x: t.w2) +% 128
+    elseif t.w1 != 0_u64
+      nz = b128_asinfam_clz(x: t.w1) +% 192
+    elseif t.w0 != 0_u64
+      nz = b128_asinfam_clz(x: t.w0) +% 256
+    t = b128_asinfam_shln5(a: t, k: nz)
+    var pi = j *% 5_u64
+    var ph = B128AsinFamW5(w0: B128_ASIN_PHI0[pi], w1: B128_ASIN_PHI0[pi +% 1_u64], w2: B128_ASIN_PHI0[pi +% 2_u64], w3: B128_ASIN_PHI0[pi +% 3_u64], w4: B128_ASIN_PHI0[pi +% 4_u64])
+    xc = b128_asinfam_add5(a: ph, b: xc)
+  var t2 = b128_asinfam_sqrh5(a: t)
+  var t3 = b128_asinfam_mh5(b: t, a: t2)
+  t2 = b128_asinfam_shrn5(a: t2, k: 2 *% (nz -% 6) -% 1)
+  var f = b128_asinfam_evalpoly(t2: t2)
+  f = b128_asinfam_mh5(b: t3, a: f)
+  var v = 0_u128
+  var rnd = 0_u64
+  if j != 0_u64
+    f = b128_asinfam_shrn5(a: f, k: 3 *% nz)
+    xc = b128_asinfam_add5(a: xc, b: f)
+    var k = b128_asinfam_clz(x: xc.w4)
+    rnd = (xc.w3 >>> b128_asinfam_sh(n: 14 -% k)) & 1_u64
+    xn = 0x3FFE -% k
+    v = b128_asinfam_join(hi: xc.w4 >>> b128_asinfam_sh(n: 15 -% k), lo: (xc.w3 >>> b128_asinfam_sh(n: 15 -% k)) | (xc.w4 << b128_asinfam_sh(n: 49 +% k)))
+  else
+    f = b128_asinfam_shrn5(a: f, k: 2 *% nz +% 1)
+    var xh = xa >>> 1
+    var a3 = b128_asinfam_ac(a: b128_asinfam_lo(u: xh), b: f.w3, c: 0_u64)
+    var a4 = b128_asinfam_ac(a: b128_asinfam_hi(u: xh), b: f.w4, c: a3.item1)
+    var k = b128_asinfam_s(u: a4.item0 >>> 63)
+    rnd = (a3.item0 >>> b128_asinfam_sh(n: 13 +% k)) & 1_u64
+    v = b128_asinfam_join(hi: a4.item0, lo: a3.item0) >>> b128_asinfam_sh(n: 14 +% k)
+    xn = xn +% k
+    v = v & 0x0000FFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+  v = v +% b128_asinfam_join(hi: (b128_asinfam_u(n: xn) << 48) | xsgn, lo: rnd)
+  return B128.from_bits(bits: v)
+
+# asin(PTH[j]) as five-word fixed-point values, one row per table point
+secret preset B128_ASIN_PHI0: Array[U64, 360] = [
+  0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
+  0x31DC03B852FDE26E_u64, 0x067073CAA9724261_u64, 0x146B2CF786E935F7_u64, 0x13001BF1BB854BC4_u64, 0x02CB0E871E4D3726_u64,
+  0x9FD8E87590496F73_u64, 0xCDD8EDD69F613BE7_u64, 0xA4CBBF16F87E6782_u64, 0xB7E6AB0FD3C59B0E_u64, 0x0595F42CDB812489_u64,
+  0xB3D4031693534F58_u64, 0x5D01A5FAAED1D0D3_u64, 0xFF3200C1C4F94322_u64, 0x59F6668F9B56ACC6_u64, 0x0861885FF6C0A35D_u64,
+  0xB4FAB3FC67F7A8B9_u64, 0xF5865C9C96D2FA32_u64, 0x29425B02341193A3_u64, 0x48B0673D280EB1C2_u64, 0x0B2BA0DD41444021_u64,
+  0x790DDFC5CBE9082F_u64, 0x1C7DC75CEDB0A275_u64, 0xC8153F82EA41ACEF_u64, 0x6B9567F1AAD3C76A_u64, 0x0DF716A41BBB8B7D_u64,
+  0x6ED0830E8BE51BB2_u64, 0xF0E929895ECC82ED_u64, 0x7DE84CFCC54FE6F6_u64, 0x76BC77009FD70571_u64, 0x10C23F2FD8E3E9A0_u64,
+  0x2AD1C043C574F910_u64, 0x713AD3D086FF14D2_u64, 0xBA270541AA876034_u64, 0x92D9E59DBF55C60D_u64, 0x138D717BA27EEABC_u64,
+  0xB303FD12510F210A_u64, 0x94A653871859E237_u64, 0x0D1502EE17EB1BD7_u64, 0x3739065AEC5C06AB_u64, 0x1659054AE2B44A81_u64,
+  0x006D05B30DABA4C3_u64, 0x6908BE7DDFD7775B_u64, 0xC00A83FEF85D99D7_u64, 0x795FA4F368B70F06_u64, 0x192349840A184357_u64,
+  0xA914F322A5010D57_u64, 0x49222451BF9432D3_u64, 0x50DA7E2B81928F5C_u64, 0x221D215E79A25603_u64, 0x1BEE9DE650865623_u64,
+  0x929E0B76F0A42573_u64, 0xDA9BA7FC9C3431F1_u64, 0x9174FA977E1BAAAD_u64, 0xF758A3DF6D9553DD_u64, 0x1EB94F058A92E80F_u64,
+  0xCEE9D9A2DB7DE49B_u64, 0xB88AA461C7C4F24C_u64, 0x448F34C5B2254778_u64, 0xCF80327E8E111BFE_u64, 0x2185C42FED9C65A9_u64,
+  0x0CBB8DA2A502B8EA_u64, 0xE094E1731BA94E46_u64, 0x97B764BC45EBE177_u64, 0xBE926F0AD70B40FD_u64, 0x245032E12E6A1D6D_u64,
+  0xD3EC0402365050E0_u64, 0xD057A4B66E7DA35B_u64, 0x149B8CC2311B2017_u64, 0xEC8890B158863303_u64, 0x271B02290466D237_u64,
+  0x1FD4828F5C9B8CA8_u64, 0x319E956B7FDE7CC9_u64, 0xC94382AC5F951B31_u64, 0xE06D1BEBF0914A3B_u64, 0x29E68BF629A0DA11_u64,
+  0x71AE5A9CCE6BC46F_u64, 0xF45AC44E54C7356E_u64, 0x4C2591B80B5D94AC_u64, 0x7355BED3FA0A825F_u64, 0x2CAEEAE98E6DF044_u64,
+  0x1614E2E195D53AB6_u64, 0x4F839EF8340DF429_u64, 0x040D34EE0E4D94BC_u64, 0xF89ED2DDBCBF4628_u64, 0x2F7CF8D136534AA2_u64,
+  0xF265A4A1FB8335C7_u64, 0xA4778FC22EB6B74E_u64, 0xD853F8DFA8DC313F_u64, 0x1162BC035BE61A75_u64, 0x32443631456A4A4B_u64,
+  0x8247E3B00A8A8583_u64, 0x8BDC75BB08DA5F10_u64, 0x27E44935F029B5AA_u64, 0xF828F8301F2F6681_u64, 0x3511E7D818E033D1_u64,
+  0x5EAA69EB3673E6B7_u64, 0xDED5356713B85CC8_u64, 0xED71CB61A35FB922_u64, 0x6967F0EEBE17495F_u64, 0x37DDC249CAC0DE95_u64,
+  0x56CB01BFF8B95B1E_u64, 0x7AE06C0836E66ACF_u64, 0xB966728BA24A156D_u64, 0x2431F222087AE262_u64, 0x3AA810220E622BA0_u64,
+  0x0CD54146269826FD_u64, 0xB38D91035609925A_u64, 0x3C90404FA8FDCF10_u64, 0xA93AE7E3B29AB57F_u64, 0x3D711D0D40BC2C8D_u64,
+  0x898DAFCF7EA69738_u64, 0x60C82F9ADE96A188_u64, 0xD441D9474B741773_u64, 0xF588D3830E2690AF_u64, 0x403DC62D61195AF3_u64,
+  0xC5C3582884BC019F_u64, 0xAB593F8CBE5BDE60_u64, 0xB8561A02D8CD4426_u64, 0x96ECCB83D59EB445_u64, 0x430548E0B5CD9611_u64,
+  0x536507B58B2D6C0A_u64, 0xBF490C3CFDE570CB_u64, 0x4B6BD1E189F08282_u64, 0x624CD14038C8DA96_u64, 0x45D126D0C3399240_u64,
+  0x30E1DDE73C9AEAC0_u64, 0x4D1BFFE4EA9A99F2_u64, 0xE5D0081AFB2E1436_u64, 0xE295B1B21AC2995C_u64, 0x489D272385822B6E_u64,
+  0x95453966359700AD_u64, 0x17E1392B221445C2_u64, 0x729B7DBD3347F60E_u64, 0xA08F9CF2CC63D953_u64, 0x4B69A4A8A606C031_u64,
+  0xC7743390E65965FF_u64, 0x0B847AB940E4873B_u64, 0x8D1F17662A0B3481_u64, 0xDAFCCC10FA37A2EA_u64, 0x4E321C56E752580D_u64,
+  0x7B57CE308F292447_u64, 0xD150427A9A863F22_u64, 0xC5E0B9E5677A4E20_u64, 0x37FCA23BF3387E48_u64, 0x5100A2EE4EDB94B2_u64,
+  0xBDA4BD9416C5C7A3_u64, 0x82969BB7DB7748D8_u64, 0x00D78B1EC255A12C_u64, 0x32A855887D51994D_u64, 0x53C6BD236475E5CC_u64,
+  0x8C2F292C5227C693_u64, 0x42E7BD886156BE32_u64, 0xB0DF3BF15143943C_u64, 0xC543C697A208D585_u64, 0x5693B9334FE20FDA_u64,
+  0xED129E30B3377786_u64, 0xF685DA7F0125CCE9_u64, 0x4226EDEB7B2B6DEB_u64, 0x532A9F496D475CCE_u64, 0x595DDCADDD3AEDC3_u64,
+  0xC246F045AE5F9921_u64, 0xC469F3CBF90F9AB1_u64, 0xB6AC3D0A4D2B5392_u64, 0x4F4959241985A90A_u64, 0x5C2AAAAC17F0E1D6_u64,
+  0xB4CC0A0DA35889E0_u64, 0xA4511CD3434D2F34_u64, 0x151FA685F47230D4_u64, 0xFBA7987CA6A53862_u64, 0x5EF538076593E829_u64,
+  0x39494CDB29EF9D2F_u64, 0x6798F6EA9D4221D1_u64, 0xD64E85FE6C15A177_u64, 0x2D5B6BBE1108441C_u64, 0x61BDBB8B67421581_u64,
+  0x45AAE2F82DEE00CC_u64, 0x76E81CE03E84D69A_u64, 0x3316CDA9344E35C9_u64, 0xEAE47C48F1215E66_u64, 0x648A157110CF21B0_u64,
+  0x41EEF34546C95B41_u64, 0x79DFBCA51DA9087A_u64, 0xB36F5AC6D44D45D1_u64, 0x7C3A89B8D8280209_u64, 0x67551870A5AF196B_u64,
+  0x54F1BF06FD9B552D_u64, 0x7E02C07120A7060F_u64, 0x6738FB4AE60936DD_u64, 0x8DDC4B0DDEE2054D_u64, 0x6A1F0700BE9DE55F_u64,
+  0x4E203FFBB54040B7_u64, 0xFE905D1720B87885_u64, 0x986A4823DF9A3CA9_u64, 0x61EB119337A3335E_u64, 0x6CEB2FA010C749F6_u64,
+  0xF4A190060D439A24_u64, 0x817D74DCF378CD86_u64, 0x172EA99D30F812A7_u64, 0x6AF33F05FD82F72C_u64, 0x6FB3DF4B98F240B0_u64,
+  0x9AEC3BED5A1C1404_u64, 0x03A65BB59AD7A06A_u64, 0x1846E90FA0DE023B_u64, 0x7D2FE76C33E24ECC_u64, 0x727F8D505178BF54_u64,
+  0x6AE899663FDB4F17_u64, 0xAA3655945C870D12_u64, 0x659083B1CD9D70D7_u64, 0x7E7EB442572A626C_u64, 0x754B8B59E6F8C240_u64,
+  0x9AF398B34ACBE664_u64, 0xE3D6BA0A31B9F6C2_u64, 0x768D232448470674_u64, 0x5141ACF6BD77A871_u64, 0x7814D9CC335F7D97_u64,
+  0x7C43FDF5E9CE2813_u64, 0x2DE8C2A724B9FA56_u64, 0xAE3B7A549E5C78A5_u64, 0x7084AC99E10C434A_u64, 0x7ADF11214C0B6503_u64,
+  0xE06FD2C8EDC4FD43_u64, 0xB5C5702D7A091FDA_u64, 0x8DF7819414BB24C6_u64, 0xE968AE72D864E5AA_u64, 0x7DAAA2B073C4877F_u64,
+  0xE0558594031F34CB_u64, 0xE3B66C6DB1B4677B_u64, 0xA3AC86D4E6C0489A_u64, 0x8833F79AC38B15C1_u64, 0x80780D1E994FB7BB_u64,
+  0x99C89E96E492DBC9_u64, 0xD4129126B1733A9B_u64, 0x725016B221B694E1_u64, 0x75B2B442B022DD71_u64, 0x83402903760FD134_u64,
+  0x9158E49DE631A47E_u64, 0xA6C00B85FEB1093C_u64, 0xD0872B6328B14761_u64, 0x3DBD94A2B5E37532_u64, 0x860ABA7EB47087A9_u64,
+  0xF69AF9A28D593E56_u64, 0x1DA6495B5F99D1D3_u64, 0x8C9A8AF0190B27C8_u64, 0xBFD5796310D923A8_u64, 0x88D65318AAE1284D_u64,
+  0x92FAD152F7A419FA_u64, 0xA898E37734F35E6F_u64, 0x93294418A7B1EEF9_u64, 0xAAA37BF72A9BCA36_u64, 0x8BA145B068050A5C_u64,
+  0x9EB0E34D8237D900_u64, 0x248324370F0391A9_u64, 0xF9AB140C3F2319E3_u64, 0xA9A902EB63EC1333_u64, 0x8E6BD976F7AE97C1_u64,
+  0x69046A077A9FB34F_u64, 0xB83240D17B1A5789_u64, 0x97B6AD5DE0D13C0F_u64, 0xBAC8E70E639B423D_u64, 0x91365E5FEF79B4CD_u64,
+  0x6BBDAE5C0DA83D6C_u64, 0x37712D2DB36F9E39_u64, 0xEEF92AE1713389C7_u64, 0xB541D1074DDB5287_u64, 0x94012FA0A5DB180A_u64,
+  0xBB5676745C77EBBB_u64, 0x57D8473FF0EBECE1_u64, 0xAAFA85766FF71DB6_u64, 0xA7DAB323606549D7_u64, 0x96CCB7062A990CAE_u64,
+  0x58A33D22EB345C38_u64, 0xA1FBE3B19B08AA77_u64, 0xD8499F6481B60D89_u64, 0x92D1E25A3BC9B0E6_u64, 0x9999717E6E1EC71F_u64,
+  0x261113E4F262AF0F_u64, 0x3DF0074844F7AC88_u64, 0x4243932D0EABEDE2_u64, 0xE575ABDED0B7D4F0_u64, 0x9C621BF8FC82208D_u64,
+  0x406CADF4E2B87105_u64, 0x524E16FDF1D11D7B_u64, 0xAA030B9D01B9FD9B_u64, 0xED08E0CB58F4F54E_u64, 0x9F2E16283B9C5D03_u64,
+  0xD73E6DC68F1113A5_u64, 0x942557AEBBE3D9EF_u64, 0xF8F9C3FB6B1B03DE_u64, 0x097B5496F5A6E1A0_u64, 0xA1F7C7C61F889ECD_u64,
+  0xC4FA9EC55A050116_u64, 0x63D4F5D564C5B9E6_u64, 0x5820483EA4C7D28F_u64, 0xF2AFFDC3344F9CED_u64, 0xA4C2A22CF44C08A6_u64,
+  0xC6FE18D269AC4C10_u64, 0xF087DF22F5BCC95D_u64, 0xA894ADEC7B5A152A_u64, 0x78B0E9FB162603EE_u64, 0xA78D60417D3FDD14_u64,
+  0xD65FD0023770EB25_u64, 0x8B6F97871F584DA8_u64, 0x1B63F18834D9B341_u64, 0xAF5C7A86D6939813_u64, 0xAA585D25A7E182E7_u64,
+  0xC093AEC132B1C4AB_u64, 0xF91F55DA8CC955FC_u64, 0xCC5ECAF63081CE7D_u64, 0xDCF0B021B83092B5_u64, 0xAD240F36158AD0C8_u64,
+  0xBD41045CDF957EB4_u64, 0x4CF7C3415D74B2E9_u64, 0x01BE218CDB35AE43_u64, 0x5DD1C5FEC09949C9_u64, 0xAFEE872FAF2E5B19_u64,
+  0x5D33FB200912B7E2_u64, 0x58BC9C09FF4EFAA2_u64, 0x331D9BD6ED13A3B4_u64, 0x63858412FBDAB72E_u64, 0xB2B928E083506504_u64,
+  0x3B1CDC0B95DF2E73_u64, 0x4436F2F0C8996085_u64, 0xC6F98F67EA025FD7_u64, 0xC65A997A7F30B873_u64, 0xB5846F60626B807F_u64,
+  0x403667C077C1FC20_u64, 0x697E62529203F9EB_u64, 0x936EEE0E15D0DCEA_u64, 0xC22B7C8099952145_u64, 0xB84F2EB5AC3795E7_u64,
+  0x388B200E8525E458_u64, 0xB5CA574FC8A17BB9_u64, 0xBB43E02F8AC0E731_u64, 0x77344F09355E7066_u64, 0xBB19877484CA70A4_u64,
+  0x77D3B12CE16C9C68_u64, 0x822D209B4424EFD5_u64, 0x9684A28DAD6B791D_u64, 0xCE9CA57812EA9DCF_u64, 0xBDE45C1866F2D9E6_u64,
+  0x5F01A5224504C357_u64, 0x666C7B378DF042A5_u64, 0x3C22AAD7FE194A3E_u64, 0x514A5CD169B87306_u64, 0xC0AF3B8491D54390_u64,
+  0xCF86B4ABFFEE731F_u64, 0xCA3271187934A232_u64, 0x27BD0FDDF4ECBDCA_u64, 0xE7744018C3407AA7_u64, 0xC37A16C32273901B_u64,
+  0xEF9975DEAA64C17A_u64, 0x6BA80FA8E07F2CF2_u64, 0x61818A93D068697F_u64, 0xAE3E1A514A871A58_u64, 0xC64503961527469C_u64]

@@ -1,0 +1,330 @@
+module Core
+
+# ============================================================================
+# Multi-word integer helpers shared by the B128 log and expm1 ports
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/log/logq.c and src/binary128/expm1/expm1q.c
+# (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file.
+# Numbers wider than 128 bits are little-endian arrays of 64-bit words (word 0 is the least significant).
+# Every sum wraps like the C unsigned arithmetic it replaces.
+
+### Builds a U128 from its high and low 64-bit words.
+@inline
+secret routine b128_wide_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### The high 64-bit word of a U128.
+@inline
+secret routine b128_wide_hi(x: U128) -> U64
+  return LLVM::int_truncate[U128, U64](x >>> 64)
+
+### The low 64-bit word of a U128.
+@inline
+secret routine b128_wide_lo(x: U128) -> U64
+  return LLVM::int_truncate[U128, U64](x)
+
+### The full 128-bit product of two 64-bit words.
+@inline
+secret routine b128_wide_muu(a: U64, b: U64) -> U128
+  return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
+
+### The high word of the unsigned 64x64-bit product.
+@inline
+secret routine b128_wide_mhuu(a: U64, b: U64) -> U64
+  return b128_wide_hi(x: b128_wide_muu(a: a, b: b))
+
+### Approximate high part of the unsigned 128x128-bit product (the low x low product is dropped).
+@inline
+secret routine b128_wide_mhUU(a: U128, b: U128) -> U128
+  var a0 = b128_wide_lo(x: a)
+  var a1 = b128_wide_hi(x: a)
+  var b0 = b128_wide_lo(x: b)
+  var b1 = b128_wide_hi(x: b)
+  var a1b1 = b128_wide_muu(a: a1, b: b1)
+  a1b1 = a1b1 +% (b128_wide_muu(a: a1, b: b0) >>> 64)
+  return a1b1 +% (b128_wide_muu(a: a0, b: b1) >>> 64)
+
+### High part of the 64x128-bit product: (a * b) >> 64.
+@inline
+secret routine b128_wide_mhuU(a: U64, b: U128) -> U128
+  var ab0 = b128_wide_muu(a: a, b: b128_wide_lo(x: b))
+  var ab1 = b128_wide_muu(a: a, b: b128_wide_hi(x: b))
+  return ab1 +% (ab0 >>> 64)
+
+### Full 256-bit product of two U128 values, as (high, low).
+secret routine b128_wide_mUU(a: U128, b: U128) -> (U128, U128)
+  var a0 = b128_wide_lo(x: a)
+  var a1 = b128_wide_hi(x: a)
+  var b0 = b128_wide_lo(x: b)
+  var b1 = b128_wide_hi(x: b)
+  var a1b0 = b128_wide_muu(a: a1, b: b0)
+  var a0b1 = b128_wide_muu(a: a0, b: b1)
+  var a1b1 = b128_wide_muu(a: a1, b: b1)
+  var a0b0 = b128_wide_muu(a: a0, b: b0)
+  var mid = a1b0 +% a0b1
+  var cmid = 0_u128
+  if mid < a1b0
+    cmid = 1_u128 << 64
+  var lo = a0b0 +% (mid << 64)
+  var clo = 0_u128
+  if lo < a0b0
+    clo = 1_u128
+  return (((a1b1 +% (mid >>> 64)) +% cmid) +% clo, lo)
+
+### A shift amount as the U32 the shift operators take.
+@inline
+secret routine b128_wide_s(n: U64) -> U32
+  return LLVM::int_truncate[U64, U32](n)
+
+### Arithmetic right shift of two's-complement bits.
+@inline
+secret routine b128_wide_sar(x: U64, s: U64) -> U64
+  return LLVM::reinterpret_bits[S64, U64](LLVM::reinterpret_bits[U64, S64](x) >> LLVM::int_truncate[U64, U32](s))
+
+### (a * b) >> 64 for a 7-word a, truncated to 7 words.
+secret routine b128_wide_mul7w(a: Array[U64, 7], b: U64) -> Array[U64, 7]
+  var o = Array[U64, 7]()
+  var prev = b128_wide_mhuu(a: a[0], b: b)
+  var i = 1_u64
+  while i < 7
+    var p = b128_wide_muu(a: a[i], b: b)
+    var s = LLVM::zero_extend[U64, U128](b128_wide_lo(x: p)) +% LLVM::zero_extend[U64, U128](prev)
+    o[i -% 1] = b128_wide_lo(x: s)
+    prev = b128_wide_hi(x: p) +% b128_wide_hi(x: s)
+    i = i +% 1
+  o[6] = prev
+  return o
+
+### mhu7xu2: the words of the 7x2-word product a * b at or above word 2, as 7 words.
+secret routine b128_wide_mhu7xu2(a: Array[U64, 7], b: U128) -> Array[U64, 7]
+  var o = b128_wide_mul7w(a: a, b: b128_wide_hi(x: b))
+  var sh = Array[U64, 7]()
+  var i = 0_u64
+  while i < 6
+    sh[i] = a[i +% 1]
+    i = i +% 1
+  var t = b128_wide_mul7w(a: sh, b: b128_wide_lo(x: b))
+  var c = 0_u64
+  i = 0_u64
+  while i < 7
+    var s = (LLVM::zero_extend[U64, U128](o[i]) +% LLVM::zero_extend[U64, U128](t[i])) +% LLVM::zero_extend[U64, U128](c)
+    o[i] = b128_wide_lo(x: s)
+    c = b128_wide_hi(x: s)
+    i = i +% 1
+  return o
+
+### arsu7: arithmetic right shift of a 7-word number by n bits (n < 192).
+secret routine b128_wide_arsu7(x: Array[U64, 7], n: U64) -> Array[U64, 7]
+  var o = x
+  var rk = n & 63
+  var lk = (64 -% rk) & 63
+  var qk = n >>> 6
+  var i = 0_u64
+  if rk == 0
+    while qk +% i <= 5
+      o[i] = o[qk +% i]
+      i = i +% 1
+  else
+    while qk +% i <= 5
+      o[i] = (o[qk +% i +% 1] << b128_wide_s(n: lk)) | (o[qk +% i] >>> b128_wide_s(n: rk))
+      i = i +% 1
+  var h = o[6]
+  var k = 6 -% qk
+  o[k] = b128_wide_sar(x: h, s: rk)
+  k = k +% 1
+  var hs = b128_wide_sar(x: h, s: 63)
+  while k < 7
+    o[k] = hs
+    k = k +% 1
+  return o
+
+### mhu6u6u6: the approximate high 6 words of the 6x6-word product a * b (every partial-product half at or
+### above word 6, summed exactly modulo 2^384).
+secret routine b128_wide_mhu6(b: Array[U64, 6], a: Array[U64, 6]) -> Array[U64, 6]
+  var o = Array[U64, 6]()
+  var carry = 0_u128
+  var w = 0_u64
+  while w < 6
+    var p = w +% 6
+    var s = carry
+    var i = 0_u64
+    while i < 6
+      # the high half of a_i * b_j lands in word i + j + 1, the low half in word i + j
+      if p >= i +% 1 and p -% i -% 1 <= 5
+        s = s +% (b128_wide_muu(a: a[i], b: b[p -% i -% 1]) >>> 64)
+      if p >= i and p -% i <= 5
+        s = s +% LLVM::zero_extend[U64, U128](b128_wide_lo(x: b128_wide_muu(a: a[i], b: b[p -% i])))
+      i = i +% 1
+    o[w] = b128_wide_lo(x: s)
+    carry = s >>> 64
+    w = w +% 1
+  return o
+
+### mahu1u6u6: ((a * b) >> 64) + c over 6 words.
+secret routine b128_wide_mahu6(a: U64, b: Array[U64, 6], c: Array[U64, 6]) -> Array[U64, 6]
+  var o = Array[U64, 6]()
+  var prev = b128_wide_mhuu(a: a, b: b[0])
+  var cc = 0_u64
+  var i = 0_u64
+  while i < 6
+    var plo = 0_u64
+    var phi = 0_u64
+    if i < 5
+      var p = b128_wide_muu(a: a, b: b[i +% 1])
+      plo = b128_wide_lo(x: p)
+      phi = b128_wide_hi(x: p)
+    var s = LLVM::zero_extend[U64, U128](plo) +% LLVM::zero_extend[U64, U128](prev)
+    prev = phi +% b128_wide_hi(x: s)
+    var s2 = (LLVM::zero_extend[U64, U128](c[i]) +% (s & 0xFFFFFFFFFFFFFFFF_u128)) +% LLVM::zero_extend[U64, U128](cc)
+    o[i] = b128_wide_lo(x: s2)
+    cc = b128_wide_hi(x: s2)
+    i = i +% 1
+  return o
+
+### addu6u6: a + b over 6 words.
+secret routine b128_wide_add6(a: Array[U64, 6], b: Array[U64, 6]) -> Array[U64, 6]
+  var o = Array[U64, 6]()
+  var c = 0_u64
+  var i = 0_u64
+  while i < 6
+    var s = (LLVM::zero_extend[U64, U128](a[i]) +% LLVM::zero_extend[U64, U128](b[i])) +% LLVM::zero_extend[U64, U128](c)
+    o[i] = b128_wide_lo(x: s)
+    c = b128_wide_hi(x: s)
+    i = i +% 1
+  return o
+
+### mahu1u3u3: ((a * (b2, b1, b0)) >> 64) + (c2, c1, c0) over 3 words, returned as (w0, w1, w2).
+secret routine b128_wide_mahu3(a: U64, b0: U64, b1: U64, b2: U64, c0: U64, c1: U64, c2: U64) -> (U64, U64, U64)
+  var ab0 = b128_wide_muu(a: a, b: b0)
+  var ab1 = b128_wide_muu(a: a, b: b1)
+  var ab2 = b128_wide_muu(a: a, b: b2)
+  var t = LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab1)) +% (ab0 >>> 64)
+  var s = LLVM::zero_extend[U64, U128](c0) +% (t & 0xFFFFFFFFFFFFFFFF_u128)
+  var o0 = b128_wide_lo(x: s)
+  t = (LLVM::zero_extend[U64, U128](b128_wide_lo(x: ab2)) +% (ab1 >>> 64)) +% (t >>> 64)
+  s = (LLVM::zero_extend[U64, U128](c1) +% (t & 0xFFFFFFFFFFFFFFFF_u128)) +% (s >>> 64)
+  var o1 = b128_wide_lo(x: s)
+  t = (ab2 >>> 64) +% (t >>> 64)
+  var o2 = (c2 +% b128_wide_lo(x: t)) +% b128_wide_hi(x: s)
+  return (o0, o1, o2)
+
+### (a2, a1, a0) + (b2, b1, b0) over 3 words, returned as (w0, w1, w2).
+@inline
+secret routine b128_wide_add3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
+  var s = LLVM::zero_extend[U64, U128](a0) +% LLVM::zero_extend[U64, U128](b0)
+  var o0 = b128_wide_lo(x: s)
+  s = (LLVM::zero_extend[U64, U128](a1) +% LLVM::zero_extend[U64, U128](b1)) +% (s >>> 64)
+  var o1 = b128_wide_lo(x: s)
+  var o2 = (a2 +% b2) +% b128_wide_hi(x: s)
+  return (o0, o1, o2)
+
+### (a2, a1, a0) - (b2, b1, b0) over 3 words, returned as (w0, w1, w2).
+@inline
+secret routine b128_wide_sub3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
+  var o0 = a0 -% b0
+  var br = 0_u64
+  if a0 < b0
+    br = 1_u64
+  var o1 = (a1 -% b1) -% br
+  var br2 = 0_u64
+  if a1 < b1 or (a1 == b1 and br != 0)
+    br2 = 1_u64
+  var o2 = (a2 -% b2) -% br2
+  return (o0, o1, o2)
+
+### One row of the 2^r polynomial (r < 2^-4) of the accurate exp-based steps's coefficient table, as 6 words.
+@inline
+secret routine b128_wide_rc(i: U64) -> Array[U64, 6]
+  var r = Array[U64, 6]()
+  var k = 0_u64
+  while k < 6
+    r[k] = B128_WIDE_EC[6 *% i +% k]
+    k = k +% 1
+  return r
+
+### The 2^r polynomial (r < 2^-4) of the accurate exp-based steps on the top word x (Horner over all coefficient rows).
+secret routine b128_wide_pol6(x: U64) -> Array[U64, 6]
+  var a = b128_wide_mahu6(a: x, b: b128_wide_rc(i: 36), c: b128_wide_rc(i: 35))
+  var i = 35_u64
+  loop
+    i = i -% 1
+    a = b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: i))
+    if i <= 1
+      break
+  return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
+
+### The same polynomial on the second word x, keeping only the terms that still matter.
+secret routine b128_wide_pol6red(x: U64) -> Array[U64, 6]
+  var a = Array[U64, 6]()
+  var b = Array[U64, 6]()
+  b[0] = B128_WIDE_EC[6 *% 5 +% 5]
+  a = b128_wide_mahu6(a: x, b: a, c: b)
+  b[0] = B128_WIDE_EC[6 *% 4 +% 4]
+  b[1] = B128_WIDE_EC[6 *% 4 +% 5]
+  a = b128_wide_mahu6(a: x, b: a, c: b)
+  b[0] = B128_WIDE_EC[6 *% 3 +% 3]
+  b[1] = B128_WIDE_EC[6 *% 3 +% 4]
+  b[2] = B128_WIDE_EC[6 *% 3 +% 5]
+  a = b128_wide_mahu6(a: x, b: a, c: b)
+  b[0] = B128_WIDE_EC[6 *% 2 +% 2]
+  b[1] = B128_WIDE_EC[6 *% 2 +% 3]
+  b[2] = B128_WIDE_EC[6 *% 2 +% 4]
+  b[3] = B128_WIDE_EC[6 *% 2 +% 5]
+  a = b128_wide_mahu6(a: x, b: a, c: b)
+  b[0] = B128_WIDE_EC[6 *% 1 +% 1]
+  b[1] = B128_WIDE_EC[6 *% 1 +% 2]
+  b[2] = B128_WIDE_EC[6 *% 1 +% 3]
+  b[3] = B128_WIDE_EC[6 *% 1 +% 4]
+  b[4] = B128_WIDE_EC[6 *% 1 +% 5]
+  a = b128_wide_mahu6(a: x, b: a, c: b)
+  return b128_wide_mahu6(a: x, b: a, c: b128_wide_rc(i: 0))
+
+### The polynomial's contribution from the low words of x (degree 2).
+secret routine b128_wide_pol6redred(x: Array[U64, 7]) -> Array[U64, 6]
+  var xs = Array[U64, 6]()
+  xs[2] = x[0]
+  xs[3] = x[1]
+  xs[4] = x[2]
+  xs[5] = x[3]
+  var f = b128_wide_mhu6(b: xs, a: b128_wide_rc(i: 2))
+  var g = Array[U64, 6]()
+  g[0] = f[2]
+  g[1] = f[3]
+  g[2] = f[4]
+  g[3] = f[5]
+  g = b128_wide_add6(a: g, b: b128_wide_rc(i: 1))
+  f = b128_wide_mhu6(b: xs, a: g)
+  g[0] = f[2]
+  g[1] = f[3]
+  g[2] = f[4]
+  g[3] = f[5]
+  g[4] = B128_WIDE_EC[4]
+  g[5] = B128_WIDE_EC[5]
+  return g
+
+### 2^f to about 380 bits for the fixed-point fraction f held in words 0..5 of x (bits 60..63 of word 5 select
+### the 2^(j/16) table entry, the rest feed the polynomial), as 6 words.
+secret routine b128_wide_exp2_frac(x: Array[U64, 7]) -> Array[U64, 6]
+  var xw = x
+  var jt = xw[5] >>> 60
+  xw[5] = xw[5] & 0x0FFFFFFFFFFFFFFF_u64
+  var f = b128_wide_pol6(x: xw[5])
+  var f1 = b128_wide_pol6red(x: xw[4])
+  var f2 = b128_wide_pol6redred(x: xw)
+  var ft = b128_wide_mhu6(b: f, a: f1)
+  ft = b128_wide_mhu6(b: ft, a: f2)
+  var tb = Array[U64, 6]()
+  var i = 0_u64
+  while i < 6
+    tb[i] = B128_WIDE_ETBL[6 *% jt +% i]
+    i = i +% 1
+  return b128_wide_mhu6(b: ft, a: tb)
+
+# 1/ln(2) to 448 bits
+secret preset B128_WIDE_ILN2: Array[U64, 7] = [0xEA90B9E60C4A90A0_u64, 0x24D92F75C16BE0B3_u64, 0xDE1C43F755176CD6_u64, 0x8B25166CD1A13247_u64, 0xEB577AA8DD695A58_u64, 0xBE87FED0691D3E88_u64, 0xB8AA3B295C17F0BB_u64]
+# 2^(j/16), j = 0..15, to 384 bits
+secret preset B128_WIDE_ETBL: Array[U64, 96] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x82DC9BF3421840D1_u64, 0x7835AF9AB4E6355C_u64, 0x5D42B362AF1EE859_u64, 0x148A0459E7585151_u64, 0xC5C95B8C2154C1B2_u64, 0x85AAC367CC487B14_u64, 0x9994FAC7F4EA654B_u64, 0xB4F28C879A524BD4_u64, 0x91E135EE84A3F733_u64, 0x1AA84FFBEBAC349F_u64, 0xFBE4628758A53C90_u64, 0x8B95C1E3EA8BD6E6_u64, 0x23B504FB5DADBB25_u64, 0x4E0D990C27C43643_u64, 0xF1203CAF65BFB9B9_u64, 0x1942B34816FB4F26_u64, 0x0FD6D8E0AE5AC9D8_u64, 0x91C3D373AB11C336_u64, 0x4E9F94EE0C90DBBD_u64, 0xBE47C34D380250A8_u64, 0xD78B65CBEFA7BB6F_u64, 0x5E139A1B14FA8178_u64, 0x46AD23182E42F6F6_u64, 0x9837F0518DB8A96F_u64, 0xA264696B6F6E2B1C_u64, 0xCD12E5ADA91EEF7B_u64, 0x21F977FE7C7FA117_u64, 0x65C15C122133E2A2_u64, 0xA0911F09EBB9FDD1_u64, 0x9EF5326091A111AD_u64, 0xAD35E8E58C5CE4F4_u64, 0x5343B4A0330A8052_u64, 0x2589C98A8290D3F0_u64, 0x1DD170ACE2BCFC17_u64, 0x1CBD7F621710701B_u64, 0xA5FED6A9B15138EA_u64, 0x739A3D061FEA7592_u64, 0x458FD5F44E26A7A7_u64, 0xB165F141833A67DA_u64, 0x6BE409407034FDED_u64, 0x4980A8C8F59A2EC4_u64, 0xAD583EEA42A14AC6_u64, 0xA8B1FE6FDC83DB39_u64, 0x4AFC83043AB8A2C3_u64, 0xED17AC8583339915_u64, 0x1D6F60BA893BA84C_u64, 0x597D89B3754ABE9F_u64, 0xB504F333F9DE6484_u64, 0x283C66DB56DF97F8_u64, 0x9B985F3A0EAE1C1D_u64, 0x0D9A4BE023ECE031_u64, 0x15B34BBCB0298F41_u64, 0xA8811FB66D0FAF7A_u64, 0xBD08A39F580C36BE_u64, 0xEFBA190ED1A58A51_u64, 0xBB2068BE237512DF_u64, 0xC7686006E4E6C092_u64, 0x6B0F939998251A36_u64, 0x3E2AD0C964DD9F37_u64, 0xC5672A115506DADD_u64, 0xCD8CAEBC5D894C26_u64, 0x1B8343088BBDADD4_u64, 0x2BBD398AF35C079F_u64, 0x6F28610B8C36485A_u64, 0xE235838F95F2C6ED_u64, 0xCE248C151F8480E3_u64, 0x81247458FB61E576_u64, 0xEFB01FDA334BCA9A_u64, 0xB5C13ADA0E778299_u64, 0x1D733AF522058B16_u64, 0x39A68BB9902D3FDE_u64, 0xD744FCCAD69D6AF4_u64, 0xF44E17262DA49B5D_u64, 0x188081FE7062F61E_u64, 0x1CB99D3F1FF298A2_u64, 0x224B251B33092002_u64, 0x065895048DD333CA_u64, 0xE0CCDEEC2A94E111_u64, 0x091482854D819E44_u64, 0xB338FCD2AC2FFBC8_u64, 0x17D8D1E8CA31880A_u64, 0xC4FAACE043B7F91C_u64, 0xD02D75B3706E54FA_u64, 0xEAC0C6E7DD24392E_u64, 0x29F075F23730E918_u64, 0xD22DD036F1906094_u64, 0xBDD80329364AA29F_u64, 0x6F510308677709F5_u64, 0x7B9D0C7AED980FC3_u64, 0xF5257D152486CC2C_u64]
+# coefficients of the 2^r polynomial, 6 words each
+secret preset B128_WIDE_EC: Array[U64, 222] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x8000000000000000_u64, 0x2ACAA97DA57CADBE_u64, 0xF3DC3B1036F5D64C_u64, 0xC5068BADC5D57D15_u64, 0xA079A193394C5B16_u64, 0xE4F1D9CC01F97B57_u64, 0x58B90BFBE8E7BCD5_u64, 0xD344071B5EC47714_u64, 0x524EB0376B9686E0_u64, 0xC2BE93BBB1396E6E_u64, 0xA3A2751C30CE69D4_u64, 0x6F16B06EC9735FCA_u64, 0x1EBFBDFF82C58EA8_u64, 0x80960837D68B3044_u64, 0x44545F2E4DD67D06_u64, 0x4753198ADE236146_u64, 0xA7AE23A226D00887_u64, 0xCCE9D8AECCAF4B7B_u64, 0x071AC235C1282FE2_u64, 0xEEE877628D8F6274_u64, 0x8F7E8887E73829D7_u64, 0x699B709699E1815F_u64, 0x72478EA53E63911D_u64, 0x9CCBBE0B53EEAC50_u64, 0x013B2AB6FBA4E772_u64, 0x318A9F63B2F3EC5C_u64, 0x2F040F926E2C93BE_u64, 0xC8CDC36AA406093F_u64, 0x60AED94D2DCE32E1_u64, 0x20E2FED34A297D86_u64, 0x002BB0FFCF14CE62_u64, 0x2D3C7B9299D0D3E1_u64, 0x91EC7AEC4E3F0A35_u64, 0x549592FF6D6AB786_u64, 0xCFB314FFCCC47BB0_u64, 0xDBD2C2A261AC8D07_u64, 0x00050C244BE1B1E1_u64, 0xCD46DC2CD5899528_u64, 0x95CE94549C9A636A_u64, 0x5D3119327FAC831D_u64, 0x4ACE1152E8810FEE_u64, 0x1A1AC547321F639A_u64, 0x00007FF2FF1622C3_u64, 0x8531A13788143560_u64, 0x5C5F54178A891B6B_u64, 0x7D5B21CD05968068_u64, 0x2586E1A0F7107AB9_u64, 0x11FEC7FF3036D3BE_u64, 0x00000B160111D2E4_u64, 0xE590C3FDFB446BE7_u64, 0x2D5087B376C0214D_u64, 0x738AFD2A4917377A_u64, 0x84518CB8CAA9BA26_u64, 0x3E1ED253872D27FC_u64, 0x000000DA929E9CAF_u64, 0xCC782DE6FF640FD0_u64, 0x68569686F1264EA6_u64, 0x98468B24ACD303BE_u64, 0xB4CE2A0608A16570_u64, 0xC764FB7ED0ECA973_u64, 0x0000000F267A8AC5_u64, 0xEE22A537A6D9A8B8_u64, 0x08110963D1D9380F_u64, 0x43B147AA9F2C11B5_u64, 0x90A4EDC7B3F29C1C_u64, 0x8DD92607ABCCAF23_u64, 0x00000000F465639A_u64, 0x38202F8BF18F1943_u64, 0xBC2FB66E0BF68E76_u64, 0x511F7698B91CBA26_u64, 0xD17730E76AAEDF16_u64, 0x7E14C2F15AB43F0B_u64, 0x000000000E1DEB28_u64, 0xEA93B5CEDF528C2F_u64, 0x6EE667B44F788F66_u64, 0x714AA5175CD8C9AB_u64, 0x7B8D8CE6FE81F087_u64, 0x8B3687CB140D6180_u64, 0x0000000000C0B0C9_u64, 0x88AD1FE5BCEC581B_u64, 0xA772E0B581376DF7_u64, 0x1D1EDB9F5248282A_u64, 0x2AE5761242913279_u64, 0x26AC3C54B9F8A1B1_u64, 0x0000000000098A4B_u64, 0x9D19FAF9F3A16E65_u64, 0xC2FDE1C74321A361_u64, 0x3787E55BAD70A464_u64, 0xFC6A729280D47C69_u64, 0xA10EC1008799EC55_u64, 0x00000000000070DB_u64, 0xF708EE5BF7061DEE_u64, 0x921CFCDBBCCF2EB0_u64, 0x7CD64E11A79215FE_u64, 0x93B26377E3B574BD_u64, 0xA26B9E7E2CE48E3F_u64, 0x00000000000004E3_u64, 0x9BB4D4CCB609D71E_u64, 0x6EF9409A4CD3AC24_u64, 0xC560A32B4349D4DD_u64, 0xB1001EFF03E83F71_u64, 0x088968384B4FAAC3_u64, 0x0000000000000033_u64, 0xB5C5F81B7E235F48_u64, 0x9C1837383FEF6AA4_u64, 0xCF80A6C83EA7DC89_u64, 0x2ED389743C9AA15C_u64, 0xF7176BDB43695D73_u64, 0x0000000000000001_u64, 0x4E3F1412BE77B88A_u64, 0x75F070DF1338E5DB_u64, 0xD970F6D684DCCA91_u64, 0xE056AB257AA7F274_u64, 0x125A7ECB835C64DA_u64, 0x0000000000000000_u64, 0x6C8A502410B3A92B_u64, 0x5AE22FF5B3B87C53_u64, 0x5510CEF268F5A4F6_u64, 0x27126F802BC39D75_u64, 0x00A2D6625A8289AC_u64, 0x0000000000000000_u64, 0xA851C04A8293FECE_u64, 0x95E77DEC82B8EB58_u64, 0xEF60EB192FE67EDA_u64, 0xE0AADF36DDF86F4F_u64, 0x00055FF15E0F8271_u64, 0x0000000000000000_u64, 0x7E2F1903476D3F72_u64, 0x991510E40164F6EC_u64, 0xB93A9CF471520656_u64, 0x81D8F91AED9D0512_u64, 0x00002B59F5A6E03B_u64, 0x0000000000000000_u64, 0xE661B8B0F04BD98D_u64, 0xC0C7162D7C443B27_u64, 0x48EB10AA6D041426_u64, 0xFB5CB2465D33A354_u64, 0x0000014E7515DC98_u64, 0x0000000000000000_u64, 0xA2DE610B24AFFA88_u64, 0x36D51A1C2CF018AE_u64, 0xE823660BEE34DF2B_u64, 0xD5E52102FA4F3D47_u64, 0x00000009A8D57B65_u64, 0x0000000000000000_u64, 0x8297D75925CF8A0E_u64, 0xB19C48D3A13188F6_u64, 0x08EC765F339C0710_u64, 0x6A09E41E7A3814F9_u64, 0x00000000448FBF65_u64, 0x0000000000000000_u64, 0x11744278158DD70D_u64, 0xD10B922FB4D1B574_u64, 0xDD8263D932A8A20C_u64, 0x99F1CC682AF884C5_u64, 0x0000000001D3EBC2_u64, 0x0000000000000000_u64, 0x20127EE09BB9F25C_u64, 0x5ED98D7CDE9ECACE_u64, 0x46DA42907892BB39_u64, 0x9AF8DBD36A3B0863_u64, 0x00000000000C0334_u64, 0x0000000000000000_u64, 0xAFD75D37C82B15CA_u64, 0xF0ACD37674CF3129_u64, 0xAE8A3FB59540AB8D_u64, 0xA3DFEB50D4131639_u64, 0x0000000000004C20_u64, 0x0000000000000000_u64, 0xDAAF1913E1CB12F0_u64, 0xE352EA644FB69C62_u64, 0xF3FAC0750B414CC5_u64, 0xCF69A29F13DE20E8_u64, 0x00000000000001D1_u64, 0x0000000000000000_u64, 0x0587A7D1A7EC6C45_u64, 0x05EACA3704DCD2F6_u64, 0x12DCBE8116EADA8F_u64, 0xC333445E3155F79B_u64, 0x000000000000000A_u64, 0x0000000000000000_u64, 0x183F54470927DBCD_u64, 0x76BC8F5B8E8B7093_u64, 0x8F099FB908474B26_u64, 0x3D9AEA5B4D0EBFAE_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x261C179F4BDFFA1D_u64, 0x0909A0681E2103A8_u64, 0x4DBDD766D2D9A092_u64, 0x01559C86508B1539_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3816A7CA0CA85578_u64, 0x6B7FD2696989CDEE_u64, 0xD34DACABB2D48A6C_u64, 0x00072CE49E65A3AC_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0xD4E29D35FE14E115_u64, 0xC30D08011BDAFD19_u64, 0xA9A6BF19955B2132_u64, 0x00002572BE492F62_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0xE4DF41884BE86BB5_u64, 0x0C5772EE960FD5BF_u64, 0x9DBEE3B9355D1FB0_u64, 0x000000BDD01D5D84_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x80446608D32C4ED3_u64, 0xB4D5892FE7709C19_u64, 0xD3840403FCEFE8A9_u64, 0x00000003BC4FB6D4_u64, 0x0000000000000000_u64, 0x0000000000000000_u64]

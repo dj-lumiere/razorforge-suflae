@@ -1,0 +1,228 @@
+module Core
+
+# ============================================================================
+# Correctly rounded Euclidean distance (hypot) of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/hypot/hypotq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped).
+# The whole computation runs on 64- and 128-bit integers: the sum of squares is formed in fixed point and
+# its square root is taken with the reciprocal-square-root seed of B128Sqrt.rf, with an exact 256-bit check
+# of the two candidate results when the rounding is too close to call.
+
+### `sqrt(x^2 + y^2)`, correctly rounded: the exact Euclidean distance rounded to the nearest `B128` (ties
+### to even), identical on every platform, without spurious overflow or underflow. Raw IEEE 754
+### propagation: an infinite leg gives +infinity (even with a quiet NaN in the other leg), otherwise a NaN
+### leg gives NaN.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded hypotenuse.
+routine hypot_unchecked(x: B128, y: B128) -> B128
+  var absmask = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u128
+  var xa = x.to_bits() & absmask
+  var ya = y.to_bits() & absmask
+  # a = max(|x|, |y|), b = min(|x|, |y|)
+  var a = xa
+  var b = ya
+  if xa < ya
+    a = ya
+    b = xa
+  var xn = LLVM::reinterpret_bits[U128, S128](a >>> 112)
+  var yn = LLVM::reinterpret_bits[U128, S128](b >>> 112)
+  if xn == 0x7FFF
+    var xnan = b128_hypot_class(x: a)
+    var ynan = b128_hypot_class(x: b)
+    if xnan == 2 or ynan == 2
+      # a signaling NaN: the default NaN
+      return B128.from_bits(bits: 0x1FFFF_u128 << 111)
+    if xnan +% ynan == 4
+      # hypot(+-inf, qnan) = hypot(qnan, +-inf) = +inf
+      return B128.from_bits(bits: 0x7FFF_u128 << 112)
+    if xnan == 3
+      return B128.from_bits(bits: a)
+    if ynan == 3
+      return B128.from_bits(bits: b)
+    # infinity and a number
+    return B128.from_bits(bits: 0x7FFF_u128 << 112)
+  var xe = LLVM::int_truncate[S128, S64](xn)
+  var ye = LLVM::int_truncate[S128, S64](yn)
+  if ye == 0
+    var bhi = LLVM::int_truncate[U128, U64](b >>> 64)
+    var blo = LLVM::int_truncate[U128, U64](b)
+    var ns = -15_s64
+    if bhi != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](bhi.leading_zeros())
+    elseif blo != 0
+      ns = ns +% LLVM::reinterpret_bits[U64, S64](blo.leading_zeros()) +% 64
+    else
+      return B128.from_bits(bits: a)
+    ye = 1 -% ns
+    b = b << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+    if xe == 0
+      var ahi = LLVM::int_truncate[U128, U64](a >>> 64)
+      var alo = LLVM::int_truncate[U128, U64](a)
+      ns = -15_s64
+      if ahi != 0
+        ns = ns +% LLVM::reinterpret_bits[U64, S64](ahi.leading_zeros())
+      else
+        ns = ns +% LLVM::reinterpret_bits[U64, S64](alo.leading_zeros()) +% 64
+      xe = 1 -% ns
+      a = a << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](ns))
+  var dn = xe -% ye
+  var top = 1_u128 << 127
+  a = (a << 15) | top
+  var v = 0_u128
+  if dn > 56
+    # the smaller leg is too small to matter beyond a sticky bit
+    v = a | 1
+  else
+    b = (b << 15) | top
+    var sdn = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](dn))
+    var sa = b128_hypot_sqrhU(a: a)
+    var sb = b128_hypot_sqrhU(a: b >>> sdn)
+    var s2 = sa +% sb
+    var overflow = 0_s64
+    if s2 < sa
+      overflow = 1
+    var nz = 0_s64
+    if overflow == 0
+      nz = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](s2 >>> 64).leading_zeros())
+    var i = LLVM::reinterpret_bits[S64, U64]((1 -% overflow +% nz) & 1)
+    var s = 1 -% overflow +% nz
+    s2 = s2 << LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](s))
+    xe = xe +% overflow
+    var rx = LLVM::int_truncate[U128, U64](s2 >>> 64)
+    var r = b128_sqrt_rsqrt9(m: rx)
+    # 2^64/sqrt(2) for odd exponents
+    var rs = 0xFFFFFFFFFFFFFFFF_u64
+    if i != 0
+      rs = 0xB504F333F9DE6484_u64
+    var r2 = LLVM::zero_extend[U64, U128](r) *% LLVM::zero_extend[U64, U128](rs)
+    s2 = s2 >>> LLVM::int_truncate[U64, U32](2 -% i)
+    s2 = s2 | (1_u128 << LLVM::int_truncate[U64, U32](126 +% i))
+    r = LLVM::int_truncate[U128, U64](r2 >>> 64)
+    var sx = b128_sqrt_mhuU(y: r, x: s2)
+    var h = b128_sqrt_mhuU(y: r, x: sx) << 2
+    # high part of the (signed h) x (unsigned sx) product
+    var ds = b128_sqrt_mhUU(a: sx, b: h)
+    if (h >>> 127) != 0
+      ds = ds -% sx
+    sx = sx << 1
+    v = sx -% ds
+    var dd = LLVM::reinterpret_bits[U16, S16](LLVM::int_truncate[U128, U16](v << 2))
+    if dd > -37 and dd < 13
+      # rounding test: compare the square of the candidate with the exact sum of squares
+      v = v +% (1_u128 << 13)
+      v = v & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFC000_u128
+      var ovf = 0_u128
+      if v == 0
+        ovf = 1
+      var c = v >>> 13
+      var c2 = c *% c
+      a = a >>> 13
+      var asq = b128_hypot_sqrU(a: a)
+      var ah = asq.item0
+      var al = asq.item1
+      b = b >>> 13
+      var bsq = b128_hypot_sqrU(a: b)
+      var bh = bsq.item0
+      var bl = bsq.item1
+      if dn != 0
+        var k = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](2 *% dn))
+        var kc = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](128 -% 2 *% dn))
+        var sticky = 0_u128
+        if (bl << kc) != 0
+          sticky = 1
+        bl = ((bl >>> k) | (bh << kc)) | sticky
+        bh = bh >>> k
+      al = al +% bl
+      var carry = 0_u128
+      if al < bl
+        carry = 1
+      ah = ah +% (bh +% carry)
+      if (ah >>> 102) != 0
+        # s = 2
+        var sticky2 = 0_u128
+        if (al << 126) != 0
+          sticky2 = 1
+        al = ((al >>> 2) | (ah << 126)) | sticky2
+      al = al -% c2
+      v = v | (ovf << 127)
+      xe = xe +% LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ovf))
+      var sal = LLVM::reinterpret_bits[U128, S128](al)
+      if sal < 0
+        v = v -% 1
+      elseif sal > 0
+        v = v +% 1
+  xe = xe -% 1
+  if xe > 0
+    if xe >= 32766
+      # overflow: rounds to +infinity
+      return B128.from_bits(bits: 0x7FFF_u128 << 112)
+    var frac = LLVM::int_truncate[U128, U64](v) & 0x7FFF_u64
+    var rnd = frac >>> 14
+    if frac == 0x4000
+      # a tie: round to even
+      rnd = LLVM::int_truncate[U128, U64](v >>> 15) & 1
+    v = v >>> 15
+    v = v +% ((LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](xe)) << 112) | LLVM::zero_extend[U64, U128](rnd))
+    return B128.from_bits(bits: v)
+  # subnormal result
+  var sh = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](15 -% xe))
+  var sh1 = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](14 -% xe))
+  var frac2 = v & ((1_u128 << sh) -% 1)
+  var rnd2 = frac2 >>> sh1
+  if frac2 == (1_u128 << sh1)
+    rnd2 = (v >>> sh) & 1
+  v = (v >>> sh) +% rnd2
+  return B128.from_bits(bits: v)
+
+### Classifies a sign-stripped binary128 bit pattern.
+### :param x: The bits, sign bit clear.
+### :returns: 0 for a number, 1 for infinity, 2 for a signaling NaN, 3 for a quiet NaN.
+secret routine b128_hypot_class(x: U128) -> S64
+  var xh = LLVM::int_truncate[U128, U64](x >>> 64)
+  var xl = LLVM::int_truncate[U128, U64](x)
+  var t = xh >>> 32
+  if ((xh << 32) | xl) != 0
+    t = t | 1
+  var c = 0_s64
+  if t >= 0x7FFF0000_u64
+    c = c +% 1
+  if t >= 0x7FFF0001_u64
+    c = c +% 1
+  if t >= 0x7FFF8000_u64
+    c = c +% 1
+  return c
+
+### Approximate high 128 bits of the square of a (the low*low product dropped).
+### :param a: The value to square.
+### :returns: The high half of a*a, approximately.
+@inline
+secret routine b128_hypot_sqrhU(a: U128) -> U128
+  var a0 = a & 0xFFFFFFFFFFFFFFFF_u128
+  var a1 = a >>> 64
+  var a10h = (a1 *% a0) >>> 64
+  return ((a1 *% a1) +% a10h) +% a10h
+
+### Full 256-bit square of a.
+### :param a: The value to square.
+### :returns: The high and low 128-bit halves of a*a.
+secret routine b128_hypot_sqrU(a: U128) -> (U128, U128)
+  var a0 = a & 0xFFFFFFFFFFFFFFFF_u128
+  var a1 = a >>> 64
+  var a10 = a1 *% a0
+  var hi = a1 *% a1
+  var lo = a0 *% a0
+  var t = a10 << 64
+  var th = a10 >>> 64
+  var n = 0_u64
+  while n < 2
+    lo = lo +% t
+    if lo < t
+      hi = hi +% 1
+    hi = hi +% th
+    n = n +% 1
+  return (hi, lo)

@@ -1,0 +1,18 @@
+module Core
+
+# ============================================================================
+# Correctly rounded sine of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/sin/sinq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2026 Chen-Pang He <jdh863@gmail.com>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# errno and exception-flag handling are dropped). The reduction, evaluation and rounding pipeline it shares
+# with the cosine lives in B128TrigShared.rf.
+
+### Returns the sine, correctly rounded: the exact sine of this value (in radians) rounded to the nearest
+### `B128` (ties to even), identical on every platform. `sin(-x) == -sin(x)`, ±0 maps to itself, and
+### ±infinity and NaN give NaN.
+### :returns: The correctly rounded sine.
+routine B128.sin() -> B128
+  return B128.from_bits(bits: b128_trig(bits: me.to_bits(), cosine: false))

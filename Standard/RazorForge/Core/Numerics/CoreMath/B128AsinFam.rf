@@ -1,0 +1,1187 @@
+module Core
+
+# ============================================================================
+# Shared arithmetic and tables of the correctly rounded arc sine and arc cosine of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/asin/asinq.c and src/binary128/acos/acosq.c
+# (https://core-math.gitlabpages.inria.fr/). The two C files carry identical copies of these helpers and
+# tables, so they are kept once here and used by CoreMath/B128Asin.rf and CoreMath/B128Acos.rf.
+# Copyright (c) 2026 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception-flag and errno handling and directed-rounding branches are dropped).
+# Everything works on integers (64-bit words, carry chains and 64x64->128-bit products), never on the
+# B128 arithmetic operators. Multi-word values are held least significant word first.
+
+### Five 64-bit words of a fixed-point value, least significant first (the C u5x64).
+secret record B128AsinFamW5
+  w0: U64
+  w1: U64
+  w2: U64
+  w3: U64
+  w4: U64
+
+### Six 64-bit words of a fixed-point value, least significant first (the C u6x64).
+secret record B128AsinFamW6
+  w0: U64
+  w1: U64
+  w2: U64
+  w3: U64
+  w4: U64
+  w5: U64
+
+# ============================================================================
+# Word helpers
+# ============================================================================
+
+### The full 128-bit product of two 64-bit words.
+@inline
+secret routine b128_asinfam_mul(a: U64, b: U64) -> U128
+  return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
+
+### The high 64 bits of a 128-bit value.
+@inline
+secret routine b128_asinfam_hi(u: U128) -> U64
+  return LLVM::int_truncate[U128, U64](u >>> 64)
+
+### The low 64 bits of a 128-bit value.
+@inline
+secret routine b128_asinfam_lo(u: U128) -> U64
+  return LLVM::int_truncate[U128, U64](u)
+
+### Joins two 64-bit words into a 128-bit value.
+@inline
+secret routine b128_asinfam_join(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### The high 64 bits of the unsigned product a*b.
+@inline
+secret routine b128_asinfam_mhuu(a: U64, b: U64) -> U64
+  return b128_asinfam_hi(u: b128_asinfam_mul(a: a, b: b))
+
+### The high 64 bits of the signed product a*b, both words read as two's complement.
+@inline
+secret routine b128_asinfam_mhii(a: U64, b: U64) -> U64
+  var p = b128_asinfam_mhuu(a: a, b: b)
+  if (a >>> 63) != 0_u64
+    p = p -% b
+  if (b >>> 63) != 0_u64
+    p = p -% a
+  return p
+
+### Adds two words and a carry: returns (sum, carry out).
+@inline
+secret routine b128_asinfam_ac(a: U64, b: U64, c: U64) -> (U64, U64)
+  var s = LLVM::zero_extend[U64, U128](a) +% LLVM::zero_extend[U64, U128](b) +% LLVM::zero_extend[U64, U128](c)
+  return (LLVM::int_truncate[U128, U64](s), LLVM::int_truncate[U128, U64](s >>> 64))
+
+### Subtracts a word and a borrow: returns (difference, borrow out).
+@inline
+secret routine b128_asinfam_sc(a: U64, b: U64, c: U64) -> (U64, U64)
+  var s = LLVM::zero_extend[U64, U128](a) -% LLVM::zero_extend[U64, U128](b) -% LLVM::zero_extend[U64, U128](c)
+  return (LLVM::int_truncate[U128, U64](s), LLVM::int_truncate[U128, U64](s >>> 64) & 1_u64)
+
+### A 64-bit shift amount taken modulo 64, as the hardware does.
+@inline
+secret routine b128_asinfam_sh(n: S64) -> U32
+  return LLVM::int_truncate[S64, U32](n & 63)
+
+### A 128-bit shift amount taken modulo 128.
+@inline
+secret routine b128_asinfam_sh7(n: S64) -> U32
+  return LLVM::int_truncate[S64, U32](n & 127)
+
+### Reads a word as a signed integer.
+@inline
+secret routine b128_asinfam_s(u: U64) -> S64
+  return LLVM::reinterpret_bits[U64, S64](u)
+
+### Reads a signed integer as a word.
+@inline
+secret routine b128_asinfam_u(n: S64) -> U64
+  return LLVM::reinterpret_bits[S64, U64](n)
+
+### Count of leading zero bits of a word.
+@inline
+secret routine b128_asinfam_clz(x: U64) -> S64
+  return LLVM::reinterpret_bits[U64, S64](x.leading_zeros())
+
+# ============================================================================
+# 128-bit helpers of the fast path
+# ============================================================================
+
+### Approximate high 128 bits of the unsigned 128x128-bit product (the C mhUU).
+@inline
+secret routine b128_asinfam_mhuu128(a: U128, b: U128) -> U128
+  var a0 = b128_asinfam_lo(u: a)
+  var a1 = b128_asinfam_hi(u: a)
+  var b0 = b128_asinfam_lo(u: b)
+  var b1 = b128_asinfam_hi(u: b)
+  var a1b0 = b128_asinfam_mul(a: a1, b: b0)
+  var a0b1 = b128_asinfam_mul(a: a0, b: b1)
+  var a1b1 = b128_asinfam_mul(a: a1, b: b1)
+  a1b1 = a1b1 +% (a1b0 >>> 64)
+  a1b1 = a1b1 +% (a0b1 >>> 64)
+  return a1b1
+
+### Approximate high 128 bits of the square of a 128-bit value (the C sqrhU).
+@inline
+secret routine b128_asinfam_sqrhu128(a: U128) -> U128
+  var a0 = b128_asinfam_lo(u: a)
+  var a1 = b128_asinfam_hi(u: a)
+  var a10 = b128_asinfam_mul(a: a1, b: a0) >>> 63
+  return b128_asinfam_mul(a: a1, b: a1) +% a10
+
+### High three words of the product of a word and a three-word value (the C mhu3uu3).
+@inline
+secret routine b128_asinfam_mh3w(y: U64, x0: U64, x1: U64, x2: U64) -> (U64, U64, U64)
+  var xy0 = b128_asinfam_mul(a: x0, b: y)
+  var xy1 = b128_asinfam_mul(a: x1, b: y)
+  var xy2 = b128_asinfam_mul(a: x2, b: y)
+  var r0 = b128_asinfam_ac(a: b128_asinfam_lo(u: xy1), b: b128_asinfam_hi(u: xy0), c: 0_u64)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_lo(u: xy2), b: b128_asinfam_hi(u: xy1), c: r0.item1)
+  var r2 = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: xy2), c: r1.item1)
+  return (r0.item0, r1.item0, r2.item0)
+
+### High three words of the product of a two-word and a three-word value (the C mhu3u2u3).
+@inline
+secret routine b128_asinfam_mh3d(y0: U64, y1: U64, x0: U64, x1: U64, x2: U64) -> (U64, U64, U64)
+  var x1y0 = b128_asinfam_mul(a: x1, b: y0)
+  var x2y0 = b128_asinfam_mul(a: x2, b: y0)
+  var x0y1 = b128_asinfam_mul(a: x0, b: y1)
+  var x1y1 = b128_asinfam_mul(a: x1, b: y1)
+  var x2y1 = b128_asinfam_mul(a: x2, b: y1)
+  x2y0 = x2y0 +% (x1y0 >>> 64)
+  x1y1 = x1y1 +% (x0y1 >>> 64)
+  x2y1 = x2y1 +% (x1y1 >>> 64)
+  var r0 = b128_asinfam_ac(a: b128_asinfam_lo(u: x1y1), b: b128_asinfam_lo(u: x2y0), c: 0_u64)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_lo(u: x2y1), b: b128_asinfam_hi(u: x2y0), c: r0.item1)
+  var r2 = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: x2y1), c: r1.item1)
+  return (r0.item0, r1.item0, r2.item0)
+
+### Three-word sum a + b (the C addu3u3u3).
+@inline
+secret routine b128_asinfam_add3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
+  var r0 = b128_asinfam_ac(a: a0, b: b0, c: 0_u64)
+  var r1 = b128_asinfam_ac(a: a1, b: b1, c: r0.item1)
+  var r2 = b128_asinfam_ac(a: a2, b: b2, c: r1.item1)
+  return (r0.item0, r1.item0, r2.item0)
+
+### Three-word difference a - b (the C subu3u3u3).
+@inline
+secret routine b128_asinfam_sub3(a0: U64, a1: U64, a2: U64, b0: U64, b1: U64, b2: U64) -> (U64, U64, U64)
+  var r0 = b128_asinfam_sc(a: a0, b: b0, c: 0_u64)
+  var r1 = b128_asinfam_sc(a: a1, b: b1, c: r0.item1)
+  var r2 = b128_asinfam_sc(a: a2, b: b2, c: r1.item1)
+  return (r0.item0, r1.item0, r2.item0)
+
+# ============================================================================
+# Range reduction and 1/sqrt
+# ============================================================================
+
+### Reciprocal square root of a 64-bit fixed-point m in [1, 2), to almost 64 bits (the C rsqrt9).
+@inline
+secret routine b128_asinfam_rsqrt9(m: U64) -> U64
+  var ix = (m >>> 58) << 2
+  var c0 = B128_ASINFAM_RSQRT[ix]
+  var c1 = B128_ASINFAM_RSQRT[ix +% 1_u64]
+  var c2 = B128_ASINFAM_RSQRT[ix +% 2_u64]
+  var c3 = B128_ASINFAM_RSQRT[ix +% 3_u64]
+  c0 = (c0 << 31) | 0x8000000000000000_u64
+  c1 = c1 << 25
+  var d = (m << 6) >>> 32
+  var d2 = (d *% d) >>> 32
+  var re = c0 +% ((d2 *% c2) >>> 13)
+  var ro = (d *% ((c1 +% ((d2 *% c3) >>> 19)) >>> 26)) >>> 6
+  var r = re -% ro
+  # one Newton-Raphson step r1 = r0 - r0*(r0^2*x - 1)/2
+  var r2 = b128_asinfam_mhuu(a: r, b: r)
+  var h = b128_asinfam_mhuu(a: m, b: r2) +% r2
+  var hr = b128_asinfam_mhii(a: h, b: r >>> 1)
+  r = r -% hr
+  if r == 0_u64
+    r = r -% 1_u64
+  return r
+
+### Picks the table index j of the range reduction from the high word of 0 < |x| < 1 (the C jget).
+@inline
+secret routine b128_asinfam_jget(x: U64) -> U64
+  var z = 0x3FFF000000000000_u64 -% x
+  var mz = z << 16
+  var e = b128_asinfam_s(u: z >>> 48)
+  if e == 0
+    var nz = b128_asinfam_clz(x: mz)
+    mz = mz << b128_asinfam_sh(n: nz +% 1)
+    e = e -% nz
+  var lz = e *% 16 +% b128_asinfam_s(u: mz >>> 60) +% 161
+  if lz < 0
+    lz = 0
+  var j = 0_u64
+  if lz < 256
+    j = B128_ASINFAM_IND[b128_asinfam_u(n: lz)]
+  var tz = e *% 2048 +% b128_asinfam_s(u: mz >>> 53)
+  if tz < B128_ASINFAM_STH[j]
+    j = j +% 1_u64
+  return j
+
+### The full 256-bit square of a two-word value (the C sqrU).
+@inline
+secret routine b128_asinfam_sqru(x0: U64, x1: U64) -> (U64, U64, U64, U64)
+  var p10 = b128_asinfam_mul(a: x1, b: x0)
+  var p10x = b128_asinfam_hi(u: p10) >>> 63
+  p10 = p10 << 1
+  var p00 = b128_asinfam_mul(a: x0, b: x0)
+  var p11 = b128_asinfam_mul(a: x1, b: x1)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_hi(u: p00), b: b128_asinfam_lo(u: p10), c: 0_u64)
+  var r2 = b128_asinfam_ac(a: b128_asinfam_hi(u: p10), b: b128_asinfam_lo(u: p11), c: r1.item1)
+  var r3 = b128_asinfam_ac(a: b128_asinfam_hi(u: p11), b: p10x, c: r2.item1)
+  return (b128_asinfam_lo(u: p00), r1.item0, r2.item0, r3.item0)
+
+### Normalized 1 - x^2 for the two-word x scaled by 2^-s: returns the four words and the exponent e. `mode`
+### picks the C variant: 0 = asinq's omx2v2 (one's complement), 1 = acosq's omx2v2 (one's complement, plus
+### one when the top word vanishes), 2 = omx2v3 (exact two's complement).
+@inline
+secret routine b128_asinfam_omx2(s: S64, x0: U64, x1: U64, mode: U64) -> (U64, U64, U64, U64, S64)
+  var q = b128_asinfam_sqru(x0: x0, x1: x1)
+  var ls = b128_asinfam_sh(n: s ^ -1)
+  var rs = b128_asinfam_sh(n: s)
+  var y0 = ((q.item1 << 1) << ls) | (q.item0 >>> rs)
+  var y1 = ((q.item2 << 1) << ls) | (q.item1 >>> rs)
+  var y2 = ((q.item3 << 1) << ls) | (q.item2 >>> rs)
+  var y3 = q.item3 >>> rs
+  if mode == 2_u64
+    var n0 = b128_asinfam_sc(a: 0_u64, b: y0, c: 0_u64)
+    var n1 = b128_asinfam_sc(a: 0_u64, b: y1, c: n0.item1)
+    var n2 = b128_asinfam_sc(a: 0_u64, b: y2, c: n1.item1)
+    var n3 = b128_asinfam_sc(a: 0_u64, b: y3, c: n2.item1)
+    y0 = n0.item0
+    y1 = n1.item0
+    y2 = n2.item0
+    y3 = n3.item0
+  else
+    y0 = y0 ^ 0xFFFFFFFFFFFFFFFF_u64
+    y1 = y1 ^ 0xFFFFFFFFFFFFFFFF_u64
+    y2 = y2 ^ 0xFFFFFFFFFFFFFFFF_u64
+    y3 = y3 ^ 0xFFFFFFFFFFFFFFFF_u64
+  var e = 1_s64
+  if y3 != 0_u64
+    var lk = b128_asinfam_clz(x: y3)
+    var l = b128_asinfam_sh(n: lk)
+    var r = b128_asinfam_sh(n: lk ^ -1)
+    y3 = (y3 << l) | ((y2 >>> 1) >>> r)
+    y2 = (y2 << l) | ((y1 >>> 1) >>> r)
+    y1 = (y1 << l) | ((y0 >>> 1) >>> r)
+    y0 = y0 << l
+    e = e +% lk
+  else
+    if mode == 1_u64
+      var i0 = b128_asinfam_ac(a: y0, b: 1_u64, c: 0_u64)
+      var i1 = b128_asinfam_ac(a: y1, b: 0_u64, c: i0.item1)
+      var i2 = b128_asinfam_ac(a: y2, b: 0_u64, c: i1.item1)
+      y0 = i0.item0
+      y1 = i1.item0
+      y2 = i2.item0
+    var lk = b128_asinfam_clz(x: y2)
+    var l = b128_asinfam_sh(n: lk)
+    var r = b128_asinfam_sh(n: lk ^ -1)
+    y3 = (y2 << l) | ((y1 >>> 1) >>> r)
+    y2 = (y1 << l) | ((y0 >>> 1) >>> r)
+    y1 = y0 << l
+    y0 = 0_u64
+    e = e +% lk +% 64
+  return (y0, y1, y2, y3, e)
+
+### 2^64/sqrt(2)^(e&1), the scale that folds an odd exponent into the reciprocal square root.
+@inline
+secret routine b128_asinfam_rsqrt2(e: S64) -> U64
+  if (e & 1) == 0
+    return 0xFFFFFFFFFFFFFFFF_u64
+  return 0xB504F333F9DE6484_u64
+
+### The fast path's sqrt(1 - x^2) for the mantissa words x (shifted left by 15) and nz = 0x3fff - exponent:
+### returns its three words and the exponent e of 1 - x^2. `mode` is passed on to `b128_asinfam_omx2`.
+@inline
+secret routine b128_asinfam_fast_sqrt(x0: U64, x1: U64, nz: S64, mode: U64) -> (U64, U64, U64, S64)
+  var q = b128_asinfam_omx2(s: 2 *% nz -% 2, x0: x0, x1: x1, mode: mode)
+  var e = q.item4
+  var rx = (q.item3 << 1) | (q.item2 >>> 63)
+  var r = b128_asinfam_rsqrt9(m: rx)
+  r = b128_asinfam_mhuu(a: r, b: b128_asinfam_rsqrt2(e: e))
+  var sx = b128_asinfam_mh3w(y: r, x0: q.item1, x1: q.item2, x2: q.item3)
+  var hq = b128_asinfam_mh3w(y: r, x0: sx.item0, x1: sx.item1, x2: sx.item2)
+  var h0 = (hq.item0 >>> 2) | (hq.item1 << 62)
+  var h1 = (hq.item1 >>> 2) | (hq.item2 << 62)
+  var h2 = b128_asinfam_mhii(a: h1, b: h1)
+  h2 = h2 +% (h2 >>> 1)
+  var hh = b128_asinfam_join(hi: h1, lo: h0)
+  var lk = (e & 1) +% 2
+  var rk = (64 -% lk) & 63
+  var l = b128_asinfam_sh(n: lk)
+  var rr = b128_asinfam_sh(n: rk)
+  hh = hh -% b128_asinfam_join(hi: h2 >>> rr, lo: h2 << l)
+  # D = high part of the (unsigned SX) x (signed hh) product
+  var sa = b128_asinfam_join(hi: sx.item2, lo: sx.item1)
+  var d = b128_asinfam_mhuu128(a: sa, b: hh)
+  if (hh >>> 127) != 0_u128
+    d = d -% sa
+  var d0 = b128_asinfam_lo(u: d)
+  var d1 = b128_asinfam_hi(u: d)
+  var d2 = 0_u64
+  if (d1 >>> 63) != 0_u64
+    d2 = 0xFFFFFFFFFFFFFFFF_u64
+  d2 = (d2 << l) | (d1 >>> rr)
+  d1 = (d1 << l) | (d0 >>> rr)
+  d0 = d0 << l
+  var o = b128_asinfam_sub3(a0: sx.item0, a1: sx.item1, a2: sx.item2, b0: d0, b1: d1, b2: d2)
+  return (o.item0, o.item1, o.item2, e)
+
+### The fast path's odd polynomial t + t^3*P(t^2) part: returns t^3*P(t^2) for the normalized t and the
+### shift s2 that aligns t^2.
+@inline
+secret routine b128_asinfam_fast_poly(t: U128, s2: S64) -> U128
+  var t2 = b128_asinfam_sqrhu128(a: t)
+  var t3 = b128_asinfam_mhuu128(a: t, b: t2)
+  if s2 < 128
+    t2 = t2 >>> b128_asinfam_sh7(n: s2)
+  else
+    t2 = 0_u128
+  var t2h = b128_asinfam_hi(u: t2)
+  var fl = B128_ASINFAM_C[18]
+  fl = B128_ASINFAM_C[16] +% b128_asinfam_mhuu(a: t2h, b: fl)
+  fl = B128_ASINFAM_C[14] +% b128_asinfam_mhuu(a: t2h, b: fl)
+  fl = B128_ASINFAM_C[12] +% b128_asinfam_mhuu(a: t2h, b: fl)
+  var f = b128_asinfam_join(hi: B128_ASINFAM_C[11], lo: B128_ASINFAM_C[10] +% b128_asinfam_mhuu(a: t2h, b: fl))
+  var i = 10_u64
+  while i > 0_u64
+    i = i -% 2_u64
+    f = b128_asinfam_join(hi: B128_ASINFAM_C[i +% 1_u64], lo: B128_ASINFAM_C[i]) +% b128_asinfam_mhuu128(a: t2, b: f)
+  return b128_asinfam_mhuu128(a: t3, b: f)
+
+# ============================================================================
+# Five-word arithmetic of the accurate path
+# ============================================================================
+
+### Word i of a five-word value, 0 outside 0..4.
+secret routine b128_asinfam_w5at(a: B128AsinFamW5, i: S64) -> U64
+  if i == 0
+    return a.w0
+  if i == 1
+    return a.w1
+  if i == 2
+    return a.w2
+  if i == 3
+    return a.w3
+  if i == 4
+    return a.w4
+  return 0_u64
+
+### Word i of a six-word value, 0 outside 0..5.
+secret routine b128_asinfam_w6at(a: B128AsinFamW6, i: S64) -> U64
+  if i == 0
+    return a.w0
+  if i == 1
+    return a.w1
+  if i == 2
+    return a.w2
+  if i == 3
+    return a.w3
+  if i == 4
+    return a.w4
+  if i == 5
+    return a.w5
+  return 0_u64
+
+### Word i of a five-word value shifted right by k >= 0 bits.
+secret routine b128_asinfam_w5r(a: B128AsinFamW5, i: S64, off: S64, s: S64) -> U64
+  var lo = b128_asinfam_w5at(a: a, i: i +% off)
+  if s == 0
+    return lo
+  return (lo >>> b128_asinfam_sh(n: s)) | (b128_asinfam_w5at(a: a, i: i +% off +% 1) << b128_asinfam_sh(n: 64 -% s))
+
+### Word i of a six-word value shifted right by k >= 0 bits.
+secret routine b128_asinfam_w6r(a: B128AsinFamW6, i: S64, off: S64, s: S64) -> U64
+  var lo = b128_asinfam_w6at(a: a, i: i +% off)
+  if s == 0
+    return lo
+  return (lo >>> b128_asinfam_sh(n: s)) | (b128_asinfam_w6at(a: a, i: i +% off +% 1) << b128_asinfam_sh(n: 64 -% s))
+
+### Word i of a five-word value shifted left by k >= 0 bits.
+secret routine b128_asinfam_w5l(a: B128AsinFamW5, i: S64, off: S64, s: S64) -> U64
+  var hi = b128_asinfam_w5at(a: a, i: i -% off) << b128_asinfam_sh(n: s)
+  return hi | ((b128_asinfam_w5at(a: a, i: i -% off -% 1) >>> 1) >>> b128_asinfam_sh(n: 63 -% s))
+
+### A five-word value shifted right by k bits (left for k < 0), the C shrn(5, a, k).
+secret routine b128_asinfam_shrn5(a: B128AsinFamW5, k: S64) -> B128AsinFamW5
+  if k < 0
+    return b128_asinfam_shln5(a: a, k: 0 -% k)
+  var off = k >> 6
+  var s = k & 63
+  return B128AsinFamW5(w0: b128_asinfam_w5r(a: a, i: 0, off: off, s: s), w1: b128_asinfam_w5r(a: a, i: 1, off: off, s: s), w2: b128_asinfam_w5r(a: a, i: 2, off: off, s: s), w3: b128_asinfam_w5r(a: a, i: 3, off: off, s: s), w4: b128_asinfam_w5r(a: a, i: 4, off: off, s: s))
+
+### A five-word value shifted left by k bits (right for k < 0), the C shln(5, a, k).
+secret routine b128_asinfam_shln5(a: B128AsinFamW5, k: S64) -> B128AsinFamW5
+  if k < 0
+    return b128_asinfam_shrn5(a: a, k: 0 -% k)
+  var off = k >> 6
+  var s = k & 63
+  return B128AsinFamW5(w0: b128_asinfam_w5l(a: a, i: 0, off: off, s: s), w1: b128_asinfam_w5l(a: a, i: 1, off: off, s: s), w2: b128_asinfam_w5l(a: a, i: 2, off: off, s: s), w3: b128_asinfam_w5l(a: a, i: 3, off: off, s: s), w4: b128_asinfam_w5l(a: a, i: 4, off: off, s: s))
+
+### A six-word value shifted right by k >= 0 bits, the C shrn(6, a, k).
+secret routine b128_asinfam_shrn6(a: B128AsinFamW6, k: S64) -> B128AsinFamW6
+  var off = k >> 6
+  var s = k & 63
+  return B128AsinFamW6(w0: b128_asinfam_w6r(a: a, i: 0, off: off, s: s), w1: b128_asinfam_w6r(a: a, i: 1, off: off, s: s), w2: b128_asinfam_w6r(a: a, i: 2, off: off, s: s), w3: b128_asinfam_w6r(a: a, i: 3, off: off, s: s), w4: b128_asinfam_w6r(a: a, i: 4, off: off, s: s), w5: b128_asinfam_w6r(a: a, i: 5, off: off, s: s))
+
+### Five-word sum a + b (the C addu5u5u5).
+secret routine b128_asinfam_add5(a: B128AsinFamW5, b: B128AsinFamW5) -> B128AsinFamW5
+  var r0 = b128_asinfam_ac(a: a.w0, b: b.w0, c: 0_u64)
+  var r1 = b128_asinfam_ac(a: a.w1, b: b.w1, c: r0.item1)
+  var r2 = b128_asinfam_ac(a: a.w2, b: b.w2, c: r1.item1)
+  var r3 = b128_asinfam_ac(a: a.w3, b: b.w3, c: r2.item1)
+  var r4 = b128_asinfam_ac(a: a.w4, b: b.w4, c: r3.item1)
+  return B128AsinFamW5(w0: r0.item0, w1: r1.item0, w2: r2.item0, w3: r3.item0, w4: r4.item0)
+
+### Five-word difference a - b (the C subu5u5u5).
+secret routine b128_asinfam_sub5(a: B128AsinFamW5, b: B128AsinFamW5) -> B128AsinFamW5
+  var r0 = b128_asinfam_sc(a: a.w0, b: b.w0, c: 0_u64)
+  var r1 = b128_asinfam_sc(a: a.w1, b: b.w1, c: r0.item1)
+  var r2 = b128_asinfam_sc(a: a.w2, b: b.w2, c: r1.item1)
+  var r3 = b128_asinfam_sc(a: a.w3, b: b.w3, c: r2.item1)
+  var r4 = b128_asinfam_sc(a: a.w4, b: b.w4, c: r3.item1)
+  return B128AsinFamW5(w0: r0.item0, w1: r1.item0, w2: r2.item0, w3: r3.item0, w4: r4.item0)
+
+### Row j of B128_ASINFAM_CTH, sqrt(1 - s_j^2), as five words.
+secret routine b128_asinfam_cth(j: U64) -> B128AsinFamW5
+  var i = j *% 5_u64
+  return B128AsinFamW5(w0: B128_ASINFAM_CTH[i], w1: B128_ASINFAM_CTH[i +% 1_u64], w2: B128_ASINFAM_CTH[i +% 2_u64], w3: B128_ASINFAM_CTH[i +% 3_u64], w4: B128_ASINFAM_CTH[i +% 4_u64])
+
+### Approximate high five words of the five-word product a*b (the C mhu5u5u5(o, b, a)).
+secret routine b128_asinfam_mh5(b: B128AsinFamW5, a: B128AsinFamW5) -> B128AsinFamW5
+  var a4b0 = b128_asinfam_mul(a: a.w4, b: b.w0)
+  var o0 = b128_asinfam_hi(u: a4b0)
+  var a3b1 = b128_asinfam_mul(a: a.w3, b: b.w1)
+  var a4b1 = b128_asinfam_mul(a: a.w4, b: b.w1)
+  var r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b1), b: b128_asinfam_hi(u: a3b1), c: 0_u64)
+  var t = r.item0
+  var c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  var c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4b1), b: 0_u64, c: c0)
+  var o1 = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o1, b: 0_u64, c: c1)
+  o1 = r.item0
+  c1 = r.item1
+
+  var a2b2 = b128_asinfam_mul(a: a.w2, b: b.w2)
+  var a3b2 = b128_asinfam_mul(a: a.w3, b: b.w2)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b2), b: b128_asinfam_hi(u: a2b2), c: 0_u64)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  c1 = r.item1
+  var a4b2 = b128_asinfam_mul(a: a.w4, b: b.w2)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b2), b: b128_asinfam_hi(u: a3b2), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o1, b: t, c: c1)
+  o1 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4b2), b: 0_u64, c: c0)
+  var o2 = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o2, b: 0_u64, c: c1)
+  o2 = r.item0
+  c1 = r.item1
+
+  var a1b3 = b128_asinfam_mul(a: a.w1, b: b.w3)
+  var a2b3 = b128_asinfam_mul(a: a.w2, b: b.w3)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b3), b: b128_asinfam_hi(u: a1b3), c: 0_u64)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  c1 = r.item1
+  var a3b3 = b128_asinfam_mul(a: a.w3, b: b.w3)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b3), b: b128_asinfam_hi(u: a2b3), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o1, b: t, c: c1)
+  o1 = r.item0
+  c1 = r.item1
+  var a4b3 = b128_asinfam_mul(a: a.w4, b: b.w3)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b3), b: b128_asinfam_hi(u: a3b3), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o2, b: t, c: c1)
+  o2 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4b3), b: 0_u64, c: c0)
+  var o3 = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o3, b: 0_u64, c: c1)
+  o3 = r.item0
+  c1 = r.item1
+
+  var a0b4 = b128_asinfam_mul(a: a.w0, b: b.w4)
+  var a1b4 = b128_asinfam_mul(a: a.w1, b: b.w4)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b4), b: b128_asinfam_hi(u: a0b4), c: 0_u64)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  c1 = r.item1
+  var a2b4 = b128_asinfam_mul(a: a.w2, b: b.w4)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b4), b: b128_asinfam_hi(u: a1b4), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o1, b: t, c: c1)
+  o1 = r.item0
+  c1 = r.item1
+  var a3b4 = b128_asinfam_mul(a: a.w3, b: b.w4)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b4), b: b128_asinfam_hi(u: a2b4), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o2, b: t, c: c1)
+  o2 = r.item0
+  c1 = r.item1
+  var a4b4 = b128_asinfam_mul(a: a.w4, b: b.w4)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b4), b: b128_asinfam_hi(u: a3b4), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o3, b: t, c: c1)
+  o3 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4b4), b: 0_u64, c: c0)
+  var o4 = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o4, b: 0_u64, c: c1)
+  o4 = r.item0
+  return B128AsinFamW5(w0: o0, w1: o1, w2: o2, w3: o3, w4: o4)
+
+### High five words of the product of a two-word b and a five-word a (the C mhu5u2u5).
+secret routine b128_asinfam_mh5d(b0: U64, b1: U64, a: B128AsinFamW5) -> B128AsinFamW5
+  var a1b0 = b128_asinfam_mul(a: a.w1, b: b0)
+  var a2b0 = b128_asinfam_mul(a: a.w2, b: b0)
+  var a3b0 = b128_asinfam_mul(a: a.w3, b: b0)
+  var a4b0 = b128_asinfam_mul(a: a.w4, b: b0)
+  var r = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b0), b: b128_asinfam_hi(u: a1b0), c: 0_u64)
+  var o0 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b0), b: b128_asinfam_hi(u: a2b0), c: r.item1)
+  var o1 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b0), b: b128_asinfam_hi(u: a3b0), c: r.item1)
+  var o2 = r.item0
+  r = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a4b0), c: r.item1)
+  var o3 = r.item0
+
+  var a0b1 = b128_asinfam_mul(a: a.w0, b: b1)
+  var a1b1 = b128_asinfam_mul(a: a.w1, b: b1)
+  var a2b1 = b128_asinfam_mul(a: a.w2, b: b1)
+  var a3b1 = b128_asinfam_mul(a: a.w3, b: b1)
+  var a4b1 = b128_asinfam_mul(a: a.w4, b: b1)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b1), b: b128_asinfam_hi(u: a0b1), c: 0_u64)
+  var t = r.item0
+  var c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  var c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b1), b: b128_asinfam_hi(u: a1b1), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o1, b: t, c: c1)
+  o1 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b1), b: b128_asinfam_hi(u: a2b1), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o2, b: t, c: c1)
+  o2 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b1), b: b128_asinfam_hi(u: a3b1), c: c0)
+  t = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: o3, b: t, c: c1)
+  o3 = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a4b1), c: c0)
+  t = r.item0
+  r = b128_asinfam_ac(a: 0_u64, b: t, c: c1)
+  return B128AsinFamW5(w0: o0, w1: o1, w2: o2, w3: o3, w4: r.item0)
+
+### High five words of the product of a word b0 and a five-word a (the C mhu5u1u5).
+secret routine b128_asinfam_mh5w(b0: U64, a: B128AsinFamW5) -> B128AsinFamW5
+  var a0b0 = b128_asinfam_mul(a: a.w0, b: b0)
+  var a1b0 = b128_asinfam_mul(a: a.w1, b: b0)
+  var a2b0 = b128_asinfam_mul(a: a.w2, b: b0)
+  var a3b0 = b128_asinfam_mul(a: a.w3, b: b0)
+  var a4b0 = b128_asinfam_mul(a: a.w4, b: b0)
+  var r0 = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b0), b: b128_asinfam_hi(u: a0b0), c: 0_u64)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b0), b: b128_asinfam_hi(u: a1b0), c: r0.item1)
+  var r2 = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b0), b: b128_asinfam_hi(u: a2b0), c: r1.item1)
+  var r3 = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b0), b: b128_asinfam_hi(u: a3b0), c: r2.item1)
+  var r4 = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a4b0), c: r3.item1)
+  return B128AsinFamW5(w0: r0.item0, w1: r1.item0, w2: r2.item0, w3: r3.item0, w4: r4.item0)
+
+### The full product of a word b0 and a four-word a (the C mu5u1u4).
+secret routine b128_asinfam_mu5(b0: U64, a0: U64, a1: U64, a2: U64, a3: U64) -> B128AsinFamW5
+  var a0b0 = b128_asinfam_mul(a: a0, b: b0)
+  var a1b0 = b128_asinfam_mul(a: a1, b: b0)
+  var a2b0 = b128_asinfam_mul(a: a2, b: b0)
+  var a3b0 = b128_asinfam_mul(a: a3, b: b0)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b0), b: b128_asinfam_hi(u: a0b0), c: 0_u64)
+  var r2 = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b0), b: b128_asinfam_hi(u: a1b0), c: r1.item1)
+  var r3 = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b0), b: b128_asinfam_hi(u: a2b0), c: r2.item1)
+  var r4 = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a3b0), c: r3.item1)
+  return B128AsinFamW5(w0: b128_asinfam_lo(u: a0b0), w1: r1.item0, w2: r2.item0, w3: r3.item0, w4: r4.item0)
+
+### The full product of a word b0 and a five-word a (the C mu6u1u5).
+secret routine b128_asinfam_mu6(b0: U64, a: B128AsinFamW5) -> B128AsinFamW6
+  var a0b0 = b128_asinfam_mul(a: a.w0, b: b0)
+  var a1b0 = b128_asinfam_mul(a: a.w1, b: b0)
+  var a2b0 = b128_asinfam_mul(a: a.w2, b: b0)
+  var a3b0 = b128_asinfam_mul(a: a.w3, b: b0)
+  var a4b0 = b128_asinfam_mul(a: a.w4, b: b0)
+  var r1 = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b0), b: b128_asinfam_hi(u: a0b0), c: 0_u64)
+  var r2 = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b0), b: b128_asinfam_hi(u: a1b0), c: r1.item1)
+  var r3 = b128_asinfam_ac(a: b128_asinfam_lo(u: a3b0), b: b128_asinfam_hi(u: a2b0), c: r2.item1)
+  var r4 = b128_asinfam_ac(a: b128_asinfam_lo(u: a4b0), b: b128_asinfam_hi(u: a3b0), c: r3.item1)
+  var r5 = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a4b0), c: r4.item1)
+  return B128AsinFamW6(w0: b128_asinfam_lo(u: a0b0), w1: r1.item0, w2: r2.item0, w3: r3.item0, w4: r4.item0, w5: r5.item0)
+
+### Approximate high five words of the square of a five-word value (the C sqrhu5).
+secret routine b128_asinfam_sqrh5(a: B128AsinFamW5) -> B128AsinFamW5
+  var a4a0 = b128_asinfam_mul(a: a.w4, b: a.w0)
+  var a3a1 = b128_asinfam_mul(a: a.w3, b: a.w1)
+  var r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4a0), b: b128_asinfam_hi(u: a3a1), c: 0_u64)
+  var o0 = r.item0
+  var c0 = r.item1
+  var o1 = c0
+  var a4a1 = b128_asinfam_mul(a: a.w4, b: a.w1)
+  var a3a2 = b128_asinfam_mul(a: a.w3, b: a.w2)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4a1), b: b128_asinfam_lo(u: a3a2), c: 0_u64)
+  var t = r.item0
+  var c1 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: c0)
+  o0 = r.item0
+  c0 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a4a1), b: b128_asinfam_hi(u: a3a2), c: c1)
+  t = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: o1, b: t, c: c0)
+  o1 = r.item0
+  c0 = r.item1
+  var a4a2 = b128_asinfam_mul(a: a.w4, b: a.w2)
+  r = b128_asinfam_ac(a: o1, b: b128_asinfam_lo(u: a4a2), c: c0)
+  o1 = r.item0
+  c0 = r.item1
+  var a4a3 = b128_asinfam_mul(a: a.w4, b: a.w3)
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a4a3), b: b128_asinfam_hi(u: a4a2), c: c1)
+  t = r.item0
+  c1 = r.item1
+  r = b128_asinfam_ac(a: 0_u64, b: t, c: c0)
+  var o2 = r.item0
+  r = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a4a3), c: c1)
+  var o3 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: o0, c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: o1, c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: o2, c: r.item1)
+  o2 = r.item0
+  r = b128_asinfam_ac(a: o3, b: o3, c: r.item1)
+  o3 = r.item0
+  var o4 = r.item1
+
+  var a2a2 = b128_asinfam_mul(a: a.w2, b: a.w2)
+  var a3a3 = b128_asinfam_mul(a: a.w3, b: a.w3)
+  var a4a4 = b128_asinfam_mul(a: a.w4, b: a.w4)
+  var q0 = b128_asinfam_ac(a: o0, b: b128_asinfam_hi(u: a2a2), c: 0_u64)
+  var q1 = b128_asinfam_ac(a: o1, b: b128_asinfam_lo(u: a3a3), c: q0.item1)
+  var q2 = b128_asinfam_ac(a: o2, b: b128_asinfam_hi(u: a3a3), c: q1.item1)
+  var q3 = b128_asinfam_ac(a: o3, b: b128_asinfam_lo(u: a4a4), c: q2.item1)
+  var q4 = b128_asinfam_ac(a: o4, b: b128_asinfam_hi(u: a4a4), c: q3.item1)
+  return B128AsinFamW5(w0: q0.item0, w1: q1.item0, w2: q2.item0, w3: q3.item0, w4: q4.item0)
+
+### Approximate high four words of the square of a four-word value (the C sqrhu4).
+secret routine b128_asinfam_sqrh4(a0: U64, a1: U64, a2: U64, a3: U64) -> (U64, U64, U64, U64)
+  var a2a1 = b128_asinfam_mul(a: a2, b: a1)
+  var a3a0 = b128_asinfam_mul(a: a3, b: a0)
+  var a3a1 = b128_asinfam_mul(a: a3, b: a1)
+  var a3a2 = b128_asinfam_mul(a: a3, b: a2)
+  var r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3a1), b: b128_asinfam_hi(u: a3a0), c: 0_u64)
+  var o0 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a3a2), b: b128_asinfam_hi(u: a3a1), c: r.item1)
+  var o1 = r.item0
+  r = b128_asinfam_ac(a: 0_u64, b: b128_asinfam_hi(u: a3a2), c: r.item1)
+  var o2 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: b128_asinfam_hi(u: a2a1), c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: 0_u64, c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: 0_u64, c: r.item1)
+  o2 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: o0, c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: o1, c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: o2, c: r.item1)
+  o2 = r.item0
+  var o3 = r.item1
+
+  var a2a2 = b128_asinfam_mul(a: a2, b: a2)
+  var a3a3 = b128_asinfam_mul(a: a3, b: a3)
+  var q0 = b128_asinfam_ac(a: o0, b: b128_asinfam_lo(u: a2a2), c: 0_u64)
+  var q1 = b128_asinfam_ac(a: o1, b: b128_asinfam_hi(u: a2a2), c: q0.item1)
+  var q2 = b128_asinfam_ac(a: o2, b: b128_asinfam_lo(u: a3a3), c: q1.item1)
+  var q3 = b128_asinfam_ac(a: o3, b: b128_asinfam_hi(u: a3a3), c: q2.item1)
+  return (q0.item0, q1.item0, q2.item0, q3.item0)
+
+### Approximate high two words of the square of a two-word value (the C sqrhu2).
+secret routine b128_asinfam_sqrh2(a0: U64, a1: U64) -> (U64, U64)
+  var a1a0 = b128_asinfam_mul(a: a1, b: a0)
+  var a1a1 = b128_asinfam_mul(a: a1, b: a1) +% (a1a0 >>> 63)
+  return (b128_asinfam_lo(u: a1a1), b128_asinfam_hi(u: a1a1))
+
+### Approximate high two words of the two-word product a*b (the C mhu2u2u2(o, b, a)).
+secret routine b128_asinfam_mh2(b0: U64, b1: U64, a0: U64, a1: U64) -> (U64, U64)
+  var a1b0 = b128_asinfam_mul(a: a1, b: b0)
+  var o0 = b128_asinfam_hi(u: a1b0)
+  var a0b1 = b128_asinfam_mul(a: a0, b: b1)
+  var a1b1 = b128_asinfam_mul(a: a1, b: b1)
+  var r = b128_asinfam_ac(a: b128_asinfam_lo(u: a1b1), b: b128_asinfam_hi(u: a0b1), c: 0_u64)
+  var t = r.item0
+  var c0 = r.item1
+  r = b128_asinfam_ac(a: o0, b: t, c: 0_u64)
+  o0 = r.item0
+  var c1 = r.item1
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a1b1), b: 0_u64, c: c0)
+  r = b128_asinfam_ac(a: r.item0, b: 0_u64, c: c1)
+  return (o0, r.item0)
+
+### Approximate high three words of the three-word product a*b (the C mhu3u3u3(o, b, a)).
+secret routine b128_asinfam_mh3(b0: U64, b1: U64, b2: U64, a0: U64, a1: U64, a2: U64) -> (U64, U64, U64)
+  var a1b1 = b128_asinfam_mul(a: a1, b: b1)
+  var a2b0 = b128_asinfam_mul(a: a2, b: b0)
+  var a0b2 = b128_asinfam_mul(a: a0, b: b2)
+  var a2b1 = b128_asinfam_mul(a: a2, b: b1)
+  var a1b2 = b128_asinfam_mul(a: a1, b: b2)
+  var a2b2 = b128_asinfam_mul(a: a2, b: b2)
+  a2b1 = a2b1 +% (a2b0 >>> 64)
+  a1b2 = a1b2 +% (a0b2 >>> 64)
+  var r = b128_asinfam_ac(a: b128_asinfam_hi(u: a1b1), b: b128_asinfam_lo(u: a2b1), c: 0_u64)
+  var o0 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_lo(u: a2b2), b: b128_asinfam_hi(u: a2b1), c: r.item1)
+  var o1 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a2b2), b: 0_u64, c: r.item1)
+  var o2 = r.item0
+  var q0 = b128_asinfam_ac(a: o0, b: b128_asinfam_lo(u: a1b2), c: 0_u64)
+  var q1 = b128_asinfam_ac(a: o1, b: b128_asinfam_hi(u: a1b2), c: q0.item1)
+  var q2 = b128_asinfam_ac(a: o2, b: 0_u64, c: q1.item1)
+  return (q0.item0, q1.item0, q2.item0)
+
+### Approximate high four words of the four-word product a*b (the C mhu4u4u4(o, b, a)).
+secret routine b128_asinfam_mh4(b0: U64, b1: U64, b2: U64, b3: U64, a0: U64, a1: U64, a2: U64, a3: U64) -> (U64, U64, U64, U64)
+  var a3b0 = b128_asinfam_mul(a: a3, b: b0)
+  var a3b2 = b128_asinfam_mul(a: a3, b: b2)
+  var a2b1 = b128_asinfam_mul(a: a2, b: b1)
+  var a3b1 = b128_asinfam_mul(a: a3, b: b1)
+  var a1b2 = b128_asinfam_mul(a: a1, b: b2)
+  var a2b2 = b128_asinfam_mul(a: a2, b: b2)
+  var a0b3 = b128_asinfam_mul(a: a0, b: b3)
+  var a1b3 = b128_asinfam_mul(a: a1, b: b3)
+  var a2b3 = b128_asinfam_mul(a: a2, b: b3)
+  var a3b3 = b128_asinfam_mul(a: a3, b: b3)
+  a3b1 = a3b1 +% (a2b1 >>> 64)
+  a2b2 = a2b2 +% (a1b2 >>> 64)
+
+  var r = b128_asinfam_ac(a: b128_asinfam_hi(u: a0b3), b: b128_asinfam_lo(u: a1b3), c: 0_u64)
+  var o0 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a1b3), b: b128_asinfam_lo(u: a2b3), c: r.item1)
+  var o1 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a2b3), b: b128_asinfam_lo(u: a3b3), c: r.item1)
+  var o2 = r.item0
+  r = b128_asinfam_ac(a: b128_asinfam_hi(u: a3b3), b: 0_u64, c: r.item1)
+  var o3 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: b128_asinfam_hi(u: a3b0), c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: b128_asinfam_lo(u: a3b2), c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: b128_asinfam_hi(u: a3b2), c: r.item1)
+  o2 = r.item0
+  r = b128_asinfam_ac(a: o3, b: 0_u64, c: r.item1)
+  o3 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: b128_asinfam_lo(u: a3b1), c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: b128_asinfam_hi(u: a3b1), c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: 0_u64, c: r.item1)
+  o2 = r.item0
+  r = b128_asinfam_ac(a: o3, b: 0_u64, c: r.item1)
+  o3 = r.item0
+
+  r = b128_asinfam_ac(a: o0, b: b128_asinfam_lo(u: a2b2), c: 0_u64)
+  o0 = r.item0
+  r = b128_asinfam_ac(a: o1, b: b128_asinfam_hi(u: a2b2), c: r.item1)
+  o1 = r.item0
+  r = b128_asinfam_ac(a: o2, b: 0_u64, c: r.item1)
+  o2 = r.item0
+  r = b128_asinfam_ac(a: o3, b: 0_u64, c: r.item1)
+  o3 = r.item0
+  return (o0, o1, o2, o3)
+
+# ============================================================================
+# Accurate path: sqrt(1 - x^2) and the polynomial
+# ============================================================================
+
+### sqrt(1 - x^2) to five words for the mantissa words x (shifted left by 15) and ex = 0x3fff - exponent:
+### returns the five words and the exponent e of 1 - x^2 (the C getcos).
+secret routine b128_asinfam_getcos(ex: S64, x0: U64, x1: U64) -> (B128AsinFamW5, S64)
+  var q = b128_asinfam_omx2(s: 2 *% (ex -% 1), x0: x0, x1: x1, mode: 2_u64)
+  var e = q.item4
+  var eo = e & 1
+  var rx = (q.item3 << 1) | (q.item2 >>> 63)
+  var r = b128_asinfam_rsqrt9(m: rx)
+  r = b128_asinfam_mhuu(a: r, b: b128_asinfam_rsqrt2(e: e))
+  var sq = b128_asinfam_mu5(b0: r, a0: q.item0, a1: q.item1, a2: q.item2, a3: q.item3)
+  var h6 = b128_asinfam_shrn6(a: b128_asinfam_mu6(b0: r, a: sq), k: 2)
+  var msk = 0_u64
+  if (h6.w4 >>> 63) != 0_u64
+    msk = 0xFFFFFFFFFFFFFFFF_u64
+  var h0 = h6.w0 ^ msk
+  var h1 = h6.w1 ^ msk
+  var h2 = h6.w2 ^ msk
+  var h3 = h6.w3 ^ msk
+  var h4 = h6.w4 ^ msk
+  var s = b128_asinfam_sqrh4(a0: h1, a1: h2, a2: h3, a3: h4)
+  var h4s = b128_asinfam_sqrh2(a0: s.item2, a1: s.item3)
+  var v = b128_asinfam_mh3(b0: h2, b1: h3, b2: h4, a0: s.item1, a1: s.item2, a2: s.item3)
+  # h2s *= 1.5 (the C mu4x3)
+  var m0 = b128_asinfam_ac(a: s.item0, b: (s.item1 << 63) | (s.item0 >>> 1), c: 0_u64)
+  var m1 = b128_asinfam_ac(a: s.item1, b: (s.item2 << 63) | (s.item1 >>> 1), c: m0.item1)
+  var m2 = b128_asinfam_ac(a: s.item2, b: (s.item3 << 63) | (s.item2 >>> 1), c: m1.item1)
+  var m3 = b128_asinfam_ac(a: s.item3, b: s.item3 >>> 1, c: m2.item1)
+  # h3s *= 1.25 (the C mu3x5)
+  var n0 = b128_asinfam_ac(a: v.item0, b: (v.item1 << 62) | (v.item0 >>> 2), c: 0_u64)
+  var n1 = b128_asinfam_ac(a: v.item1, b: (v.item2 << 62) | (v.item1 >>> 2), c: n0.item1)
+  var n2 = b128_asinfam_ac(a: v.item2, b: v.item2 >>> 2, c: n1.item1)
+  var t4u = b128_asinfam_join(hi: h4s.item1, lo: h4s.item0)
+  t4u = t4u +% ((t4u *% 3_u128) >>> 5)
+  var h2s = b128_asinfam_shrn5(a: B128AsinFamW5(w0: 0_u64, w1: m0.item0, w2: m1.item0, w3: m2.item0, w4: m3.item0), k: 62 -% eo)
+  var h3s = b128_asinfam_shrn5(a: B128AsinFamW5(w0: 0_u64, w1: 0_u64, w2: n0.item0, w3: n1.item0, w4: n2.item0), k: 59 +% 64 -% 2 *% eo)
+  var t4 = b128_asinfam_shrn5(a: B128AsinFamW5(w0: 0_u64, w1: 0_u64, w2: 0_u64, w3: b128_asinfam_lo(u: t4u), w4: b128_asinfam_hi(u: t4u)), k: 56 +% 128 -% 3 *% eo)
+  var h = B128AsinFamW5(w0: h0, w1: h1, w2: h2, w3: h3, w4: h4)
+  if msk != 0_u64
+    h = b128_asinfam_add5(a: h, b: h2s)
+    h = b128_asinfam_add5(a: h, b: h3s)
+    h = b128_asinfam_add5(a: h, b: t4)
+  else
+    h = b128_asinfam_sub5(a: h, b: h2s)
+    h = b128_asinfam_add5(a: h, b: h3s)
+    h = b128_asinfam_sub5(a: h, b: t4)
+  var g6 = b128_asinfam_mu6(b0: r, a: h)
+  var x2l = B128AsinFamW5(w0: 0_u64, w1: q.item0, w2: q.item1, w3: q.item2, w4: q.item3)
+  var hh = b128_asinfam_mh5(b: B128AsinFamW5(w0: g6.w1, w1: g6.w2, w2: g6.w3, w3: g6.w4, w4: g6.w5), a: x2l)
+  hh = b128_asinfam_shrn5(a: hh, k: 62 -% eo)
+  if msk == 0_u64
+    sq = b128_asinfam_sub5(a: sq, b: hh)
+  else
+    sq = b128_asinfam_add5(a: sq, b: hh)
+  return (sq, e)
+
+### The accurate path's polynomial P(t^2) to five words (the C evalpoly).
+secret routine b128_asinfam_evalpoly(t2: B128AsinFamW5) -> B128AsinFamW5
+  var f0 = b128_asinfam_mhuu(a: t2.w4, b: B128_ASINFAM_CP[0])
+  f0 = B128_ASINFAM_CP[1] +% f0
+  var f1 = B128_ASINFAM_CP[2]
+  var k = 3_u64
+  var i = 0_u64
+  while i < 6_u64
+    var p2 = b128_asinfam_mh2(b0: f0, b1: f1, a0: t2.w3, a1: t2.w4)
+    var s2 = b128_asinfam_ac(a: B128_ASINFAM_CP[k], b: p2.item0, c: 0_u64)
+    var s2b = b128_asinfam_ac(a: B128_ASINFAM_CP[k +% 1_u64], b: p2.item1, c: s2.item1)
+    f0 = s2.item0
+    f1 = s2b.item0
+    k = k +% 2_u64
+    i = i +% 1_u64
+  var f2 = B128_ASINFAM_CP[15]
+  k = 16_u64
+  i = 0_u64
+  while i < 5_u64
+    var p3 = b128_asinfam_mh3(b0: f0, b1: f1, b2: f2, a0: t2.w2, a1: t2.w3, a2: t2.w4)
+    var s3 = b128_asinfam_add3(a0: B128_ASINFAM_CP[k], a1: B128_ASINFAM_CP[k +% 1_u64], a2: B128_ASINFAM_CP[k +% 2_u64], b0: p3.item0, b1: p3.item1, b2: p3.item2)
+    f0 = s3.item0
+    f1 = s3.item1
+    f2 = s3.item2
+    k = k +% 3_u64
+    i = i +% 1_u64
+  var f3 = B128_ASINFAM_CP[31]
+  k = 32_u64
+  i = 0_u64
+  while i < 6_u64
+    var p4 = b128_asinfam_mh4(b0: f0, b1: f1, b2: f2, b3: f3, a0: t2.w1, a1: t2.w2, a2: t2.w3, a3: t2.w4)
+    var q0 = b128_asinfam_ac(a: B128_ASINFAM_CP[k], b: p4.item0, c: 0_u64)
+    var q1 = b128_asinfam_ac(a: B128_ASINFAM_CP[k +% 1_u64], b: p4.item1, c: q0.item1)
+    var q2 = b128_asinfam_ac(a: B128_ASINFAM_CP[k +% 2_u64], b: p4.item2, c: q1.item1)
+    var q3 = b128_asinfam_ac(a: B128_ASINFAM_CP[k +% 3_u64], b: p4.item3, c: q2.item1)
+    f0 = q0.item0
+    f1 = q1.item0
+    f2 = q2.item0
+    f3 = q3.item0
+    k = k +% 4_u64
+    i = i +% 1_u64
+  var f = B128AsinFamW5(w0: f0, w1: f1, w2: f2, w3: f3, w4: B128_ASINFAM_CP[56])
+  k = 57_u64
+  i = 0_u64
+  while i < 5_u64
+    var p5 = b128_asinfam_mh5(b: f, a: t2)
+    var ck = B128AsinFamW5(w0: B128_ASINFAM_CP[k], w1: B128_ASINFAM_CP[k +% 1_u64], w2: B128_ASINFAM_CP[k +% 2_u64], w3: B128_ASINFAM_CP[k +% 3_u64], w4: B128_ASINFAM_CP[k +% 4_u64])
+    f = b128_asinfam_add5(a: ck, b: p5)
+    k = k +% 5_u64
+    i = i +% 1_u64
+  return f
+
+# ============================================================================
+# Tables
+# ============================================================================
+# B128_ASINFAM_RSQRT: 64 rows of 4 coefficients of the cubic 1/sqrt approximation (rsqrt9)
+# B128_ASINFAM_STH: rounded sin(pi/2/72*j) in the format of the range reduction
+# B128_ASINFAM_PTH: rounded sin(pi/2/72*j)
+# B128_ASINFAM_CTH: sqrt(1 - PTH[j]^2), five words per row
+# B128_ASINFAM_IND: the table index of the range reduction
+# B128_ASINFAM_C: the fast polynomial, two words per coefficient
+# B128_ASINFAM_CP: the accurate polynomial, coefficients of growing width packed back to back
+secret preset B128_ASINFAM_RSQRT: Array[U64, 256] = [
+  0x00000000FFFFFFFF_u64, 0x00000000FFFFF780_u64, 0x00000000BFF55815_u64, 0x000000009BB5B6E7_u64,
+  0x00000000FC0BD889_u64, 0x00000000FA1D6E7D_u64, 0x00000000B8A95A89_u64, 0x00000000938BF8F0_u64,
+  0x00000000F82EC882_u64, 0x00000000F473BEA9_u64, 0x00000000B1BF4705_u64, 0x000000008BED0079_u64,
+  0x00000000F467F280_u64, 0x00000000EEFFF2A1_u64, 0x00000000AB309D4A_u64, 0x0000000084CDB431_u64,
+  0x00000000F0B6848C_u64, 0x00000000E9BF46F4_u64, 0x00000000A4F76232_u64, 0x000000007E24037B_u64,
+  0x00000000ED19B75E_u64, 0x00000000E4AF2628_u64, 0x000000009F0E1340_u64, 0x0000000077E6CA62_u64,
+  0x00000000E990CDAD_u64, 0x00000000DFCD2521_u64, 0x00000000996F9B96_u64, 0x00000000720DB8DF_u64,
+  0x00000000E61B138E_u64, 0x00000000DB16FFDE_u64, 0x0000000094174A00_u64, 0x000000006C913CFF_u64,
+  0x00000000E2B7DDDF_u64, 0x00000000D68A967B_u64, 0x000000008F00C812_u64, 0x00000000676A6F92_u64,
+  0x00000000DF6689B7_u64, 0x00000000D225EA80_u64, 0x000000008A281226_u64, 0x0000000062930308_u64,
+  0x00000000DC267BEA_u64, 0x00000000CDE71C63_u64, 0x000000008589702C_u64, 0x000000005E05343E_u64,
+  0x00000000D8F7208E_u64, 0x00000000C9CC6948_u64, 0x0000000081216F2E_u64, 0x0000000059BBBCF8_u64,
+  0x00000000D5D7EA91_u64, 0x00000000C5D428EE_u64, 0x000000007CECDB76_u64, 0x0000000055B1C7D6_u64,
+  0x00000000D2C8534E_u64, 0x00000000C1FCCBC9_u64, 0x0000000078E8BB45_u64, 0x0000000051E2E592_u64,
+  0x00000000CFC7DA32_u64, 0x00000000BE44D94A_u64, 0x0000000075124A0A_u64, 0x000000004E4B0369_u64,
+  0x00000000CCD6045F_u64, 0x00000000BAAAEE41_u64, 0x000000007166F40F_u64, 0x000000004AE66284_u64,
+  0x00000000C9F25C5C_u64, 0x00000000B72DBB69_u64, 0x000000006DE45288_u64, 0x0000000047B19045_u64,
+  0x00000000C71C71C7_u64, 0x00000000B3CC040F_u64, 0x000000006A882804_u64, 0x0000000044A95F5F_u64,
+  0x00000000C453D90F_u64, 0x00000000B0849CD4_u64, 0x0000000067505D2A_u64, 0x0000000041CAE1A0_u64,
+  0x00000000C1982B2E_u64, 0x00000000AD566A85_u64, 0x00000000643AFDC8_u64, 0x000000003F13625C_u64,
+  0x00000000BEE9056F_u64, 0x00000000AA406113_u64, 0x000000006146361F_u64, 0x000000003C806169_u64,
+  0x00000000BC46092E_u64, 0x00000000A7418293_u64, 0x000000005E70506D_u64, 0x000000003A0F8E8E_u64,
+  0x00000000B9AEDBA5_u64, 0x00000000A458DE58_u64, 0x000000005BB7B2B1_u64, 0x0000000037BEC572_u64,
+  0x00000000B72325B7_u64, 0x00000000A1859022_u64, 0x00000000591ADC9A_u64, 0x00000000358C09E2_u64,
+  0x00000000B4A293C2_u64, 0x000000009EC6BF52_u64, 0x00000000569865A7_u64, 0x0000000033758476_u64,
+  0x00000000B22CD56D_u64, 0x000000009C1B9E36_u64, 0x00000000542EFB6A_u64, 0x0000000031797F8A_u64,
+  0x00000000AFC19D86_u64, 0x000000009983695C_u64, 0x0000000051DD5FFB_u64, 0x000000002F96647A_u64,
+  0x00000000AD60A1D1_u64, 0x0000000096FD66F7_u64, 0x000000004FA2687C_u64, 0x000000002DCAB91F_u64,
+  0x00000000AB099AE9_u64, 0x000000009488E64B_u64, 0x000000004D7CFBC9_u64, 0x000000002C151D8A_u64,
+  0x00000000A8BC441A_u64, 0x0000000092253F20_u64, 0x000000004B6C1139_u64, 0x000000002A7449EF_u64,
+  0x00000000A6785B42_u64, 0x000000008FD1D14A_u64, 0x00000000496EAF82_u64, 0x0000000028E70CC3_u64,
+  0x00000000A43DA0AE_u64, 0x000000008D8E042A_u64, 0x000000004783EBA7_u64, 0x00000000276C4900_u64,
+  0x00000000A20BD701_u64, 0x000000008B594648_u64, 0x0000000045AAE80A_u64, 0x000000002602F493_u64,
+  0x000000009FE2C315_u64, 0x0000000089330CE4_u64, 0x0000000043E2D382_u64, 0x0000000024AA16EC_u64,
+  0x000000009DC22BE4_u64, 0x00000000871AD399_u64, 0x00000000422AE88C_u64, 0x000000002360C7AF_u64,
+  0x000000009BA9DA6C_u64, 0x0000000085101C05_u64, 0x0000000040826C88_u64, 0x0000000022262D7B_u64,
+  0x0000000099999999_u64, 0x0000000083126D70_u64, 0x000000003EE8AF07_u64, 0x0000000020F97CD2_u64,
+  0x0000000097913630_u64, 0x0000000081215480_u64, 0x000000003D5D0922_u64, 0x000000001FD9F714_u64,
+  0x0000000095907EB8_u64, 0x000000007F3C62EF_u64, 0x000000003BDEDCE0_u64, 0x000000001EC6E994_u64,
+  0x0000000093974369_u64, 0x000000007D632F45_u64, 0x000000003A6D94A9_u64, 0x000000001DBFACBB_u64,
+  0x0000000091A55615_u64, 0x000000007B955498_u64, 0x000000003908A2BE_u64, 0x000000001CC3A33B_u64,
+  0x000000008FBA8A1C_u64, 0x0000000079D2724E_u64, 0x0000000037AF80BF_u64, 0x000000001BD23960_u64,
+  0x000000008DD6B456_u64, 0x00000000781A2BE4_u64, 0x000000003661AF39_u64, 0x000000001AEAE458_u64,
+  0x000000008BF9AB07_u64, 0x00000000766C28BA_u64, 0x00000000351EB539_u64, 0x000000001A0D21A2_u64,
+  0x000000008A2345CC_u64, 0x0000000074C813DD_u64, 0x0000000033E61FEB_u64, 0x0000000019387676_u64,
+  0x0000000088535D90_u64, 0x00000000732D9BDC_u64, 0x0000000032B7823A_u64, 0x00000000186C6F3E_u64,
+  0x000000008689CC7E_u64, 0x00000000719C7297_u64, 0x000000003192747D_u64, 0x0000000017A89F21_u64,
+  0x0000000084C66DF1_u64, 0x0000000070144D19_u64, 0x0000000030769424_u64, 0x0000000016EC9F89_u64,
+  0x0000000083091E6A_u64, 0x000000006E94E36C_u64, 0x000000002F63836F_u64, 0x0000000016380FBF_u64,
+  0x000000008151BB87_u64, 0x000000006D1DF079_u64, 0x000000002E58E925_u64, 0x00000000158A9484_u64,
+  0x000000007FA023F1_u64, 0x000000006BAF31DE_u64, 0x000000002D567053_u64, 0x0000000014E3D7BA_u64,
+  0x000000007DF43758_u64, 0x000000006A4867D3_u64, 0x000000002C5BC811_u64, 0x000000001443880E_u64,
+  0x000000007C4DD664_u64, 0x0000000068E95508_u64, 0x000000002B68A346_u64, 0x0000000013A958AB_u64,
+  0x000000007AACE2B0_u64, 0x000000006791BE86_u64, 0x000000002A7CB871_u64, 0x00000000131500EE_u64,
+  0x0000000079113EBC_u64, 0x0000000066416B95_u64, 0x000000002997C17A_u64, 0x0000000012863C29_u64,
+  0x00000000777ACDE8_u64, 0x0000000064F825A1_u64, 0x0000000028B97B82_u64, 0x0000000011FCC95C_u64,
+  0x0000000075E9746A_u64, 0x0000000063B5B822_u64, 0x0000000027E1A6B4_u64, 0x0000000011786B03_u64,
+  0x00000000745D1746_u64, 0x000000006279F081_u64, 0x000000002710061D_u64, 0x0000000010F8E6DA_u64,
+  0x0000000072D59C46_u64, 0x0000000061449E06_u64, 0x0000000026445F86_u64, 0x00000000107E05AC_u64,
+  0x000000007152E9F4_u64, 0x00000000601591BE_u64, 0x00000000257E7B4D_u64, 0x0000000010079327_u64,
+  0x000000006FD4E793_u64, 0x000000005EEC9E6B_u64, 0x0000000024BE2445_u64, 0x000000000F955DA9_u64,
+  0x000000006E5B7D16_u64, 0x000000005DC9986E_u64, 0x0000000024032795_u64, 0x000000000F273620_u64,
+  0x000000006CE6931D_u64, 0x000000005CAC55B7_u64, 0x00000000234D5496_u64, 0x000000000EBCEFDB_u64,
+  0x000000006B7612EC_u64, 0x000000005B94ADB2_u64, 0x00000000229C7CBC_u64, 0x000000000E56606E_u64]
+secret preset B128_ASINFAM_STH: Array[S64, 71] = [
+  11476_s64, 9429_s64, 8096_s64, 7384_s64, 6672_s64, 6053_s64, 5699_s64, 5346_s64, 4995_s64, 4645_s64,
+  4297_s64, 4023_s64, 3851_s64, 3680_s64, 3510_s64, 3342_s64, 3174_s64, 3009_s64, 2844_s64, 2681_s64,
+  2520_s64, 2361_s64, 2203_s64, 2048_s64, 1894_s64, 1742_s64, 1592_s64, 1445_s64, 1299_s64, 1157_s64,
+  1016_s64, 878_s64, 742_s64, 609_s64, 479_s64, 351_s64, 226_s64, 104_s64, -31_s64, -263_s64,
+  -490_s64, -711_s64, -925_s64, -1133_s64, -1335_s64, -1531_s64, -1719_s64, -1901_s64, -2105_s64, -2442_s64,
+  -2765_s64, -3074_s64, -3369_s64, -3650_s64, -3917_s64, -4240_s64, -4715_s64, -5159_s64, -5574_s64, -5959_s64,
+  -6484_s64, -7134_s64, -7722_s64, -8306_s64, -9238_s64, -10046_s64, -11220_s64, -12394_s64, -14139_s64, -16488_s64,
+  -20584_s64]
+secret preset B128_ASINFAM_PTH: Array[U64, 72] = [
+  0x0000000000000000_u64, 0x000000000000B2C0_u64, 0x0000000000016560_u64, 0x0000000000021800_u64,
+  0x000000000002CA00_u64, 0x0000000000037C00_u64, 0x0000000000042D80_u64, 0x000000000004DE80_u64,
+  0x0000000000058F00_u64, 0x0000000000063E80_u64, 0x000000000006ED80_u64, 0x0000000000079B80_u64,
+  0x0000000000084900_u64, 0x000000000008F500_u64, 0x000000000009A000_u64, 0x00000000000A4A00_u64,
+  0x00000000000AF200_u64, 0x00000000000B9A00_u64, 0x00000000000C3F00_u64, 0x00000000000CE400_u64,
+  0x00000000000D8700_u64, 0x00000000000E2800_u64, 0x00000000000EC700_u64, 0x00000000000F6500_u64,
+  0x0000000000100000_u64, 0x0000000000109A00_u64, 0x0000000000113200_u64, 0x000000000011C800_u64,
+  0x0000000000125B00_u64, 0x000000000012ED00_u64, 0x0000000000137B00_u64, 0x0000000000140800_u64,
+  0x0000000000149200_u64, 0x0000000000151A00_u64, 0x0000000000159F00_u64, 0x0000000000162100_u64,
+  0x000000000016A100_u64, 0x0000000000171E00_u64, 0x0000000000179800_u64, 0x0000000000180F80_u64,
+  0x0000000000188380_u64, 0x000000000018F500_u64, 0x0000000000196380_u64, 0x000000000019CE80_u64,
+  0x00000000001A3680_u64, 0x00000000001A9B80_u64, 0x00000000001AFD80_u64, 0x00000000001B5B80_u64,
+  0x00000000001BB680_u64, 0x00000000001C0E40_u64, 0x00000000001C6280_u64, 0x00000000001CB340_u64,
+  0x00000000001D0080_u64, 0x00000000001D4A40_u64, 0x00000000001D9080_u64, 0x00000000001DD340_u64,
+  0x00000000001E1200_u64, 0x00000000001E4D60_u64, 0x00000000001E84E0_u64, 0x00000000001EB8C0_u64,
+  0x00000000001EE8E0_u64, 0x00000000001F1540_u64, 0x00000000001F3DE0_u64, 0x00000000001F62A0_u64,
+  0x00000000001F8390_u64, 0x00000000001FA0B0_u64, 0x00000000001FB9F0_u64, 0x00000000001FCF50_u64,
+  0x00000000001FE0D4_u64, 0x00000000001FEE76_u64, 0x00000000001FF834_u64, 0x00000000001FFE0D_u64]
+secret preset B128_ASINFAM_CTH: Array[U64, 360] = [
+  0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64,
+  0x64D23D92F9EA2771_u64, 0x6D047DB3A6E206A7_u64, 0x2953C428C9D7BC56_u64, 0xFB0F1838D5A3A8DA_u64, 0xFFF06594451D279D_u64,
+  0xE3080AA3BD169D0C_u64, 0x4054EAE9456537DB_u64, 0x9E5833EAE773BC87_u64, 0x6F49CCB466446B89_u64, 0xFFC19BC9271A05B3_u64,
+  0x00912C8144374C85_u64, 0x309A44DDAE7556CE_u64, 0xC319285201C58B56_u64, 0x3A246E54BEB8DAC9_u64, 0xFF73917B77AA5C47_u64,
+  0x6A7360619E7EDB23_u64, 0x0B11B912DE529986_u64, 0x5A6995A8CC7D5EAC_u64, 0x552A6D7261223CC4_u64, 0xFF069A0439CBE651_u64,
+  0x238522EA64680061_u64, 0xF079215EBCD5CA36_u64, 0x290DE5267799873E_u64, 0xCAB4F035A6BFA060_u64, 0xFE7A55701A8697B0_u64,
+  0x7A92124309B60EF2_u64, 0x4B9DD14818169EFC_u64, 0x040BA2EDCA526F4E_u64, 0xAC4772D0D4932B9B_u64, 0xFDCF16B94B0B442E_u64,
+  0x30FF410C35A4B64D_u64, 0xD1D820652A9BC4C6_u64, 0x6D055DC0A4C09600_u64, 0xB4AAB1B03D022116_u64, 0xFD04E2530BCBD671_u64,
+  0x03AEDBA8702F81C3_u64, 0x96DA5AF0D3EA2F8B_u64, 0xCA571FB2CBDEE5B9_u64, 0x17C0BD0E66183953_u64, 0xFC1BB125286C39D8_u64,
+  0xFB91ABAEBC934604_u64, 0xCE94D1434F07A0A1_u64, 0x068284240CEEAE19_u64, 0x5E9A55955F4B097F_u64, 0xFB143C17BDCC996D_u64,
+  0xAB794690D17636D8_u64, 0xC8E308F9BD76C0E2_u64, 0x15FDDD7233C65EED_u64, 0xDB301A162CF8115D_u64, 0xF9EDC73D6C923555_u64,
+  0x593FEA054C7F450E_u64, 0x6B0AA37CFFC886A5_u64, 0xD8E480C9EBB134E1_u64, 0x287DCE6A9F8EA2AC_u64, 0xF8A922AE090B0799_u64,
+  0x251FEF9C8BB46028_u64, 0x493C5F39729DF2A1_u64, 0xC745B46ACA55D0E8_u64, 0x2062F831FA08F4AF_u64, 0xF7454C2C7D12B97A_u64,
+  0xFF1FFE460BD9C836_u64, 0xB16E3E5300AB04B0_u64, 0xCC500109643B1F25_u64, 0x1BF03E7AE9DD3A2A_u64, 0xF5C455407155FE59_u64,
+  0x4606E3F3B69B5B9F_u64, 0xAF57D7ACA36B7036_u64, 0x23DC96105C0B9D9B_u64, 0x0E73CD55DD020B9F_u64, 0xF4253C1C1A1AE532_u64,
+  0x3E9033C3D73B8BA0_u64, 0x36A1F12DAB4107B3_u64, 0xE2BF1FC80065CF4B_u64, 0x067308DECED752E6_u64, 0xF267ED62F8B7C795_u64,
+  0xDC78F0C65249D290_u64, 0x3DA244D00C619D0D_u64, 0xD5109661F43E9ECD_u64, 0x70A15831A61BCA6B_u64, 0xF08F329D05A331B0_u64,
+  0x2E799EF643386021_u64, 0xF50E2C1A3600D3AD_u64, 0x828F074191858249_u64, 0x4F6A116DA6359A61_u64, 0xEE953E620E55DF7B_u64,
+  0xF59CF516CFC8AEF3_u64, 0x3994459558477033_u64, 0xCFBCAD100D166A9E_u64, 0x6632028B37FF16AD_u64, 0xEC832DD8F9584E23_u64,
+  0x8993BED4BC91F71B_u64, 0x2D156655D9D43F98_u64, 0x7386F1C67CF345E5_u64, 0xD03960687C6A9EFE_u64, 0xEA4F644F48136890_u64,
+  0x6C1BE9D31D8598FE_u64, 0x0BBC7599CC98B839_u64, 0x1B0CB81A981ED38D_u64, 0x74401BC33D3F4F33_u64, 0xE800632C0E1D2F2C_u64,
+  0xD77E840A65911D5A_u64, 0x0409ADA21048C2B1_u64, 0x54C0567F7377993B_u64, 0xB61BEA5C37779619_u64, 0xE59668E019F1E288_u64,
+  0xDF264C217DA2460F_u64, 0x4310BC9FC7837821_u64, 0xA5CB92AB27280AB6_u64, 0x03513AA71030FBB2_u64, 0xE311A97671F44F1C_u64,
+  0x8EE20E415370DE4E_u64, 0xB85F2EA14495BF6F_u64, 0xA12912F50E813792_u64, 0x0F451E45046E7646_u64, 0xE06DEA9A80D1FDF6_u64,
+  0x2485E7ECAF78AEDF_u64, 0x639053243722D371_u64, 0x92EC1A6629ED23CC_u64, 0x92BA16B83C5C1DC4_u64, 0xDDB3D742C265539D_u64,
+  0x7D45353940EE462B_u64, 0x81CFCCF2DA1A22D6_u64, 0x4DB6039C8F8F6015_u64, 0x83992B6BB6C89121_u64, 0xDADA7CC9882F1832_u64,
+  0xB0DE57772EAC59F6_u64, 0x855009022EF97EB9_u64, 0x8549B723BAB4BE2D_u64, 0x27E229B54B803697_u64, 0xD7E6403E36D2F1F7_u64,
+  0xE6C36C5AD24B30C1_u64, 0x5258A95FC94E2FB8_u64, 0x63AEA18A41E1BF81_u64, 0x2A16383F5C4D5062_u64, 0xD4D7154F370BBE07_u64,
+  0x4F980D926321DF45_u64, 0xAD92BC366EAF4837_u64, 0x360B41691BA7A5F0_u64, 0x010BD7D48AB25527_u64, 0xD1B27B4AE9008EF2_u64,
+  0xB53F05EAE4761AB3_u64, 0x5636614D38C536C1_u64, 0x9CFEA8981156D5DD_u64, 0x0BB008A15E850CEC_u64, 0xCE6D5666B787CA77_u64,
+  0x80638F93F4A2C269_u64, 0x1DCDBCDBBCF14233_u64, 0xAE4218B2749A67BE_u64, 0x69D2608C3B73E12F_u64, 0xCB190AE896231BCE_u64,
+  0xE516CEFC6347A5E9_u64, 0x9684BA1ED4646C7A_u64, 0x5F831BDEF11F9BBC_u64, 0xC6158124A4EF775F_u64, 0xC7A3B782716D38C8_u64,
+  0x8F005279FAA6880D_u64, 0x890F8C878E5F7DF9_u64, 0x3485668A4E6E9637_u64, 0xCF01D7D5779F0507_u64, 0xC419953003B5C74B_u64,
+  0x744FE29890F407F9_u64, 0x6F46175FAB644DFC_u64, 0xD9330605EC9B4E0A_u64, 0xA322920E8BD7ACCF_u64, 0xC07416E77D712462_u64,
+  0xAB325FD93CE9B6B8_u64, 0x57C460F1A312C3DD_u64, 0x0FCF1122EE32B17C_u64, 0x892C26B0BCFACC8D_u64, 0xBCBA10B0D8770ED2_u64,
+  0xCEF1E69C4EADB8B3_u64, 0x7F131158279FF4D7_u64, 0x4E6BA5183B584705_u64, 0x8FCD4C453517E8BA_u64, 0xB8EBE30ED9FAC186_u64,
+  0x3745F18539BF8772_u64, 0x2CEE4AB653475E6E_u64, 0xC28307BEA98BB0E7_u64, 0x5CBC46EE3D37B72D_u64, 0xB501E65ACBAD5AD8_u64,
+  0xF4C3A3A64DDAFD51_u64, 0x5E65313F078E13AB_u64, 0xE6BA3E11CDB88AFB_u64, 0xF74E3A8AB016619F_u64, 0xB103B40770404B83_u64,
+  0x539C48DE71A3CC8E_u64, 0x7F208CB9376741F7_u64, 0xA22A23CB0D6B1468_u64, 0x3FD4750AFB3804BB_u64, 0xACF1860DA3CFD826_u64,
+  0xBC5EB21DC1786F2D_u64, 0xCAF9195F5C2505BA_u64, 0xF402F48B30C4DF2F_u64, 0x4987496D863E1E7C_u64, 0xA8C6FAE0BBD09645_u64,
+  0x61F8E4BEFFCF379F_u64, 0x758E5DDD22563B4F_u64, 0x80D42D484F061220_u64, 0xFBC0967B24F94966_u64, 0xA48D1E8D86992CDC_u64,
+  0xCDF0FCA2BCBAFF85_u64, 0x201F9EE54D8615FA_u64, 0x7A56FC977F0D0E4C_u64, 0x754BB974869014D6_u64, 0xA03AA9D87A93F00D_u64,
+  0xCAE22303AEAF6595_u64, 0xE7B53A3891AF1AE5_u64, 0x6DE54E5C6A03779D_u64, 0x6CF567B89889FEF8_u64, 0x9BD425459273D285_u64,
+  0x9831E7542D85D7EA_u64, 0x611013CA24685535_u64, 0xA3724E71C24123D7_u64, 0xB849FF7AEA680179_u64, 0x975EEA2B65A9847E_u64,
+  0x101A86B895C7D937_u64, 0xE88C06711A5AB702_u64, 0xFD217BA2D78129EC_u64, 0x20B672429FB3D1DD_u64, 0x92D5D4E3FC1F9CBD_u64,
+  0x4D91C0B5749D4914_u64, 0x8ED80817147623B6_u64, 0xB90BD29F73F58752_u64, 0x5FF44C46FFCCF7F3_u64, 0x8E38A46BDB3B3D12_u64,
+  0x2EFEA8CE593572C2_u64, 0xF37F1D4704FB5C49_u64, 0xF4C2E89353ADA913_u64, 0xEDBF03F73C1D3162_u64, 0x8986F9B6C7132CFF_u64,
+  0x35B06CBF85F84FBB_u64, 0xBF788966CDCD56B0_u64, 0x91E498B6C64670DC_u64, 0xF6E11DFE5F762E4D_u64, 0x84CD81E775B4C098_u64,
+  0x539BA47E0B57D2DE_u64, 0x974B441DFA650168_u64, 0xA477F58BC7C8DC47_u64, 0x29DD7114D81C96BF_u64, 0x7FFFB96FEC8CE447_u64,
+  0x3D5BCFE7068C0FF1_u64, 0x5016BBCD4EF1B8E7_u64, 0x6F1857955007A55C_u64, 0x98EA27D884420256_u64, 0x7B208EAAB0B94056_u64,
+  0x846EF313E2E0BF68_u64, 0xABFAC2142052BC6C_u64, 0x8496C1983F214586_u64, 0xE132ACEBBD5846B8_u64, 0x7633823FD4EEEF51_u64,
+  0x03681A2FCB57C1E9_u64, 0x999FD17F45CC07F3_u64, 0x411F4BE11FD95EB2_u64, 0xA206CE1148E4933C_u64, 0x7138B866DBF2205C_u64,
+  0x701D2B27ADFE0FB8_u64, 0x239F4FE8463AEE07_u64, 0xE0B2BB9935920222_u64, 0x5D94AC1EEB7461F9_u64, 0x6C3040FF7AE4F3D5_u64,
+  0x064F259D5D960D10_u64, 0xB194CF34FF2BF070_u64, 0x5F46977EAC6F5A5C_u64, 0x4367583037F40763_u64, 0x671A12BD2092F0E6_u64,
+  0x739008A332539B2B_u64, 0x34D36B62E94D21EC_u64, 0xF32753BD933F314C_u64, 0x9A57AAE41393EB49_u64, 0x61F604A26E818217_u64,
+  0x4CDA609F93951DC0_u64, 0xE4F6C5BA31B5C6ED_u64, 0x4FA0C524C392182A_u64, 0x37DF71C28F1DE586_u64, 0x5CC3C513B7FDB337_u64,
+  0x9A01A8613FD798EB_u64, 0x266E72C3DE2E292E_u64, 0x59FEC1C23334CF3A_u64, 0x2E578575CC9228DF_u64, 0x578DCBB6628E3C6F_u64,
+  0x1F1A07C6D6B6ADCD_u64, 0x1EB9DC19B8598724_u64, 0xD9AB93ACE24809DC_u64, 0x05DAB10687BEB878_u64, 0x5246F2E8FD06B80B_u64,
+  0xB8A6A56A834058EB_u64, 0xE60A200E3EB8678A_u64, 0xE50F6F2CD1D3AACE_u64, 0xEDB16A84844FC0A7_u64, 0x4CFA66F577D9EAF3_u64,
+  0x69AAB942D6B77874_u64, 0x9D6DF99AD27E5270_u64, 0x80152267D988B733_u64, 0xDBE4096C369E089E_u64, 0x47A24816DD512C95_u64,
+  0x0550F19403D41E0A_u64, 0xBB071EAD370AF5FF_u64, 0xB9B5812340F07744_u64, 0x64F8889A905E2862_u64, 0x4241A5C4A8543894_u64,
+  0xACD334AEE8E9E8A3_u64, 0x92D46CCF664AA8E9_u64, 0x9D79C6111152CB8A_u64, 0x4B40D1AF34812DF0_u64, 0x3CD8779DB76341CD_u64,
+  0x0403E507D395BA75_u64, 0x4C8823C7BA7C9380_u64, 0x0A03C989401A778B_u64, 0x14849E09356EC1DC_u64, 0x37667D4C98BFBCCB_u64,
+  0x657BB80E7A20116A_u64, 0xA79B3D94F1414A71_u64, 0x86AB887459D6023C_u64, 0x602A110D5BF3BFC0_u64, 0x31F02728A1820184_u64,
+  0x531DFB48CE58358D_u64, 0xE827B8EAC551E9EE_u64, 0x1B75725ED755AA4A_u64, 0xC588E51FB5F4FD50_u64, 0x2C736B07088A07BA_u64,
+  0x90C4AA84E4598669_u64, 0x7DD80F90A7AF46AD_u64, 0xA23D2AD47DF691AB_u64, 0x4E35D5F602D9B24D_u64, 0x26EFFF9C8EFF17D3_u64,
+  0x06B8EA90E4449667_u64, 0x3B72F4405F272C6F_u64, 0xE689513157C5339A_u64, 0xA73888A873793997_u64, 0x2168E05FB8858700_u64,
+  0xC343B6652A5C735A_u64, 0x18FAE9A2C9F7CF27_u64, 0x7E0C3CA1DAAC2E97_u64, 0xBB8233ABBCF0C73A_u64, 0x1BDE7B65EBD95DD2_u64,
+  0x3097E3126B116BD9_u64, 0x35782CB810CE1724_u64, 0x5CA4CD631E80444D_u64, 0xD2EFF3545C8A56C1_u64, 0x164FBB9BD36B968C_u64,
+  0xE12E48B0CF8A0B8E_u64, 0x402A65318C77466E_u64, 0xFFFBC69461AF1AF2_u64, 0x0D511D6A919BECA2_u64, 0x10BE2E7AFFDE1A24_u64,
+  0xED8E7549E2530CAD_u64, 0x419A20B85F378012_u64, 0x4D48FE6ABD0A9A0E_u64, 0x40B937DAE10995F7_u64, 0x0B2A9F7BD1A4E3F7_u64,
+  0x0CCF7C9E0C0FE38A_u64, 0xF496F2CB6C0DC6CA_u64, 0x5C67A95D27203004_u64, 0x87E16185128E709B_u64, 0x059591109EBD190A_u64]
+secret preset B128_ASINFAM_IND: Array[U64, 256] = [
+  0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64,
+  0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64,
+  0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64,
+  0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64, 0x0000000000000046_u64,
+  0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64,
+  0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000045_u64,
+  0x0000000000000045_u64, 0x0000000000000045_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64,
+  0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64, 0x0000000000000044_u64,
+  0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64, 0x0000000000000043_u64,
+  0x0000000000000043_u64, 0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000042_u64,
+  0x0000000000000042_u64, 0x0000000000000042_u64, 0x0000000000000041_u64, 0x0000000000000041_u64, 0x0000000000000041_u64, 0x0000000000000041_u64, 0x0000000000000041_u64, 0x0000000000000041_u64,
+  0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64, 0x0000000000000040_u64,
+  0x000000000000003F_u64, 0x000000000000003F_u64, 0x000000000000003F_u64, 0x000000000000003F_u64, 0x000000000000003E_u64, 0x000000000000003E_u64, 0x000000000000003E_u64, 0x000000000000003E_u64,
+  0x000000000000003E_u64, 0x000000000000003D_u64, 0x000000000000003D_u64, 0x000000000000003D_u64, 0x000000000000003D_u64, 0x000000000000003D_u64, 0x000000000000003C_u64, 0x000000000000003C_u64,
+  0x000000000000003C_u64, 0x000000000000003C_u64, 0x000000000000003B_u64, 0x000000000000003B_u64, 0x000000000000003B_u64, 0x000000000000003A_u64, 0x000000000000003A_u64, 0x000000000000003A_u64,
+  0x0000000000000039_u64, 0x0000000000000039_u64, 0x0000000000000039_u64, 0x0000000000000039_u64, 0x0000000000000038_u64, 0x0000000000000038_u64, 0x0000000000000038_u64, 0x0000000000000037_u64,
+  0x0000000000000037_u64, 0x0000000000000037_u64, 0x0000000000000036_u64, 0x0000000000000036_u64, 0x0000000000000035_u64, 0x0000000000000035_u64, 0x0000000000000034_u64, 0x0000000000000034_u64,
+  0x0000000000000033_u64, 0x0000000000000033_u64, 0x0000000000000033_u64, 0x0000000000000032_u64, 0x0000000000000032_u64, 0x0000000000000031_u64, 0x0000000000000031_u64, 0x0000000000000031_u64,
+  0x0000000000000030_u64, 0x0000000000000030_u64, 0x000000000000002F_u64, 0x000000000000002E_u64, 0x000000000000002E_u64, 0x000000000000002D_u64, 0x000000000000002C_u64, 0x000000000000002C_u64,
+  0x000000000000002B_u64, 0x000000000000002A_u64, 0x000000000000002A_u64, 0x0000000000000029_u64, 0x0000000000000029_u64, 0x0000000000000028_u64, 0x0000000000000027_u64, 0x0000000000000027_u64,
+  0x0000000000000026_u64, 0x0000000000000025_u64, 0x0000000000000024_u64, 0x0000000000000023_u64, 0x0000000000000022_u64, 0x0000000000000021_u64, 0x0000000000000020_u64, 0x000000000000001F_u64,
+  0x000000000000001E_u64, 0x000000000000001E_u64, 0x000000000000001D_u64, 0x000000000000001C_u64, 0x000000000000001B_u64, 0x000000000000001A_u64, 0x0000000000000019_u64, 0x0000000000000018_u64,
+  0x0000000000000018_u64, 0x0000000000000017_u64, 0x0000000000000016_u64, 0x0000000000000015_u64, 0x0000000000000014_u64, 0x0000000000000013_u64, 0x0000000000000013_u64, 0x0000000000000012_u64,
+  0x0000000000000011_u64, 0x0000000000000010_u64, 0x0000000000000010_u64, 0x000000000000000F_u64, 0x000000000000000E_u64, 0x000000000000000D_u64, 0x000000000000000D_u64, 0x000000000000000C_u64,
+  0x000000000000000B_u64, 0x000000000000000B_u64, 0x000000000000000A_u64, 0x000000000000000A_u64, 0x000000000000000A_u64, 0x0000000000000009_u64, 0x0000000000000009_u64, 0x0000000000000009_u64,
+  0x0000000000000008_u64, 0x0000000000000008_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000007_u64, 0x0000000000000006_u64, 0x0000000000000006_u64, 0x0000000000000006_u64,
+  0x0000000000000005_u64, 0x0000000000000005_u64, 0x0000000000000005_u64, 0x0000000000000005_u64, 0x0000000000000005_u64, 0x0000000000000004_u64, 0x0000000000000004_u64, 0x0000000000000004_u64,
+  0x0000000000000004_u64, 0x0000000000000004_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64, 0x0000000000000003_u64,
+  0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000002_u64,
+  0x0000000000000002_u64, 0x0000000000000002_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64,
+  0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000001_u64,
+  0x0000000000000001_u64, 0x0000000000000001_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64]
+secret preset B128_ASINFAM_C: Array[U64, 20] = [
+  0xAAAAAAAAAAAAAAA9_u64, 0xAAAAAAAAAAAAAAAA_u64,
+  0x333333333333337A_u64, 0x0013333333333333_u64,
+  0xB6DB6DB6DB6DAE36_u64, 0x000002DB6DB6DB6D_u64,
+  0x71C71C71C71CFC25_u64, 0x000000007C71C71C_u64,
+  0x2E8BA2E8BA29804E_u64, 0x000000000016E8BA_u64,
+  0x3B13B13B13CE93B6_u64, 0x0000000000000471_u64,
+  0xE4CCCCCCCC5F2A5A_u64, 0x0000000000000000_u64,
+  0x002F50F0F1F806DC_u64, 0x0000000000000000_u64,
+  0x000009FEF0FEC73A_u64, 0x0000000000000000_u64,
+  0x0000000227286573_u64, 0x0000000000000000_u64]
+secret preset B128_ASINFAM_CP: Array[U64, 82] = [
+  0x1343996B9F42B9F5_u64, 0x255E6E351770584D_u64, 0x00000000000000A3_u64, 0x5E2111CBA47A2B05_u64, 0x000000000005717D_u64,
+  0xA97F20B758A855CD_u64, 0x000000002EA1BCC9_u64, 0x889C99395996E6CE_u64, 0x00000190CB77F60C_u64, 0xC7476C854BADE5BF_u64,
+  0x000D8137ABD89D89_u64, 0x97B4EA2813D93845_u64, 0x74F4AA383759F229_u64, 0x5ABB1888E58BE523_u64, 0x5F1F6DB6DB6DB6DB_u64,
+  0x00000000000003F9_u64, 0x9A1160A9AB2539CE_u64, 0xA8BA2E8BA2E8BA2E_u64, 0x000000000022BDD3_u64, 0x72EC43B868C4B3C0_u64,
+  0xF7BDEF7BDEF7BDEF_u64, 0x0000000131683BDE_u64, 0x4B2852D709BF2295_u64, 0x58469EE58469EE58_u64, 0x00000A8DD18469EE_u64,
+  0x2D86E53634CAFB09_u64, 0x684BDA12F684BDA1_u64, 0x005E0B7684BDA12F_u64, 0x151D85735049738F_u64, 0xE147AE147AE147AE_u64,
+  0x4D0C7AE147AE147A_u64, 0x0000000000000003_u64, 0x9BA6F1B2735CAE39_u64, 0x6F4DE9BD37A6F4DE_u64, 0xBD37A6F4DE9BD37A_u64,
+  0x0000000000001DF3_u64, 0xCF46C00A8ED8A2E2_u64, 0x3CF3CF3CF3CF3CF3_u64, 0xF3CF3CF3CF3CF3CF_u64, 0x000000000112EF3C_u64,
+  0x86BAEBA7AFBB9DD6_u64, 0xBCA1AF286BCA1AF2_u64, 0xA1AF286BCA1AF286_u64, 0x00000009FEF286BC_u64, 0xE1E21D9D6B73053D_u64,
+  0xE1E1E1E1E1E1E1E1_u64, 0xE1E1E1E1E1E1E1E1_u64, 0x00005EA1E1E1E1E1_u64, 0x33332CFA4CCAAD37_u64, 0x3333333333333333_u64,
+  0x3333333333333333_u64, 0x0393333333333333_u64, 0x89D89E04E6327AE5_u64, 0xD89D89D89D89D89D_u64, 0x9D89D89D89D89D89_u64,
+  0x89D89D89D89D89D8_u64, 0x0000000000000023_u64, 0x8BA2E8B369EE2B14_u64, 0xE8BA2E8BA2E8BA2E_u64, 0x2E8BA2E8BA2E8BA2_u64,
+  0xA2E8BA2E8BA2E8BA_u64, 0x0000000000016E8B_u64, 0x8E38E38E78E717BC_u64, 0x38E38E38E38E38E3_u64, 0xE38E38E38E38E38E_u64,
+  0x8E38E38E38E38E38_u64, 0x000000000F8E38E3_u64, 0x6DB6DB6DB566FAC3_u64, 0xB6DB6DB6DB6DB6DB_u64, 0xDB6DB6DB6DB6DB6D_u64,
+  0x6DB6DB6DB6DB6DB6_u64, 0x000000B6DB6DB6DB_u64, 0x99999999999E1925_u64, 0x9999999999999999_u64, 0x9999999999999999_u64,
+  0x9999999999999999_u64, 0x0009999999999999_u64, 0xAAAAAAAAAAAAA521_u64, 0xAAAAAAAAAAAAAAAA_u64, 0xAAAAAAAAAAAAAAAA_u64,
+  0xAAAAAAAAAAAAAAAA_u64, 0xAAAAAAAAAAAAAAAA_u64]

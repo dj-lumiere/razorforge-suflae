@@ -1,0 +1,47 @@
+module Core
+
+# ============================================================================
+# Correctly rounded exponential e^x of B128
+# ============================================================================
+# Ported from CORE-MATH, src/binary128/exp/expq.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probe,
+# exception-flag and errno handling are dropped).
+# The work is done on 64-bit words. The tables, the 2^x evaluation and the fallback paths are shared with
+# the exp2 and exp10 ports (B128ExpShared.rf).
+
+### Returns `e` raised to this value, correctly rounded: the exact exponential rounded to the nearest
+### `B128` (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow ->
+### +infinity, `exp(-infinity) == 0`, NaN -> quiet NaN). No crash.
+### :returns: The correctly rounded exponential, possibly +infinity.
+routine B128.exp_unchecked() -> B128
+  var u = me.to_bits()
+  var hi = b128_expfam_hi(u: u)
+  var lo = b128_expfam_lo(u: u)
+  var b1 = hi & 0x7FFFFFFFFFFFFFFF_u64
+  # |x| < 2^-114: e^x rounds to 1
+  if b1 < 0x3F8D000000000000_u64
+    return B128.from_bits(bits: 0x3FFF0000000000000000000000000000_u128)
+  if b1 >= 0x400C62E42FEFA39E_u64
+    # infinity: e^+inf = +inf, e^-inf = +0
+    if b1 == 0x7FFF000000000000_u64 and lo == 0
+      if hi >>> 63 == 0
+        return me
+      return B128.from_bits(bits: 0_u128)
+    # NaN: quiet it, keeping sign and payload
+    if b1 >= 0x7FFF000000000000_u64
+      return B128.from_bits(bits: u | (1_u128 << 111))
+    # x >= 0x1.62e42fefa39ef35793c7673007e6p+13: overflow
+    if hi >>> 63 == 0 and u >= 0x400C62E42FEFA39EF35793C7673007E6_u128
+      return B128.from_bits(bits: 0x7FFF0000000000000000000000000000_u128)
+    # x <= -0x1.654bb3b2c73ebb059fabb506ff34p+13: underflow to +0
+    if u >= 0xC00C654BB3B2C73EBB059FABB506FF34_u128
+      return B128.from_bits(bits: 0_u128)
+  # x/ln(2) in fixed point: 3 words, the integer part above the 20 low bits of the top word
+  var sm = b128_expfam_sar(v: hi, n: 63_u64)
+  var m = b128_expfam_w(hi: (hi & 0x0000FFFFFFFFFFFF_u64) | 0x0001000000000000_u64, lo: lo)
+  var fs = b128_expfam_mh3x2(a0: B128_EXPFAM_ILN2[4], a1: B128_EXPFAM_ILN2[5], a2: B128_EXPFAM_ILN2[6], b: m)
+  var e = (hi >>> 48) & 0x7FFF_u64
+  var r = b128_expfam_ars3(w0: fs.item0 ^ sm, w1: fs.item1 ^ sm, w2: fs.item2 ^ sm, n: 0x401A_u64 -% e)
+  return b128_expfam_finish(fs0: r.item0, fs1: r.item1, fs2: r.item2, x0: u, kind: 0_u64)

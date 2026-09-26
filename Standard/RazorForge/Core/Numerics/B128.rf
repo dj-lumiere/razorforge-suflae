@@ -1022,59 +1022,6 @@ routine B128.sqrt!() -> B128
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns the correctly-rounded square root with raw IEEE 754 propagation (C `sqrt`):
-### NaN for negatives, +inf for +inf, ±0 for ±0.
-routine B128.sqrt_unchecked() -> B128
-  if me.is_nan()
-    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  if me.is_zero()
-    return me
-  if me.is_negative()
-    return B128.from_bits(bits: b128_qnan())
-  if me.is_infinite()
-    return me
-  var e = me.raw_exponent()
-  var m = me.raw_mantissa()
-  var emsb = 0_s64
-  if e == 0_u64
-    emsb = -16382_s64
-    while LLVM::int_eq[U128](a: LLVM::bit_and[U128](a: m, b: b128_implicit()), b: 0_u128)
-      m = LLVM::shift_left[U128](value: m, bits: 1_u128)
-      emsb = LLVM::sub(a: emsb, b: 1_s64)
-  else
-    m = LLVM::bit_or[U128](a: m, b: b128_implicit())
-    emsb = LLVM::sub(a: LLVM::reinterpret_bits[U64, S64](e), b: 16383_s64)
-  var p = LLVM::sub(a: emsb, b: 112_s64)
-  if LLVM::signed_rem(a: p, b: 2_s64) != 0_s64
-    m = LLVM::shift_left[U128](value: m, bits: 1_u128)
-    p = LLVM::sub(a: p, b: 1_s64)
-  var e2 = LLVM::signed_div(a: p, b: 2_s64)
-  var bigm = b128_u256_shl(v: b128_u256(m), n: 124_u128)
-  var root = b128_isqrt256(bigm)
-  var inexact = LLVM::int_ne(a: LLVM::mul(a: root, b: root), b: bigm)
-  var r128 = b128_u256_to128(root)
-  var msbi = LLVM::sub(a: 127_u128, b: LLVM::leading_zeros(r128))
-  var shiftc = LLVM::sub(a: msbi, b: 112_u128)
-  var sqexp = LLVM::add(a: LLVM::sub(a: e2, b: 62_s64), b: LLVM::int_truncate[U128, S64](msbi))
-  var sig = LLVM::shift_right_unsigned(r128, shiftc)
-  var lost = LLVM::bit_and(a: r128, b: LLVM::sub(a: LLVM::shift_left(value: 1_u128, bits: shiftc), b: 1_u128))
-  var guard = LLVM::shift_left(value: 1_u128, bits: LLVM::sub(a: shiftc, b: 1_u128))
-  var roundup = false
-  if LLVM::unsigned_gt(a: lost, b: guard)
-    roundup = true
-  elseif LLVM::int_eq(a: lost, b: guard)
-    if inexact
-      roundup = true
-    else
-      roundup = LLVM::int_ne(a: LLVM::bit_and(a: sig, b: 1_u128), b: 0_u128)
-  if roundup
-    sig = LLVM::add(a: sig, b: 1_u128)
-    if LLVM::int_ne(a: LLVM::bit_and(a: sig, b: LLVM::shift_left(value: 1_u128, bits: 113_u128)), b: 0_u128)
-      sig = LLVM::shift_right_unsigned(sig, 1_u128)
-      sqexp = LLVM::add(a: sqexp, b: 1_s64)
-  var biased = LLVM::add(a: sqexp, b: 16383_s64)
-  return B128.from_bits(bits: b128_pack(sign: 0_u64, biased: LLVM::zero_extend[U32, U64](LLVM::int_truncate[S64, U32](biased)), sig: sig))
-
 # ============================================================================
 # Remainder operators — fmod (truncated) and IEEE remainder (round-to-even),
 # computed exactly by integer long division on the significands.
