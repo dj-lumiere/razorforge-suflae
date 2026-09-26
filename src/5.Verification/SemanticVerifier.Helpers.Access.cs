@@ -369,7 +369,8 @@ public sealed partial class SemanticVerifier
             },
             memberName: routine.Name,
             ownerType: routine.OwnerType,
-            accessLocation: accessLocation);
+            accessLocation: accessLocation,
+            memberModule: routine.OwnerType?.Module ?? routine.Module);
 
         // Dangerous routines can only be called inside danger blocks — EXCEPT a compiler-synthesized
         // call (e.g. ScopeTeardownLoweringPass's injected `local.destroy()`), which is the compiler's
@@ -393,8 +394,10 @@ public sealed partial class SemanticVerifier
     /// <param name="memberName">The name of the member.</param>
     /// <param name="ownerType">The type that owns this member, if any.</param>
     /// <param name="accessLocation">Source location of the access site.</param>
+    /// <param name="memberModule">The member's module when it is not the owner type's (a free routine).</param>
     private void ValidateMemberAccess(VisibilityModifier visibility, string memberKind,
-        string memberName, TypeSymbol? ownerType, SourceLocation accessLocation)
+        string memberName, TypeSymbol? ownerType, SourceLocation accessLocation,
+        string? memberModule = null)
     {
         // Owner secrecy CAPS member visibility: a `secret` (module-private) type's members are
         // module-private too, no matter their own modifier. The type name is already hidden cross-module,
@@ -415,7 +418,9 @@ public sealed partial class SemanticVerifier
         {
             case VisibilityModifier.Secret:
                 // Secret members are accessible within the same module
-                if (!IsAccessingFromSameModule(memberModule: ownerType?.Module))
+                // A free routine has no owner type, so its own module decides (it used to compare against
+                // null and reject every call, even from the routine's own module).
+                if (!IsAccessingFromSameModule(memberModule: memberModule ?? ownerType?.Module))
                 {
                     string typeName = ownerType?.Name ?? "type";
                     ReportError(code: SemanticDiagnosticCode.SecretMemberAccess,

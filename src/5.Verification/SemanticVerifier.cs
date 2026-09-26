@@ -1694,10 +1694,19 @@ public sealed partial class SemanticVerifier
         {
             // Discard stdlib-body diagnostics (see snapshot above): mirror the eager sweep's RemoveRange so a
             // user build never fails on a stdlib-internal diagnostic. Trim back to the pre-analysis counts.
+            // An unknown identifier is the exception: it is never a user-code rule false-firing on stdlib, it
+            // leaves an error type in a body that is about to be emitted, and dropping it turned a plain
+            // "unknown identifier" into an LLVM-emitter crash. Keep those.
             if (_errors.Count > errorsBeforeStdlib)
             {
+                List<SemanticError> unresolvedNames = _errors.Skip(count: errorsBeforeStdlib)
+                                                             .Where(predicate: e =>
+                                                                  e.Code == SemanticDiagnosticCode
+                                                                     .UnknownIdentifier)
+                                                             .ToList();
                 _errors.RemoveRange(index: errorsBeforeStdlib,
                     count: _errors.Count - errorsBeforeStdlib);
+                _errors.AddRange(collection: unresolvedNames);
             }
 
             if (_warnings.Count > warningsBeforeStdlib)
@@ -2031,10 +2040,10 @@ public sealed partial class SemanticVerifier
 
         Mark(label: "Phase 2 -> Type/signature resolution");
 
-        // Divergent cross-file duplicate constructors: same signature + different body in different
+        // Divergent cross-file duplicate routines: same signature + different body in different
         // files -> last-wins registration silently shadows one (the B64(from:B128) recursion class).
         // Benign identical duplicates (equal BodyHash) were not recorded, so anything here is a real bug.
-        foreach ((RoutineInfo first, RoutineInfo second) in _registry.DivergentDuplicateCreators)
+        foreach ((RoutineInfo first, RoutineInfo second) in _registry.DivergentDuplicateRoutines)
         {
             SourceLocation? loc = second.Location ?? first.Location;
             if (loc == null)
@@ -2042,9 +2051,16 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
+            string parameterTypes =
+                string.Join(separator: ", ", values: second.Parameters.Select(selector: p => p.Type.Name));
+            string what = second.IsCreator
+                ? $"Constructor '{second.OwnerType?.Name}({parameterTypes})'"
+                : second.OwnerType != null
+                    ? $"Member routine '{second.OwnerType.Name}.{second.Name}({parameterTypes})'"
+                    : $"Routine '{second.Name}({parameterTypes})'";
             ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
                 message:
-                $"Constructor '{second.OwnerType?.Name}({string.Join(separator: ", ", values: second.Parameters.Select(selector: p => p.Type.Name))})' " +
+                $"{what} " +
                 $"is defined with DIFFERENT bodies in two files ('{first.Location?.FileName}' and " +
                 $"'{second.Location?.FileName}'). Registration is last-wins, so one silently shadows the " +
                 "other — remove the redundant definition (keep the real one; a same-signature forwarder " +

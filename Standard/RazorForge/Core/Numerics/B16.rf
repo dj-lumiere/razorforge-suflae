@@ -743,7 +743,7 @@ routine B16.fma_unchecked(b: B16, c: B16) -> B16
       else
         sb = sb -% 1
       s = B64.from_bits(bits: sb)
-  return b16_narrow_b64(d: s)
+  return B16(from: s)
 
 ### Floating-point remainder (C fmod).
 routine B16.fmod(you: B16) -> B16

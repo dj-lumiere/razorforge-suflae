@@ -1,0 +1,12 @@
+HALVES: 0.5 -2.5 1.5
+SINGLES: 1 0.25
+WORDS: 65535
+B16(from: 0.15000000000000002) bits 12493
+B16(from: 0.22500000000000003) bits 13107
+B16(from: 0.3375) bits 13670
+B16(from: 0.5062500000000001) bits 14349
+tie to even: 15360
+tie up to even: 15362
+largest below overflow: 31743
+overflow: 31744
+hypot of literals: 0.223606797749979

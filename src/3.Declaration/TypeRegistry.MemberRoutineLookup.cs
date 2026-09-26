@@ -39,20 +39,50 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Divergent cross-file duplicate constructors found during registration: two creators sharing a
+    /// Divergent cross-file duplicate routines found during registration: two routines sharing a
     /// signature but with DIFFERENT bodies, defined in DIFFERENT files. Registration is last-wins, so
     /// one silently shadows the other — the hazard class that made <c>B64(from: B128)</c> resolve to a
-    /// recursive-forwarder stub instead of the real engine impl (infinite recursion). Surfaced as a
+    /// recursive-forwarder stub instead of the real engine impl (infinite recursion), and that let
+    /// <c>B16.sin()</c> exist in both B16.rf and CoreMath/B16Sin.rf with no diagnostic. Surfaced as a
     /// build error by <see cref="Builder.Verification.SemanticVerifier"/>. Benign identical duplicates (same
-    /// body, e.g. <c>U16(from: U8)</c> in both U8.rf and U16.rf) are NOT recorded (equal BodyHash).
+    /// body, e.g. <c>U16(from: U8)</c> in both U8.rf and U16.rf) are NOT recorded (equal body hash).
     /// </summary>
-    public List<(RoutineInfo First, RoutineInfo Second)> DivergentDuplicateCreators { get; } = [];
+    public List<(RoutineInfo First, RoutineInfo Second)> DivergentDuplicateRoutines { get; } = [];
+
+    /// <summary>
+    /// Declared bodies of registered routines, kept so the divergent-duplicate guard can hash a body only
+    /// when two routines actually collide on a registry key (hashing every body up front would print the
+    /// whole stdlib at registration).
+    /// </summary>
+    private readonly Dictionary<RoutineInfo, Statement> _declaredBodies =
+        new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Records <paramref name="routine"/>'s declared body for the divergent-duplicate guard.</summary>
+    public void NoteDeclaredBody(RoutineInfo routine, Statement? body)
+    {
+        if (body != null)
+        {
+            _declaredBodies[key: routine] = body;
+        }
+    }
+
+    // The routine's structural body hash, computed on first need from its noted declared body.
+    private int? DeclaredBodyHash(RoutineInfo routine)
+    {
+        if (routine.BodyHash == null &&
+            _declaredBodies.TryGetValue(key: routine, value: out Statement? body))
+        {
+            routine.BodyHash = ComputeCreatorBodyHash(body: body);
+        }
+
+        return routine.BodyHash;
+    }
 
     /// <summary>
     /// Location-free structural hash of a constructor body for the divergent-duplicate guard (source
     /// text, not record ToString which embeds SourceLocation — so identical logic in two files hashes
-    /// equal). Null for empty / extern (PassStatement) bodies. Computed only for creators by the two
-    /// registration paths (StdlibLoader, SignatureResolver).
+    /// equal). Null for empty / extern (PassStatement) bodies. Computed on a registry-key collision
+    /// (see DeclaredBodyHash).
     /// </summary>
     public static int? ComputeCreatorBodyHash(Statement? body)
     {
@@ -145,20 +175,23 @@ public sealed partial class TypeRegistry
         // `T.create(field: Foo)` overrides the auto-generated record field constructor).
         if (keyExisted)
         {
-            // Divergent cross-file duplicate constructor guard (see DivergentDuplicateCreators):
+            // Divergent cross-file duplicate routine guard (see DivergentDuplicateRoutines):
             // same signature + SAME failability, both real (non-synthetic), different files, DIFFERENT
             // bodies. Failability must match: a checked `T!(from: X)` and a reinterpret `T(from: X)`
             // legitimately share a signature (they coexist via the owner+IsFailable index) and are NOT a
             // divergent duplicate — only same-failability same-signature different-body pairs are the bug.
-            if (existingByKey is { IsSynthesized: false, BodyHash: { } h1 } &&
-                routine is { IsSynthesized: false, BodyHash: { } h2 } &&
-                existingByKey.IsFailable == routine.IsFailable && h1 != h2 &&
+            // The body hashes are only computed here, on an actual collision.
+            if (existingByKey is { IsSynthesized: false } &&
+                routine is { IsSynthesized: false } &&
+                existingByKey.IsFailable == routine.IsFailable &&
                 existingByKey.Location?.FileName is { } f1 &&
                 routine.Location?.FileName is { } f2 && !string.Equals(a: f1,
                     b: f2,
-                    comparisonType: StringComparison.OrdinalIgnoreCase))
+                    comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                DeclaredBodyHash(routine: existingByKey) is { } h1 &&
+                DeclaredBodyHash(routine: routine) is { } h2 && h1 != h2)
             {
-                DivergentDuplicateCreators.Add(item: (existingByKey, routine));
+                DivergentDuplicateRoutines.Add(item: (existingByKey, routine));
             }
 
             bool existingIsUser = !existingByKey!.IsSynthesized;

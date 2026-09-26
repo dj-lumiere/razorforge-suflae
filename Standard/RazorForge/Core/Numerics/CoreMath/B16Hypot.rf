@@ -36,9 +36,9 @@ routine hypot_unchecked(x: B16, y: B16) -> B16
   var tx = B64(from: x)
   var ty = B64(from: y)
   if b16_hypot_is_inf(u: sx) and b16_hypot_is_qnan(u: sy)
-    return b16_narrow_b64(d: tx *! tx)
+    return B16(from: tx *! tx)
   if b16_hypot_is_inf(u: sy) and b16_hypot_is_qnan(u: sx)
-    return b16_narrow_b64(d: ty *! ty)
+    return B16(from: ty *! ty)
   # a NaN leg comes back quieted, x's before y's, like the x86 addition the original relies on (left to
   # `+!`, the optimizer may swap the operands and return the other NaN)
   if x.is_nan()
@@ -46,4 +46,4 @@ routine hypot_unchecked(x: B16, y: B16) -> B16
   if y.is_nan()
     return B16.from_bits(bits: sy | 0x0200_u16)
   var ret = LLVM::sqrt[B64](tx *! tx +! ty *! ty)
-  return b16_narrow_b64(d: ret)
+  return B16(from: ret)

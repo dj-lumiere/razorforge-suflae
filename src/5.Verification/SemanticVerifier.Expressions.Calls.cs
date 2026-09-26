@@ -1,3 +1,4 @@
+using Builder.Tokenizer;
 using Builder.Diagnostics;
 using SyntaxTree;
 using TypeModel.Enums;
@@ -1716,6 +1717,13 @@ public sealed partial class SemanticVerifier
             return;
         }
 
+        if (TryResolveFreeOverloadByLiteralDefaults(call: call,
+                callName: callName,
+                routine: ref routine))
+        {
+            return;
+        }
+
         if (!HasArgumentTypeMismatch(call: call, routine: routine))
         {
             return;
@@ -1759,6 +1767,67 @@ public sealed partial class SemanticVerifier
         TryRebindFreeOverloadAsGeneric(call: call,
             callName: callName,
             routine: ref routine);
+    }
+
+    /// <summary>
+    /// A call whose arguments include a bare unsuffixed literal first looks for the overload taking the
+    /// literals' DEFAULT types (B64 / S64, or Suflae's defaults). <paramref name="routine"/> arrives as the
+    /// first overload registered under the bare name, and a bare literal conforms to any numeric parameter,
+    /// so without this `hypot_unchecked(x: 0.1, y: 0.2)` bound whichever overload's file registered first
+    /// (B128) instead of the B64 one a literal defaults to. Returns false (leaving the conformance path to
+    /// run) when there is no bare literal or no concrete overload for the default types.
+    /// </summary>
+    private bool TryResolveFreeOverloadByLiteralDefaults(CallExpression call, string callName,
+        ref RoutineInfo? routine)
+    {
+        bool hasBareLiteral = call.Arguments.Any(predicate: a =>
+            (a is NamedArgumentExpression na
+                ? na.Value
+                : a) is LiteralExpression
+            {
+                LiteralType: TokenType.UndecidedInteger or TokenType.UndecidedDecimal
+            });
+        if (!hasBareLiteral || routine == null)
+        {
+            return false;
+        }
+
+        var defaultArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
+        foreach (Expression arg in call.Arguments)
+        {
+            Expression actualArg = arg is NamedArgumentExpression na
+                ? na.Value
+                : arg;
+            TypeSymbol argType = AnalyzeExpression(expression: actualArg);
+            if (argType == ErrorTypeSymbol.Instance)
+            {
+                return false;
+            }
+
+            defaultArgTypes.Add(item: argType);
+        }
+
+        // Already the overload for the default types: nothing to rebind. (Looking it up again could hand back
+        // a same-signature sibling, e.g. a `threaded routine`'s raw body instead of its handle-returning
+        // wrapper.)
+        if (routine.Parameters.Count == defaultArgTypes.Count &&
+            routine.Parameters.Select(selector: p => p.Type.FullName)
+                   .SequenceEqual(second: defaultArgTypes.Select(selector: t => t.FullName)))
+        {
+            return false;
+        }
+
+        RoutineInfo? byDefaults =
+            _registry.LookupRoutineOverload(baseName: callName, argTypes: defaultArgTypes) ??
+            _registry.LookupRoutineOverload(baseName: routine.BaseName, argTypes: defaultArgTypes);
+        if (byDefaults is not { IsGenericDefinition: false })
+        {
+            return false;
+        }
+
+        routine = byDefaults;
+        call.ResolvedRoutine = routine;
+        return true;
     }
 
     /// <summary>

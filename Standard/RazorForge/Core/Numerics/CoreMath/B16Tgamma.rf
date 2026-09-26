@@ -29,7 +29,7 @@ routine B16.tgamma_unchecked() -> B16
   if ax <= 0x6F000000_u32
     # |x| <= 2^-16: gamma(x) = 1/x - euler_gamma + O(x)
     var d = (0x1.fa658c23b1578p-1 -! 0x1.d0a118f324b63p-1 *! z) *! z -! 0x1.2788cfc6fb619p-1
-    return b16_narrow_b64(d: 1.0 /! z +! d)
+    return B16(from: 1.0 /! z +! d)
   var fx = LLVM::floor[B32](x)
   if x >= 0x1.274p+3_b32
     # overflow
@@ -49,7 +49,7 @@ routine B16.tgamma_unchecked() -> B16
       t0 = t0 *! x0
       i = i + 1
       x0 = x0 +! 1.0
-    return b16_narrow_b64(d: t0)
+    return B16(from: t0)
   if x < -16.0_b32
     # for x < -16, x non-integer, |gamma(x)| < 2^-25 rounds to a zero of the sign of gamma(x)
     if k & 1_s32 == 0
@@ -78,5 +78,5 @@ routine B16.tgamma_unchecked() -> B16
   if i <= -0.5
     w = 1.0 /! w
   f = f *! w
-  return b16_narrow_b64(d: f)
+  return B16(from: f)
 

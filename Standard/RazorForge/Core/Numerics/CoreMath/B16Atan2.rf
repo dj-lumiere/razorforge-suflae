@@ -101,7 +101,7 @@ secret routine b16_atan2_tiny(y: B32, x: B32) -> B16
       tu = tu +% 1
     else
       tu = tu -% 1
-  return b16_narrow_b64(d: B64.from_bits(bits: tu))
+  return B16(from: B64.from_bits(bits: tu))
 
 ### Returns the two-argument arc tangent atan2(y, x) (in radians), correctly rounded: the exact angle of
 ### the point (x, y) rounded to the nearest `B16` (ties to even), identical on every platform. The result
@@ -133,14 +133,14 @@ routine atan2(y: B16, x: B16) -> B16
     if yinf and xinf
       if xnegative
         # +/-3pi/4
-        return b16_narrow_b64(d: 0x1.2d97c7f3321d2p+1 *! sy)
+        return B16(from: 0x1.2d97c7f3321d2p+1 *! sy)
       # +/-pi/4
-      return b16_narrow_b64(d: 0x1.921fb54442d18p-1 *! sy)
+      return B16(from: 0x1.921fb54442d18p-1 *! sy)
     if xinf
       if xnegative
-        return b16_narrow_b64(d: 0x1.921fb54442d18p+1 *! sy)
-      return b16_narrow_b64(d: 0.0 *! sy)
-    return b16_narrow_b64(d: 0x1.921fb54442d18p+0 *! sy)
+        return B16(from: 0x1.921fb54442d18p+1 *! sy)
+      return B16(from: 0.0 *! sy)
+    return B16(from: 0x1.921fb54442d18p+0 *! sy)
   var qs = 0_u64
   if ynegative
     qs = qs + 4
@@ -150,10 +150,10 @@ routine atan2(y: B16, x: B16) -> B16
     if ax == 0_u32
       var off0 = B64.from_bits(bits: B16_ATAN2_OFF[qs])
       if xnegative
-        return b16_narrow_b64(d: off0 +! B64.from_bits(bits: B16_ATAN2_OFFL[qs]))
-      return b16_narrow_b64(d: off0)
+        return B16(from: off0 +! B64.from_bits(bits: B16_ATAN2_OFFL[qs]))
+      return B16(from: off0)
     if not xnegative
-      return b16_narrow_b64(d: 0.0 *! sy)
+      return B16(from: 0.0 *! sy)
   var gt = ay > ax
   var i = qs
   var mg = 0.0
@@ -228,4 +228,4 @@ routine atan2(y: B16, x: B16) -> B16
         tm = tm *! 0.75
     r = th +! tm
   # round to binary16 directly (rounding through binary32 first would round twice)
-  return b16_narrow_b64(d: r)
+  return B16(from: r)

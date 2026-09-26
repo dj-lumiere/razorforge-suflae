@@ -245,3 +245,102 @@ RT_EXPORT tu_int __udivmodti4(tu_int a, tu_int b, tu_int *rem) {
 }
 
 #endif /* __SIZEOF_INT128__ */
+
+/*
+ * Half-precision conversions with the ABI LLVM expects on Windows x86-64.
+ *
+ * LLVM passes and returns `half` in XMM registers, but the clang_rt.builtins library shipped for
+ * Windows was built with the old integer convention (the result in AX). With -mf16c float<->half
+ * becomes an instruction, while double->half has none and stays a __truncdfhf2 libcall, which then
+ * read garbage from XMM0 (B16(from: 0.15) came back as 0x3334). The runtime is linked before
+ * compiler-rt, and the JIT resolves against this DLL's exports, so these correct definitions win in
+ * both. Each rounds once to nearest, ties to even, and a NaN keeps its sign and top payload bits and
+ * becomes quiet.
+ */
+#if defined(_WIN32) && defined(__clang__) && defined(__FLT16_MAX__)
+
+#include <string.h>
+
+static uint16_t rt_f64_to_f16_bits(uint64_t d) {
+    uint16_t sign = (uint16_t)((d >> 48) & 0x8000u);
+    uint64_t ab = d & 0x7FFFFFFFFFFFFFFFull;
+    if (ab >= 0x7FF0000000000000ull) {
+        if (ab > 0x7FF0000000000000ull)
+            return (uint16_t)(sign | 0x7E00u | (uint16_t)((ab >> 42) & 0x3FFu));
+        return (uint16_t)(sign | 0x7C00u);
+    }
+    int e = (int)(ab >> 52);
+    uint64_t m = ab & 0xFFFFFFFFFFFFFull;
+    int he = e - 1023 + 15;
+    if (he >= 31)
+        return (uint16_t)(sign | 0x7C00u);
+    if (he <= 0) {
+        /* binary16 subnormal (or zero): shift the full significand further right */
+        if (e == 0)
+            return sign;
+        uint64_t sig = m | (1ull << 52);
+        int shift = 43 - he;
+        if (shift > 60)
+            return sign;
+        uint64_t q = sig >> shift;
+        uint64_t rem = sig & ((1ull << shift) - 1);
+        uint64_t half = 1ull << (shift - 1);
+        if (rem > half || (rem == half && (q & 1)))
+            q++;
+        return (uint16_t)(sign | (uint16_t)q);
+    }
+    uint32_t h = ((uint32_t)he << 10) | (uint32_t)(m >> 42);
+    uint64_t rem = m & ((1ull << 42) - 1);
+    if (rem > (1ull << 41) || (rem == (1ull << 41) && (h & 1)))
+        h++; /* a carry into the exponent is correct, up to +inf */
+    return (uint16_t)(sign | h);
+}
+
+static _Float16 rt_f16_from_bits(uint16_t u) {
+    _Float16 h;
+    memcpy(&h, &u, sizeof h);
+    return h;
+}
+
+RT_EXPORT _Float16 __truncdfhf2(double a) {
+    uint64_t d;
+    memcpy(&d, &a, sizeof d);
+    return rt_f16_from_bits(rt_f64_to_f16_bits(d));
+}
+
+RT_EXPORT _Float16 __truncsfhf2(float a) {
+    /* float -> double is exact, so this is still one rounding */
+    double w = (double)a;
+    uint64_t d;
+    memcpy(&d, &w, sizeof d);
+    return rt_f16_from_bits(rt_f64_to_f16_bits(d));
+}
+
+RT_EXPORT float __extendhfsf2(_Float16 a) {
+    uint16_t u;
+    memcpy(&u, &a, sizeof u);
+    uint32_t sign = (uint32_t)(u & 0x8000u) << 16;
+    uint32_t e = (u >> 10) & 0x1Fu;
+    uint32_t m = u & 0x3FFu;
+    uint32_t f;
+    if (e == 0x1Fu) {
+        f = sign | 0x7F800000u | (m << 13) | (m ? 0x00400000u : 0u);
+    } else if (e != 0) {
+        f = sign | ((e + 112u) << 23) | (m << 13);
+    } else if (m == 0) {
+        f = sign;
+    } else {
+        /* binary16 subnormal: normalize into a binary32 normal */
+        int k = 0;
+        while ((m & 0x400u) == 0) {
+            m <<= 1;
+            k++;
+        }
+        f = sign | ((uint32_t)(113 - k) << 23) | ((m & 0x3FFu) << 13);
+    }
+    float r;
+    memcpy(&r, &f, sizeof r);
+    return r;
+}
+
+#endif /* _WIN32 && __clang__ && __FLT16_MAX__ */

@@ -1,3 +1,4 @@
+using Builder.Tokenizer;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
@@ -631,12 +632,38 @@ public sealed partial class StdlibLoader
                 if (presetType != null)
                 {
                     SeedPresetValueMetadata(value: preset.Value, presetType: presetType);
+                    ConformPresetArrayLiterals(value: preset.Value, presetType: presetType);
                     registry.RegisterPreset(name: preset.Name,
                         type: presetType,
                         module: moduleName,
                         value: preset.Value,
                         isSecret: preset.IsSecret);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gives the bare literals of an <c>Array[T, N]</c> preset the element type's concrete literal token. The
+    /// preset becomes one constant global that never passes through lowering, so an unsuffixed `1.0` in an
+    /// <c>Array[B32, N]</c> would otherwise reach the emitter undecided. (User presets get the same treatment,
+    /// with diagnostics, in the verifier's preset collection.)
+    /// </summary>
+    private static void ConformPresetArrayLiterals(Expression value, TypeSymbol presetType)
+    {
+        if (value is not ListLiteralExpression list || presetType.BareName != "Array" ||
+            presetType.TypeArguments is not { Count: > 0 } args)
+        {
+            return;
+        }
+
+        for (int i = 0; i < list.Elements.Count; i++)
+        {
+            if (list.Elements[index: i] is LiteralExpression literal &&
+                literal.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal)
+            {
+                literal.ResolvedType = args[0];
+                list.Elements[index: i] = UndecidedLiteralConformance.Conform(literal: literal);
             }
         }
     }
@@ -963,13 +990,9 @@ public sealed partial class StdlibLoader
         // directly rather than re-deriving the routine by module-blind name lookup.
         routine.ResolvedInfo = routineInfo;
 
-        // Constructor divergent-duplicate guard: hash the body so RegisterRoutine can distinguish a
-        // benign identical cross-file duplicate creator from a divergent one (see
-        // TypeRegistry.DivergentDuplicateCreators).
-        if (routineInfo.IsCreator)
-        {
-            routineInfo.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
-        }
+        // Divergent-duplicate guard: keep the declared body so a same-signature routine from another
+        // file can be compared by body hash (see TypeRegistry.DivergentDuplicateRoutines).
+        registry.NoteDeclaredBody(routine: routineInfo, body: routine.Body);
 
         try
         {

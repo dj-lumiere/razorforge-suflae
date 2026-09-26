@@ -752,11 +752,6 @@ routine D128.is_normal() -> Bool
   var p = me.decode()
   return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_ne(a: p.coeff, b: 0_u128)
 
-### True if me is ±0 (finite with a zero coefficient).
-routine D128.is_zero() -> Bool
-  var p = me.decode()
-  return LLVM::int_eq(a: p.special, b: 0_u64) and LLVM::int_eq(a: p.coeff, b: 0_u128)
-
 ### C99 fpclassify: classifies me as SIGNALING_NAN, NAN, INFINITE, ZERO, SUBNORMAL, or NORMAL.
 routine D128.fpclassify() -> FpClass
   var p = me.decode()

@@ -1,0 +1,34 @@
+module Tests/Stdlib/FloatPresetNarrowApi
+import IO/Console
+
+# Array presets written with unsuffixed literals take the element type (they become one constant global
+# that never passes through lowering), B64 -> B16 narrowing rounds once to nearest with ties to even at
+# run time (a runtime conversion whose calling convention must match LLVM's), and a call whose arguments
+# are all bare literals picks the overload for the literals' default type (B64), not whichever overload
+# registered first.
+preset HALVES: Array[B64, 3] = [0.5, -2.5, 0x1.8p+0]
+preset SINGLES: Array[B32, 2] = [1.0, 0.25]
+preset WORDS: Array[U16, 3] = [1, 2, 65535]
+
+routine start()
+  show(f"HALVES: {HALVES[0]} {HALVES[1]} {HALVES[2]}")
+  show(f"SINGLES: {SINGLES[0]} {SINGLES[1]}")
+  show(f"WORDS: {WORDS[2]}")
+
+  var x = 0.1
+  var i = 0
+  while i < 4
+    x = x *! 1.5
+    show(f"B16(from: {x}) bits {B16(from: x).to_bits()}")
+    i = i + 1
+  var tie_even = 0x1.002p+0
+  var tie_up = 0x1.006p+0
+  var big = 65519.0
+  var over = 65520.0
+  show(f"tie to even: {B16(from: tie_even).to_bits()}")
+  show(f"tie up to even: {B16(from: tie_up).to_bits()}")
+  show(f"largest below overflow: {B16(from: big).to_bits()}")
+  show(f"overflow: {B16(from: over).to_bits()}")
+
+  show(f"hypot of literals: {hypot_unchecked(x: 0.1, y: 0.2)}")
+  return

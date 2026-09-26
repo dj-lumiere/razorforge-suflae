@@ -1,3 +1,4 @@
+using Builder.Declaration;
 using Builder.Tokenizer;
 using SyntaxTree;
 using TypeModel.Symbols;
@@ -1145,41 +1146,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     // Maps an UndecidedInteger literal's SA-resolved type to its concrete integer LiteralType.
     private static TokenType ResolveUndecidedIntegerLiteral(LiteralExpression undecInt)
     {
-        return undecInt.ResolvedType?.Name switch
-        {
-            "S8" => TokenType.S8Literal,
-            "S16" => TokenType.S16Literal,
-            "S32" => TokenType.S32Literal,
-            "S128" => TokenType.S128Literal,
-            "S256" => TokenType.S256Literal,
-            "U8" => TokenType.U8Literal,
-            "U16" => TokenType.U16Literal,
-            "U32" => TokenType.U32Literal,
-            "U64" => TokenType.U64Literal,
-            "U128" => TokenType.U128Literal,
-            "U256" => TokenType.U256Literal,
-            "Address" => TokenType.AddressLiteral,
-            "Integer" => TokenType.IntegerLiteral,
-            _ => TokenType
-               .S64Literal // This should be language specific: Suflae should use IntegerLiteral
-        };
+        return UndecidedLiteralConformance.ResolveInteger(resolved: undecInt.ResolvedType);
     }
 
     // Maps an UndecidedDecimal literal's SA-resolved type to its concrete decimal LiteralType.
     private static TokenType ResolveUndecidedDecimalLiteral(LiteralExpression undecDec)
     {
-        return undecDec.ResolvedType?.Name switch
-        {
-            "B16" => TokenType.B16Literal,
-            "B32" => TokenType.B32Literal,
-            "B128" => TokenType.B128Literal,
-            "D32" => TokenType.D32Literal,
-            "D64" => TokenType.D64Literal,
-            "D128" => TokenType.D128Literal,
-            "Decimal" => TokenType.DecimalLiteral,
-            _ => TokenType
-               .B64Literal // This should be language specific: Suflae should use DecimalLiteral
-        };
+        return UndecidedLiteralConformance.ResolveDecimal(resolved: undecDec.ResolvedType);
     }
 
     /// <summary>

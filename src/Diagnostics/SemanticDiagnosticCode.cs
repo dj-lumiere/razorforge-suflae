@@ -332,6 +332,11 @@ public enum SemanticDiagnosticCode
     /// it or restructure imports.</summary>
     AmbiguousTypeReference = 262,
 
+    /// <summary>An element of an <c>Array[T, N]</c> / <c>BitArray[N]</c> preset is not a literal of the
+    /// element type. The preset becomes one constant global, so every element must be a build-time literal
+    /// that fits the element type.</summary>
+    PresetElementNotConstant = 263,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
     // ═══════════════════════════════════════════════════════════════════════════

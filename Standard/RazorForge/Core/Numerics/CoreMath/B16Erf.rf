@@ -40,7 +40,7 @@ routine B16.erf() -> B16
     c0 = c0 +! z4 *! c2
     c4 = c4 +! z4 *! c6
     c0 = c0 +! z8 *! c4
-    return b16_narrow_b64(d: s *! c0)
+    return B16(from: s *! c0)
   # |x| in [i/16, (i+1)/16): a degree-7 polynomial around i/16 + 1/32
   z = (z -! 0.03125) -! 0.0625 *! v
   var row = (i - 7) * 8
@@ -53,7 +53,7 @@ routine B16.erf() -> B16
   d0 = d0 +! zz2 *! d2
   d4 = d4 +! zz2 *! d6
   d0 = d0 +! zz4 *! d4
-  return b16_narrow_b64(d: d0.copysign(sign: s))
+  return B16(from: d0.copysign(sign: s))
 
 ### Entry `k` of the flattened erf coefficient table.
 ### :param k: The flat index.

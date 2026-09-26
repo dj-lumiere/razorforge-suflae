@@ -98,6 +98,13 @@ public partial class LlvmEmitter
                     $"Aggregate preset '{key}' element must be a scalar literal; got {element.GetType().Name}.");
             }
 
+            if (lit.LiteralType is TokenType.UndecidedInteger or TokenType.UndecidedDecimal)
+            {
+                throw new InvalidOperationException(
+                    message:
+                    $"Aggregate preset '{key}' element reached the LLVM emitter as an undecided literal; preset collection should have given it the element type.");
+            }
+
             // Numeric/bool/char literals render to a pure constant with no IR side effects.
             parts.Add(item: $"{elemLlvm} {EmitLiteral(sb: scratch, literal: lit)}");
         }

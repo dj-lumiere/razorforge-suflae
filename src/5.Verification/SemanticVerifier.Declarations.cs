@@ -1,3 +1,4 @@
+using Builder.Declaration;
 using Builder.Diagnostics;
 using SyntaxTree;
 using TypeModel.Enums;
@@ -372,6 +373,11 @@ public sealed partial class SemanticVerifier
         }
 
         SeedPresetValueMetadata(value: preset.Value, presetType: presetType);
+        if (preset.Value is ListLiteralExpression list && presetType is not ErrorTypeSymbol)
+        {
+            ConformPresetListElements(preset: preset, list: list, presetType: presetType);
+        }
+
         _registry.DeclareVariable(name: preset.Name,
             type: presetType,
             isPreset: true,
@@ -386,6 +392,60 @@ public sealed partial class SemanticVerifier
                 module: module,
                 value: preset.Value,
                 isSecret: preset.IsSecret);
+        }
+    }
+
+    /// <summary>
+    /// Types each element of an <c>Array[T, N]</c> / <c>BitArray[N]</c> preset literal against the element
+    /// type. The preset becomes a single constant global that never passes through routine-body analysis or
+    /// lowering, so this is where a bare literal gets its type (and its range check), and where its token is
+    /// made concrete: an unsuffixed `1.0` in an `Array[B32, N]` must reach the emitter as a B32 constant, not
+    /// as an undecided literal.
+    /// </summary>
+    private void ConformPresetListElements(PresetDeclaration preset, ListLiteralExpression list,
+        TypeSymbol presetType)
+    {
+        TypeSymbol? elementType = presetType.BareName switch
+        {
+            "Array" when presetType.TypeArguments is { Count: > 0 } args => args[0],
+            "BitArray" => LookupTypeWithImports(name: "Bool"),
+            _ => null
+        };
+        if (elementType == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < list.Elements.Count; i++)
+        {
+            if (list.Elements[index: i] is not LiteralExpression literal)
+            {
+                ReportError(code: SemanticDiagnosticCode.PresetElementNotConstant,
+                    message:
+                    $"Element {i} of preset '{preset.Name}' is not a literal. A '{presetType.Name}' preset " +
+                    "is stored as one constant, so write each element as a literal.",
+                    location: list.Elements[index: i].Location);
+                continue;
+            }
+
+            TypeSymbol literalType = AnalyzeLiteralExpression(literal: literal, expectedType: elementType);
+            if (literalType is ErrorTypeSymbol)
+            {
+                continue;
+            }
+
+            if (literalType.Name != elementType.Name)
+            {
+                ReportError(code: SemanticDiagnosticCode.PresetElementNotConstant,
+                    message:
+                    $"Element {i} of preset '{preset.Name}' is a '{literalType.Name}' literal, but " +
+                    $"'{presetType.Name}' holds '{elementType.Name}'. Write it as a '{elementType.Name}' literal.",
+                    location: literal.Location);
+                continue;
+            }
+
+            literal.ResolvedType = literalType;
+            list.Elements[index: i] = UndecidedLiteralConformance.Conform(literal: literal);
         }
     }
 

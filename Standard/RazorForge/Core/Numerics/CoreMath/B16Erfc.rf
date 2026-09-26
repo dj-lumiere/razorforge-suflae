@@ -56,7 +56,7 @@ routine B16.erfc() -> B16
     p = -0x1.812746b03610bp-2 +! x2 *! p
     p = 0x1.20dd750429b6dp+0 +! x2 *! p
     var f0 = B64(from: x) *! p
-    return b16_narrow_b64(d: 1.0 -! f0)
+    return B16(from: 1.0 -! f0)
   # now -0x1.ea8f94p+1 <= x <= 0x1.41bbf8p+3 with |x| > 0x1.7p-4: erfc(|x|) = exp(-x^2) * poly(z)
   var jt = LLVM::fma[B64](a: x2, b: 0x1.71547652b82fep+0, c: -(1024.0 +! 0x1p-8))
   var j = LLVM::reinterpret_bits[U64, S64](jt.to_bits() << 12) >> 48
@@ -82,7 +82,7 @@ routine B16.erfc() -> B16
   var off = 0.0
   if sgn == 1
     off = 2.0
-  return b16_narrow_b64(d: off +! r)
+  return B16(from: off +! r)
 
 ### Entry `k` of the flattened erfc rational-approximation table.
 ### :param k: The flat index.

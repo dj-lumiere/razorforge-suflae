@@ -94,21 +94,21 @@ routine B16.pow_unchecked(exp: B16) -> B16
   if xu == 0x32BB_u32 and yu == 0x4242_u32
     return B16(from: 0x1.f2cp-8_b32 +! 0x1p-20_b32)
   if xu == 0x4D47_u32 and yu == 0x9D5F_u32
-    return b16_narrow_b64(d: 0x1.f8p-1 -! 0x1p-13)
+    return B16(from: 0x1.f8p-1 -! 0x1p-13)
   if xu == 0x2E27_u32 and yu == 0xC107_u32
-    return b16_narrow_b64(d: 0x1.688p+8 -! 0x1p-4)
+    return B16(from: 0x1.688p+8 -! 0x1p-4)
   if xu == 0x14CB_u32 and yu == 0xBE46_u32
-    return b16_narrow_b64(d: 0x1.35cp+15 -! 0x1p-3)
+    return B16(from: 0x1.35cp+15 -! 0x1p-3)
   if xu == 0x7ABF_u32 and yu == 0x8CC5_u32
-    return b16_narrow_b64(d: 0x1.fe8p-1 -! 0x1p-13)
+    return B16(from: 0x1.fe8p-1 -! 0x1p-13)
   if xu == 0x650C_u32 and yu == 0x9BED_u32
-    return b16_narrow_b64(d: 0x1.f2p-1 +! 0x1p-13)
+    return B16(from: 0x1.f2p-1 +! 0x1p-13)
   if xu == 0x29A0_u32 and yu == 0xB5CF_u32
-    return b16_narrow_b64(d: 0x1.8ep+1 +! 0x1p-11)
+    return B16(from: 0x1.8ep+1 +! 0x1p-11)
   if xu == 0x17E9_u32 and yu == 0xB1CF_u32
-    return b16_narrow_b64(d: 0x1.8ep+1 +! 0x1p-11)
+    return B16(from: 0x1.8ep+1 +! 0x1p-11)
   if xu == 0x5988_u32 and yu == 0x9443_u32
-    return b16_narrow_b64(d: 0x1.fd4p-1 +! 0x1p-13)
+    return B16(from: 0x1.fd4p-1 +! 0x1p-13)
   var xd = B64(from: B16.from_bits(bits: LLVM::int_truncate[U32, U16](xu)))
   var yd = B64(from: y)
   var isex = b16_pow_is_exact(xu: xu, yu: yu, y: y)
@@ -125,7 +125,7 @@ routine B16.pow_unchecked(exp: B16) -> B16
       var test2 = b16_pow_fast(x: B64.from_bits(bits: rounded), y: isex & 0xF_u64).to_bits()
       if test1 == test2
         ret = rounded
-  return b16_narrow_b64(d: B64.from_bits(bits: ret +% sign))
+  return B16(from: B64.from_bits(bits: ret +% sign))
 
 ### Whether the binary16 value with bits `u` is an integer (zero counts).
 ### :param u: The binary16 bit pattern, zero-extended.

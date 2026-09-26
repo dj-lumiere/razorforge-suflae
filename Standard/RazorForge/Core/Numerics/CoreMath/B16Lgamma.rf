@@ -96,7 +96,7 @@ routine B16.lgamma() -> B16
               f = 0x1.250d048e7a1bdp+0 -! f
               var lp = b16_lgamma_ln(x: b16_lgamma_sinpi(x: B64(from: x -! fx)) *! z)
               f = f -! lp
-  return b16_narrow_b64(d: f)
+  return B16(from: f)
 
 ### The product `(x - r0)(x - r1)...(x - r6)` over the 7 numerator roots of the mid-range rational
 ### approximation, grouped as in the original.

@@ -377,12 +377,9 @@ internal sealed class SignatureResolver
             return;
         }
 
-        // Constructor divergent-duplicate guard: hash the body so RegisterRoutine distinguishes
-        // identical from divergent same-signature creators (mainly for stdlib cross-file paths).
-        if (finalRoutine.IsCreator)
-        {
-            finalRoutine.BodyHash = TypeRegistry.ComputeCreatorBodyHash(body: routine.Body);
-        }
+        // Divergent-duplicate guard: keep the declared body so a same-signature routine from another
+        // file can be compared by body hash (see TypeRegistry.DivergentDuplicateRoutines).
+        _sa._registry.NoteDeclaredBody(routine: finalRoutine, body: routine.Body);
 
         _sa._registry.RegisterRoutine(routine: finalRoutine);
 
