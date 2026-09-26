@@ -400,6 +400,22 @@ public sealed partial class SemanticVerifier
         // go-to-definition). Reference identity distinguishes shadowed same-name bindings.
         id.ResolvedVariable = varInfo;
 
+        // A scalar `secret preset` is inlined only inside the file that declares it (PresetInliningPass).
+        // Used from another file it would stay a bare identifier and reach the LLVM emitter, so say so here.
+        // (An array preset is never inlined: it is emitted once as a constant, which any file may index.)
+        if (varInfo is { IsPreset: true, IsSecret: true, IsPresettableAggregate: false, Location: { } declared } &&
+            !string.IsNullOrEmpty(value: id.Location.FileName) &&
+            !_registry.FileDeclaresPreset(file: id.Location.FileName, name: id.Name))
+        {
+            ReportError(code: SemanticDiagnosticCode.SecretMemberAccess,
+                message:
+                $"'{id.Name}' is a secret preset of {Path.GetFileName(path: declared.FileName)}, and a secret preset " +
+                "can be used only in the file that declares it. Drop `secret` from its declaration, or give this " +
+                "file its own constant.",
+                location: id.Location);
+            return ErrorTypeSymbol.Instance;
+        }
+
         // #11: Deadref tracking — report error if steal invalidated variable. Stamp the per-occurrence
         // dead state first (for the language server's grey-out) regardless of whether we error.
         id.IsDeadUse = _deadrefVariables.Contains(item: id.Name);

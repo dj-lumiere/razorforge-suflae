@@ -16,3 +16,10 @@ module Core
 ### :returns: The correctly rounded sine.
 routine B128.sin() -> B128
   return B128.from_bits(bits: b128_trig(bits: me.to_bits(), cosine: false))
+
+### Returns the sine and the cosine together, each correctly rounded exactly as `sin()` and `cos()` return
+### them. They share the argument reduction, so the pair costs little more than one of them.
+### :returns: `(sin(me), cos(me))`.
+routine B128.sincos() -> (B128, B128)
+  var r = b128_trig_both(bits: me.to_bits())
+  return (B128.from_bits(bits: r.item0), B128.from_bits(bits: r.item1))

@@ -1504,7 +1504,8 @@ routine B128(from: B128) -> B128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B128` value.
 routine B128(from: D32) -> B128
-  return B128(from: B64(from))
+  var d = from.decode()
+  return B128.from_bits(bits: decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 113_s64, emin: -16382_s64, emax: 16383_s64))
 
 ### Converts a decimal64 value to quadruple-precision binary floating point.
 ### :param from: The decimal floating-point input value.
@@ -1516,7 +1517,7 @@ routine B128(from: D64) -> B128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B128` value.
 routine B128(from: D128) -> B128
-  return d128_to_uf192(x: from).to_b128()
+  return d128parts_to_uf192(p: from.decode()).to_b128()
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)

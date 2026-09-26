@@ -211,12 +211,9 @@ routine d128parts_to_uf192(p: D128Parts) -> UnpackedFloat[3, 6]
     return num.div(you: den)
   return uf192_from_u128(c: p.coeff, sign: p.sign).mul(you: uf192_pow10(e: p.exp))
 
-### dec -> bin: D128 value as a W=192 engine value (coeff exact, scaled by 10^exp).
-routine d128_to_uf192(x: D128) -> UnpackedFloat[3, 6]
-  return d128parts_to_uf192(p: x.decode())
-
-### bin -> dec: W=192 engine value as a D128, correctly rounded to <=34 digits.
-routine uf192_to_d128(x: UnpackedFloat[3, 6]) -> D128
+### bin -> dec for values beyond uf192_to_d128's table: scale by the engine's own 10^q and round through
+### decfinB (the scaled integer carries a sticky last digit, so decfinB's rounding is the only one).
+routine uf192_to_d128_scaled(x: UnpackedFloat[3, 6]) -> D128
   if x.isnan()
     return D128.quiet_nan()
   if x.isinf()
@@ -234,6 +231,152 @@ routine uf192_to_d128(x: UnpackedFloat[3, 6]) -> D128
   # after rounding to 34 digits, so a float->decimal result is stored reduced (e.g. exp2(10)
   # is 1024×10^0, not 1024×10^-30) rather than padded to a fixed ~34-digit fraction.
   return d128_of_parts(p: decfinB(sign: sign, coeff: limbs6_low_u256(a: coeff), exp: LLVM::sub(a: 0_s64, b: q), pref: 6111_s64))
+
+### dec -> bin for the transcendentals: a D128 as a W=192 engine value. The coefficient (< 2^113),
+### normalized to 128 bits, times the tabled 192-bit 10^exp (D64Trans' D64_POW10_192, exponents -398..414)
+### is a 320-bit product rounded once to the 191-bit significand: exact up to that rounding for
+### 0 <= exp <= 82, within about one unit of the last place elsewhere. Exponents outside the table (values
+### beyond ~1e±400) take d128parts_to_uf192.
+routine d128_to_uf192(x: D128) -> UnpackedFloat[3, 6]
+  var p = x.decode()
+  if p.special != 0_u64 or p.coeff == 0_u128 or p.exp < -398_s64 or p.exp > 414_s64
+    return d128parts_to_uf192(p: p)
+  var lz = LLVM::leading_zeros(p.coeff)
+  var c = LLVM::shift_left(value: p.coeff, bits: lz)
+  var (a3, a2, a1, a0) = d64_mul_pow10(a: LLVM::int_truncate[U128, U64](c), e: p.exp)
+  var (b3, b2, b1, b0) = d64_mul_pow10(a: LLVM::int_truncate[U128, U64](c >>> 64), e: p.exp)
+  # the 320-bit product A + B * 2^64 as five words p4..p0 (p0 = a0), in [2^318, 2^320)
+  var s1 = LLVM::zero_extend[U64, U128](a1) +% LLVM::zero_extend[U64, U128](b0)
+  var s2 = LLVM::zero_extend[U64, U128](a2) +% LLVM::zero_extend[U64, U128](b1) +% (s1 >>> 64)
+  var s3 = LLVM::zero_extend[U64, U128](a3) +% LLVM::zero_extend[U64, U128](b2) +% (s2 >>> 64)
+  var p4 = b3 +% LLVM::int_truncate[U128, U64](s3 >>> 64)
+  var p3 = LLVM::int_truncate[U128, U64](s3)
+  var p2 = LLVM::int_truncate[U128, U64](s2)
+  var p1 = LLVM::int_truncate[U128, U64](s1)
+  # the significand is the top 191 bits (leading 1 at bit 190), the bit below them decides the rounding
+  var top = p4 >>> 63
+  var h2 = p4
+  var h1 = p3
+  var h0 = p2
+  var half = p1 >>> 63
+  var below = (p1 << 1) != 0_u64 or a0 != 0_u64
+  if top != 0_u64
+    h0 = (p2 >>> 1) | (p3 << 63)
+    h1 = (p3 >>> 1) | (p4 << 63)
+    h2 = p4 >>> 1
+    half = p2 & 1_u64
+    below = p1 != 0_u64 or a0 != 0_u64
+  var ex = 126_s64 +% LLVM::reinterpret_bits[U64, S64](top) +% d64_pow10_bin_exp(e: p.exp) -% LLVM::int_truncate[U128, S64](lz)
+  if half != 0_u64 and (below or (h0 & 1_u64) != 0_u64)
+    h0 = h0 +% 1_u64
+    if h0 == 0_u64
+      h1 = h1 +% 1_u64
+      if h1 == 0_u64
+        h2 = h2 +% 1_u64
+        if (h2 >>> 63) != 0_u64
+          h2 = h2 >>> 1
+          ex = ex +% 1_s64
+  return UnpackedFloat[3, 6].make(mant: wide_words3[3](h2: h2, h1: h1, h0: h0), exp: ex, fpclass: SignedFpClass.from_flags(sign: p.sign, iszero: false, isinf: false, isnan: false))
+
+### bin -> dec: W=192 engine value as a D128, correctly rounded to <=34 digits. x = m * 2^(e2-190) times the
+### tabled 192-bit 10^q, q = 33 - floor(e2 * log10(2)), has a 34- or 35-digit integer part N, and the
+### 384-bit product carries the fraction for the one rounding. The product is exact for 0 <= q <= 82. For
+### q > 82 (x below 1e-49) x * 10^q is never an integer or halfway (its binary denominator is at least 2^77),
+### and the table's error cannot move the rounding. For q < 0 (x at or above 1e34) x can be exactly halfway
+### (a B128 input, say), so a result within 2^-62 of halfway is settled exactly by binary_is_decimal_tie.
+### Values beyond the table (q outside -398..414, x beyond ~1e±380) take uf192_to_d128_scaled.
+routine uf192_to_d128(x: UnpackedFloat[3, 6]) -> D128
+  if x.isnan()
+    return D128.quiet_nan()
+  if x.isinf()
+    return D128.infinity(sign: x.sign())
+  if x.iszero()
+    return d128_of_parts(p: D128Parts(sign: x.sign(), special: 0_u64, exp: 0_s64, coeff: 0_u128))
+  var e2 = x.exp +% 1_s64
+  var q = 33_s64 -% ((e2 *% 78913_s64) >> 18)
+  if q < -398_s64 or q > 414_s64
+    return uf192_to_d128_scaled(x: x)
+  var m0 = x.mant[0]
+  var m1 = x.mant[1]
+  var m2 = x.mant[2]
+  # the 384-bit product m * M as six words p5..p0, accumulated one 64-bit word of m at a time
+  var (a3, a2, a1, a0) = d64_mul_pow10(a: m0, e: q)
+  var (b3, b2, b1, b0) = d64_mul_pow10(a: m1, e: q)
+  var (c3, c2, c1, c0) = d64_mul_pow10(a: m2, e: q)
+  var s1 = LLVM::zero_extend[U64, U128](a1) +% LLVM::zero_extend[U64, U128](b0)
+  var s2 = LLVM::zero_extend[U64, U128](a2) +% LLVM::zero_extend[U64, U128](b1) +% LLVM::zero_extend[U64, U128](c0) +% (s1 >>> 64)
+  var s3 = LLVM::zero_extend[U64, U128](a3) +% LLVM::zero_extend[U64, U128](b2) +% LLVM::zero_extend[U64, U128](c1) +% (s2 >>> 64)
+  var s4 = LLVM::zero_extend[U64, U128](b3) +% LLVM::zero_extend[U64, U128](c2) +% (s3 >>> 64)
+  var p5 = c3 +% LLVM::int_truncate[U128, U64](s4 >>> 64)
+  var p4 = LLVM::int_truncate[U128, U64](s4)
+  var p3 = LLVM::int_truncate[U128, U64](s3)
+  var p2 = LLVM::int_truncate[U128, U64](s2)
+  var p1 = LLVM::int_truncate[U128, U64](s1)
+  # the integer part N sits above bit 256 + k, k = 125 - e2 - floor(q * log2(10)), which is 13..16
+  var k = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](125_s64 -% e2 -% d64_pow10_bin_exp(e: q)))
+  var n = ((LLVM::zero_extend[U64, U128](p5) << 64) | LLVM::zero_extend[U64, U128](p4)) >>> k
+  # the top 128 fraction bits (the fraction times 2^128) and whether any bit below them is set
+  var fhi = (((LLVM::zero_extend[U64, U128](p3) << 64) | LLVM::zero_extend[U64, U128](p2)) >>> k) | (LLVM::zero_extend[U64, U128](p4) << (128_u32 -% k))
+  var frest = (p2 & ((1_u64 << k) -% 1_u64)) != 0_u64 or p1 != 0_u64 or a0 != 0_u64
+  var exact = q >= 0_s64 and q <= 82_s64
+  var half = 1_u128 << 127
+  var near = 1_u128 << 66
+  # the tie check needs x as an odd U128 times a power of two (an exact binary input always is)
+  var tm = 0_u128
+  var tlsb = 0_s64
+  if not exact and q < 0_s64
+    var tz = 0_s64
+    var w0 = m0
+    var w1 = m1
+    var w2 = m2
+    if m0 == 0_u64
+      tz = 64_s64
+      w0 = m1
+      w1 = m2
+      w2 = 0_u64
+      if m1 == 0_u64
+        tz = 128_s64
+        w0 = m2
+        w1 = 0_u64
+    var t0 = LLVM::reinterpret_bits[U64, S64](LLVM::trailing_zeros(w0))
+    var sh = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](t0))
+    var low = ((LLVM::zero_extend[U64, U128](w1) << 64) | LLVM::zero_extend[U64, U128](w0))
+    if w2 == 0_u64
+      tm = LLVM::shift_right_unsigned(low, sh)
+      tlsb = tz +% t0 +% e2 -% 190_s64
+    elseif t0 >= LLVM::reinterpret_bits[U64, S64](64_u64 -% LLVM::leading_zeros(w2))
+      tm = LLVM::shift_right_unsigned(low, sh) | LLVM::shift_left(value: LLVM::zero_extend[U64, U128](w2), bits: 128_u128 -% sh)
+      tlsb = tz +% t0 +% e2 -% 190_s64
+  var c = n
+  var ex = 0_s64 -% q
+  var up = false
+  if n < 10000000000000000000000000000000000_u128
+    var off = if fhi >= half then fhi -% half else half -% fhi
+    if exact
+      up = fhi > half or (fhi == half and (frest or (n & 1_u128) != 0_u128))
+    elseif q < 0_s64 and off < near and binary_is_decimal_tie(m: tm, lsb: tlsb, t: n, qe: q)
+      up = (n & 1_u128) != 0_u128
+    else
+      up = fhi >= half
+  else
+    c = div_pow10_u128(x: n, k: 1_s64)
+    var d = n -% c *% 10_u128
+    ex = 1_s64 -% q
+    if exact
+      up = d > 5_u128 or (d == 5_u128 and (fhi != 0_u128 or frest or (c & 1_u128) != 0_u128))
+    elseif q < 0_s64 and ((d == 5_u128 and fhi < near) or (d == 4_u128 and fhi > (0_u128 -% near))) and binary_is_decimal_tie(m: tm, lsb: tlsb, t: c, qe: q -% 1_s64)
+      up = (c & 1_u128) != 0_u128
+    else
+      up = d >= 5_u128
+  if up
+    c = c +% 1_u128
+    if c == 10000000000000000000000000000000000_u128
+      c = 1000000000000000000000000000000000_u128
+      ex = ex +% 1_s64
+  # stored reduced: strip every trailing zero
+  var tz10 = trailing_zeros10_u128(c: c, cap0: 34_s64)
+  c = div_pow10_u128(x: c, k: tz10)
+  return d128_of_parts(p: D128Parts(sign: x.sign(), special: 0_u64, exp: ex +% tz10, coeff: c))
 
 # ============================================================================
 # Transcendentals — decode to the W=192 engine, run the engine core, round back
@@ -493,18 +636,6 @@ routine D128.fma!(b: D128, c: D128) -> D128
 ### :param c: The addend.
 routine D128.fma_unchecked(b: D128, c: D128) -> D128
   return uf192_to_d128(x: d128_to_uf192(x: me).fma(b: d128_to_uf192(x: b), c: d128_to_uf192(x: c)))
-
-### Sine of me (radians). Finite-preserving for finite input; never crashes.
-routine D128.sin() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).sin(n: 16_s64))
-
-### Cosine of me (radians). Finite-preserving for finite input; never crashes.
-routine D128.cos() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).cos())
-
-### Tangent of me (radians). Finite-preserving for finite input; never crashes.
-routine D128.tan() -> D128
-  return uf192_to_d128(x: d128_to_uf192(x: me).tan())
 
 ### Arcsine asin(me) in radians. Crashes: NumericDomainError on NaN/domain (|me|>1),
 ### NumericOverflowError on ±inf.

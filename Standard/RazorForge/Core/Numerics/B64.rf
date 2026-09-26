@@ -139,13 +139,14 @@ routine B64(from: B64) -> B64
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B64` value.
 routine B64(from: D64) -> B64
-  return d64_to_b128(x: from).B64()
+  var d = from.decode()
+  return B64.from_bits(bits: LLVM::int_truncate[U128, U64](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 53_s64, emin: -1022_s64, emax: 1023_s64)))
 
 ### Converts a decimal128 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B64` value.
 routine B64(from: D128) -> B64
-  return d128_to_uf192(x: from).to_b128().B64()
+  return d128parts_to_uf192(p: from.decode()).to_b128().B64()
 
 # ============================================================================
 # Arithmetic Operations

@@ -637,7 +637,8 @@ public sealed partial class StdlibLoader
                         type: presetType,
                         module: moduleName,
                         value: preset.Value,
-                        isSecret: preset.IsSecret);
+                        isSecret: preset.IsSecret,
+                        location: preset.Location);
                 }
             }
         }

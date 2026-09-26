@@ -142,13 +142,15 @@ routine B32(from: B64) -> B32
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D32) -> B32
-  return B32(from: B64(from))
+  var d = from.decode()
+  return B32.from_bits(bits: LLVM::int_truncate[U128, U32](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 24_s64, emin: -126_s64, emax: 127_s64)))
 
 ### Converts a decimal64 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `B32` value.
 routine B32(from: D64) -> B32
-  return B32(from: B64(from))
+  var d = from.decode()
+  return B32.from_bits(bits: LLVM::int_truncate[U128, U32](decimal_to_binary_bits(sign: d.sign, special: d.special, coeff: d.coeff, exp: d.exp, p: 24_s64, emin: -126_s64, emax: 127_s64)))
 
 ### Converts a decimal128 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.

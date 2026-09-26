@@ -391,7 +391,8 @@ public sealed partial class SemanticVerifier
                 type: presetType,
                 module: module,
                 value: preset.Value,
-                isSecret: preset.IsSecret);
+                isSecret: preset.IsSecret,
+                location: preset.Location);
         }
     }
 

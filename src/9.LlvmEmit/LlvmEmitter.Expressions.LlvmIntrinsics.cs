@@ -403,9 +403,10 @@ public partial class LlvmEmitter
     /// </summary>
     /// <summary>
     /// Splits a bitcast operand string <c>"&lt;Type&gt; &lt;Value&gt;"</c> into its type and value.
-    /// Most types are space-free, but inline-array aggregates (<c>[N x T]</c>, possibly nested) contain
-    /// spaces — split after the balanced closing bracket in that case; otherwise split on the first
-    /// space. Returns null when the operand is malformed.
+    /// Most types are space-free, but inline-array aggregates (<c>[N x T]</c>, possibly nested) and quoted
+    /// names of types with several type arguments contain spaces — split after the balanced closing bracket
+    /// or the closing quote in those cases; otherwise split on the first space. Returns null when the
+    /// operand is malformed.
     /// </summary>
     private static (string FromType, string Val)? SplitBitcastOperand(string operand)
     {
@@ -439,6 +440,21 @@ public partial class LlvmEmitter
 
             return (operand.Substring(startIndex: 0, length: close + 1), operand
                .Substring(startIndex: close + 1)
+               .Trim());
+        }
+
+        // A quoted type name keeps its type arguments' spaces (`%"Record.Core.UnpackedFloat[3, 6]"`):
+        // the type runs to the closing quote.
+        if (operand.StartsWith(value: "%\"", comparisonType: StringComparison.Ordinal))
+        {
+            int quote = operand.IndexOf(value: '"', startIndex: 2);
+            if (quote < 0 || quote + 1 >= operand.Length)
+            {
+                return null;
+            }
+
+            return (operand.Substring(startIndex: 0, length: quote + 1), operand
+               .Substring(startIndex: quote + 1)
                .Trim());
         }
 

@@ -2570,8 +2570,9 @@ public sealed partial class TypeRegistry
     /// <param name="module">The module this preset belongs to.</param>
     /// <param name="value">The value.</param>
     /// <param name="isSecret">Whether the preset is file-private (secret).</param>
+    /// <param name="location">Where the preset is declared (a secret preset's file decides where it may be used).</param>
     public void RegisterPreset(string name, TypeSymbol type, string? module = null,
-        Expression? value = null, bool isSecret = false)
+        Expression? value = null, bool isSecret = false, SourceLocation? location = null)
     {
         var variable = new VariableInfo(name: name, type: type)
         {
@@ -2579,10 +2580,15 @@ public sealed partial class TypeRegistry
             IsPreset = true,
             IsSecret = isSecret,
             Module = module,
-            PresetValue = value
+            PresetValue = value,
+            Location = location
         };
 
         _presets[key: name] = variable;
+        if (location is { FileName: { Length: > 0 } file })
+        {
+            _presetDeclarationSites.Add(item: (file, name));
+        }
 
         // Index by module-qualified name for unambiguous lookup
         string qualifiedName = variable.QualifiedName;
@@ -2591,6 +2597,26 @@ public sealed partial class TypeRegistry
             _presetsByQualifiedName.TryAdd(key: qualifiedName, value: variable);
         }
     }
+
+    // (file, name) of every registered preset: several files may declare a same-named secret preset, while
+    // _presets keeps one entry per name.
+    private readonly HashSet<(string File, string Name)> _presetDeclarationSites =
+        new(comparer: new PresetSiteComparer());
+
+    private sealed class PresetSiteComparer : IEqualityComparer<(string File, string Name)>
+    {
+        public bool Equals((string File, string Name) a, (string File, string Name) b) =>
+            string.Equals(a: a.Name, b: b.Name, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(a: a.File, b: b.File, comparisonType: StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string File, string Name) site) =>
+            HashCode.Combine(value1: StringComparer.OrdinalIgnoreCase.GetHashCode(obj: site.File),
+                value2: StringComparer.Ordinal.GetHashCode(obj: site.Name));
+    }
+
+    /// <summary>Whether <paramref name="file"/> itself declares a preset named <paramref name="name"/>.</summary>
+    public bool FileDeclaresPreset(string file, string name) =>
+        _presetDeclarationSites.Contains(item: (file, name));
 
     /// <summary>
     /// Looks up a variable by name in the current scope chain,

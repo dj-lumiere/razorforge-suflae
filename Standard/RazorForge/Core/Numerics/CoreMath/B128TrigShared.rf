@@ -50,7 +50,17 @@ secret routine b128_trig(bits: U128, cosine: Bool) -> U128
   if not cosine
     sign = bits & signmask
   var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
-  var fr = b128_trig_fast(m: m, e: e, cosine: cosine)
+  return b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: cosine), m: m, e: e, cosine: cosine, sign: sign)
+
+### Rounds a fast-path result, or runs the accurate path when the fast one cannot vouch for it.
+### :param fr: The fast path's (vouched, frac, e2, sign) result.
+### :param m: The argument's significand.
+### :param e: The argument's exponent.
+### :param cosine: True for the cosine, false for the sine.
+### :param sign: The argument's sign bit for the sine, 0 for the cosine.
+### :returns: The bits of the correctly rounded result.
+secret routine b128_trig_finish(fr: (Bool, U128, S64, U128), m: U128, e: S64, cosine: Bool, sign: U128) -> U128
+  var implicit = 1_u128 << 112
   if fr.item0
     # round on the fixed 15-bit guard unless it sits within 16 units of the midpoint
     var frac = fr.item1
@@ -62,6 +72,31 @@ secret routine b128_trig(bits: U128, cosine: Bool) -> U128
       var ex = LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](fr.item2 +% 16382)) << 112
       return (sign ^ fr.item3) | (((ex +% (frac >>> 15)) -% implicit) +% up)
   return b128_trig_accurate(m: m, e: e, cosine: cosine, sign: sign)
+
+### Both correctly rounded results for the argument bits, the sine's then the cosine's, sharing the argument
+### reduction (the expensive part) between them.
+### :param bits: The argument's bits.
+### :returns: The bits of sin and of cos.
+secret routine b128_trig_both(bits: U128) -> (U128, U128)
+  var signmask = 1_u128 << 127
+  var expmask = 0x7FFF_u128 << 112
+  var implicit = 1_u128 << 112
+  var ax = bits & (signmask -% 1)
+  if ax >= expmask or ax < (LLVM::zero_extend[U64, U128](16383_u64 -% 57_u64) << 112)
+    return (b128_trig(bits: bits, cosine: false), b128_trig(bits: bits, cosine: true))
+  var m = (ax & (implicit -% 1)) | implicit
+  var sign = bits & signmask
+  var e = LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](ax >>> 112)) -% 16383
+  if e < -8
+    return (b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: false), m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: b128_trig_fast(m: m, e: e, cosine: true), m: m, e: e, cosine: true, sign: 0_u128))
+  var r = b128_trig_reduce(m: m, e: e)
+  if not r.item0
+    return (b128_trig_accurate(m: m, e: e, cosine: false, sign: sign), b128_trig_accurate(m: m, e: e, cosine: true, sign: 0_u128))
+  var sq = b128_trig_squares(t1: r.item3, et: r.item4)
+  var s1 = b128_trig_sin_frac(t1: r.item3, u: sq.item0, v: sq.item1)
+  var fs = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: false)
+  var fc = b128_trig_fast_tail(n: r.item1, negative: r.item2, rt1: r.item3, ret: r.item4, sq: sq, s1b: s1, cosine: true)
+  return (b128_trig_finish(fr: fs, m: m, e: e, cosine: false, sign: sign), b128_trig_finish(fr: fc, m: m, e: e, cosine: true, sign: 0_u128))
 
 ### A shift amount as the U32 the shift operators take.
 @inline
@@ -468,7 +503,6 @@ secret routine b128_trig_cos_corr(u1: U128, u: U128, v: U128) -> U128
 ### :returns: Whether the reduction vouches for the result, the magnitude as a floating 128-bit fraction
 ### frac*2^(e2-128), e2, and the sign it contributes.
 secret routine b128_trig_fast(m: U128, e: S64, cosine: Bool) -> (Bool, U128, S64, U128)
-  var signmask = 1_u128 << 127
   if e < -8
     # below 2^-8 the argument is its own reduced angle
     var t1 = m << 15
@@ -491,6 +525,13 @@ secret routine b128_trig_fast(m: U128, e: S64, cosine: Bool) -> (Bool, U128, S64
   var ret = r.item4
   var sq2 = b128_trig_squares(t1: rt1, et: ret)
   var s1b = b128_trig_sin_frac(t1: rt1, u: sq2.item0, v: sq2.item1)
+  return b128_trig_fast_tail(n: n, negative: negative, rt1: rt1, ret: ret, sq: sq2, s1b: s1b, cosine: cosine)
+
+### The fast path after the reduction: sin or cos of j*pi/256 + theta from the table and theta's series.
+### :returns: As b128_trig_fast.
+secret routine b128_trig_fast_tail(n: S64, negative: Bool, rt1: U128, ret: S64, sq: (U128, U128, U128), s1b: U128, cosine: Bool) -> (Bool, U128, S64, U128)
+  var signmask = 1_u128 << 127
+  var sq2 = sq
   # the cosine is the sine a quadrant on: the top bit of the quadrant is the sign, the low bit which of
   # sin A and cos A is wanted
   var k = (n >> 7)
