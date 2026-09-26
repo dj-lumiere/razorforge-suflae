@@ -6,6 +6,10 @@ module Numerics
 # form, a right shift moves the magnitude and keeps the sign, and text uses the digit map 0-9 A-Z a-z + /
 # (letters case-insensitive up to radix 36).
 #
+# The integer semantics and algorithms (Euclidean division, binary GCD, two's-complement bitwise ops,
+# radix text with its digit map) follow LibTomMath (The Unlicense), which this engine replaced. See
+# THIRD-PARTY-NOTICES.md.
+#
 # Memory: like the Real engine, every buffer comes from the calling thread's scratch region, and
 # {Integer} copies the final result out before releasing the region.
 
