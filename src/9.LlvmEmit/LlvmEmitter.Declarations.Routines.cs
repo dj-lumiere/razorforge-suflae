@@ -100,7 +100,7 @@ public partial class LlvmEmitter
         // ABI-Indirect struct value arg: passed as a hidden byval pointer-to-copy.
         if (ParameterPassedByval(routine: routine, paramType: param.Type))
         {
-            return $"ptr byval({GetLlvmType(type: param.Type)})";
+            return IndirectParameterLlvmType(paramType: param.Type);
         }
 
         // ABI-Coerce small struct value arg: passed reinterpreted as an integer register form.
@@ -526,7 +526,7 @@ public partial class LlvmEmitter
         }
         else if (byval)
         {
-            paramType = $"ptr byval({GetLlvmType(type: param.Type)})";
+            paramType = IndirectParameterLlvmType(paramType: param.Type);
         }
         else
         {

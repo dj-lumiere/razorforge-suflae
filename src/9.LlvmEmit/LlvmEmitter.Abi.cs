@@ -454,6 +454,22 @@ public partial class LlvmEmitter
     }
 
     /// <summary>
+    /// The LLVM parameter type of an ABI-Indirect struct argument, a pointer to a copy the CALLER made. Only
+    /// SysV x86-64 passes such a struct in the argument stack area, which is what LLVM's <c>byval</c> means.
+    /// MS x64 and AAPCS64 pass a plain pointer to the caller's copy (what clang emits for them). Marking those
+    /// <c>byval</c> made the x86-64 backend copy the struct a second time, into the outgoing argument area,
+    /// on every call (the soft-float engine ran 13-40% slower for it). Every call site spills the argument
+    /// into a fresh slot first, so the callee may treat the pointee as its own copy either way.
+    /// </summary>
+    private string IndirectParameterLlvmType(TypeSymbol paramType)
+    {
+        bool sysVX64 = _target.TargetArch == "x86_64" && _target.TargetOS != "windows";
+        return sysVX64
+            ? $"ptr byval({GetLlvmType(type: paramType)})"
+            : "ptr";
+    }
+
+    /// <summary>
     /// The ABI register type a value parameter is COERCED to (e.g. <c>i64</c> / <c>{ i64, i32 }</c>),
     /// or null when the parameter is not register-coerced. Unlike byval, coercion needs NO trivial-
     /// copyability gate: it passes the struct's VALUE (reinterpreted as integers) and the callee
@@ -528,7 +544,7 @@ public partial class LlvmEmitter
         EmitEntryAlloca(llvmName: slot, llvmType: t);
         EmitLine(sb: sb, line: $"  store {t} {argValue}, ptr {slot}");
         newValue = slot;
-        newType = $"ptr byval({t})";
+        newType = IndirectParameterLlvmType(paramType: parameterType);
         return true;
     }
 }

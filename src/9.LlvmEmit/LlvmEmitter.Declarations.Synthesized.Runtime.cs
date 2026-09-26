@@ -105,7 +105,7 @@ public partial class LlvmEmitter
                 ? null
                 : ParameterCoerceType(routine: routine, paramType: param.Type)
             let paramType = byval
-                ? $"ptr byval({GetLlvmType(type: param.Type)})"
+                ? IndirectParameterLlvmType(paramType: param.Type)
                 : coerce ?? GetParameterLlvmType(type: param.Type)
             let emittedName = GetEmittedParamName(byval: byval, name: param.Name)
             select $"{paramType} %{emittedName}");
