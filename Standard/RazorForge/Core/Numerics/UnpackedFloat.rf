@@ -942,6 +942,10 @@ common routine UnpackedFloat[N, N2].words2(h1: U64, h0: U64) -> Array[U64, N]
 common routine UnpackedFloat[N, N2].words3(h2: U64, h1: U64, h0: U64) -> Array[U64, N]
   return wide_words3[N](h2: h2, h1: h1, h0: h0)
 
+### A mantissa from five words (h4 * 2^256 + ... + h0).
+common routine UnpackedFloat[N, N2].words5(h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> Array[U64, N]
+  return wide_words5[N](h4: h4, h3: h3, h2: h2, h1: h1, h0: h0)
+
 ### A mantissa from a single 128-bit literal.
 common routine UnpackedFloat[N, N2].from_u128_mant(v: U128) -> Array[U64, N]
   return wide_from_u128[N](v: v)

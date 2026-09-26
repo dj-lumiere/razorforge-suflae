@@ -57,6 +57,20 @@ needs U64 K
       LLVM::store_element_ref[Array[U64, K], U64](r.hijack(), 2_u64, h2)
   return r
 
+### A limb array holding the five words h4..h0, most significant first (upper words dropped when K is
+### smaller).
+@inline
+routine wide_words5[K](h4: U64, h3: U64, h2: U64, h1: U64, h0: U64) -> Array[U64, K]
+needs U64 K
+  var r = wide_words3[K](h2: h2, h1: h1, h0: h0)
+  danger
+    var rp = r.hijack()
+    if LLVM::unsigned_gt(a: K, b: 3_u64)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, 3_u64, h3)
+    if LLVM::unsigned_gt(a: K, b: 4_u64)
+      LLVM::store_element_ref[Array[U64, K], U64](rp, 4_u64, h4)
+  return r
+
 ### A limb array holding `v` (zero-extended; truncated when K = 1).
 @inline
 routine wide_from_u128[K](v: U128) -> Array[U64, K]

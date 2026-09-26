@@ -5,14 +5,251 @@ module Core
 # atan2, cbrt, cos, exp, exp10, exp2, expm1, hypot, log, sin, sqrt) are correctly rounded
 # integer ports in CoreMath/B128*.rf. The rest (tan, sinh/cosh/tanh, asinh/acosh/atanh,
 # log2/log10/log1p, pow, sinpi/cospi/tanpi, erf/erfc, tgamma/lgamma) are ports of TLFloat's
-# Quad math on the W=192 engine (UnpackedFloat[3, 6]): a 192-bit mantissa carries 79 guard
-# bits over B128's 113-bit significand, so they are faithful (within 1 ULP). Against MPFR on
-# 20000 inputs each (2026-09-26) all of them were correctly rounded except 3 sinpi/cospi
-# results off by 1 ULP, but that is measured, not proven. The cores are WIDTH-GENERIC member
-# routines on UnpackedFloat[N, N2] (D64/D128/Decimal use them too). Constants/coefficients
-# come from B128Const.rf (W-dispatched; every table has a W==192 branch). Each B128 method
-# casts in via me.to_uf192() and out via .to_b128().
+# Quad math evaluated on the W=192 engine (UnpackedFloat[3, 6]) with a rounding check and a W=320
+# fallback (see the section below): a result is kept only when its error band rounds to one B128.
+# The error bounds behind the bands are measured (W=192 against W=320), not proven, so these are
+# correctly rounded as far as measured: all 18 match MPFR on 20000 inputs each. The cores are
+# WIDTH-GENERIC member routines on UnpackedFloat[N, N2] (D64/D128 use them too). Constants and
+# coefficients come from B128Const.rf (W-dispatched for W=128, 192 and 320).
 # ============================================================================
+
+# ============================================================================
+# Wide-engine rounding with a fallback. The functions below without a CORE-MATH port compute on the
+# W=192 engine with series sized for about 2^-150 (measured against the W=320 values: within 2^-147, erfc
+# 2^-140, lgamma 2^-143 absolute) and keep that result only when its 2^-135 band (erfc 2^-128) rounds to one
+# B128 (uf192_round_within); otherwise they recompute on the W=320 engine (its wider tables carry ~230+
+# bits) and round that. Each has one width-generic core used at both widths.
+# ============================================================================
+
+### A B128 as a value on the W = 64*N engine (exact; subnormals normalized).
+routine b128_to_uf[N, N2](x: B128) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var bits = x.to_bits()
+  var sign = (bits >>> 127) != 0_u128
+  var e = LLVM::int_truncate[U128, S64]((bits >>> 112) & 0x7FFF_u128)
+  var f = bits & ((1_u128 << 112) -% 1_u128)
+  if e == 0x7FFF_s64
+    if f != 0_u128
+      return UnpackedFloat[N, N2].nan()
+    return UnpackedFloat[N, N2].inf(sign: sign)
+  if e == 0_s64 and f == 0_u128
+    return UnpackedFloat[N, N2].zero(sign: sign)
+  var top = UnpackedFloat[N, N2].width() -% 2_s64
+  var cls = SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false)
+  if e == 0_s64
+    var msb = 127_s64 -% LLVM::int_truncate[U128, S64](LLVM::leading_zeros(f))
+    return UnpackedFloat[N, N2].make(mant: wide_from_u128[N](v: f).wide_shl(n: top -% msb), exp: msb -% 16495_s64, fpclass: cls)
+  return UnpackedFloat[N, N2].make(mant: wide_from_u128[N](v: f | (1_u128 << 112)).wide_shl(n: top -% 112_s64), exp: e -% 16384_s64, fpclass: cls)
+
+### The B128 that every value within u * (1 ± 2^-k) rounds to, and whether there is one. u's band stays
+### in u's binade (else "no"): the significand, leading 1 at bit 190, moves by 2^(190-k) units.
+routine uf192_round_within(u: UnpackedFloat[3, 6], k: S64) -> (Bool, B128)
+  var r = u.to_b128()
+  if u.iszero() or u.isinf() or u.isnan()
+    return (true, r)
+  var d = wide_from_u128[3](v: LLVM::shift_left(value: 1_u128, bits: LLVM::zero_extend[U64, U128](LLVM::reinterpret_bits[S64, U64](190_s64 -% k))))
+  var hi = u.mant.wide_add(you: d)
+  var lo = u.mant.wide_sub(you: d)
+  if hi.wide_bit(pos: 191_s64) or not lo.wide_bit(pos: 190_s64)
+    return (false, r)
+  var rh = UnpackedFloat[3, 6].make(mant: hi, exp: u.exp, fpclass: u.fpclass).to_b128()
+  var rl = UnpackedFloat[3, 6].make(mant: lo, exp: u.exp, fpclass: u.fpclass).to_b128()
+  return (rh.to_bits() == r.to_bits() and rl.to_bits() == r.to_bits(), r)
+
+### sin(t) for |t| <= pi/4 on any engine: the odd Taylor series in -t^2 over the whole coefficient table
+### of that width (through t^35 at W=192, t^53 at W=320), no reduction.
+routine uf_sin_small[N, N2](t: UnpackedFloat[N, N2]) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var top = 15_s64
+  if N == 3_u64
+    top = 17_s64
+  if N == 5_u64
+    top = 26_s64
+  var negsq = t.mul(you: t).neg()
+  var d = UnpackedFloat[N, N2].sin_coef(top)
+  var i = top -% 1_s64
+  while i >= 0_s64
+    d = d.fma_finite(b: negsq, c: UnpackedFloat[N, N2].sin_coef(i))
+    i = i -% 1_s64
+  return d.mul(you: t)
+
+### cos(t) for |t| <= pi/4 on any engine: the even Taylor series in -t^2 over the whole coefficient table
+### of that width (through t^34 at W=192, t^54 at W=320), no reduction.
+routine uf_cos_small[N, N2](t: UnpackedFloat[N, N2]) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var top = 16_s64
+  if N == 3_u64
+    top = 17_s64
+  if N == 5_u64
+    top = 27_s64
+  var negsq = t.mul(you: t).neg()
+  var d = UnpackedFloat[N, N2].cos_coef(top)
+  var i = top -% 1_s64
+  while i >= 0_s64
+    d = d.fma_finite(b: negsq, c: UnpackedFloat[N, N2].cos_coef(i))
+    i = i -% 1_s64
+  return d
+
+### The reduction shared by sinpi / cospi / tanpi: a = n/2 + y with y in [-1/4, 1/4] (exact: a has at
+### most 113 bits), returned as the angle pi*y and the low bits of 2n (intlsb of 4a), whose quadrant says
+### which of sin / cos applies and with which sign.
+routine b128_pi_reduce[N, N2](a: B128) -> (UnpackedFloat[N, N2], S64)
+needs U64 N, U64 N2
+  var x = b128_to_uf[N, N2](x: a).ldexp(e: 1_s64)
+  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
+  return (UnpackedFloat[N, N2].pi().mul(you: y), x.ldexp(e: 1_s64).intlsb())
+
+### sin(pi*a) for a non-integer finite a.
+routine b128_sinpi_core[N, N2](a: B128) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var (t, lx) = b128_pi_reduce[N, N2](a: a)
+  var z = uf_cos_small[N, N2](t: t)
+  if ((lx +% 3_s64) & 2_s64) != 0_s64
+    z = uf_sin_small[N, N2](t: t).neg()
+  if ((lx +% 7_s64) & 4_s64) != 0_s64
+    z = z.neg()
+  return z
+
+### cos(pi*a) for a finite a that is not a half-integer.
+routine b128_cospi_core[N, N2](a: B128) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var (t, lx) = b128_pi_reduce[N, N2](a: a)
+  var z = uf_sin_small[N, N2](t: t).neg()
+  if ((lx +% 3_s64) & 2_s64) != 0_s64
+    z = uf_cos_small[N, N2](t: t)
+  if ((lx +% 1_s64) & 4_s64) != 0_s64
+    z = z.neg()
+  return z
+
+### tan(pi*a) for a non-integer finite a (±infinity at a half-integer).
+routine b128_tanpi_core[N, N2](a: B128) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var (t, lx) = b128_pi_reduce[N, N2](a: a)
+  var s = uf_sin_small[N, N2](t: t)
+  var c = uf_cos_small[N, N2](t: t)
+  var odd = ((lx +% 1_s64) & 2_s64) != 0_s64
+  var z = s.div(you: c)
+  if odd
+    z = c.div(you: s)
+  if z.isinf()
+    z = UnpackedFloat[N, N2].inf(sign: (lx & 4_s64) == 0_s64)
+  if odd
+    z = z.neg()
+  return z
+
+### erf (erfc when `complement`) on any engine: the continued fraction below |z| = 3.1, the erfc one above,
+### with more levels at W=320 (level counts must be even: each loop pass takes two).
+routine b128_erf_core[N, N2](a: UnpackedFloat[N, N2], complement: Bool) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var mid = 86_s64
+  var tail = 150_s64
+  if N == 5_u64
+    mid = 160_s64
+    tail = 320_s64
+  var one = UnpackedFloat[N, N2].from_s64(src: 1_s64)
+  var two = UnpackedFloat[N, N2].from_s64(src: 2_s64)
+  var thr = UnpackedFloat[N, N2].from_s64(src: 31_s64).div(you: UnpackedFloat[N, N2].from_s64(src: 10_s64))
+  if a.lt(you: thr.neg())
+    if complement
+      return two.add(you: a.erfc_cf_n(levels: tail, en: 24_s64))
+    return one.neg().sub(you: a.erfc_cf_n(levels: tail, en: 24_s64))
+  if a.lt(you: thr)
+    if complement
+      return one.sub(you: a.erf_cf_n(levels: mid, en: 24_s64))
+    return a.erf_cf_n(levels: mid, en: 24_s64)
+  if complement
+    return a.erfc_cf_n(levels: tail, en: 24_s64)
+  return one.sub(you: a.erfc_cf_n(levels: tail, en: 24_s64))
+
+### lgamma's (sign, log|gamma|) on any engine: lgamma_core_shift with the Stirling argument pushed to 20
+### at W=192 and to 48 at W=320, where the series' least term is far smaller.
+routine b128_lgamma_core[N, N2](a: UnpackedFloat[N, N2]) -> UFSign[N, N2]
+needs U64 N, U64 N2
+  if N == 5_u64
+    return a.lgamma_core_shift(shift: 48_s64, logn: 34_s64)
+  return a.lgamma_core_shift(shift: 20_s64, logn: 27_s64)
+
+### tan on any engine: Payne-Hanek to |red| <= pi/4 and quadrant q, then sin(red)/cos(red) for an even
+### quadrant and -cos(red)/sin(red) for an odd one.
+routine b128_tan_core[N, N2](u: UnpackedFloat[N, N2]) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var pr = u.ph(p: 1_s64)
+  var s = uf_sin_small[N, N2](t: pr.item0)
+  var c = uf_cos_small[N, N2](t: pr.item0)
+  if (pr.item1 & 1_s64) != 0_s64
+    return c.div(you: s).neg()
+  return s.div(you: c)
+
+### |x|^y on any engine for the general case: exp(y * log|x|).
+routine b128_pow_core[N, N2](x: B128, y: B128) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  return b128_to_uf[N, N2](x: x).abs().log(n: 27_s64, m: 0_s64, t: 0_s64).mul(you: b128_to_uf[N, N2](x: y)).exp(n: 24_s64)
+
+### One of the fallback functions (index `which`) of a on any engine: 0 tan, 1 sinh, 2 cosh, 3 tanh,
+### 4 asinh, 5 acosh, 6 atanh, 7 log2, 8 log10, 9 log1p, 10 erf, 11 erfc, 12 lgamma, 13 tgamma.
+routine b128_engine_fn[N, N2](a: B128, which: U64) -> UnpackedFloat[N, N2]
+needs U64 N, U64 N2
+  var u = b128_to_uf[N, N2](x: a)
+  # series lengths for ~2^-150 at W=192 (the exp/log cores pick their own at W=320)
+  var en = 24_s64
+  var ln = 27_s64
+  if which == 0_u64
+    return b128_tan_core[N, N2](u: u)
+  if which == 1_u64
+    return u.sinh_n(en: en)
+  if which == 2_u64
+    return u.cosh_n(en: en)
+  if which == 3_u64
+    return u.tanh_n(en: en)
+  if which == 4_u64
+    return u.asinh_n(ln: ln)
+  if which == 5_u64
+    return u.acosh_n(ln: ln)
+  if which == 6_u64
+    return u.atanh_n(ln: ln)
+  if which == 7_u64
+    return u.log(n: ln, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[N, N2].recip_ln2())
+  if which == 8_u64
+    return u.log(n: ln, m: 0_s64, t: 0_s64).mul(you: UnpackedFloat[N, N2].recip_ln10())
+  if which == 9_u64
+    return u.log1p(n: ln, m: 0_s64)
+  if which == 10_u64
+    return b128_erf_core[N, N2](a: u, complement: false)
+  if which == 11_u64
+    return b128_erf_core[N, N2](a: u, complement: true)
+  var g = b128_lgamma_core[N, N2](a: u)
+  if which == 12_u64
+    return g.item1
+  var r = g.item1.exp(n: en)
+  if g.item0
+    r = r.neg()
+  return r
+
+### f(a) for one of the b128_engine_fn functions: the W=192 value when its 2^-k band rounds to one B128,
+### else the W=320 value rounded.
+routine b128_fallback(a: B128, which: U64, k: S64) -> B128
+  var (ok, r) = uf192_round_within(u: b128_engine_fn[3, 6](a: a, which: which), k: k)
+  if ok
+    return r
+  return b128_engine_fn[5, 10](a: a, which: which).to_b128()
+
+### sinpi (which = 0), cospi (1) or tanpi (2) of a like b128_fallback.
+routine b128_pi_fallback(a: B128, which: U64, k: S64) -> B128
+  var u = UnpackedFloat[3, 6].zero(sign: false)
+  if which == 0_u64
+    u = b128_sinpi_core[3, 6](a: a)
+  elseif which == 1_u64
+    u = b128_cospi_core[3, 6](a: a)
+  else
+    u = b128_tanpi_core[3, 6](a: a)
+  var (ok, r) = uf192_round_within(u: u, k: k)
+  if ok
+    return r
+  if which == 0_u64
+    return b128_sinpi_core[5, 10](a: a).to_b128()
+  if which == 1_u64
+    return b128_cospi_core[5, 10](a: a).to_b128()
+  return b128_tanpi_core[5, 10](a: a).to_b128()
 
 ### exp on the unpacked engine (TLFloat exp_, N=20, M=1).
 routine UnpackedFloat[N, N2].exp(n: S64) -> UnpackedFloat[N, N2]
@@ -418,6 +655,10 @@ routine UnpackedFloat[N, N2].atanh() -> UnpackedFloat[N, N2]
 
 ### asinh on the unpacked engine (log_/log1p_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[N, N2].asinh() -> UnpackedFloat[N, N2]
+  return me.asinh_n(ln: 24_s64)
+
+### asinh with the log / log1p series length `ln`.
+routine UnpackedFloat[N, N2].asinh_n(ln: S64) -> UnpackedFloat[N, N2]
   var y = me.abs()
   if me.isnan() or y.isinf()
     return me
@@ -434,13 +675,17 @@ routine UnpackedFloat[N, N2].asinh() -> UnpackedFloat[N, N2]
   # For |x| <= 1 the log1p argument is y + y^2/(1 + sqrt(1 + y^2)), which equals sqrt(1 + y^2) - 1 + y but
   # subtracts nothing: the old `d - 1 + y` added sqrt's last-bit error (~2^-190) to a small y, so below
   # |x| ~ 2^-76 the result lost its last bits and for tiny x came back as a negative ~-2^-190.
-  var res = if ygt1 then d.fma(b: y, c: y).log(n: 24_s64, m: 0_s64, t: -10_s64) else y.mul(you: y).div(you: d.add(you: one)).add(you: y).log1p(n: 24_s64, m: 0_s64)
+  var res = if ygt1 then d.fma(b: y, c: y).log(n: ln, m: 0_s64, t: -10_s64) else y.mul(you: y).div(you: d.add(you: one)).add(you: y).log1p(n: ln, m: 0_s64)
   if me.sign()
     res = res.neg()
   return res
 
 ### acosh on the unpacked engine (log_/log1p_ N=24, M=0 — no reduction sqrt).
 routine UnpackedFloat[N, N2].acosh() -> UnpackedFloat[N, N2]
+  return me.acosh_n(ln: 24_s64)
+
+### acosh with the log / log1p series length `ln`.
+routine UnpackedFloat[N, N2].acosh_n(ln: S64) -> UnpackedFloat[N, N2]
   if me.isnan()
     return me
   var one = UnpackedFloat[N, N2].from_s64(src: 1_s64)
@@ -457,10 +702,10 @@ routine UnpackedFloat[N, N2].acosh() -> UnpackedFloat[N, N2]
   var two = UnpackedFloat[N, N2].from_s64(src: 2_s64)
   if me.lt(you: two)
     var w = tm1.add(you: tm1.mul(you: me.add(you: one)).sqrt())
-    return w.log1p(n: 24_s64, m: 0_s64)
+    return w.log1p(n: ln, m: 0_s64)
   # m=0: drop the second (reduction) sqrt; n=24 (~2^-130) covers the B128/D128 target.
   var s = me.add(you: one).mul(you: tm1).sqrt().add(you: me)
-  return s.log(n: 24_s64, m: 0_s64, t: -10_s64)
+  return s.log(n: ln, m: 0_s64, t: -10_s64)
 
 # ============================================================================
 # B128 method wrappers
@@ -540,7 +785,18 @@ routine B128.log1p!() -> B128
 
 ### `ln(1+me)` with raw IEEE (NaN -> qNaN, me=-1 -> -inf, me<-1 -> qNaN, +inf -> +inf). No crash.
 routine B128.log1p_unchecked() -> B128
-  return me.log1p_unchecked_n(n: 21_s64)
+  if me.is_nan()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  if me.is_zero()
+    return me
+  var negone = UnpackedFloat[3, 6].from_s64(src: -1_s64).to_b128()
+  if me == negone
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
+  if me < negone
+    return B128.from_bits(bits: b128_qnan())
+  if me.is_infinite()
+    return me
+  return b128_fallback(a: me, which: 9_u64, k: 135_s64)
 
 ### `ln(1+me)` raw IEEE, explicit atanh/exp-series term count `n`.
 routine B128.log1p_unchecked_n(n: S64) -> B128
@@ -568,7 +824,15 @@ routine B128.log2!() -> B128
 
 ### `log2(me)` with raw IEEE (computed as ln(me) * (1/ln2)). No crash.
 routine B128.log2_unchecked() -> B128
-  return me.log2_unchecked_n(n: 23_s64)
+  if me.is_nan()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  if me.is_zero()
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
+  if me.is_negative()
+    return B128.from_bits(bits: b128_qnan())
+  if me.is_infinite()
+    return me
+  return b128_fallback(a: me, which: 7_u64, k: 135_s64)
 
 ### `log2(me)` raw IEEE, with the inner log atanh-series term count `n`.
 routine B128.log2_unchecked_n(n: S64) -> B128
@@ -593,7 +857,15 @@ routine B128.log10!() -> B128
 
 ### `log10(me)` with raw IEEE (computed as ln(me) * (1/ln10)). No crash.
 routine B128.log10_unchecked() -> B128
-  return me.log10_unchecked_n(n: 23_s64)
+  if me.is_nan()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  if me.is_zero()
+    return B128.from_bits(bits: b128_inf(sign: 1_u64))
+  if me.is_negative()
+    return B128.from_bits(bits: b128_qnan())
+  if me.is_infinite()
+    return me
+  return b128_fallback(a: me, which: 8_u64, k: 135_s64)
 
 ### `log10(me)` raw IEEE, with the inner log atanh-series term count `n`.
 routine B128.log10_unchecked_n(n: S64) -> B128
@@ -706,11 +978,14 @@ routine B128.pow_unchecked_p(you: B128, logn: S64, expn: S64, fast: Bool) -> B12
     if me.is_negative() and yisoddint
       zu = zu.neg()
     return zu.to_b128()
-  var z = me.abs().to_uf192().log(n: logn, m: 0_s64, t: 0_s64).mul(you: yo).exp(n: expn)
-  # Negative base with an odd-integer exponent keeps a negative result.
+  # |x|^y on the W=192 engine, the W=320 one when that sits too close to a rounding boundary; a negative base
+  # with an odd-integer exponent keeps a negative result
+  var (ok, z) = uf192_round_within(u: b128_pow_core[3, 6](x: me, y: you), k: 135_s64)
+  if not ok
+    z = b128_pow_core[5, 10](x: me, y: you).to_b128()
   if me.is_negative() and yisoddint
-    z = z.neg()
-  return z.to_b128()
+    return z.neg()
+  return z
 
 ### Returns `asin(me)`.
 routine B128.asin!() -> B128
@@ -777,7 +1052,7 @@ routine B128.sinh!() -> B128
 
 ### `sinh(me)` with raw IEEE (large |me| -> signed inf). No crash.
 routine B128.sinh_unchecked() -> B128
-  return me.to_uf192().sinh().to_b128()
+  return b128_fallback(a: me, which: 1_u64, k: 135_s64)
 
 ### `sinh(me)` raw IEEE, with the inner expm1-series term count `n`.
 routine B128.sinh_unchecked_n(n: S64) -> B128
@@ -794,7 +1069,7 @@ routine B128.cosh!() -> B128
 
 ### `cosh(me)` with raw IEEE (large |me| -> +inf). No crash.
 routine B128.cosh_unchecked() -> B128
-  return me.to_uf192().cosh().to_b128()
+  return b128_fallback(a: me, which: 2_u64, k: 135_s64)
 
 ### `cosh(me)` raw IEEE, with the inner exp-series term count `n`.
 routine B128.cosh_unchecked_n(n: S64) -> B128
@@ -802,7 +1077,7 @@ routine B128.cosh_unchecked_n(n: S64) -> B128
 
 ### Returns `tanh(me)`.
 routine B128.tanh() -> B128
-  return me.to_uf192().tanh().to_b128()
+  return b128_fallback(a: me, which: 3_u64, k: 135_s64)
 
 ### `tanh(me)` with the inner expm1-series term count `n`.
 routine B128.tanh_n(n: S64) -> B128
@@ -819,7 +1094,7 @@ routine B128.atanh!() -> B128
 
 ### `atanh(me)` with raw IEEE (|me|=1 -> signed inf, |me|>1 -> qNaN). No crash.
 routine B128.atanh_unchecked() -> B128
-  return me.to_uf192().atanh().to_b128()
+  return b128_fallback(a: me, which: 6_u64, k: 135_s64)
 
 ### `atanh(me)` raw IEEE, with the inner log1p-series term count `n`.
 routine B128.atanh_unchecked_n(n: S64) -> B128
@@ -834,7 +1109,7 @@ routine B128.asinh() -> B128
   # exact-zero (and signed-zero) result here.
   if me.is_zero()
     return me
-  return me.to_uf192().asinh().to_b128()
+  return b128_fallback(a: me, which: 4_u64, k: 135_s64)
 
 ### Returns `acosh(me)` (computed on the W=192 engine).
 routine B128.acosh!() -> B128
@@ -849,7 +1124,7 @@ routine B128.acosh!() -> B128
 routine B128.acosh_unchecked() -> B128
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
-  return me.to_uf192().acosh().to_b128()
+  return b128_fallback(a: me, which: 5_u64, k: 135_s64)
 
 # ============================================================================
 # Forward trig — Payne-Hanek argument reduction (TLFloat ph) over the rpitab
@@ -1088,7 +1363,13 @@ routine UnpackedFloat[N, N2].tan() -> UnpackedFloat[N, N2]
 
 ### Returns `tan(me)`.
 routine B128.tan() -> B128
-  return me.tan_n(n: 15_s64)
+  if me.is_nan()
+    return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
+  if me.is_infinite()
+    return B128.from_bits(bits: b128_qnan())
+  if me.is_zero()
+    return me
+  return b128_fallback(a: me, which: 0_u64, k: 135_s64)
 
 ### `tan(me)` with the tan-series explicit degree `n`.
 routine B128.tan_n(n: S64) -> B128
@@ -1172,14 +1453,6 @@ routine UnpackedFloat[N, N2].intlsb() -> S64
     return LLVM::sub(a: LLVM::sub(a: 0_s64, b: mm), b: 1_s64)
   return mm
 
-### The reduction shared by sinpi / cospi / tanpi on the W=192 engine: a = n/2 + y with y in [-1/4, 1/4]
-### (exact: a has at most 113 bits), returned as the angle pi*y and the low bits of 2n (intlsb of 4a),
-### whose quadrant says which of sin / cos applies and with which sign.
-routine b128_pi_reduce(a: B128) -> (UnpackedFloat[3, 6], S64)
-  var x = a.to_uf192().ldexp(e: 1_s64)
-  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
-  return (UnpackedFloat[3, 6].pi().mul(you: y), x.ldexp(e: 1_s64).intlsb())
-
 ### Whether a finite B128 integer is odd (every B128 from 2^113 on is even).
 routine b128_integer_is_odd(a: B128) -> Bool
   return (a.abs().to_uf192().intlsb() & 1_s64) != 0_s64
@@ -1193,14 +1466,7 @@ routine B128.sinpi() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: me.is_negative()).to_b128()
-  var (t, lx) = b128_pi_reduce(a: me)
-  # the quadrant logic below takes -sin(t) as its sine branch
-  var z = uf192_cos_small(t: t)
-  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
-    z = uf192_sin_small(t: t).neg()
-  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 7_s64), b: 4_s64), b: 0_s64)
-    z = z.neg()
-  return z.to_b128()
+  return b128_pi_fallback(a: me, which: 0_u64, k: 135_s64)
 
 ### Returns `cos(pi*me)`: cos(pi*(n + 1/2)) is +0. Evaluated on the W=192 engine after an exact reduction to
 ### |pi*y| <= pi/4.
@@ -1209,17 +1475,10 @@ routine B128.cospi() -> B128
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     return B128.from_bits(bits: b128_qnan())
-  var (t, lx) = b128_pi_reduce(a: me)
-  var lx3and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64)
-  # the quadrant logic below takes -sin(t) as its sine branch
-  if lx3and2 == 0_s64 and t.iszero()
+  var twice = me.to_uf192().ldexp(e: 1_s64)
+  if twice.isint() and not me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: false).to_b128()
-  var z = uf192_sin_small(t: t).neg()
-  if LLVM::int_ne(a: lx3and2, b: 0_s64)
-    z = uf192_cos_small(t: t)
-  if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 4_s64), b: 0_s64)
-    z = z.neg()
-  return z.to_b128()
+  return b128_pi_fallback(a: me, which: 1_u64, k: 135_s64)
 
 ### Returns `tan(pi*me)`. At an integer n it is +0 for a positive even n and -0 for a positive odd one (IEEE
 ### 754 tanPi), with the opposite signs for negative n since tanpi is odd. Evaluated on the W=192 engine as
@@ -1231,19 +1490,7 @@ routine B128.tanpi() -> B128
     return B128.from_bits(bits: b128_qnan())
   if me.to_uf192().isint()
     return UnpackedFloat[3, 6].zero(sign: me.is_negative() != b128_integer_is_odd(a: me)).to_b128()
-  var (t, lx) = b128_pi_reduce(a: me)
-  var lx4 = LLVM::bit_and(a: lx, b: 4_s64)
-  var s = uf192_sin_small(t: t)
-  var c = uf192_cos_small(t: t)
-  var lx1and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 2_s64)
-  var z = s.div(you: c)
-  if LLVM::int_ne(a: lx1and2, b: 0_s64)
-    z = c.div(you: s)
-  if z.isinf()
-    z = UnpackedFloat[3, 6].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: LLVM::int_eq(a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
-  if LLVM::int_ne(a: lx1and2, b: 0_s64)
-    z = z.neg()
-  return z.to_b128()
+  return b128_pi_fallback(a: me, which: 2_u64, k: 135_s64)
 
 # ============================================================================
 # erf / erfc — continued-fraction expansions (TLFloat erf_/erfc_, N=120) on the
@@ -1252,6 +1499,10 @@ routine B128.tanpi() -> B128
 
 ### erf_ continued fraction (TLFloat erf_, N=120).
 routine UnpackedFloat[N, N2].erf_cf(levels: S64) -> UnpackedFloat[N, N2]
+  return me.erf_cf_n(levels: levels, en: 22_s64)
+
+### erf_cf with the term count `en` of its exp(-z^2).
+routine UnpackedFloat[N, N2].erf_cf_n(levels: S64, en: S64) -> UnpackedFloat[N, N2]
   # Backward recurrence (Lentz-style numerator/denominator pair) for the erf continued
   # fraction; `levels` recurrence levels (must be EVEN — two steps per loop iteration), sized by the
   # caller to its precision target (the W=192 erf() needs ~120; D64 far fewer). The seed numerator is
@@ -1271,10 +1522,14 @@ routine UnpackedFloat[N, N2].erf_cf(levels: S64) -> UnpackedFloat[N, N2]
     i = LLVM::sub(a: i, b: 2_s64)
   # erf(z) = (2/sqrt(pi)) * z * e^(-z^2) * (d/n); the ldexp(1) = factor of 2, rsqrt_pi = 1/sqrt(pi).
   d = d.ldexp(e: 1_s64)
-  return me.mul_finite(you: UnpackedFloat[N, N2].rsqrt_pi()).mul_finite(you: zz.neg().exp(n: 22_s64)).mul_finite(you: d.div(you: n))
+  return me.mul_finite(you: UnpackedFloat[N, N2].rsqrt_pi()).mul_finite(you: zz.neg().exp(n: en)).mul_finite(you: d.div(you: n))
 
 ### erfc_ continued fraction (TLFloat erfc_, N=120).
 routine UnpackedFloat[N, N2].erfc_cf(levels: S64) -> UnpackedFloat[N, N2]
+  return me.erfc_cf_n(levels: levels, en: 22_s64)
+
+### erfc_cf with the term count `en` of its exp(-z^2).
+routine UnpackedFloat[N, N2].erfc_cf_n(levels: S64, en: S64) -> UnpackedFloat[N, N2]
   # Backward recurrence for the erfc continued fraction (the i/2 partial terms), `levels` levels
   # (EVEN); converges for the tail |z| >= 3.1 where the erf series loses digits. Caller sizes `levels`
   # to its precision target.
@@ -1291,7 +1546,7 @@ routine UnpackedFloat[N, N2].erfc_cf(levels: S64) -> UnpackedFloat[N, N2]
     d = t
     i = LLVM::sub(a: i, b: 2_s64)
   # erfc(z) = (1/sqrt(pi)) * z * e^(-z^2) * (d/n).
-  return me.mul_finite(you: UnpackedFloat[N, N2].rsqrt_pi()).mul_finite(you: zz.neg().exp(n: 22_s64)).mul_finite(you: d.div(you: n))
+  return me.mul_finite(you: UnpackedFloat[N, N2].rsqrt_pi()).mul_finite(you: zz.neg().exp(n: en)).mul_finite(you: d.div(you: n))
 
 ### Returns the error function `erf(me)`.
 routine B128.erf() -> B128
@@ -1300,15 +1555,7 @@ routine B128.erf() -> B128
   if me.is_infinite()
     var s = if me.is_negative() then -1_s64 else 1_s64
     return UnpackedFloat[3, 6].from_s64(src: s).to_b128()
-  var thr = UnpackedFloat[3, 6].from_s64(src: 31_s64).div(you: UnpackedFloat[3, 6].from_s64(src: 10_s64))
-  var a = me.to_uf192()
-  if a.lt(you: thr.neg())
-    return UnpackedFloat[3, 6].from_s64(src: -1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_b128()
-  if a.lt(you: thr)
-    # 72 levels is bit-exact for B128 across the whole erf branch |z|<3.1 (verified: lv=60 already
-    # bit-identical to 120 at z=3.09); the tail branch keeps 120 for the W=192 79-guard-bit margin.
-    return a.erf_cf(levels: 72_s64).to_b128()
-  return UnpackedFloat[3, 6].from_s64(src: 1_s64).sub(you: a.erfc_cf(levels: 120_s64)).to_b128()
+  return b128_fallback(a: me, which: 10_u64, k: 135_s64)
 
 ### Returns the complementary error function `erfc(me)`.
 routine B128.erfc() -> B128
@@ -1317,13 +1564,8 @@ routine B128.erfc() -> B128
   if me.is_infinite()
     var s = if me.is_negative() then 2_s64 else 0_s64
     return UnpackedFloat[3, 6].from_s64(src: s).to_b128()
-  var thr = UnpackedFloat[3, 6].from_s64(src: 31_s64).div(you: UnpackedFloat[3, 6].from_s64(src: 10_s64))
-  var a = me.to_uf192()
-  if a.lt(you: thr.neg())
-    return UnpackedFloat[3, 6].from_s64(src: 2_s64).add(you: a.erfc_cf(levels: 120_s64)).to_b128()
-  if a.lt(you: thr)
-    return UnpackedFloat[3, 6].from_s64(src: 1_s64).sub(you: a.erf_cf(levels: 72_s64)).to_b128()
-  return a.erfc_cf(levels: 120_s64).to_b128()
+  # 1 - erf(z) below |z| = 3.1 cancels up to 15 bits, so the W=192 erfc is only within about 2^-140
+  return b128_fallback(a: me, which: 11_u64, k: 128_s64)
 
 ### Precision-reduced erf for sub-113-bit targets (D64 ~54 bits): identical branch structure to
 ### `erf()` but the continued fraction runs at B128 width (113-bit) instead of the full W=192 engine, with
@@ -1363,22 +1605,27 @@ routine B128.erfc_fast(levels_mid: S64, levels_tail: S64) -> B128
 # Params: R=20, O=35, sin N=15, log N=23, exp N=20.
 # ============================================================================
 
-### lgamma core (TLFloat lgamma_): returns (sign, log|gamma(me)|).
+### lgamma core (TLFloat lgamma_): returns (sign, log|gamma(me)|), the Stirling series at W=192 widths.
 routine UnpackedFloat[N, N2].lgamma_core() -> UFSign[N, N2]
+  return me.lgamma_core_shift(shift: 20_s64, logn: 23_s64)
+
+### lgamma core with the argument pushed up to `shift` before the Stirling series (whose least term shrinks
+### as the argument grows): returns (sign, log|gamma(me)|).
+routine UnpackedFloat[N, N2].lgamma_core_shift(shift: S64, logn: S64) -> UFSign[N, N2]
   var one = UnpackedFloat[N, N2].from_s64(src: 1_s64)
   var p5 = one.ldexp(e: -1_s64)
   # For a < -1 use the reflection formula at the end; work with a = 1-me there.
   var reflect = me.lt(you: one.neg())
   var a = if reflect then one.sub(you: me) else me
-  # Argument augmentation: shift a up to >= 20 by the recurrence gamma(a)=gamma(a+1)/a,
+  # Argument augmentation: shift a up to >= `shift` by the recurrence gamma(a)=gamma(a+1)/a,
   # accumulating the divided-out factors in w (the Stirling series needs a large argument).
   var inv = a.rint()
   var fr = a.sub(you: inv)
   var w = UnpackedFloat[N, N2].from_s64(src: 1_s64)
-  var twenty = UnpackedFloat[N, N2].from_s64(src: 20_s64)
+  var twenty = UnpackedFloat[N, N2].from_s64(src: shift)
   if inv.lt(you: twenty)
     var ii = inv.to_s64()
-    while LLVM::signed_lt(a: ii, b: 20_s64)
+    while LLVM::signed_lt(a: ii, b: shift)
       w = w.mul_finite(you: UnpackedFloat[N, N2].from_s64(src: ii).add(you: fr))
       ii = LLVM::add(a: ii, b: 1_s64)
     a = twenty.add(you: fr)
@@ -1391,14 +1638,22 @@ routine UnpackedFloat[N, N2].lgamma_core() -> UFSign[N, N2]
     i = LLVM::sub(a: i, b: 1_s64)
   # Stirling: lgamma(a) = series/a + (a-1/2)*ln a - a + (1/2)*ln(2pi); subtract ln|w|
   # to undo the argument augmentation.
-  var loga = a.log(n: 23_s64, m: 0_s64, t: 0_s64)
+  var loga = a.log(n: logn, m: 0_s64, t: 0_s64)
   y = y.div(you: a).add(you: a.sub(you: p5).mul(you: loga)).sub(you: a).add(you: p5.mul(you: UnpackedFloat[N, N2].ln_2pi()))
-  y = y.sub(you: w.abs().log(n: 23_s64, m: 0_s64, t: 0_s64))
+  y = y.sub(you: w.abs().log(n: logn, m: 0_s64, t: 0_s64))
   var sign = w.sign()
   if reflect
     # Reflection: lgamma(me) = ln(pi) - ln|sin(pi*fr)| - lgamma(1-me); sign from sin and parity.
-    var s = UnpackedFloat[N, N2].pi().mul(you: fr).sin(n: 15_s64)
-    y = UnpackedFloat[N, N2].ln_pi().sub(you: s.abs().log(n: 23_s64, m: 0_s64, t: 0_s64)).sub(you: y)
+    # sin(pi*fr), |fr| <= 1/2, from the small-angle series: past 1/4 it is cos(pi*(1/2 - |fr|))
+    var af = fr.abs()
+    var s = UnpackedFloat[N, N2].zero(sign: false)
+    if af.gt(you: one.ldexp(e: -2_s64))
+      s = uf_cos_small[N, N2](t: UnpackedFloat[N, N2].pi().mul(you: p5.sub(you: af)))
+    else
+      s = uf_sin_small[N, N2](t: UnpackedFloat[N, N2].pi().mul(you: af))
+    if fr.sign()
+      s = s.neg()
+    y = UnpackedFloat[N, N2].ln_pi().sub(you: s.abs().log(n: logn, m: 0_s64, t: 0_s64)).sub(you: y)
     sign = (sign).xor(you: s.sign())
     sign = sign == inv.iseven()
   return UFSign[N, N2](item0: sign, item1: y)
@@ -1500,11 +1755,7 @@ routine B128.tgamma_unchecked() -> B128
     return B128.from_bits(bits: b128_inf(sign: sg))
   if me.is_negative() and zu.isint()
     return B128.from_bits(bits: b128_qnan())
-  var p = zu.lgamma_core()
-  var r = p.item1.exp(n: 20_s64)
-  if p.item0
-    r = r.neg()
-  return r.to_b128()
+  return b128_fallback(a: me, which: 13_u64, k: 135_s64)
 
 ### Returns the log-gamma function `lgamma(me)` (= ln|gamma(me)|).
 routine B128.lgamma() -> B128
@@ -1514,5 +1765,15 @@ routine B128.lgamma() -> B128
     return B128.from_bits(bits: b128_inf(sign: 0_u64))
   if me.is_negative() and me.to_uf192().isint()
     return B128.from_bits(bits: b128_inf(sign: 0_u64))
-  var p = me.to_uf192().lgamma_core()
-  return p.item1.to_b128()
+  # lgamma's error is absolute (about 2^-143 on the W=192 engine), so near its zeros at 1 and 2 the relative
+  # band widens with the result's smallness
+  var u = b128_engine_fn[3, 6](a: me, which: 12_u64)
+  var k = 135_s64
+  if not u.iszero() and u.exp +% 1_s64 < -3_s64
+    k = 138_s64 +% u.exp +% 1_s64
+  if k < 114_s64
+    return b128_engine_fn[5, 10](a: me, which: 12_u64).to_b128()
+  var (ok, r) = uf192_round_within(u: u, k: k)
+  if ok
+    return r
+  return b128_engine_fn[5, 10](a: me, which: 12_u64).to_b128()
