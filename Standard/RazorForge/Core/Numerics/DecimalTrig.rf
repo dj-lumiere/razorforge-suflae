@@ -134,21 +134,23 @@ routine decimal_quarter_reduce(c: U128, e: S64) -> (U64, UnpackedFloat[3, 6])
     return (q, angle.neg())
   return (q, angle)
 
-### sin(t) for |t| <= pi/4 on the W=192 engine: the odd Taylor series in -t^2, no reduction.
+### sin(t) for |t| <= pi/4 on the W=192 engine: the odd Taylor series in -t^2 through t^31 (the whole
+### coefficient table), no reduction. The first dropped term is below 2^-133 of the result.
 routine uf192_sin_small(t: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
   var negsq = t.mul(you: t).neg()
-  var d = UnpackedFloat[3, 6].sin_coef(16_s64)
-  var i = 15_s64
+  var d = UnpackedFloat[3, 6].sin_coef(15_s64)
+  var i = 14_s64
   while i >= 0_s64
     d = d.fma_finite(b: negsq, c: UnpackedFloat[3, 6].sin_coef(i))
     i = i -% 1_s64
   return d.mul(you: t)
 
-### cos(t) for |t| <= pi/4 on the W=192 engine: the even Taylor series in -t^2, no reduction.
+### cos(t) for |t| <= pi/4 on the W=192 engine: the even Taylor series in -t^2 through t^32 (the whole
+### coefficient table), no reduction. The first dropped term is below 2^-140 of the result.
 routine uf192_cos_small(t: UnpackedFloat[3, 6]) -> UnpackedFloat[3, 6]
   var negsq = t.mul(you: t).neg()
-  var d = UnpackedFloat[3, 6].cos_coef(15_s64)
-  var i = 14_s64
+  var d = UnpackedFloat[3, 6].cos_coef(16_s64)
+  var i = 15_s64
   while i >= 0_s64
     d = d.fma_finite(b: negsq, c: UnpackedFloat[3, 6].cos_coef(i))
     i = i -% 1_s64

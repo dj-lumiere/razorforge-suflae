@@ -1150,7 +1150,7 @@ routine hypot_unchecked(x: B128, y: B128, z: B128) -> B128
   return xx.mul(you: xx).add(you: yy.mul(you: yy)).add(you: zz.mul(you: zz)).sqrt().to_b128()
 
 # ============================================================================
-# sinpi / cospi / tanpi (TLFloat; no rpitab — reduce via round(2a) then sin/cos polynomials)
+# sinpi / cospi / tanpi (no rpitab — reduce via round(2a) then the W=192 sin/cos series)
 # ============================================================================
 
 ### Low 16 bits of the integer value (TLFloat `intlsb`).
@@ -1172,95 +1172,75 @@ routine UnpackedFloat[N, N2].intlsb() -> S64
     return LLVM::sub(a: LLVM::sub(a: 0_s64, b: mm), b: 1_s64)
   return mm
 
-### sinpi polynomial (TLFloat sinpi_, N=14) on the already-reduced argument.
-routine UnpackedFloat[N, N2].sinpi_poly() -> UnpackedFloat[N, N2]
-  # Evaluate the ordinary sin polynomial at p = pi*me (Horner in -p^2), times -p.
-  var p = UnpackedFloat[N, N2].pi().mul(you: me)
-  var negsq = p.mul(you: p).neg()
-  var d = UnpackedFloat[N, N2].sin_coef(14_s64)
-  var i = 13_s64
-  while LLVM::signed_ge(a: i, b: 0_s64)
-    d = d.fma_finite(b: negsq, c: UnpackedFloat[N, N2].sin_coef(i))
-    i = LLVM::sub(a: i, b: 1_s64)
-  return d.mul(you: p.neg())
+### The reduction shared by sinpi / cospi / tanpi on the W=192 engine: a = n/2 + y with y in [-1/4, 1/4]
+### (exact: a has at most 113 bits), returned as the angle pi*y and the low bits of 2n (intlsb of 4a),
+### whose quadrant says which of sin / cos applies and with which sign.
+routine b128_pi_reduce(a: B128) -> (UnpackedFloat[3, 6], S64)
+  var x = a.to_uf192().ldexp(e: 1_s64)
+  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
+  return (UnpackedFloat[3, 6].pi().mul(you: y), x.ldexp(e: 1_s64).intlsb())
 
-### cospi polynomial (TLFloat cospi_, N=14) on the already-reduced argument.
-routine UnpackedFloat[N, N2].cospi_poly() -> UnpackedFloat[N, N2]
-  # Evaluate the ordinary cos polynomial at p = pi*me (Horner in -p^2).
-  var p = UnpackedFloat[N, N2].pi().mul(you: me)
-  var negsq = p.mul(you: p).neg()
-  var d = UnpackedFloat[N, N2].cos_coef(15_s64)
-  var i = 14_s64
-  while LLVM::signed_ge(a: i, b: 0_s64)
-    d = d.fma_finite(b: negsq, c: UnpackedFloat[N, N2].cos_coef(i))
-    i = LLVM::sub(a: i, b: 1_s64)
-  return d
+### Whether a finite B128 integer is odd (every B128 from 2^113 on is even).
+routine b128_integer_is_odd(a: B128) -> Bool
+  return (a.abs().to_uf192().intlsb() & 1_s64) != 0_s64
 
-### Returns `sin(pi*me)`.
+### Returns `sin(pi*me)`: sin(pi*n) is ±0 with the sign of me. Evaluated on the W=192 engine after an exact
+### reduction to |pi*y| <= pi/4.
 routine B128.sinpi() -> B128
   if me.is_nan() or me.is_zero()
     return me
   if me.is_infinite()
     return B128.from_bits(bits: b128_qnan())
-  # Reduce on the doubled argument: y = (2a - round(2a))/2 in [-1/4, 1/4]; lx is the low
-  # bits of round(2a)*2, selecting which polynomial (sin/cos) and the result sign.
-  var a = me.to_uf()
-  var x = a.ldexp(e: 1_s64)
-  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
-  var lx = x.ldexp(e: 1_s64).intlsb()
-  var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
-  # Exact zeros at integer arguments (sin(pi*integer) = 0), preserving the signed zero.
-  if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[2, 4].zero(sign: x.sign()).to_b128()
-  # Quadrant selects cospi vs sinpi polynomial; a further bit flips the sign.
-  var z = y.cospi_poly()
+  if me.to_uf192().isint()
+    return UnpackedFloat[3, 6].zero(sign: me.is_negative()).to_b128()
+  var (t, lx) = b128_pi_reduce(a: me)
+  # the quadrant logic below takes -sin(t) as its sine branch
+  var z = uf192_cos_small(t: t)
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64), b: 0_s64)
-    z = y.sinpi_poly()
+    z = uf192_sin_small(t: t).neg()
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 7_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
   return z.to_b128()
 
-### Returns `cos(pi*me)`.
+### Returns `cos(pi*me)`: cos(pi*(n + 1/2)) is +0. Evaluated on the W=192 engine after an exact reduction to
+### |pi*y| <= pi/4.
 routine B128.cospi() -> B128
   if me.is_nan()
     return B128.from_bits(bits: b128_quiet(bits: me.to_bits()))
   if me.is_infinite()
     return B128.from_bits(bits: b128_qnan())
-  var a = me.to_uf()
-  var x = a.ldexp(e: 1_s64)
-  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
-  var lx = x.ldexp(e: 1_s64).intlsb()
+  var (t, lx) = b128_pi_reduce(a: me)
   var lx3and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 3_s64), b: 2_s64)
-  if lx3and2 == 0_s64 and y.iszero()
-    return UnpackedFloat[2, 4].zero(sign: false).to_b128()
-  var z = y.sinpi_poly()
+  # the quadrant logic below takes -sin(t) as its sine branch
+  if lx3and2 == 0_s64 and t.iszero()
+    return UnpackedFloat[3, 6].zero(sign: false).to_b128()
+  var z = uf192_sin_small(t: t).neg()
   if LLVM::int_ne(a: lx3and2, b: 0_s64)
-    z = y.cospi_poly()
+    z = uf192_cos_small(t: t)
   if LLVM::int_ne(a: LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 4_s64), b: 0_s64)
     z = z.neg()
   return z.to_b128()
 
-### Returns `tan(pi*me)`.
+### Returns `tan(pi*me)`. At an integer n it is +0 for a positive even n and -0 for a positive odd one (IEEE
+### 754 tanPi), with the opposite signs for negative n since tanpi is odd. Evaluated on the W=192 engine as
+### sin / cos of the reduced angle.
 routine B128.tanpi() -> B128
   if me.is_nan() or me.is_zero()
     return me
   if me.is_infinite()
     return B128.from_bits(bits: b128_qnan())
-  var a = me.to_uf()
-  var x = a.ldexp(e: 1_s64)
-  var y = x.sub(you: x.round()).ldexp(e: -1_s64)
-  var lx = x.ldexp(e: 1_s64).intlsb()
-  var lx3 = LLVM::bit_and(a: lx, b: 3_s64)
+  if me.to_uf192().isint()
+    return UnpackedFloat[3, 6].zero(sign: me.is_negative() != b128_integer_is_odd(a: me)).to_b128()
+  var (t, lx) = b128_pi_reduce(a: me)
   var lx4 = LLVM::bit_and(a: lx, b: 4_s64)
-  if ((LLVM::signed_ge(a: lx, b: 0_s64) and lx3 == 0_s64) or (LLVM::signed_lt(a: lx, b: 0_s64) and lx3 == 3_s64)) and x.isint()
-    return UnpackedFloat[2, 4].zero(sign: LLVM::int_ne(a: lx4, b: 0_s64)).to_b128()
-  var pr = UnpackedFloat[2, 4].pi().mul(you: y).tanxy()
+  var s = uf192_sin_small(t: t)
+  var c = uf192_cos_small(t: t)
   var lx1and2 = LLVM::bit_and(a: LLVM::add(a: lx, b: 1_s64), b: 2_s64)
-  var z = pr.item0.div(you: pr.item1)
+  var z = s.div(you: c)
   if LLVM::int_ne(a: lx1and2, b: 0_s64)
-    z = pr.item1.div(you: pr.item0)
+    z = c.div(you: s)
   if z.isinf()
-    z = UnpackedFloat[2, 4].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: LLVM::int_eq(a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
+    z = UnpackedFloat[3, 6].make(mant: z.mant, exp: z.exp, fpclass: SignedFpClass.from_flags(sign: LLVM::int_eq(a: lx4, b: 0_s64), iszero: z.iszero(), isinf: z.isinf(), isnan: z.isnan()))
   if LLVM::int_ne(a: lx1and2, b: 0_s64)
     z = z.neg()
   return z.to_b128()
