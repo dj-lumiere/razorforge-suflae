@@ -32,9 +32,11 @@ routine uf192_from_u128(c: U128, sign: Bool) -> UnpackedFloat[3, 6]
   var mant = cw.wide_shl(n: LLVM::sub(a: 191_s64, b: x))
   return UnpackedFloat[3, 6].make(mant: mant, exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
-### Rounds the engine value (assumed a positive ~integer) to a 384-bit (6-limb) integer,
-### round-half-even. shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
-routine uf192_to_limbs6_round(u: UnpackedFloat[3, 6]) -> Array[U64, 6]
+### Turns the engine value (assumed a positive ~integer) into a 384-bit (6-limb) integer for a LATER
+### decimal rounding that drops at least one digit: the integer part, with its last digit nudged off 0/5
+### when the value was inexact (see D64Trans' uf128_to_u128_sticky: rounding here and again in decfinB
+### rounded twice). shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
+routine uf192_to_limbs6_sticky(u: UnpackedFloat[3, 6]) -> Array[U64, 6]
   var mw = wide_resize[3, 6](a: u.mant)
   var shift = LLVM::sub(a: 189_s64, b: u.exp)
   if LLVM::signed_le(a: shift, b: 0_s64)
@@ -42,12 +44,16 @@ routine uf192_to_limbs6_round(u: UnpackedFloat[3, 6]) -> Array[U64, 6]
   if LLVM::signed_ge(a: shift, b: 384_s64)
     return Array[U64, 6]()
   var q = mw.wide_shl(n: LLVM::sub(a: 0_s64, b: shift))
-  var lost = mw.wide_keep_low(n: shift)
-  var half = wide_bit_at[6](pos: LLVM::sub[S64](a: shift, b: 1_s64))
-  var lh = lost.wide_cmp(you: half)
-  if LLVM::signed_gt(a: lh, b: 0_s64)
-    q = q.wide_add_u64(v: 1_u64)
-  elseif LLVM::int_eq(a: lh, b: 0_s64) and q.wide_bit(pos: 0_s64)
+  if mw.wide_keep_low(n: shift).wide_is_zero()
+    return q
+  # last decimal digit of q: 2^64 = 6 (mod 10) and 6^i = 6 (mod 10), so q = l0 + 6 * (l1 + ... + l5)
+  var high = 0_u64
+  var i = 1_u64
+  while i < 6_u64
+    high = high +% LLVM::unsigned_rem[U64](a: q[i], b: 10)
+    i = i +% 1_u64
+  var digit = LLVM::unsigned_rem[U64](a: LLVM::unsigned_rem[U64](a: q[0_u64], b: 10) +% 6_u64 *% high, b: 10)
+  if digit == 0_u64 or digit == 5_u64
     q = q.wide_add_u64(v: 1_u64)
   return q
 
@@ -223,7 +229,7 @@ routine uf192_to_d128(x: UnpackedFloat[3, 6]) -> D128
   var decexp = LLVM::signed_div(a: LLVM::mul(a: e_bin, b: 315653_s64), b: 1048576_s64)
   var q = LLVM::sub(a: 40_s64, b: decexp)
   var scaled = x.abs().mul(you: uf192_pow10(e: q))
-  var coeff = uf192_to_limbs6_round(u: scaled)
+  var coeff = uf192_to_limbs6_sticky(u: scaled)
   # Normalize the result cohort: pref = qmax (6111) makes decfinB strip ALL trailing zeros
   # after rounding to 34 digits, so a float->decimal result is stored reduced (e.g. exp2(10)
   # is 1024×10^0, not 1024×10^-30) rather than padded to a fixed ~34-digit fraction.

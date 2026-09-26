@@ -100,7 +100,7 @@ routine D32(from: B64) -> D32
   # scale so the coefficient lands as a ~16-digit integer (15 - decexp) in DD precision, round to U64,
   # then decfin32 rounds 16 -> 7 digits round-half-even (pref = 90 strips trailing zeros).
   var q = LLVM::sub(a: 15_s64, b: decexp)
-  var coeff = dd_to_u64_round(u: ax.mul(you: dd_pow10(e: q)))
+  var coeff = dd_to_u64_sticky(u: ax.mul(you: dd_pow10(e: q)))
   return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: LLVM::sub(a: 0_s64, b: q), pref: 90_s64))
 
 ### dec -> DD: D32 value as a DD (coeff exact <=7 digits, scaled by 10^exp). The DD engine (~31
@@ -133,7 +133,7 @@ routine dd_to_d32(x: DD) -> D32
   var ax = x.abs()
   var decexp = LLVM::signed_div(a: LLVM::mul(a: C::rf_b64_ilogb(value: ax.hi), b: 315653_s64), b: 1048576_s64)
   var q = LLVM::sub(a: 15_s64, b: decexp)
-  var coeff = dd_to_u64_round(u: ax.mul(you: dd_pow10(e: q)))
+  var coeff = dd_to_u64_sticky(u: ax.mul(you: dd_pow10(e: q)))
   return d32_of_parts(p: decfin32(sign: sign, coeff: coeff, exp: LLVM::sub(a: 0_s64, b: q), pref: 90_s64))
 
 # ============================================================================

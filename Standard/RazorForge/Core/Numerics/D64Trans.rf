@@ -1,12 +1,12 @@
 module Core
 
 # ============================================================================
-# D64Trans — decimal64 (Pmax=16) transcendentals + libm surface via the
-# DoubleDouble engine (DD, two-B64 unevaluated pair, ~106-bit significand ~31
-# decimal digits >> 16). DD is the D64 (~54-bit) scratch engine: far cheaper than
-# the 128-bit UnpackedFloat soft-float when only ~16 digits are needed. DD carries
-# the FULL method surface incl. erf/erfc/tgamma/lgamma, so every transcendental
-# unpacks D64 -> DD, calls the DD routine, and packs DD -> D64 (round to 16 digits).
+# D64Trans — decimal64 (Pmax=16) transcendentals + libm surface via B128: every
+# transcendental converts D64 -> B128, evaluates there, and rounds B128 -> D64 once
+# (16 digits). Where B128 has a correctly rounded CORE-MATH routine (exp, exp2, exp10,
+# expm1, log, sin, cos, asin, acos, atan, atan2, cbrt, sqrt, hypot) the D64 result is
+# wrong only when the true value lies within ~2^-113 of a decimal midpoint; the rest run
+# on the B128 engine (~34 digits). The DD helpers below remain for D32 and conversions.
 # ============================================================================
 
 # ============================================================================
@@ -64,6 +64,23 @@ routine u64_coeff_to_dd(c: U64) -> DD
   var clo = LLVM::unsigned_rem(a: c, b: 100000000_u64)
   var hi = dd_of(x: LLVM::unsigned_to_float[U64, B64](chi)).mul(you: dd_pow10(e: 8_s64))
   return hi.add(you: dd_of(x: LLVM::unsigned_to_float[U64, B64](clo)))
+
+### Turns a positive DD ~integer (< 10^18) into a U64 for a LATER decimal rounding that drops at least
+### one digit: the integer part, with its last digit nudged off 0/5 when the value was inexact (rounding
+### here and again in decfin rounded twice; see uf128_to_u128_sticky).
+routine dd_to_u64_sticky(u: DD) -> U64
+  var r = u.floor()
+  var frac = u.sub(you: r)
+  var scale = dd_pow10(e: 9_s64)
+  var qhi = r.div(you: scale).floor()
+  var lo = r.sub(you: qhi.mul(you: scale))
+  var hi_u = LLVM::float_to_unsigned[B64, U64](qhi.to_b64())
+  var lo_u = LLVM::float_to_unsigned[B64, U64](lo.to_b64())
+  var q = LLVM::add(a: LLVM::mul(a: hi_u, b: 1000000000_u64), b: lo_u)
+  var digit = LLVM::unsigned_rem[U64](a: q, b: 10)
+  if (LLVM::float_ne[B64](a: frac.hi, b: 0.0_b64) or LLVM::float_ne[B64](a: frac.lo, b: 0.0_b64)) and (digit == 0_u64 or digit == 5_u64)
+    q = LLVM::add(a: q, b: 1_u64)
+  return q
 
 ### Rounds a positive DD ~integer (< 10^18, comfortably within U64) to a U64, round-half-even.
 ### Adds 0.5 and floors; on an exact half the floor lands even-or-odd per the fractional part,
@@ -132,9 +149,13 @@ routine uf128_from_u64(c: U64, sign: Bool) -> UnpackedFloat[2, 4]
   var mant = LLVM::shift_left(value: cw, bits: U128.to_width(s: LLVM::sub(a: 127_s64, b: x)))
   return UnpackedFloat[2, 4].make(mant: wide_from_u128[2](v: mant), exp: LLVM::sub(a: x, b: 2_s64), fpclass: SignedFpClass.from_flags(sign: sign, iszero: false, isinf: false, isnan: false))
 
-### Rounds the engine value (assumed a positive ~integer) to a U128, round-half-even.
-### shift = 125 - exp (positive in the ~10^20 range).
-routine uf128_to_u128_round(u: UnpackedFloat[2, 4]) -> U128
+### Turns the engine value (assumed a positive ~integer) into a U128 for a LATER decimal rounding that drops
+### at least one digit: the integer part, with its last digit nudged off 0/5 when the value was inexact.
+### Rounding the integer to nearest here and again to 16 digits in decfin64 rounded twice (a value just
+### below a decimal midpoint, ...649|4999964, came out as ...6495000 and then rounded up to ...650).
+### Truncating and marking inexactness keeps the dropped digits from ever looking exact or like an exact
+### half, so the one real rounding is correct. shift = 125 - exp (positive in the ~10^20 range).
+routine uf128_to_u128_sticky(u: UnpackedFloat[2, 4]) -> U128
   var um = u.mant.wide_low_u128()
   var shift = LLVM::sub(a: 125_s64, b: u.exp)
   if LLVM::signed_le(a: shift, b: 0_s64)
@@ -143,10 +164,8 @@ routine uf128_to_u128_round(u: UnpackedFloat[2, 4]) -> U128
     return LLVM::zero_extend[U64, U128](0_u64)
   var q = LLVM::shift_right_unsigned(um, U128.to_width(s: shift))
   var lost = LLVM::bit_and(a: um, b: U128.low_mask(n: shift))
-  var half = LLVM::shift_left[U128](value: 1, bits: U128.to_width(s: LLVM::sub[S64](a: shift, b: 1_s64)))
-  if LLVM::unsigned_gt(a: lost, b: half)
-    q = LLVM::add[U128](a: q, b: 1)
-  elseif LLVM::int_eq[U128](a: lost, b: half) and LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: q, b: 1), b: 0)
+  var digit = LLVM::unsigned_rem[U128](a: q, b: 10)
+  if LLVM::int_ne[U128](a: lost, b: 0) and (LLVM::int_eq[U128](a: digit, b: 0) or LLVM::int_eq[U128](a: digit, b: 5))
     q = LLVM::add[U128](a: q, b: 1)
   return q
 
@@ -223,7 +242,7 @@ routine b128_to_d64(x: B128) -> D64
   # scale so the coefficient lands as a ~21-digit integer (20 - decexp), then round to U128
   var q = LLVM::sub(a: 20_s64, b: decexp)
   var scaled = x.abs().to_uf().mul(you: uf128_pow10(e: q))
-  var coeff = uf128_to_u128_round(u: scaled)
+  var coeff = uf128_to_u128_sticky(u: scaled)
   # Normalize the result cohort: pref = qmax (369) makes decfin64 strip ALL trailing zeros
   # after rounding to 16 digits, so a float->decimal result is stored reduced, not padded.
   return d64_of_parts(p: decfin64(sign: sign, coeff: coeff, exp: LLVM::sub(a: 0_s64, b: q), pref: 369_s64))
@@ -234,7 +253,7 @@ routine b128_to_d64(x: B128) -> D64
 # so extreme-magnitude inputs (e.g. log of a >1e308 D64) are correct instead of overflowing to inf.
 # ============================================================================
 
-### e^me via the DD engine. Crashes on a non-finite result.
+### e^me via B128. Crashes on a non-finite result.
 ### :returns: The exponential of `me`.
 ### :throws: {NumericDomainError} when the result is NaN; {NumericOverflowError} on ±inf.
 routine D64.exp!() -> D64
@@ -248,10 +267,7 @@ routine D64.exp!() -> D64
 ### e^me, raw IEEE: may return ±inf (overflow) or NaN. Never crashes.
 ### :returns: The exponential of `me`, possibly non-finite.
 routine D64.exp_unchecked() -> D64
-  # D64 (16 digits ~54 bits) needs far fewer exp-series terms than B128's 113-bit target: n=13 is
-  # bit-exact to B128's n=20 across the D64 finite domain (n>=11 safe; +2-term margin). Uses B128's
-  # `exp_unchecked_n` so inf/NaN specials stay correct (a raw engine call drops them).
-  return b128_to_d64(x: d64_to_b128(x: me).exp_unchecked_n(n: 13_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).exp_unchecked())
 
 ### e^me - 1 (accurate near 0) via DD. Crashes on a non-finite result.
 ### :returns: `exp(me) - 1`.
@@ -267,7 +283,7 @@ routine D64.expm1!() -> D64
 ### `exp(me) - 1`, raw IEEE: may return ±inf or NaN. Never crashes.
 ### :returns: `exp(me) - 1`, possibly non-finite.
 routine D64.expm1_unchecked() -> D64
-  return b128_to_d64(x: d64_to_b128(x: me).expm1_unchecked_n(n: 15_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).expm1_unchecked())
 
 ### 2^me via DD. Crashes on a non-finite result.
 ### :returns: Two raised to the power `me`.
@@ -315,7 +331,7 @@ routine D64.log!() -> D64
 ### ln(me), raw IEEE: NaN for me<0, -inf for me=0. Never crashes.
 ### :returns: The natural logarithm of `me`, possibly non-finite.
 routine D64.log_unchecked() -> D64
-  return b128_to_d64(x: d64_to_b128(x: me).log_unchecked_n(n: 16_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).log_unchecked())
 
 ### ln(1+me) (accurate near 0) via DD. Crashes on a non-finite result (me<=-1).
 ### :returns: `ln(1 + me)`.
@@ -475,12 +491,12 @@ routine D64.fma_unchecked(b: D64, c: D64) -> D64
 ### Sine sin(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The sine of `me`.
 routine D64.sin() -> D64
-  return b128_to_d64(x: d64_to_b128(x: me).sin_n(n: 10_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).sin())
 
 ### Cosine cos(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The cosine of `me`.
 routine D64.cos() -> D64
-  return b128_to_d64(x: d64_to_b128(x: me).cos_n(n: 10_s64))
+  return b128_to_d64(x: d64_to_b128(x: me).cos())
 
 ### Tangent tan(me) (radians) via DD. Never crashes (NaN for non-finite input).
 ### :returns: The tangent of `me`.
