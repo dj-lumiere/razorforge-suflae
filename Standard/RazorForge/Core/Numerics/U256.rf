@@ -879,7 +879,7 @@ routine U256.is_odd() -> Bool
 ### Returns the upper 128 bits of this 256-bit value.
 ### :returns: Bits 255..128 as a `U128`.
 routine U256.high128() -> U128
-  var shifted = LLVM::shift_right_unsigned[U256](me, 128_u32)
+  var shifted = LLVM::shift_right_unsigned[U256](me, 128_u256)
   return LLVM::int_truncate[U256, U128](shifted)
 
 ### Returns the lower 128 bits of this 256-bit value.

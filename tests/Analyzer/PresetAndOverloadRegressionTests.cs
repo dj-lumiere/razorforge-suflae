@@ -101,4 +101,37 @@ public class PresetAndOverloadRegressionTests
                                  return
                                """);
     }
+
+    /// <summary>
+    /// An explicit generic call checks its arguments against the substituted parameters. They were only typed
+    /// against the expected type, so any argument was accepted (and an array passed where
+    /// `LLVM::load_element_ref` wants a `Hijacked` pointer reached the emitter as invalid IR).
+    /// </summary>
+    [Fact]
+    public void ExplicitGenericCall_ArgumentTypeMismatch_IsReported()
+    {
+        AssertHasError(source: """
+                               routine probe[C](p: C) -> U64
+                                 return 0_u64
+
+                               routine start()
+                                 var r = probe[Text](p: 5_s64)
+                                 return
+                               """,
+            expectedErrorSubstring: "cannot convert 'S64' to 'Text'");
+    }
+
+    [Fact]
+    public void LoadElementRef_OnAPresetValue_IsReported()
+    {
+        AssertHasError(source: """
+                               preset TAB: Array[U64, 2] = [1_u64, 2_u64]
+
+                               routine start()
+                                 danger
+                                   var r = LLVM::load_element_ref[Array[U64, 2], U64](TAB, 0_u64)
+                                 return
+                               """,
+            expectedErrorSubstring: "cannot convert 'Array[Core.U64, 2]' to 'Hijacked[Core.Array[Core.U64, 2]]'");
+    }
 }

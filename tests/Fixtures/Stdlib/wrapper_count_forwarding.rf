@@ -5,7 +5,9 @@ import IO/Console
 # `count` is both a List routine and the name of the choice/flags case-count derive. A call through a
 # wrapper (`Retained`, `Viewing`) must be forwarded to the list's own `count`, and must not bind the
 # choice/flags derive, whose body can never be built for a wrapper (it linked to an undefined symbol).
-# A choice still gets its case count.
+# A choice still gets its case count. Indexing through a wrapper reads the list's element (`xs[i]` used to
+# reach the emitter with no getitem), and an explicit `getitem(index:)` binds the element accessor, not the
+# slice overload `getitem(range:)` of the same name.
 
 choice Color
   RED
@@ -15,11 +17,18 @@ choice Color
 routine viewed(xs: Viewing[List[S64]]) -> U64
   return xs.count()
 
+routine viewed_at(xs: Viewing[List[S64]], i: U64) -> S64
+  return xs[i]
+
+routine viewed_getitem(xs: Viewing[List[S64]], i: U64) -> S64
+  return xs.getitem(index: i)
+
 routine start()
   var nums = List[S64]()
   nums.add_last(value: 1)
   nums.add_last(value: 2)
   show(f"viewed = {viewed(xs: nums.view())}")
+  show(f"viewed[1] = {viewed_at(xs: nums.view(), i: 1)} {viewed_getitem(xs: nums.view(), i: 0)}")
   var r = Retained[List[S64]](from: steal nums)
   show(f"retained = {r.count()} {r.is_empty()}")
   show(f"choice = {Color.count()}")

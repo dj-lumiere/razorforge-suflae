@@ -795,6 +795,17 @@ public sealed partial class SemanticVerifier
     /// updated <paramref name="dispatchType"/>, and whether an <paramref name="ambiguousSeed"/>
     /// forces a full arg-type retry.
     /// </summary>
+    /// <summary>Whether every named argument of a call names a parameter of <paramref name="routine"/> and the
+    /// arguments are not more than its parameters.</summary>
+    private static bool ArgumentNamesFit(RoutineInfo routine, List<Expression> arguments)
+    {
+        List<string> names = routine.Parameters.Where(predicate: p => p.Name != "me")
+                                    .Select(selector: p => p.Name)
+                                    .ToList();
+        return arguments.Count <= names.Count && arguments.All(predicate: a =>
+            a is not NamedArgumentExpression named || names.Contains(item: named.Name));
+    }
+
     private void ResolveMemberRoutineCandidate(CallExpression call, MemberExpression member,
         TypeSymbol objectType, bool isFailableMemberRoutineCall,
         ref TypeSymbol dispatchType, out RoutineInfo? memberRoutine, out bool ambiguousSeed)
@@ -2884,6 +2895,26 @@ public sealed partial class SemanticVerifier
             _registry.LookupMemberRoutineOverload(type: dispatchType,
                 memberRoutineName: callLookupName,
                 argTypes: resolvedArgTypes);
+        // A wrapper forwarder is synthesized by name and failability alone, and `!` is optional, so one name
+        // can have a failable and a plain overload with different parameters (List's `getitem!(index:)` and
+        // slice `getitem(range:)`): `view.getitem(index: i)` got the slice forwarder. Synthesize the other
+        // one and take it when it is the one whose parameters the call names.
+        if (betterMemberRoutine == null && IsWrapperType(type: dispatchType) &&
+            !ArgumentNamesFit(routine: memberRoutine, arguments: call.Arguments))
+        {
+            foreach (bool failable in (bool[])[true, false])
+            {
+                if (TrySynthesizeWrapperForwarder(wrapperType: dispatchType,
+                        memberRoutineName: callLookupName,
+                        isFailable: failable) is { } forwarder && forwarder != memberRoutine &&
+                    ArgumentNamesFit(routine: forwarder, arguments: call.Arguments))
+                {
+                    betterMemberRoutine = forwarder;
+                    break;
+                }
+            }
+        }
+
         if (betterMemberRoutine != null)
         {
             memberRoutine = betterMemberRoutine;

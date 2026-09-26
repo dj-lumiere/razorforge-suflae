@@ -570,25 +570,25 @@ routine S32.bitnot() -> S32
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S32.ashl(bits: U32) -> S32
-  return LLVM::shift_left[S32](me, bits)
+  return LLVM::shift_left[S32](me, LLVM::reinterpret_bits[U32, S32](bits))
 
 ### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S32.ashr(bits: U32) -> S32
-  return LLVM::shift_right_signed[S32](me, bits)
+  return LLVM::shift_right_signed[S32](me, LLVM::reinterpret_bits[U32, S32](bits))
 
 ### Left-shifts this value by `bits` positions (same as `ashl` for signed integers).
 ### :param bits: The number of bit positions to shift left.
 ### :returns: `me << bits`.
 routine S32.lshl(bits: U32) -> S32
-  return LLVM::shift_left[S32](me, bits)
+  return LLVM::shift_left[S32](me, LLVM::reinterpret_bits[U32, S32](bits))
 
 ### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
 ### :param bits: The number of bit positions to shift right.
 ### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S32.lshr(bits: U32) -> S32
-  return LLVM::shift_right_unsigned[S32](me, bits)
+  return LLVM::shift_right_unsigned[S32](me, LLVM::reinterpret_bits[U32, S32](bits))
 
 # ============================================================================
 # Comparison Operations

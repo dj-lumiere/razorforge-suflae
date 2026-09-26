@@ -690,6 +690,7 @@ public sealed partial class SemanticVerifier
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         RoutineInfo? getItem = ResolveIndexGetItem(index: index, lookupType: lookupType);
+        index.ResolvedGetItem = getItem;
 
         // Analyze the index expression with the indexer parameter type as expected type so
         // untyped integer literals (`arr[0]`) retype to U64/S64/etc. instead of defaulting to S64

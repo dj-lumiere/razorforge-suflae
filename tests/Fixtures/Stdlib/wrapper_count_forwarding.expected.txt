@@ -1,4 +1,5 @@
 viewed = 2
+viewed[1] = 2 1
 retained = 2 false
 choice = 3
 DONE

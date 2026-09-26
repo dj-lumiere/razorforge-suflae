@@ -20,7 +20,7 @@ record CPtr obeys Assignable
 ### :returns: The resulting `Address` value.
 @readonly
 routine CPtr.get_address() -> Address
-  return LLVM::pointer_to_int[CPtr, Address](me)
+  return LLVM::pointer_to_int[U8, Address](LLVM::reinterpret_bits[CPtr, Hijacked[U8]](me))
 
 ### Returns a bitwise duplicate of this raw pointer.
 ### `CPtr` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this trivial

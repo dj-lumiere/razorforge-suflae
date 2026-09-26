@@ -700,6 +700,14 @@ public record SpliceMemberExpression(
 public record IndexExpression(Expression Object, Expression Index, SourceLocation Location)
     : Expression(Location: Location)
 {
+    /// <summary>
+    /// The <c>getitem</c> semantic analysis bound for a read of this subscript, including a wrapper forwarder
+    /// it synthesized (`xs[i]` on a <c>Viewing[List[T]]</c>). Lowering turns the subscript into a
+    /// <c>getitem</c> call with it; looking the routine up again on the receiver type finds nothing for such
+    /// a wrapper.
+    /// </summary>
+    public RoutineInfo? ResolvedGetItem { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

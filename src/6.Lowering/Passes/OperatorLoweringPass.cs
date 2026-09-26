@@ -957,7 +957,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
         if (targetType != null)
         {
             TypeSymbol? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
-            resolvedGetItem = ResolveGetItemRoutine(targetType: targetType, indexType: indexType);
+            resolvedGetItem = ResolveGetItemRoutine(targetType: targetType,
+                indexType: indexType,
+                analyzedGetItem: idx.ResolvedGetItem);
         }
 
         CallLoweringKind getitemKind =
@@ -1105,11 +1107,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx) : AstRewri
     /// container of a Roamed wrapper, and finally memberRoutine-level generic monomorphization.
     /// Extracted from <see cref="LowerIndexExpression"/>.
     /// </summary>
-    private RoutineInfo? ResolveGetItemRoutine(TypeSymbol targetType, TypeSymbol? indexType)
+    private RoutineInfo? ResolveGetItemRoutine(TypeSymbol targetType, TypeSymbol? indexType,
+        RoutineInfo? analyzedGetItem = null)
     {
-        // Pick the `getitem` overload by the (now forward U64) index argument type.
+        // Pick the `getitem` overload by the (now forward U64) index argument type. A wrapper receiver
+        // (`Viewing[List[T]]`) has no `getitem` of its own: take the forwarder analysis bound for it.
         RoutineInfo? resolvedGetItem =
-            ResolveGetItemOn(targetType: targetType, indexType: indexType);
+            ResolveGetItemOn(targetType: targetType, indexType: indexType) ?? analyzedGetItem;
         // Suflae container locals are `Roamed[Dict]`/`Roamed[List]` post-SA; the wrapper
         // has no `getitem`, so resolve against the UNWRAPPED inner container (exactly as the
         // membership/comparison branch does for `x in d`). RoamedProjectionLoweringPass then

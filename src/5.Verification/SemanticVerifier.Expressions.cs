@@ -840,6 +840,20 @@ public sealed partial class SemanticVerifier
 
         if (memberRoutine is not { Parameters.Count: > 0 })
         {
+            // A fixed-width number type (S64, U8, B64, ...) declares its whole operator surface as routines, so
+            // no routine means the operator does not exist for it (`S64 / S64`: integers have `//`, not `/`). In
+            // user code the protocol gate reports this first, but that gate is off for stdlib bodies, and
+            // returning the operand type here let the call reach the LLVM emitter with nothing to call. (Other
+            // scalar types can get operators synthesized later, e.g. ByteSize's `*%`, so they are not judged.)
+            if (memberRoutine == null && IsFixedWidthNumericType(type: leftType))
+            {
+                ReportError(code: SemanticDiagnosticCode.BinaryOperatorNotFound,
+                    message:
+                    $"Operator '{binary.Operator.ToStringRepresentation()}' is not defined for '{leftType.Name}'.",
+                    location: binary.Location);
+                return ErrorTypeSymbol.Instance;
+            }
+
             return leftType;
         }
 

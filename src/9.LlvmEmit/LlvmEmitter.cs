@@ -373,6 +373,9 @@ public partial class LlvmEmitter
     /// </summary>
     private bool _traceCurrentRoutine;
 
+    /// <summary>Which emitted routines can crash; set before routine definitions are generated.</summary>
+    private Builder.Collection.CrashReachability? _crashReachability;
+
     /// <summary>
     /// Looks up a type by name, trying the current routine's module-qualified name first,
     /// then falling back to the bare name. Mirrors SemanticVerifier.LookupTypeInCurrentModule.
@@ -484,6 +487,7 @@ public partial class LlvmEmitter
         Mark(label: "Stage 2 RoutineDeclarations");
 
         // Stage 3: Generate function definitions (bodies)
+        _crashReachability = BuildCrashReachability();
         GenerateRoutineDefinitions();
         Mark(label: "Stage 3 RoutineDefinitions");
 
@@ -844,6 +848,32 @@ public partial class LlvmEmitter
     /// Generates LLVM function definitions (with bodies).
     /// Includes both user program routines and stdlib routines (for intrinsics).
     /// </summary>
+    /// <summary>
+    /// Which routines about to be emitted can crash (see <see cref="Builder.Collection.CrashReachability"/>):
+    /// only those get a stack-trace frame.
+    /// </summary>
+    private Builder.Collection.CrashReachability BuildCrashReachability()
+    {
+        var reach = new Builder.Collection.CrashReachability();
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
+        {
+            foreach (ISyntaxTreeNode decl in userProgram.Declarations)
+            {
+                if (decl is RoutineDeclaration { ResolvedInfo: { } info } routine)
+                {
+                    reach.Add(routine: info, body: routine.Body);
+                }
+            }
+        }
+
+        foreach ((string _, MonomorphizedBody body) in _instantiatedGenericBodies)
+        {
+            reach.Add(routine: body.Info, body: body.Ast.Body);
+        }
+
+        return reach;
+    }
+
     private void GenerateRoutineDefinitions()
     {
         // First, generate user program routines (these take priority)

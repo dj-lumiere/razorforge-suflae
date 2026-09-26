@@ -1694,15 +1694,18 @@ public sealed partial class SemanticVerifier
         {
             // Discard stdlib-body diagnostics (see snapshot above): mirror the eager sweep's RemoveRange so a
             // user build never fails on a stdlib-internal diagnostic. Trim back to the pre-analysis counts.
-            // An unknown identifier is the exception: it is never a user-code rule false-firing on stdlib, it
+            // An unknown identifier or a missing operator is the exception: neither is a user-code rule
+            // false-firing on stdlib (the operator protocol gate, which does false-fire there, is off), each
             // leaves an error type in a body that is about to be emitted, and dropping it turned a plain
             // "unknown identifier" into an LLVM-emitter crash. Keep those.
             if (_errors.Count > errorsBeforeStdlib)
             {
                 List<SemanticError> unresolvedNames = _errors.Skip(count: errorsBeforeStdlib)
                                                              .Where(predicate: e =>
-                                                                  e.Code == SemanticDiagnosticCode
-                                                                     .UnknownIdentifier)
+                                                                  e.Code is SemanticDiagnosticCode
+                                                                         .UnknownIdentifier
+                                                                      or SemanticDiagnosticCode
+                                                                         .BinaryOperatorNotFound)
                                                              .ToList();
                 _errors.RemoveRange(index: errorsBeforeStdlib,
                     count: _errors.Count - errorsBeforeStdlib);

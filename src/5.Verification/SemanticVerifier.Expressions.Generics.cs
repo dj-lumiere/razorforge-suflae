@@ -404,9 +404,23 @@ public sealed partial class SemanticVerifier
         generic.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
         generic.IsInFlight = routine.IsInFlightReturn;
 
-        AnalyzeGenericCallArguments(arguments: generic.Arguments,
-            declParams: declParams,
-            typeSubs: typeSubs);
+        // With concrete type arguments the routine is concrete here (monomorphized, or a pre-built
+        // resolution), so its arguments get the same binding, count and type checks as any other call. Only
+        // typing them against the expected type let `probe[Text](p: 5_s64)` through, and an array passed
+        // where `LLVM::load_element_ref` wants a `Hijacked` pointer reached the emitter as invalid IR.
+        // Type arguments that are still generic parameters (a call inside a generic definition's body, like
+        // `load_element_ref[Array[T, N], T](me.hijack(), i)`) are checked when that body is monomorphized.
+        if (typeArgs.Any(predicate: MentionsGenericParameter) ||
+            typeSubs == null && !routineMonomorphized && routine.IsGenericDefinition)
+        {
+            AnalyzeGenericCallArguments(arguments: generic.Arguments,
+                declParams: declParams,
+                typeSubs: typeSubs);
+        }
+        else
+        {
+            AnalyzeCallArguments(routine: routine, arguments: generic.Arguments, location: generic.Location);
+        }
 
         if (routine.ReturnType == null)
         {
@@ -433,6 +447,14 @@ public sealed partial class SemanticVerifier
         return SubstituteGenericParamsInReturnType(returnType: returnType,
             memberRoutine: routine,
             typeArgs: typeArgs);
+    }
+
+    /// <summary>Whether <paramref name="type"/> is, or has among its type arguments, a generic parameter or an
+    /// unparameterized generic definition.</summary>
+    private static bool MentionsGenericParameter(TypeSymbol type)
+    {
+        return type is GenericParameterTypeSymbol || type.IsGenericDefinition ||
+               type.TypeArguments is { } args && args.Any(predicate: MentionsGenericParameter);
     }
 
     private void AnalyzeGenericCallArguments(List<Expression> arguments,
