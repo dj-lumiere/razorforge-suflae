@@ -286,9 +286,20 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
   var c = coeff
   var e = exp
   var nd = digits10_u128(c: c)  # current digit count
-  # too many digits: drop the excess and round half-even
-  if LLVM::signed_gt(a: nd, b: 16_s64)
-    var drop = LLVM::sub(a: nd, b: 16_s64)
+  # Drop, in ONE half-even rounding, every digit that must go: the excess over 16 digits and the digits
+  # below the minimum exponent. Rounding the excess first and then the underflow digit by digit rounded
+  # twice (...4|9 went to ...5 on the first rounding and then, as an exact half, up to the next even).
+  var drop = LLVM::sub(a: nd, b: 16_s64)
+  var under = LLVM::sub(a: -398_s64, b: e)
+  if LLVM::signed_gt(a: under, b: drop)
+    drop = under
+  if LLVM::signed_ge(a: drop, b: nd)
+    # every digit goes: the result is 1 only when the value is above half of 10^drop (exactly half is
+    # a tie that rounds to the even 0)
+    var above = LLVM::int_eq(a: drop, b: nd) and LLVM::signed_le(a: nd, b: 38_s64) and LLVM::unsigned_gt(a: c, b: LLVM::mul[U128](a: p10_u128(k: LLVM::sub(a: nd, b: 1_s64)), b: 5))
+    c = if above then 1_u128 else 0_u128
+    e = LLVM::add(a: e, b: drop)
+  elseif LLVM::signed_gt(a: drop, b: 0_s64)
     var divv = p10_u128(k: drop)  # 10^drop divisor
     var q = div_pow10_u128(x: c, k: drop)  # kept high digits
     var r = LLVM::sub(a: c, b: LLVM::mul(a: q, b: divv))  # dropped remainder
@@ -310,13 +321,6 @@ routine decfin64(sign: Bool, coeff: U128, exp: S64, pref: S64) -> D64Parts
     e = LLVM::sub(a: e, b: 1_s64)
   if LLVM::signed_gt(a: e, b: 369_s64)
     return D64Parts(sign: sign, special: 1_u64, exp: 0_s64, coeff: 0_u64)
-  # underflow: round off low digits until e reaches the minimum
-  while LLVM::signed_lt[S64](a: e, b: -398_s64) and LLVM::int_ne[U128](a: c, b: 0)
-    var rd = LLVM::unsigned_rem(a: c, b: 10_u128)
-    c = LLVM::unsigned_div(a: c, b: 10_u128)
-    e = LLVM::add(a: e, b: 1_s64)
-    if LLVM::unsigned_gt[U128](a: rd, b: 5) or (LLVM::int_eq[U128](a: rd, b: 5) and LLVM::int_ne[U128](a: LLVM::bit_and[U128](a: c, b: 1), b: 0))
-      c = LLVM::add[U128](a: c, b: 1)
   if LLVM::int_eq[U128](a: c, b: 0)
     var ez2 = if LLVM::signed_lt(a: e, b: -398_s64) then -398_s64 else e
     return D64Parts(sign: sign, special: 0_u64, exp: ez2, coeff: 0_u64)

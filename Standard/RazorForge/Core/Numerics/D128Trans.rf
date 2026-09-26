@@ -34,8 +34,8 @@ routine uf192_from_u128(c: U128, sign: Bool) -> UnpackedFloat[3, 6]
 
 ### Turns the engine value (assumed a positive ~integer) into a 384-bit (6-limb) integer for a LATER
 ### decimal rounding that drops at least one digit: the integer part, with its last digit nudged off 0/5
-### when the value was inexact (see D64Trans' uf128_to_u128_sticky: rounding here and again in decfinB
-### rounded twice). shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
+### when the value was inexact (rounding the integer to nearest here and again in decfinB rounded twice,
+### so a value just below a decimal midpoint came out on it and then rounded up). shift = 189 - exp (positive in the ~10^40 range; 189 = W-2 - 1 = mantissa MSB slot).
 routine uf192_to_limbs6_sticky(u: UnpackedFloat[3, 6]) -> Array[U64, 6]
   var mw = wide_resize[3, 6](a: u.mant)
   var shift = LLVM::sub(a: 189_s64, b: u.exp)
