@@ -1,0 +1,65 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc tangent of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/atan/atanf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are
+# raw IEEE 754 on floats.
+
+### Returns the arc tangent of this value, correctly rounded: the exact arc tangent rounded to the nearest
+### `B32` (ties to even), identical on every platform. ±infinity gives ±pi/2 (rounded), ±0 maps to itself
+### and NaN maps to NaN.
+### :returns: The correctly rounded arc tangent, in [-pi/2, pi/2].
+routine B32.atan() -> B32
+  var t = me.to_bits()
+  var e = (t >>> 23) & 0xFF_u32
+  var ta = t & 0x7FFFFFFF_u32
+  if ta >= 0x4C700518_u32
+    # |x| >= 0x1.e00a3p+25
+    if ta > 0x7F800000_u32
+      return me +! me
+    var half_pi = 0x1.921fb54442d18p+0
+    return B32(from: half_pi.copysign(sign: B64(from: me)))
+  if e < 114_u32
+    # |x| < 2^-13
+    if e < 102_u32
+      # |x| < 2^-25
+      if t << 1 == 0_u32
+        return me
+      return LLVM::fma[B32](a: -me, b: me.abs(), c: me)
+    return LLVM::fma[B32](a: -0x1.555556p-2_b32 *! me, b: me *! me, c: me)
+  # now |x| >= 0x1p-13; for |x| >= 1 the rational approximation is evaluated at 1/x
+  var gt = e >= 127_u32
+  var z = B64(from: me)
+  if gt
+    z = 1.0 /! z
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var z8 = z4 *! z4
+  var cn0 = 0x1.51eccde075d67p-2 +! z2 *! 0x1.a76bb5637f2f2p-1
+  var cn2 = 0x1.81e0eed20de88p-1 +! z2 *! 0x1.376c8ca67d11dp-2
+  var cn4 = 0x1.aec7b69202ac6p-5 +! z2 *! 0x1.9561899acc73ep-9
+  var cn6 = 0x1.bf9fa5b67e6p-16
+  cn0 = cn0 +! z4 *! cn2
+  cn4 = cn4 +! z4 *! cn6
+  cn0 = cn0 +! z8 *! cn4
+  cn0 = cn0 *! z
+  var cd0 = 0x1.51eccde075d66p-2 +! z2 *! 0x1.dfbdd7b392d28p-1
+  var cd2 = 0x1p+0 +! z2 *! 0x1.fd22bf0e89b54p-2
+  var cd4 = 0x1.d91ff8b576282p-4 +! z2 *! 0x1.653ea99fc9bbp-7
+  var cd6 = 0x1.1e7fcc202340ap-12
+  cd0 = cd0 +! z4 *! cd2
+  cd4 = cd4 +! z4 *! cd6
+  cd0 = cd0 +! z8 *! cd4
+  var r = cn0 /! cd0
+  if not gt
+    # for |x| < 1, the rounded r is correct
+    return B32(from: r)
+  # atan(x) = sign(x)*pi/2 - atan(1/x), with pi/2 split as 0x1.9p0 + 0x1.0fdaa22168c23p-7
+  var pl = 0x1.0fdaa22168c23p-7
+  var ph = 0x1.9p0
+  r = (pl.copysign(sign: z) -! r) +! ph.copysign(sign: z)
+  return B32(from: r)

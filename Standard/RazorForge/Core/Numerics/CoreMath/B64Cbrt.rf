@@ -1,0 +1,119 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cube root of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/cbrt/cbrt.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2021-2022 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its rounding-mode probe, exception-flag restore and directed-rounding exceptions are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Returns the cube root of this value, correctly rounded: the exact cube root rounded to the nearest
+### `B64` (ties to even), identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN
+### map to themselves.
+### :returns: The correctly rounded cube root.
+routine B64.cbrt() -> B64
+  var hx = me.to_bits()
+  var mant = hx & 0x000FFFFFFFFFFFFF_u64
+  var sign = hx >>> 63
+  var e = LLVM::reinterpret_bits[U64, S64]((hx >>> 52) & 0x7FF_u64)
+  if e == 0 or e == 0x7FF
+    var ix = hx & 0x7FFFFFFFFFFFFFFF_u64
+    # ±0, ±infinity, NaN: x + x also quiets a signaling NaN
+    if e == 0x7FF or ix == 0
+      return me +! me
+    # subnormal: normalize the mantissa
+    var nz = ix.leading_zeros() - 11
+    mant = (mant << LLVM::int_truncate[U64, U32](nz)) & 0x000FFFFFFFFFFFFF_u64
+    e = e - (LLVM::reinterpret_bits[U64, S64](nz) - 1)
+  e = e + 3072
+  var cvt1 = mant | 0x3FF0000000000000_u64
+  var et = e // 3
+  var it = e % 3
+  # 2^(3k+it) <= x < 2^(3k+it+1), with 0 <= it <= 2
+  var zz = B64.from_bits(bits: (cvt1 + (LLVM::reinterpret_bits[S64, U64](it) << 52)) | (sign << 63))
+  # cbrt(x) = cbrt(zz) * 2^(et-1365) where 1 <= |zz| < 8
+  var isc = B64.from_bits(bits: cbrt_escale(it: it).to_bits() | (sign << 63))
+  var z = B64.from_bits(bits: cvt1)
+  # cbrt(zz) = cbrt(z) * isc, where isc encodes ±1, ±2^(1/3) or ±2^(2/3), and 1 <= z < 2
+  var r = 1.0 /! z
+  var rr = r *! cbrt_rsc(it: it, sign: sign)
+  var z2 = z *! z
+  var c0 = 0x1.1b0babccfef9cp-1 +! z *! 0x1.2c9a3e94d1da5p-1
+  var c2 = -0x1.4dc30b1a1ddbap-3 +! z *! 0x1.7a8d3e4ec9b07p-6
+  # the polynomial c0 + c1*z + c2*z^2 + c3*z^3 approximates z^(1/3) on [1, 2] with error < 9.2e-5
+  var y = c0 +! z2 *! c2
+  var y2 = y *! y
+  var h = y2 *! (y *! r) -! 1.0
+  # a cubic variant of Newton's method on f(y) = 1 - z/y^3
+  y = y -! (h *! y) *! (0x1.5555555555555p-2 -! 0x1.c71c71c71c71cp-3 *! h)
+  y = y *! isc
+  # one more (linear) Newton iteration, with y^3 computed to about 106 bits
+  y2 = y *! y
+  var y2l = LLVM::fma[B64](a: y, b: y, c: -y2)
+  var y3 = y2 *! y
+  var y3l = LLVM::fma[B64](a: y, b: y2, c: -y3) +! y *! y2l
+  h = ((y3 -! zz) +! y3l) *! rr
+  var dy = h *! (y *! 0x1.5555555555555p-2)
+  var y1 = y -! dy
+  dy = (y -! y1) -! dy
+  # the cube root is now y1 + dy with |dy| < 1/2 ulp(y1); rounding is hard only when dy is close to
+  # 1/2 ulp or 3/2 ulp
+  var ady = dy.abs()
+  var ady0 = (ady -! 0x1p-53).abs()
+  var ady1 = (ady -! (0x1p-52 +! 0x1p-53)).abs()
+  if ady0 < 0x1p-75 or ady1 < 0x1p-75
+    y2 = y1 *! y1
+    y2l = LLVM::fma[B64](a: y1, b: y1, c: -y2)
+    y3 = y2 *! y1
+    y3l = LLVM::fma[B64](a: y1, b: y2, c: -y3) +! y1 *! y2l
+    h = ((y3 -! zz) +! y3l) *! rr
+    dy = h *! (y1 *! 0x1.5555555555555p-2)
+    y = y1 -! dy
+    dy = (y1 -! y) -! dy
+    y1 = y
+    ady = dy.abs()
+    ady0 = (ady -! 0x1p-53).abs()
+    ady1 = (ady -! (0x1p-52 +! 0x1p-53)).abs()
+    if ady0 < 0x1p-98 or ady1 < 0x1p-98
+      var azz = zz.abs()
+      # two inputs whose cube root lies within 2^-98 of a rounding boundary
+      if azz == 0x1.9b78223aa307cp+1
+        var exact: B64 = 0x1.79d15d0e8d59cp+0
+        y1 = exact.copysign(sign: zz)
+      if azz == 0x1.a202bfc89ddffp+2
+        var exact: B64 = 0x1.de87aa837820fp+0
+        y1 = exact.copysign(sign: zz)
+  var bits = y1.to_bits() +% (LLVM::reinterpret_bits[S64, U64](et - 342 - 1023) << 52)
+  # exact cube roots (the low 34 mantissa bits all 0 or all 1): round the last bits away
+  var m0 = bits << 30
+  if m0 >>> 63 == 1
+    m0 = m0.bitnot()
+  if m0 <= 1_u64 << 30
+    var cvt4 = B64.from_bits(bits: (y1.to_bits() +% (1_u64 << 15)) & 0xFFFFFFFFFFFF0000_u64)
+    if ((cvt4 -! y1) -! dy).abs() < 0x1p-60 or zz.abs() == 1.0
+      bits = (bits +% (1_u64 << 15)) & 0xFFFFFFFFFFFF0000_u64
+  return B64.from_bits(bits: bits)
+
+### The scale `2^(it/3)` of the cube root reduction, for `it` in 0..2.
+### :param it: The exponent residue modulo 3.
+### :returns: 1, 2^(1/3) or 2^(2/3).
+secret routine cbrt_escale(it: S64) -> B64
+  if it == 0
+    return 1.0
+  if it == 1
+    return 0x1.428a2f98d728bp+0
+  return 0x1.965fea53d6e3dp+0
+
+### The reciprocal scale `±2^-it` applied to `1/z`, for `it` in 0..2 and a sign bit.
+### :param it: The exponent residue modulo 3.
+### :param sign: The input's sign bit (0 or 1).
+### :returns: 1, 1/2 or 1/4, negated when `sign` is 1.
+secret routine cbrt_rsc(it: S64, sign: U64) -> B64
+  var magnitude = 0.25
+  if it == 0
+    magnitude = 1.0
+  if it == 1
+    magnitude = 0.5
+  return if sign == 1 then -magnitude else magnitude

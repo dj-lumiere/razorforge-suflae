@@ -1,0 +1,93 @@
+module Core
+
+# ============================================================================
+# Correctly rounded log(1 + x) of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/log1p/log1pf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling and exception raising are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### `1/(1 + (j + 0.5)/32)` for j in 0..31, rounded to 23 bits, as B64 bit patterns.
+secret preset B32_LOG1P_X0: Array[U64, 32] = [0x3FEF81F800000000_u64, 0x3FEE9131C0000000_u64, 0x3FEDAE6080000000_u64, 0x3FECD85680000000_u64, 0x3FEC0E0700000000_u64, 0x3FEB4E81C0000000_u64, 0x3FEA98EF80000000_u64, 0x3FE9EC8E80000000_u64, 0x3FE948B100000000_u64, 0x3FE8ACB900000000_u64, 0x3FE8181800000000_u64, 0x3FE78A4C80000000_u64, 0x3FE702E040000000_u64, 0x3FE6816800000000_u64, 0x3FE6058180000000_u64, 0x3FE58ED240000000_u64, 0x3FE51D0800000000_u64, 0x3FE4AFD6C0000000_u64, 0x3FE446F880000000_u64, 0x3FE3E22CC0000000_u64, 0x3FE3813800000000_u64, 0x3FE323E340000000_u64, 0x3FE2C9FB40000000_u64, 0x3FE27350C0000000_u64, 0x3FE21FB780000000_u64, 0x3FE1CF06C0000000_u64, 0x3FE1811800000000_u64, 0x3FE135C800000000_u64, 0x3FE0ECF580000000_u64, 0x3FE0A68100000000_u64, 0x3FE0624DC0000000_u64, 0x3FE0204080000000_u64]
+
+### `-log(B32_LOG1P_X0[j])` offset by 0x1.7654p-37 (so the fast path errs upward), as B64 bit patterns.
+secret preset B32_LOG1P_LIX: Array[U64, 32] = [0x3F8FC0B0B1599CE4_u64, 0x3FA77457A64A42AB_u64, 0x3FB341D74627847D_u64, 0x3FBA926D8A568810_u64, 0x3FC0D77E8CD667AA_u64, 0x3FC44D2B38D15679_u64, 0x3FC7AB886A16B2B3_u64, 0x3FCAF3C9B686996D_u64, 0x3FCE27075E30CC37_u64, 0x3FD0A3250A767D98_u64, 0x3FD229423BD2662E_u64, 0x3FD3A64C596C3292_u64, 0x3FD51AADD530E505_u64, 0x3FD686C85E9E0177_u64, 0x3FD7EAF7DF859CAE_u64, 0x3FD94793EE2403B3_u64, 0x3FDA9CEC5A9CF512_u64, 0x3FDBEB4D3BAA086F_u64, 0x3FDD32FE2A03D8B5_u64, 0x3FDE744257D97431_u64, 0x3FDFAF58CF7BDFE7_u64, 0x3FE0723E6D1E5599_u64, 0x3FE109F3B52EC2F3_u64, 0x3FE19EE6A7693FC5_u64, 0x3FE23130D9C03597_u64, 0x3FE2C0E9CC4604F1_u64, 0x3FE34E28BD9E5837_u64, 0x3FE3D9028A72CD5F_u64, 0x3FE4618B9C1DD52D_u64, 0x3FE4E7D825B8D20B_u64, 0x3FE56BF9FAB56A02_u64, 0x3FE5EE02AB258CCA_u64]
+
+### `log(1 + me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform, and accurate near zero. Raw IEEE 754 propagation: `log1p(-1) ==
+### -infinity`, an input below -1 gives NaN, ±0 and +infinity map to themselves and NaN maps to NaN.
+### :returns: The correctly rounded `log(1 + me)`.
+routine B32.log1p_unchecked() -> B32
+  var z = B64(from: me)
+  var ux = me.to_bits()
+  if ux >= 0xBF800000_u32
+    # x <= -1, x = -infinity or a negative NaN
+    return b32_log1p_special(x: me)
+  var ax = ux & 0x7FFFFFFF_u32
+  if ax >= 0x7F800000_u32
+    # x = +infinity or a positive NaN
+    return b32_log1p_special(x: me)
+  if ax < 0x3C880000_u32
+    # |x| < 0x1.1p-6
+    if ax < 0x33000000_u32
+      # |x| < 0x1p-25: log1p(x) rounds like x - x^2
+      if ax == 0
+        return me
+      return LLVM::fma[B32](a: me, b: -me, c: me)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var f = z2 *! (((-0.5 +! z *! 0x1.5555555556f6bp-2) +! z2 *! (-0x1.00000000029b9p-2 +! z *! 0x1.9999988d176e4p-3)) +! z4 *! (-0x1.55555418889a7p-3 +! z *! (0x1.24adeca50e2bcp-3 -! z *! 0x1.001ba33bf57cfp-3)))
+    var r = z +! f
+    if (r.to_bits() & 0xFFFFFFF_u64) == 0
+      # r lies on a B32 rounding boundary: nudge it by the rounding error of z + f
+      r = r +! 0x1p+14 *! (f +! (z -! r))
+    return B32(from: r)
+  var tp = (z +! 1.0).to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](tp >>> 52) - 0x3FF
+  var ed = B64(from: e)
+  var m52 = tp & 0x000FFFFFFFFFFFFF_u64
+  var j = (tp >>> 47) & 31_u64
+  var xd = B64.from_bits(bits: m52 | 0x3FF0000000000000_u64)
+  # z is exact for x < 0x1.0cp+30
+  z = xd *! B64.from_bits(bits: B32_LOG1P_X0[j]) -! 1.0
+  var lixj = B64.from_bits(bits: B32_LOG1P_LIX[j])
+  var z2 = z *! z
+  var r = (0x1.62e42fefa39efp-1 *! ed +! lixj) +! z *! ((0x1.ffffffe1eac82p-1 -! z *! 0x1.ffffff7da1724p-2) +! z2 *! (0x1.5564d8fa59d0cp-2 -! z *! 0x1.001219d3dba2ap-2))
+  var ub = B32(from: r)
+  var lb = B32(from: r -! 0x1.7b33170824155p-36)
+  if ub != lb
+    # the fast path cannot decide the rounding: a longer polynomial, a two-part log(2) and a
+    # double-float final sum
+    var z4 = z2 *! z2
+    var f = z2 *! (((-0.5 +! z *! 0x1.5555555556f6bp-2) +! z2 *! (-0x1.00000000029b9p-2 +! z *! 0x1.9999988d176e4p-3)) +! z4 *! (-0x1.55555418889a7p-3 +! z *! (0x1.24adeca50e2bcp-3 -! z *! 0x1.001ba33bf57cfp-3)))
+    # remove the offset
+    var lj = lixj -! 0x1.7654p-37
+    var lh = 0x1.62e4p-1 *! ed
+    var ll = 0x1.7f7d1cf79abcap-20 *! ed
+    ll = ll +! z
+    var rh = lh +! lj
+    var rl = ((lh -! rh) +! lj) +! (ll +! f)
+    var fh = B32(from: rh +! rl)
+    var fl64 = (rh -! B64(from: fh)) +! rl
+    var fl = B32(from: fl64)
+    var tfl = fl *! 2.0_b32
+    if (fh +! tfl) -! fh == tfl
+      var half = 0.5_b32
+      fl = fl +! half.copysign(sign: B32(from: fl64 -! B64(from: fl))) *! fl.abs()
+    ub = fh +! fl
+  return ub
+
+### log1p of -1 (-infinity), +infinity (itself), NaN (itself) or an input below -1 (NaN).
+### :param x: The special input.
+### :returns: The special result.
+secret routine b32_log1p_special(x: B32) -> B32
+  var ux = x.to_bits()
+  if ux == 0xBF800000_u32
+    return B32.from_bits(bits: 0xFF800000_u32)
+  if ux == 0x7F800000_u32
+    return x
+  if (ux << 1) > 0xFF000000_u32
+    return x +! x
+  return B32.from_bits(bits: 0xFFC00000_u32)

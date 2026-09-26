@@ -1,0 +1,131 @@
+module Core
+
+# ============================================================================
+# Correctly rounded log-gamma function of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/lgamma/lgammaf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped, and `signgam` is not computed: this routine returns only the value).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Natural logarithm of the absolute value of the gamma function, correctly rounded: the exact
+### `log|gamma(x)|` rounded to the nearest `B32` (ties to even), identical on every platform. Poles
+### (0 and the negative integers) give +infinity, ±infinity gives +infinity, and NaN stays NaN.
+### :returns: The correctly rounded `log|gamma(me)|`.
+routine B32.lgamma() -> B32
+  var fx = me.floor()
+  var ax = me.abs()
+  var tu = ax.to_bits()
+  if tu >= 0x7F800000_u32
+    if tu == 0x7F800000_u32
+      return me *! me
+    return me +! me
+  if fx == me
+    # an integer: a pole at 0 and the negative integers, and log(gamma) = 0 at 1 and 2
+    if me <= 0.0_b32
+      return B32.from_bits(bits: 0x7F800000_u32)
+    if me == 1.0_b32 or me == 2.0_b32
+      return 0.0_b32
+  var z = B64(from: ax)
+  var s = B64(from: me)
+  var f = 0.0
+  if ax < 0x1.52p-1_b32
+    f = (((0x1.0fc0fad268c4dp+2 *! s) *! ((((s +! 0x1.505bdf4b65acp+4) *! (s +! 0x1.51c80eb47e068p+2)) *! ((s -! 0x1.0000000007cb8p+0) *! (s +! 0x1.4ac529250a1fcp+1))) *! (((s +! 0x1.a8c99dbe1621ap+0) *! (s +! 0x1.4abdcc74115eap+0)) *! ((s +! 0x1.1b87fe5a5b923p+0) *! (s +! 0x1.05b8a4d47ff64p+0))))) /! ((((s +! 0x1.4db2cfe9a5265p+5) *! (s +! 0x1.062e99d1c4f27p+3)) *! ((s +! 0x1.c81bc2ecf25f6p+1) *! (s +! 0x1.108e55c10091bp+1))) *! (((s +! 0x1.7dd25af0b83d4p+0) *! (s +! 0x1.36bf1880125fcp+0)) *! ((s +! 0x1.1379fc8023d9cp+0) *! (s +! 0x1.03712e41525d2p+0))))) -! b32_lgamma_ln(x: z)
+  elseif ax > 0x1.afc1ap+1_b32
+    if me >= 0x1.895f1cp+121_b32
+      return LLVM::fma[B32](a: me, b: 0x1.4d3398p+6_b32, c: 0x1.10f35ep+103_b32)
+    var lz = b32_lgamma_ln(x: z)
+    # Stirling's series
+    f = (z -! 0.5) *! (lz -! 1.0) +! 0x1.acfe390c97d69p-2
+    if ax < 0x1p+20_b32
+      var iz = 1.0 /! z
+      var iz2 = iz *! iz
+      if ax > 1198.0_b32
+        f = f +! iz *! 0x1.5555555555555p-4
+      elseif ax > 0x1.279a7p+6_b32
+        f = f +! iz *! (0x1.555555547fbadp-4 +! iz2 *! -0x1.6c0fd270c465p-9)
+      elseif ax > 0x1.555556p+3_b32
+        var iz4 = iz2 *! iz2
+        f = f +! iz *! ((0x1.555555554de0bp-4 +! iz2 *! -0x1.6c16bdc45944fp-9) +! iz4 *! (0x1.a0077f300ecb3p-11 +! iz2 *! -0x1.2e9cfff3b29c2p-11))
+      else
+        var iz4 = iz2 *! iz2
+        var iz8 = iz4 *! iz4
+        var p = ((0x1.5555555551286p-4 +! iz2 *! -0x1.6c16c0e7c4cf4p-9) +! iz4 *! (0x1.a0193267fe6f2p-11 +! iz2 *! -0x1.37e87ec19cb45p-11)) +! iz8 *! ((0x1.b40011dfff081p-11 +! iz2 *! -0x1.c16c8946b19b6p-10) +! iz4 *! (0x1.e9f47ace150d8p-9 +! iz2 *! -0x1.4f5843a71a338p-8))
+        f = f +! iz *! p
+    if me < 0.0_b32
+      # reflection: log|gamma(x)| = log(pi) - log|gamma(-x)| - log(-x) - log|sin(pi x)|
+      f = (0x1.250d048e7a1bdp+0 -! f) -! lz
+      var lp = b32_lgamma_ln(x: b32_lgamma_sinpi(x: B64(from: me -! fx)))
+      f = f -! lp
+  else
+    f = (((((z -! 1.0) *! (z -! 2.0)) *! 0x1.3cc0e6a0106b3p+2) *! ((((z +! 0x1.667923ff14df7p+5) *! (z +! 0x1.2d35f25ad8f64p+3)) *! ((z +! 0x1.b8c9eab9d5bd3p+1) *! (z +! 0x1.7a4a97f494127p+0))) *! (((z +! 0x1.3a6c8295b4445p-1) *! (z +! 0x1.da44e8b810024p-3)) *! (z +! 0x1.9061e81c77e4ap-5)))) /! ((((z +! 0x1.491a899e84c52p+6) *! (z +! 0x1.d202961b9e098p+3)) *! ((z +! 0x1.4ced68c631ed6p+2) *! (z +! 0x1.2589eedf40738p+1))) *! (((z +! 0x1.1302e3337271p+0) *! (z +! 0x1.c36b802f26dffp-2)) *! ((z +! 0x1.3ded448acc39dp-3) *! (z +! 0x1.bffc491078eafp-6)))))
+    if me < 0.0_b32
+      if tu < 0x40301B93_u32 and tu > 0x402F95C2_u32
+        # near the zero of lgamma at about -2.7476
+        var h = (s +! 0x1.5fb410a1bd901p+1) -! 0x1.a19a96d2e6f85p-54
+        var hh = h *! h
+        var h4 = hh *! hh
+        f = h *! (((-0x1.ea12da904b18cp+0 +! h *! 0x1.3267f3c265a54p+3) +! hh *! (-0x1.4185ac30cadb3p+4 +! h *! 0x1.f504accc3f2e4p+5)) +! h4 *! ((-0x1.8588444c679b4p+7 +! h *! 0x1.43740491dc22p+9) +! hh *! (-0x1.12400ea23f9e6p+11 +! h *! 0x1.dac829f365795p+12)))
+      elseif tu > 0x401CECCB_u32 and tu < 0x401D95CA_u32
+        # near the zero of lgamma at about -2.4570
+        var h = (s +! 0x1.3a7fc9600f86cp+1) +! 0x1.55f64f98af8dp-55
+        var hh = h *! h
+        var h4 = hh *! hh
+        f = h *! (((0x1.83fe966af535fp+0 +! h *! 0x1.36eebb002f61ap+2) +! hh *! (0x1.694a60589a0b3p+0 +! h *! 0x1.1718d7aedb0b5p+3)) +! h4 *! ((0x1.733a045eca0d3p+2 +! h *! 0x1.8d4297421205bp+4) +! hh *! 0x1.7feea5fb29965p+4))
+      elseif tu > 0x40492009_u32 and tu < 0x404940EF_u32
+        # near the zero of lgamma at about -3.1435
+        var h = (s +! 0x1.9260dbc9e59afp+1) +! 0x1.f717cd335a7b3p-53
+        var hh = h *! h
+        var h4 = hh *! hh
+        f = h *! (((0x1.f20a65f2fac55p+2 +! h *! 0x1.9d4d297715105p+4) +! hh *! (0x1.c1137124d5b21p+6 +! h *! 0x1.267203d24de38p+9)) +! h4 *! ((0x1.99a63399a0b44p+11 +! h *! 0x1.2941214faaf0cp+14) +! hh *! 0x1.bb912c0c9cdd1p+16))
+      else
+        f = 0x1.250d048e7a1bdp+0 -! f
+        var lp = b32_lgamma_ln(x: b32_lgamma_sinpi(x: B64(from: me -! fx)) *! z)
+        f = f -! lp
+  var r = B32(from: f)
+  if ((f.to_bits() +% 5) & 0xFFFFFFF_u64) <= 31
+    # possibly a hard-to-round case: look it up in the exception table
+    var xb = me.to_bits()
+    var k = 0_u64
+    while k < 27
+      if B32_LGAMMA_EXC_X[k] == xb
+        return B32.from_bits(bits: B32_LGAMMA_EXC_F[k]) +! B32.from_bits(bits: B32_LGAMMA_EXC_DF[k])
+      k = k + 1
+  return r
+
+### sin(pi*x) for the reflection formula, as an even polynomial in (x - 1/2) that vanishes at 0 and 1.
+### :param x: The fractional part of the input, in [0, 1).
+### :returns: sin(pi*x).
+secret routine b32_lgamma_sinpi(x: B64) -> B64
+  var y = x -! 0.5
+  var x2 = y *! y
+  var x4 = x2 *! x2
+  var x8 = x4 *! x4
+  return (0.25 -! x2) *! (((0x1p+2 +! x2 *! -0x1.de9e64df22ea4p+1) +! x4 *! (0x1.472be122401f8p+0 +! x2 *! -0x1.d4fcd82df91bp-3)) +! x8 *! ((0x1.9f05c97e0aab2p-6 +! x2 *! -0x1.f3091c427b611p-10) +! x4 *! (0x1.b22c9bfdca547p-14 +! x2 *! -0x1.15484325ef569p-18)))
+
+### Natural logarithm of a positive normal B64, through a 16-entry reciprocal table.
+### :param x: The argument (positive, finite, normal).
+### :returns: log(x).
+secret routine b32_lgamma_ln(x: B64) -> B64
+  var tb = x.to_bits()
+  var e = B64(from: LLVM::reinterpret_bits[U64, S64](tb >>> 52) - 0x3FF)
+  var i = (tb >>> 48) & 0xF_u64
+  var t = B64.from_bits(bits: (tb & 0x000FFFFFFFFFFFFF_u64) | (0x3FF_u64 << 52))
+  var z = B64.from_bits(bits: B32_LGAMMA_IX[i]) *! t -! 1.0
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  return (e *! 0x1.62e42fefa39efp-1 +! B64.from_bits(bits: B32_LGAMMA_IL[i])) +! z *! (((0x1.fffffffffff24p-1 +! z *! -0x1.ffffffffd1d67p-2) +! z2 *! (0x1.55555537802dep-2 +! z *! -0x1.ffffeca81b866p-3)) +! z4 *! ((0x1.999611761d772p-3 +! z *! -0x1.54f3e581b61bfp-3) +! z2 *! (0x1.1e642b4cb5143p-3 +! z *! -0x1.9115a5af1e1edp-4)))
+
+### Table of -log of the reciprocal table entries, for i in 0..15, as B64 bit patterns.
+secret preset B32_LGAMMA_IL: Array[U64, 16] = [0x3C659CAEEC280116_u64, 0x3FAF0A30C01162AA_u64, 0x3FBE27076E2AF2EB_u64, 0x3FC5FF3070A793D6_u64, 0x3FCC8FF7C79A9A20_u64, 0x3FD1675CABABA60F_u64, 0x3FD4618BC21C5EC2_u64, 0x3FD739D7F6BBD007_u64, 0x3FD9F323ECBF984D_u64, 0x3FDC8FF7C79A9A21_u64, 0x3FDF128F5FAF06EC_u64, 0x3FE0BE72E4252A83_u64, 0x3FE1E85F5E7040D1_u64, 0x3FE307D7334F10BE_u64, 0x3FE41D8FE84672AF_u64, 0x3FE52A2D265BC5AB_u64]
+
+### Table of reciprocals 1/(1 + i/16), for i in 0..15, as B64 bit patterns.
+secret preset B32_LGAMMA_IX: Array[U64, 16] = [0x3FF0000000000000_u64, 0x3FEE1E1E1E1E1E1E_u64, 0x3FEC71C71C71C71C_u64, 0x3FEAF286BCA1AF28_u64, 0x3FE999999999999A_u64, 0x3FE8618618618618_u64, 0x3FE745D1745D1746_u64, 0x3FE642C8590B2164_u64, 0x3FE5555555555555_u64, 0x3FE47AE147AE147B_u64, 0x3FE3B13B13B13B14_u64, 0x3FE2F684BDA12F68_u64, 0x3FE2492492492492_u64, 0x3FE1A7B9611A7B96_u64, 0x3FE1111111111111_u64, 0x3FE0842108421084_u64]
+
+### Inputs whose lgamma is hard to round (B32 bit patterns).
+secret preset B32_LGAMMA_EXC_X: Array[U32, 27] = [0x1B7679FF_u32, 0x1E88452D_u32, 0x2AD345DE_u32, 0x39EEFE83_u32, 0x3B7C53AA_u32, 0x42468B59_u32, 0x449ACF07_u32, 0x46541516_u32, 0x46B16323_u32, 0x4F3F94C0_u32, 0x50522F52_u32, 0x65FCA09F_u32, 0x716E5DD5_u32, 0x77AC5674_u32, 0x7943DEF8_u32, 0x8212E5B3_u32, 0x9B7679FF_u32, 0x9E88452D_u32, 0xA77A8E47_u32, 0xAA6C2DFF_u32, 0xABA1BF3A_u32, 0xB0D6F2CA_u32, 0xB0E17820_u32, 0xC02C060F_u32, 0xC134EB14_u32, 0xC33139A3_u32, 0xC6F7E151_u32]
+
+### The correctly rounded results of those inputs, as `f + df` (B32 bit patterns).
+secret preset B32_LGAMMA_EXC_F: Array[U32, 27] = [0x4247C72D_u32, 0x4236BD8C_u32, 0x41E4E374_u32, 0x40F62DD4_u32, 0x40B1D661_u32, 0x430F25A7_u32, 0x45ECD681_u32, 0x47E1C01B_u32, 0x48483ADF_u32, 0x517A24A3_u32, 0x5292EE5E_u32, 0x68CEAD5A_u32, 0x747E2BB9_u32, 0x7ACF27B3_u32, 0x7C7232D7_u32, 0x42AA3D22_u32, 0x4247C72D_u32, 0x4236BD8C_u32, 0x42052B95_u32, 0x41E98AC9_u32, 0x41DBEF61_u32, 0x41A23559_u32, 0x41A1D37B_u32, 0xBDABC3E3_u32, 0xC1875615_u32, 0xC43991AF_u32, 0xC89116DE_u32]
+secret preset B32_LGAMMA_EXC_DF: Array[U32, 27] = [0xB5800000_u32, 0xB5800000_u32, 0x35000000_u32, 0xB4000000_u32, 0x34000000_u32, 0x36800000_u32, 0xB9000000_u32, 0x3B000000_u32, 0xBB800000_u32, 0xC4800000_u32, 0xC6000000_u32, 0xDC000000_u32, 0x67800000_u32, 0xEE000000_u32, 0x6F800000_u32, 0xB6000000_u32, 0xB5800000_u32, 0xB5800000_u32, 0xB5800000_u32, 0xB5000000_u32, 0xB5000000_u32, 0xB5000000_u32, 0x35000000_u32, 0x31000000_u32, 0xB5000000_u32, 0xB7800000_u32, 0xBC000000_u32]

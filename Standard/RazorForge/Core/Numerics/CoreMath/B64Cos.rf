@@ -1,0 +1,137 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cosine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/cos/cos.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Paul Zimmermann and Tom Hubrecht. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest
+# path of the original is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The argument
+# reduction, the 128-bit "dint" arithmetic and the tables shared with the tangent are in B64TrigReduce.rf.
+
+### Returns the cosine of this value, interpreting it as radians, correctly rounded: the exact cosine
+### rounded to the nearest `B64` (ties to even), identical on every platform. `cos(-x) == cos(x)`, and
+### ±infinity and NaN give NaN.
+### :returns: The correctly rounded cosine.
+routine B64.cos() -> B64
+  var x = me
+  var ux = x.to_bits()
+  var e = (ux >>> 52) & 0x7FF_u64
+  # NaN, +infinity and -infinity
+  if e == 0x7FF
+    if (ux << 1) == 0xFFE0000000000000_u64
+      # the default NaN of an invalid operation (C 0.0 / 0.0 on x86)
+      return B64.from_bits(bits: 0xFFF8000000000000_u64)
+    return x +! x
+  var au = ux & 0x7FFFFFFFFFFFFFFF_u64
+  var ax = B64.from_bits(bits: au)
+  # |x| <= 0x1.6a09e667f3bccp-27: cos(x) rounds like 1 - x^2/2
+  if au <= 0x3E46A09E667F3BCC_u64
+    return LLVM::fma[B64](a: ax, b: -0x1p-28, c: 1.0)
+  var f = b64_cos_fast(x: ax)
+  var h = f.item0
+  var l = f.item1
+  var err = f.item2
+  var left = h +! (l -! err)
+  var right = h +! (l +! err)
+  if left == right
+    return left
+  return b64_cos_accurate(x: ax)
+
+### The fast path of `cos`: returns `(h, l, err)` with |h + l - cos(x)| < err.
+### :param x: The argument, finite with x > 0x1.6a09e667f3bccp-27.
+### :returns: `(h, l, err)`.
+secret routine b64_cos_fast(x: B64) -> (B64, B64, B64)
+  var red = b64_trig_reduce_fast(x: x, with_t2: false)
+  var i = red.item0
+  var h = red.item1
+  var l = red.item2
+  var err1 = red.item3
+  # i >= 2^10: pi <= x <= 2pi, cos(pi + x) = -cos(x)
+  var neg = i >>> 10
+  i = i & 0x3FF_u64
+  # i >= 2^9: pi/2 <= x <= pi, cos(pi/2 + x) = -sin(x)
+  var is_cos = 1_u64 ^ (i >>> 9)
+  neg = neg ^ (i >>> 9)
+  i = i & 0x1FF_u64
+  # i >= 2^8: cos(pi/2 - x) = sin(x); 2^-11 - h is exact
+  if (i & 0x100_u64) != 0
+    is_cos = is_cos ^ 1
+    i = 0x1FF_u64 - i
+    h = 0x1p-11 -! h
+    l = -l
+  # the SC table is evaluated at i/2^11 + SC[i][0], and h - SC[i][0] is exact
+  h = h -! B64_TRIG_SC[3 * i]
+  var u = b64_trig_a_mul(a: h, b: h)
+  var uh = u.item0
+  var ul = LLVM::fma[B64](a: h +! h, b: l, c: u.item1)
+  var ps = b64_trig_eval_ps_fast(xh: h, xl: l, uh: uh, ul: ul)
+  var pc = b64_trig_eval_pc_fast(uh: uh, ul: ul)
+  var err = 0x1.81p-69
+  if is_cos == 0
+    var s = b64_trig_s_mul(a: B64_TRIG_SC[3 * i + 2], bh: ps.item0, bl: ps.item1)
+    var c = b64_trig_s_mul(a: B64_TRIG_SC[3 * i + 1], bh: pc.item0, bl: pc.item1)
+    var t = b64_trig_fast_two_sum(a: c.item0, b: s.item0)
+    h = t.item0
+    l = t.item1 +! (s.item1 +! c.item1)
+    err = 0x1.55p-69
+  else
+    var c = b64_trig_s_mul(a: B64_TRIG_SC[3 * i + 2], bh: pc.item0, bl: pc.item1)
+    var s = b64_trig_s_mul(a: B64_TRIG_SC[3 * i + 1], bh: ps.item0, bl: ps.item1)
+    var t = b64_trig_fast_two_sum(a: c.item0, b: -s.item0)
+    h = t.item0
+    l = t.item1 +! (c.item1 -! s.item1)
+  if neg != 0
+    h = -h
+    l = -l
+  return (h, l, err +! err1)
+
+### The accurate path of `cos`, in 128-bit floating-point arithmetic.
+### :param x: The argument, finite with x > 0x1.6a09e667f3bccp-27.
+### :returns: The correctly rounded cosine.
+secret routine b64_cos_accurate(x: B64) -> B64
+  var red = b64_trig_accurate_reduce(ax: x)
+  var i = red.item0
+  var quadrant = red.item1
+  var u = red.item3
+  var v = red.item4
+  # pi <= x < 2pi: cos(x) = -cos(x - pi)
+  var neg = quadrant & 1_u64
+  var is_cos = 1_u64
+  # pi/2 <= x < pi: cos(x) = -sin(x - pi/2)
+  if (quadrant & 2_u64) != 0
+    neg = neg ^ 1
+    is_cos = 0_u64
+  # pi/4 <= x < pi/2: cos(x) = sin(pi/2 - x)
+  if (quadrant & 4_u64) != 0
+    is_cos = is_cos ^ 1
+  if is_cos == 0
+    # sin2pi(R) ~ sin2pi(i/2^11) cos2pi(X) + cos2pi(i/2^11) sin2pi(X)
+    u = b64_trig_dint_mul(a: b64_trig_s(i: i), b: u)
+    v = b64_trig_dint_mul(a: b64_trig_c(i: i), b: v)
+  else
+    # cos2pi(R) ~ cos2pi(i/2^11) cos2pi(X) - sin2pi(i/2^11) sin2pi(X)
+    u = b64_trig_dint_mul(a: b64_trig_c(i: i), b: u)
+    v = b64_trig_dint_mul(a: b64_trig_s(i: i), b: v)
+    v = (v.item0, v.item1, 1_u64 - v.item2)
+  u = b64_trig_dint_add(a0: u, b0: v)
+  # the total error is below 41 ulps of the low word: check the upper 54 bits are determined
+  var err = LLVM::zero_extend[U64, U128](41_u64)
+  var hi0 = b64_trig_hi(r: u.item0 -% err)
+  var hi1 = b64_trig_hi(r: u.item0 +% err)
+  if (hi0 >>> 10) != (hi1 >>> 10)
+    var ax = x.abs()
+    if ax == 0x1.8000000000009p-23
+      return 0x1.fffffffffff7p-1 +! 0x1.b56666666666cp-143
+    if ax == 0x1.8000000000024p-22
+      return 0x1.ffffffffffdcp-1 +! 0x1.b56666666667ep-137
+    if ax == 0x1.800000000009p-21
+      return 0x1.ffffffffff7p-1 +! 0x1.b5666666666c4p-131
+    if ax == 0x1.20000000000f3p-20
+      return 0x1.fffffffffebcp-1 +! 0x1.37642666666fdp-127
+    if ax == 0x1.800000000024p-20
+      return 0x1.fffffffffdcp-1 +! 0x1.b5666666667ddp-125
+  if neg != 0
+    u = (u.item0, u.item1, 1_u64 - u.item2)
+  return b64_trig_dint_tod(a: u)

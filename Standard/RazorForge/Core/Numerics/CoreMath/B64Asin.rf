@@ -1,0 +1,228 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc sine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/asin/asin.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest
+# path of the original is kept (its errno handling is dropped). The NaN for |x| > 1 is the x86 default NaN
+# the original produces at runtime there (0./0.), fixed so every platform returns the same bits.
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Arc sine (radians) with raw IEEE 754 propagation, correctly rounded: the exact arc sine rounded to the
+### nearest `B64` (ties to even), identical on every platform. The result lies in [-pi/2, pi/2],
+### `asin(-x) == -asin(x)`, ±0 maps to itself, and `|me| > 1`, ±infinity and NaN give NaN.
+### :returns: The correctly rounded arc sine.
+routine B64.asin_unchecked() -> B64
+  var x = me
+  var xu = x.to_bits()
+  var ax = xu << 1
+  var t = 0.0
+  var z = 0.0
+  var zl = 0.0
+  var jd = 0.0
+  var f0h = 0.0
+  var f0l = 0.0
+  var eps = 0.0
+  if ax > 0x7FC0000000000000_u64
+    # |x| > 0.5
+    f0h = 0x1.921fb54442d18p+0
+    f0l = 0x1.1a62633145c07p-54
+    if (xu >>> 63) != 0
+      f0h = -f0h
+      f0l = -f0l
+    if ax >= 0x7FE0000000000000_u64
+      # |x| >= 1
+      if ax == 0x7FE0000000000000_u64
+        # |x| = 1
+        return f0h +! f0l
+      if ax > 0xFFE0000000000000_u64
+        # NaN
+        return x +! x
+      # |x| > 1
+      return B64.from_bits(bits: 0xFFF8000000000000_u64)
+    # for |x| > 0.5 the range reduction uses the double angle formula
+    # asin(x) = pi/2 - 2*asin(sqrt((1-x)/2)), and for x < -0.5 asin(x) = -pi/2 + 2*asin(sqrt((1-|x|)/2))
+    t = 2.0 -! 2.0 *! x.abs()
+    jd = LLVM::rint[B64](value: t *! 0x1p5)
+    z = LLVM::sqrt[B64](t).copysign(sign: -x)
+    zl = LLVM::fma[B64](a: z, b: z, c: -t) *! ((-0.5 /! t) *! z)
+    t = 0.25 *! t -! jd *! 0x1p-7
+    eps = (z *! t).abs() *! 0x1.99p-52
+  else
+    # |x| <= 0.5: for |x| < 0x1.7137449123ef6p-26, |asin(x) - x| is below half an ulp of asin(x)
+    if ax < 0x7CAE26E892247DEC_u64
+      return LLVM::fma[B64](a: 0x1p-55, b: x, c: x)
+    t = x *! x
+    jd = LLVM::rint[B64](value: t *! 0x1p7)
+    t = LLVM::fma[B64](a: x, b: x, c: -0x1p-7 *! jd)
+    z = x
+    eps = (z *! t).abs() *! 0x1.77p-52
+  # asin(z + zl) = (z + zl)*(cc[j][0] + (cc[j][1] + t*P(t, cc[j] + 2))), where t = z^2 - j/128 and
+  # j = round(128*z^2)
+  var j = LLVM::float_to_unsigned[B64, U64](jd) *% 8
+  var c2 = B64.from_bits(bits: B64_ASIN_CC[j + 2])
+  var c3 = B64.from_bits(bits: B64_ASIN_CC[j + 3])
+  var c4 = B64.from_bits(bits: B64_ASIN_CC[j + 4])
+  var c5 = B64.from_bits(bits: B64_ASIN_CC[j + 5])
+  var c6 = B64.from_bits(bits: B64_ASIN_CC[j + 6])
+  var c7 = B64.from_bits(bits: B64_ASIN_CC[j + 7])
+  var t2 = t *! t
+  var d = t *! ((c2 +! t *! c3) +! t2 *! ((c4 +! t *! c5) +! t2 *! (c6 +! t *! c7)))
+  var fh = B64.from_bits(bits: B64_ASIN_CC[j])
+  var fl = B64.from_bits(bits: B64_ASIN_CC[j + 1]) +! d
+  var p = b64_asin_muldd(xh: z, xl: zl, ch: fh, cl: fl)
+  p = b64_asin_fastsum(xh: f0h, xl: f0l, yh: p.item0, yl: p.item1)
+  fh = p.item0
+  fl = p.item1
+  var lb = fh +! (fl -! eps)
+  var ub = fh +! (fl +! eps)
+  if lb != ub
+    return b64_asin_refine(x: x, phi: lb)
+  return lb
+
+### Sum `x + y` as a double-double (s, e), assuming |x| >= |y| or x == 0.
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: The rounded sum and its error.
+secret routine b64_asin_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### Double-double sum (xh + xl) + (yh + yl), assuming |xh| >= |yh| or xh == 0.
+### :param xh: The high part of the first operand.
+### :param xl: The low part of the first operand.
+### :param yh: The high part of the second operand.
+### :param yl: The low part of the second operand.
+### :returns: The high and low parts of the sum.
+secret routine b64_asin_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
+  var s = b64_asin_fasttwosum(x: xh, y: yh)
+  return (s.item0, (xl +! yl) +! s.item1)
+
+### Double-double product (xh + xl) * (ch + cl).
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_asin_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = ch *! xh
+  var l = (cl *! xh +! ch *! xl) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  return (ahhh, l)
+
+### The accurate path, reached when the fast path cannot decide the rounding: with x = sin(phi), rotates
+### the angle by a multiple of pi/64 close to phi and evaluates the arc sine of the small remainder in
+### double-double arithmetic.
+### :param x: The argument, with |x| < 1.
+### :param phi: The fast-path approximation of asin(x).
+### :returns: The correctly rounded arc sine.
+secret routine b64_asin_refine(x: B64, phi: B64) -> B64
+  var s2 = x *! x
+  var dx2 = LLVM::fma[B64](a: x, b: x, c: -s2)
+  # s2 + dx2 = x^2
+  var c2 = b64_asin_fasttwosum(x: 1.0, y: -s2)
+  var c2h = c2.item0
+  var c2l = c2.item1 -! dx2
+  c2 = b64_asin_fasttwosum(x: c2h, y: c2l)
+  c2h = c2.item0
+  c2l = c2.item1
+  # c2h + c2l approximates 1 - x^2
+  var ch = LLVM::sqrt[B64](c2h)
+  var cl = (c2l -! LLVM::fma[B64](a: ch, b: ch, c: -c2h)) *! (0.5 /! ch)
+  # ch + cl approximates sqrt(1 - x^2); jf = round(|phi|*64/pi), 0 <= jf <= 32
+  var jfd = LLVM::rint[B64](value: phi.abs() *! 0x1.45f306dc9c883p+4)
+  var jf = LLVM::float_to_unsigned[B64, U64](jfd)
+  # the table holds sin(pi/64*j) as double-doubles, the smallest term first
+  var bigch = B64.from_bits(bits: B64_ASIN_S[(32 - jf) * 2 + 1])
+  var bigcl = B64.from_bits(bits: B64_ASIN_S[(32 - jf) * 2])
+  var bigsh = B64.from_bits(bits: B64_ASIN_S[jf * 2 + 1])
+  var bigsl = B64.from_bits(bits: B64_ASIN_S[jf * 2])
+  var ax = x.abs()
+  var dsh = ax -! bigsh
+  var dsl = -bigsl
+  var dch = ch -! bigch
+  var dcl = cl -! bigcl
+  var magic = 0x1.8p-4
+  var sc = LLVM::fma[B64](a: bigsh, b: dch, c: magic) -! magic
+  var dsc = LLVM::fma[B64](a: bigsh, b: dch, c: -sc)
+  var cs = LLVM::fma[B64](a: bigch, b: dsh, c: magic) -! magic
+  var dcs = LLVM::fma[B64](a: bigch, b: dsh, c: -cs)
+  var v = cs -! sc
+  var dv = ((bigch *! dsl +! bigcl *! dsh) -! (bigsh *! dcl +! bigsl *! dch)) -! (dsc -! dcs)
+  var vv = b64_asin_fasttwosum(x: v, y: dv)
+  v = vv.item0
+  dv = vv.item1
+  var one: B64 = 1.0
+  var sgn = one.copysign(sign: x)
+  # 0 <= jt <= 64
+  var jt = jfd *! sgn
+  var sq = b64_asin_muldd(xh: v, xl: dv, ch: v, cl: dv)
+  var v2 = sq.item0
+  var dv2 = sq.item1
+  v = v *! sgn
+  dv = dv *! sgn
+  var fl = v2 *! (0x1.6e8ba2ec8cb69p-6 +! v2 *! (0x1.1c4ea7a15c997p-6 +! v2 *! 0x1.ca8355d39bb67p-7))
+  # the double-double polynomial over c[0..4], Horner from the top coefficient
+  var hp = b64_asin_fasttwosum(x: 0x1.f1c71c71c6d5bp-6, y: fl)
+  var fh = hp.item0
+  fl = 0x1.b125bccdcc89ep-60 +! hp.item1
+  hp = b64_asin_muldd(xh: v2, xl: dv2, ch: fh, cl: fl)
+  hp = b64_asin_fastsum(xh: 0x1.6db6db6db6db7p-5, xl: -0x1.cb95ff08658e6p-62, yh: hp.item0, yl: hp.item1)
+  hp = b64_asin_muldd(xh: v2, xl: dv2, ch: hp.item0, cl: hp.item1)
+  hp = b64_asin_fastsum(xh: 0x1.3333333333333p-4, xl: 0x1.9997e3427441bp-59, yh: hp.item0, yl: hp.item1)
+  hp = b64_asin_muldd(xh: v2, xl: dv2, ch: hp.item0, cl: hp.item1)
+  hp = b64_asin_fastsum(xh: 0x1.5555555555555p-3, xl: 0x1.5555555623513p-57, yh: hp.item0, yl: hp.item1)
+  hp = b64_asin_muldd(xh: v2, xl: dv2, ch: hp.item0, cl: hp.item1)
+  hp = b64_asin_fastsum(xh: 1.0, xl: -0x1.fc2c76456515bp-108, yh: hp.item0, yl: hp.item1)
+  hp = b64_asin_muldd(xh: v, xl: dv, ch: hp.item0, cl: hp.item1)
+  fh = hp.item0
+  fl = hp.item1
+  # since 0 <= jt <= 64, ph and pl are exact
+  var ph = jt *! 0x1.921fb54442dp-5
+  var pl = 0x1.8469898cc518p-53 *! jt
+  var ps = -0x1.fc8f8cbb5bf6cp-102 *! jt
+  var q = b64_asin_fastsum(xh: fh, xl: fl, yh: pl, yl: ps)
+  pl = q.item0
+  ps = q.item1
+  q = b64_asin_fasttwosum(x: ph, y: pl)
+  ph = q.item0
+  pl = q.item1
+  q = b64_asin_fasttwosum(x: pl, y: ps)
+  pl = q.item0
+  ps = q.item1
+  q = b64_asin_fasttwosum(x: ph, y: pl)
+  ph = q.item0
+  pl = q.item1
+  q = b64_asin_fasttwosum(x: pl, y: ps)
+  pl = q.item0
+  ps = q.item1
+  var th = ph.to_bits()
+  var tl = pl.to_bits() & 0x7FFFFFFFFFFFFFFF_u64
+  var tn = (th & 0x7FF0000000000000_u64) -% 0x0350000000000000_u64
+  var dn = LLVM::reinterpret_bits[U64, S64](tl -% tn)
+  var de = (tn -% tl) >>> 52
+  var res = ph +! pl
+  if (dn >= -2 and dn <= 0) or de > 47
+    # the database of inputs whose arc sine is too close to a rounding boundary
+    var k = 0_u64
+    while k < 29
+      if B64.from_bits(bits: B64_ASIN_DB_X[k]) == ax
+        var rh = B64.from_bits(bits: B64_ASIN_DB_H[k])
+        var rl = B64.from_bits(bits: B64_ASIN_DB_L[k])
+        if x > 0.0
+          return rh +! rl
+        return -rh -! rl
+      k = k + 1
+  return res
+
+# Float tables are stored as IEEE 754 bit patterns (read back with B64.from_bits).
+# cc[j][0..7], row-major: asin(x) = x*(cc[j][0] + cc[j][1] + t*P(t, cc[j] + 2)) with t = x^2 - j/128
+secret preset B64_ASIN_CC: Array[U64, 264] = [0x3FF0000000000000_u64, 0x0000000000000000_u64, 0x3FC5555555555555_u64, 0x3FB33333333333E4_u64, 0x3FA6DB6DB6D31F82_u64, 0x3F9F1C71F6889397_u64, 0x3F96E874B7045B46_u64, 0x3F91F753132271E2_u64, 0x3FF0055A27E0D033_u64, 0xBC9D9BA10494C062_u64, 0x3FC57C00CB5D6C4D_u64, 0x3FB37881F5649A75_u64, 0x3FA759AF49D494DD_u64, 0x3FA002E1864DDA2E_u64, 0x3F97C2D5D468CDD9_u64, 0x3F9292834C025357_u64, 0x3FF00ABE0C129E1E_u64, 0x3C67CEB0EE49D42A_u64, 0x3FC5A3385D5C7BA5_u64, 0x3FB3BF51056F6637_u64, 0x3FA7DBA76B124B37_u64, 0x3FA07BE4B02E94C4_u64, 0x3F98A6BB92513F01_u64, 0x3F936AFD4C615AEC_u64, 0x3FF0102BCFFD6ACD_u64, 0xBC8C2294C65D2E86_u64, 0x3FC5CAFF17351901_u64, 0x3FB407ABBC04FEB3_u64, 0x3FA86179B8005949_u64, 0x3FA0F97520BD4E72_u64, 0x3F99950C5C89F3DF_u64, 0x3F944F2344E7B664_u64, 0x3FF015A397CF0F1C_u64, 0xBC8EEBD6CCFE3EE3_u64, 0x3FC5F3581BE7B08B_u64, 0x3FB4519DDF1AE531_u64, 0x3FA8EB4B6EE35E92_u64, 0x3FA17BC85414CD46_u64, 0x3F9A8E5895E3FCF9_u64, 0x3F953FAFDC629400_u64, 0x3FF01B2588811EEB_u64, 0x3C47193E5D0A915F_u64, 0x3FC61C46A67205D2_u64, 0x3FB49D33A6EEAE0B_u64, 0x3FA979438563C014_u64, 0x3FA20316AE977F05_u64, 0x3F9B9339AFB53AA4_u64, 0x3F963D6B02C42D0A_u64, 0x3FF020B1C7DF0575_u64, 0xBC8DD547E329C1E5_u64, 0x3FC645CE0AB901BB_u64, 0x3FB4EA79C34FC7A6_u64, 0x3FAA0B8AC08940EC_u64, 0x3FA28F9BABD0629B_u64, 0x3F9CA452CF90A55E_u64, 0x3F97492B016730EF_u64, 0x3FF026487C8C5D71_u64, 0xBC95FD9B68DC3B6E_u64, 0x3FC66FF1B67D5D70_u64, 0x3FB5397D613373EB_u64, 0x3FAAA24BCE3AEB4A_u64, 0x3FA3219610B150AC_u64, 0x3F9DC251825103F1_u64, 0x3F9863D5A3932532_u64, 0x3FF02BE9CE0B87CD_u64, 0x3C7E5D09DA2E0F04_u64, 0x3FC69AB5325BC359_u64, 0x3FB58A4C3097AAB3_u64, 0x3FAB3DB3605F46F2_u64, 0x3FA3B94821742CAB_u64, 0x3F9EEDEE7DA72A15_u64, 0x3F998E6179A3E9A0_u64, 0x3FF03195E4C483F1_u64, 0xBC95DB10AD66EACB_u64, 0x3FC6C61C22D908F0_u64, 0x3FB5DCF46AB9F2CB_u64, 0x3FABDDF049BB1F4D_u64, 0x3FA456F7DB6AC768_u64, 0x3FA013F738BD7BB3_u64, 0x3F9AC9D739783D21_u64, 0x3FF0374CEA0C0C9F_u64, 0xBC9917BFF5241C76_u64, 0x3FC6F22A497B2EC0_u64, 0x3FB63184D8A79DB5_u64, 0x3FAC83339CAF946E_u64, 0x3FA4FAEF331019D4_u64, 0x3FA0B8917547D678_u64, 0x3F9C17533F147E1C_u64, 0x3FF03D0F082AFCC8_u64, 0xBC9018BBCDDB49EB_u64, 0x3FC71EE385EFDF06_u64, 0x3FB6880CDA2D3885_u64, 0x3FAD2DB0CBFAE54D_u64, 0x3FA5A57C56B50C5E_u64, 0x3FA16535A40098B2_u64, 0x3F9D780730B8EBB8_u64, 0x3FF042DC6A65FFBF_u64, 0xBC8C7EA28DCE95D1_u64, 0x3FC74C4BD7412F9E_u64, 0x3FB6E09C6D2B72BC_u64, 0x3FADDD9DCDA253DE_u64, 0x3FA656F1F62B5001_u64, 0x3FA21A5AE2AC77EE_u64, 0x3F9EED3BCA067F0E_u64, 0x3FF048B53D05907B_u64, 0x3C9634FFFED6E2A6_u64, 0x3FC77A675D1978BE_u64, 0x3FB73B4435583415_u64, 0x3FAE9333402EBBF3_u64, 0x3FA70FA78FD9F73F_u64, 0x3FA2D8804D934FE1_u64, 0x3FA03C29691A281C_u64, 0x3FF04E99AD5E4BCD_u64, 0xBC9E97A72FE827E0_u64, 0x3FC7A93A5917200C_u64, 0x3FB7981584731C05_u64, 0x3FAF4EAC9268FAE2_u64, 0x3FA7CFF9C3B19721_u64, 0x3FA3A02D9C1E0145_u64, 0x3FA10D64A0E56953_u64, 0x3FF05489E9D99995_u64, 0x3C8D177637EC6A2B_u64, 0x3FC7D8C930314681_u64, 0x3FB7F72262F532E4_u64, 0x3FB0082416E39013_u64, 0x3FA8984AAC80DDF4_u64, 0x3FA471F3CAF18EB8_u64, 0x3FA1EB1CCE6DD570_u64, 0x3FF05A8621FEB16B_u64, 0xBC7E5B33B1407C5F_u64, 0x3FC809186C2E57DD_u64, 0x3FB8587D99442DC8_u64, 0x3FB06C23D1DFCB7F_u64, 0x3FA969024036DD22_u64, 0x3FA54E6DD4D2AF33_u64, 0x3FA2D62F439F2A31_u64, 0x3FF0608E867BFF30_u64, 0x3C8CBEF5D8580027_u64, 0x3FC83A2CBD2D8BA2_u64, 0x3FB8BC3AB9724C6E_u64, 0x3FB0D377EF1E0C39_u64, 0x3FAA428EB7ADDF84_u64, 0x3FA636417BC01FF2_u64, 0x3FA3CF8ACC7EB2A0_u64, 0x3FF066A34930EC8D_u64, 0xBC9480F445FEDAD1_u64, 0x3FC86C0AFB447A74_u64, 0x3FB9226E29948D9C_u64, 0x3FB13E44A9B5A3A6_u64, 0x3FAB2564FEA8B3FE_u64, 0x3FA72A2023D92458_u64, 0x3FA4D8313CEC3485_u64, 0x3FF06CC49D38146C_u64, 0xBC8B55394F4FC07B_u64, 0x3FC89EB82831FEED_u64, 0x3FB98B2D2EB9BB23_u64, 0x3FB1ACB01E9AB414_u64, 0x3FAC12012CBD00C6_u64, 0x3FA82AC7C1D15C38_u64, 0x3FA5F13925C6EDCA_u64, 0x3FF072F2B6F1E601_u64, 0xBC92DCBB05419970_u64, 0x3FC8D2397127AEBB_u64, 0x3FB9F68DF88DA51D_u64, 0x3FB21EE26A4F62A1_u64, 0x3FAD08E707F7AE6F_u64, 0x3FA93903DEE3FEB0_u64, 0x3FA71BCFB5C57B59_u64, 0x3FF0792DCC0FBD20_u64, 0xBC75BF23EE4F9D54_u64, 0x3FC9069430AB508A_u64, 0x3FBA64A7ADB4CD85_u64, 0x3FB29505C8B48349_u64, 0x3FAE0AA2921CFA60_u64, 0x3FAA55AEB46F4322_u64, 0x3FA8593ACAD3BECE_u64, 0x3FF07F76139F761D_u64, 0x3C9FA1046481BB82_u64, 0x3FC93BCDF091CCA6_u64, 0x3FBAD59278EDC42F_u64, 0x3FB30F46B7261652_u64, 0x3FAF17C8A17C843E_u64, 0x3FAB81B2619E15B5_u64, 0x3FA9AADB395F5AE4_u64, 0x3FF085CBC61783C1_u64, 0x3C90A6E9EFA20176_u64, 0x3FC971EC6C1531E4_u64, 0x3FBB496797068912_u64, 0x3FB38DD419140184_u64, 0x3FB0187BC3357BBB_u64, 0x3FACBE0A3DCAFE26_u64, 0x3FAB122F4FA499D0_u64, 0x3FF08C2F1D638E4C_u64, 0x3C7B47C159534A3D_u64, 0x3FC9A8F592078624_u64, 0x3FBBC04165B57AB2_u64, 0x3FB410DF5F4BED1D_u64, 0x3FB0AB6BDF478C71_u64, 0x3FAE0BC44A945C64_u64, 0x3FAC90D59BCD5701_u64, 0x3FF092A054F1A2FC_u64, 0xBC92F657224E9830_u64, 0x3FC9E0EF87243A2C_u64, 0x3FBC3A3B7366A278_u64, 0x3FB4989CB22E2175_u64, 0x3FB1450E5BA7AD39_u64, 0x3FAF6C02C8F0EF93_u64, 0x3FAE288FFC8D182C_u64, 0x3FF0991FA9BFFBF4_u64, 0xBC5CA1140A1ABBF4_u64, 0x3FCA19E0A8823B80_u64, 0x3FBCB772900F9C24_u64, 0x3FB525431F0CBB2E_u64, 0x3FB1E5C2D06804E1_u64, 0x3FB06FFEFA7AA6B8_u64, 0x3FAFDB4704DCA347_u64, 0x3FF09FAD5A6B68F9_u64, 0x3C7AA1F06E92964E_u64, 0x3FCA53CF8E28C50E_u64, 0x3FBD3804DF1DE350_u64, 0x3FB5B70CC8FA98DC_u64, 0x3FB28DEF298C979B_u64, 0x3FB13482F6347EEB_u64, 0x3FB0D586DE48358C_u64, 0x3FF0A649A73E61F2_u64, 0x3C874AC0D817E9C7_u64, 0x3FCA8EC30DC93891_u64, 0x3FBDBC11EA950625_u64, 0x3FB64E371D5616D3_u64, 0x3FB33E0023936249_u64, 0x3FB204426263066A_u64, 0x3FB1CD12E4629723_u64, 0x3FF0ACF4D240CCC4_u64, 0x3C9DA890F3B40BD3_u64, 0x3FCACAC23DA07797_u64, 0x3FBE43BAB7741A98_u64, 0x3FB6EB030C631819_u64, 0x3FB3F669D2EB516E_u64, 0x3FB2E0006AE505AE_u64, 0x3FB2D58204457C82_u64, 0x3FF0B3AF1F4880BB_u64, 0x3C7F450FB78D32BA_u64, 0x3FCB07D4778263AF_u64, 0x3FBECF21DB7BE0EF_u64, 0x3FB78DB5465013E4_u64, 0x3FB4B7A8376F0996_u64, 0x3FB3C88F9F2EF221_u64, 0x3FB3F02AD9EB9753_u64, 0x3FF0BA78D40A9260_u64, 0xBC957B07A441E242_u64, 0x3FCB46015C126262_u64, 0x3FBF5E6B94713F3D_u64, 0x3FB836967D0AFECF_u64, 0x3FB5823FDD1707B9_u64, 0x3FB4BED355269DC2_u64, 0x3FB51E83065121CF_u64, 0x3FF0C152382D7366_u64, 0xBC9EE6913347C2A6_u64, 0x3FCB8550D62BFB6E_u64, 0x3FBFF1BDE0FA3CAD_u64, 0x3FB8E5F3AB550989_u64, 0x3FB656BE8B38EBAF_u64, 0x3FB5C3C13008A099_u64, 0x3FB662225A1B4F77_u64]
+# sin(pi/64*j) as double-doubles, row-major (low part, high part)
+secret preset B64_ASIN_S: Array[U64, 66] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0xBC2912BD0D569A90_u64, 0x3FA91F65F10DD814_u64, 0xBC3E2718D26ED688_u64, 0x3FB917A6BC29B42C_u64, 0x3C513000A89A11E0_u64, 0x3FC2C8106E8E613A_u64, 0xBC626D19B9FF8D82_u64, 0x3FC8F8B83C69A60B_u64, 0xBC642DEEF11DA2C4_u64, 0x3FCF19F97B215F1B_u64, 0xBC75D28DA2C4612D_u64, 0x3FD294062ED59F06_u64, 0xBC1EFDC0D58CF620_u64, 0x3FD58F9A75AB1FDD_u64, 0xBC672CEDD3D5A610_u64, 0x3FD87DE2A6AEA963_u64, 0x3C65B362CB974183_u64, 0x3FDB5D1009E15CC0_u64, 0x3C5E0D891D3C6841_u64, 0x3FDE2B5D3806F63B_u64, 0xBC8A5A014347406C_u64, 0x3FE073879922FFEE_u64, 0x3C8B25DD267F6600_u64, 0x3FE1C73B39AE68C8_u64, 0xBC6EFCC626F74A6F_u64, 0x3FE30FF7FCE17035_u64, 0x3C68076A2CFDC6B3_u64, 0x3FE44CF325091DD6_u64, 0xBC875720992BFBB2_u64, 0x3FE57D69348CECA0_u64, 0xBC8BDD3413B26456_u64, 0x3FE6A09E667F3BCD_u64, 0xBC70F537ACDF0AD7_u64, 0x3FE7B5DF226AAFAF_u64, 0xBC82C5E12ED1336D_u64, 0x3FE8BC806B151741_u64, 0xBC830EE286712474_u64, 0x3FE9B3E047F38741_u64, 0x3C39F630E8B6DAC8_u64, 0x3FEA9B66290EA1A3_u64, 0xBC8BC69F324E6D61_u64, 0x3FEB728345196E3E_u64, 0xBC76E0B1757C8D07_u64, 0x3FEC38B2F180BDB1_u64, 0xBC5E7B6BB5AB58AE_u64, 0x3FECED7AF43CC773_u64, 0x3C7457E610231AC2_u64, 0x3FED906BCF328D46_u64, 0xBC8014C76C126527_u64, 0x3FEE212104F686E5_u64, 0x3C8760B1E2E3F81E_u64, 0x3FEE9F4156C62DDA_u64, 0x3C752C7ADC6B4989_u64, 0x3FEF0A7EFB9230D7_u64, 0x3C7562172A361FD3_u64, 0x3FEF6297CFF75CB0_u64, 0xBC87A0A8CA13571F_u64, 0x3FEFA7557F08A517_u64, 0xBC887DF6378811C7_u64, 0x3FEFD88DA3D12526_u64, 0xBC6C57BC2E24AA15_u64, 0x3FEFF621E3796D7E_u64, 0x0000000000000000_u64, 0x3FF0000000000000_u64]
+# inputs whose arc sine is too close to a rounding boundary: |x|, result hi, result lo
+secret preset B64_ASIN_DB_X: Array[U64, 29] = [0x3E57137449123EF6_u64, 0x3E5D12ED0AF1A27E_u64, 0x3E851C4B960778F5_u64, 0x3E93CFC2A006A414_u64, 0x3E9CBAA95DADB559_u64, 0x3EBACD69F89AD8F1_u64, 0x3EF2BFFFFFFC233B_u64, 0x3EFFF0F3022B2E9D_u64, 0x3F13217783D70D1D_u64, 0x3F1C373FF4AAD79B_u64, 0x3F6B3F28593CAD2F_u64, 0x3F8E17B3F6BB5E6E_u64, 0x3F941D60A76A82ED_u64, 0x3F9921C0A0486537_u64, 0x3F99C360A8DD681A_u64, 0x3F9D6315F7EE7E01_u64, 0x3F9EA6FDC56FC61A_u64, 0x3FA2749DC4D19C6D_u64, 0x3FA69768DC89BB00_u64, 0x3FAA4816B2066707_u64, 0x3FAD77B117F230D6_u64, 0x3FAFC7A07B2549AA_u64, 0x3FB2DF0542154F1B_u64, 0x3FB51CF5DB1B1956_u64, 0x3FCD0EF799001BA9_u64, 0x3FD4A8E1A96E38E3_u64, 0x3FDCEEE68154D1C9_u64, 0x3FDDA4E0E6C717A5_u64, 0x3FDE9950730C4696_u64]
+secret preset B64_ASIN_DB_H: Array[U64, 29] = [0x3E57137449123EF7_u64, 0x3E5D12ED0AF1A27F_u64, 0x3E851C4B9607790D_u64, 0x3E93CFC2A006A465_u64, 0x3E9CBAA95DADB650_u64, 0x3EBACD69F89AE57A_u64, 0x3EF2C00000006DDD_u64, 0x3EFFF0F3024065E7_u64, 0x3F132177841FFBEF_u64, 0x3F1C373FF594D65B_u64, 0x3F6B3F2BA40DBC66_u64, 0x3F8E17FAEFAC7797_u64, 0x3F941DB571D96126_u64, 0x3F99226605233224_u64, 0x3F99C412D62C1440_u64, 0x3F9D641E6D5E769A_u64, 0x3F9EA829E3E988E5_u64, 0x3FA275A3D78C01EC_u64, 0x3FA69949B3D51FB1_u64, 0x3FAA4B0BFB0454D5_u64, 0x3FAD7BDCD778049F_u64, 0x3FAFCCDC252CAD1F_u64, 0x3FB2E36813A98740_u64, 0x3FB5231B416BA885_u64, 0x3FCD5064E6FE82C5_u64, 0x3FD50954B7BBF87B_u64, 0x3FDE05B0E0A809BC_u64, 0x3FDED25C5EB8C916_u64, 0x3FDFE767739D0F6D_u64]
+secret preset B64_ASIN_DB_L: Array[U64, 29] = [0xBAFFFFFFFFFFFFFF_u64, 0xB7963676AA7969AA_u64, 0x3B2FFFFFFFFFFFFF_u64, 0xB7C1E68BC303367C_u64, 0x37F742593EF4C3D3_u64, 0x381B0DDFE3E29B3C_u64, 0xB851C26F2054C230_u64, 0xBB9FFFFFFFFFFFFE_u64, 0xBBBFFFFFFFFFFFFF_u64, 0xBBBFFFFFFFFFFFFF_u64, 0xB8B27CA20C684481_u64, 0xB8F15A1C95184D1B_u64, 0xB8DDF34BCDACF353_u64, 0xB9338E672F1696D5_u64, 0x3911EDD261167BAF_u64, 0xB92AF7DEC023F5B9_u64, 0xB92F358E90326F9A_u64, 0x39149AB71C17BD11_u64, 0xB8E14B91318650E8_u64, 0x3C4FFFFFFFFFFFFF_u64, 0x38DAAFC31A59E093_u64, 0xB92DC02FDAC5159A_u64, 0xB9363ABAA885A4DA_u64, 0xB93E1E3F45D0BEC3_u64, 0xB9284B9ECB11E241_u64, 0xB93B9F88CFB1EF42_u64, 0x394117D6AECD2594_u64, 0xB9289E120E5744A5_u64, 0x38716376667A73F3_u64]

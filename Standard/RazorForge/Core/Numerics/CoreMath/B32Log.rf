@@ -1,0 +1,77 @@
+module Core
+
+# ============================================================================
+# Correctly rounded natural logarithm of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/log/logf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2026 Alexei Sibidanov and Paul Zimmermann. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling and exception raising are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### `1/(1 + i/64)` for i in 0..64, rounded to 29 bits, as B64 bit patterns.
+secret preset B32_LOG_TR: Array[U64, 65] = [0x3FF0000000000000_u64, 0x3FEF81F820000000_u64, 0x3FEF07C1F0000000_u64, 0x3FEE9131AC000000_u64, 0x3FEE1E1E1E000000_u64, 0x3FEDAE6077000000_u64, 0x3FED41D41D000000_u64, 0x3FECD85689000000_u64, 0x3FEC71C71C000000_u64, 0x3FEC0E0704000000_u64, 0x3FEBACF915000000_u64, 0x3FEB4E81B5000000_u64, 0x3FEAF286BD000000_u64, 0x3FEA98EF60000000_u64, 0x3FEA41A41A000000_u64, 0x3FE9EC8E95000000_u64, 0x3FE999999A000000_u64, 0x3FE948B0FD000000_u64, 0x3FE8F9C190000000_u64, 0x3FE8ACB90F000000_u64, 0x3FE8618618000000_u64, 0x3FE8181818000000_u64, 0x3FE7D05F41000000_u64, 0x3FE78A4C81000000_u64, 0x3FE745D174000000_u64, 0x3FE702E05C000000_u64, 0x3FE6C16C17000000_u64, 0x3FE6816817000000_u64, 0x3FE642C859000000_u64, 0x3FE6058160000000_u64, 0x3FE5C9882C000000_u64, 0x3FE58ED231000000_u64, 0x3FE5555555000000_u64, 0x3FE51D07EB000000_u64, 0x3FE4E5E0A7000000_u64, 0x3FE4AFD6A0000000_u64, 0x3FE47AE148000000_u64, 0x3FE446F865000000_u64, 0x3FE4141414000000_u64, 0x3FE3E22CBD000000_u64, 0x3FE3B13B14000000_u64, 0x3FE3813814000000_u64, 0x3FE3521CFB000000_u64, 0x3FE323E34A000000_u64, 0x3FE2F684BE000000_u64, 0x3FE2C9FB4E000000_u64, 0x3FE29E412A000000_u64, 0x3FE27350B9000000_u64, 0x3FE2492492000000_u64, 0x3FE21FB781000000_u64, 0x3FE1F7047E000000_u64, 0x3FE1CF06AE000000_u64, 0x3FE1A7B961000000_u64, 0x3FE1811812000000_u64, 0x3FE15B1E5F000000_u64, 0x3FE135C811000000_u64, 0x3FE1111111000000_u64, 0x3FE0ECF56C000000_u64, 0x3FE0C97150000000_u64, 0x3FE0A6810A000000_u64, 0x3FE0842108000000_u64, 0x3FE0624DD3000000_u64, 0x3FE0410410000000_u64, 0x3FE0204081000000_u64, 0x3FE0000000000000_u64]
+
+### `-log(B32_LOG_TR[i])` for i in 0..64, as B64 bit patterns.
+secret preset B32_LOG_TL: Array[U64, 65] = [0xBD23B40815CD0628_u64, 0x3F8FC0A890FBB514_u64, 0x3F9F829B1E780B98_u64, 0x3FA77458F532C948_u64, 0x3FAF0A30C2114EF2_u64, 0x3FB341D793BBC7F7_u64, 0x3FB6F0D28D256172_u64, 0x3FBA926D3A6ACB89_u64, 0x3FBE2707722AE90C_u64, 0x3FC0D77E7A90896C_u64, 0x3FC29552F6FFF036_u64, 0x3FC44D2B6C5B7831_u64, 0x3FC5FF306EE78EE7_u64, 0x3FC7AB890410D41C_u64, 0x3FC9525A9E3451C7_u64, 0x3FCAF3C94ED0BB06_u64, 0x3FCC8FF7C59A9535_u64, 0x3FCE27076D5AEDF9_u64, 0x3FCFB9186B5E393E_u64, 0x3FD0A324E38B8E6D_u64, 0x3FD1675CACABA398_u64, 0x3FD22941FC0F76EF_u64, 0x3FD2E8E2BC311ABA_u64, 0x3FD3A64C56B14373_u64, 0x3FD4618BC31C5C4C_u64, 0x3FD51AAD874DF5B7_u64, 0x3FD5D1BDBEA80754_u64, 0x3FD686C81D331238_u64, 0x3FD739D7F6DBCD90_u64, 0x3FD7EAF83C82AD4D_u64, 0x3FD89A3385813FE4_u64, 0x3FD947941AA91484_u64, 0x3FD9F323EDBF95D5_u64, 0x3FDA9CEC9A4205D3_u64, 0x3FDB44F77C5C8CEC_u64, 0x3FDBEB4D9EA71905_u64, 0x3FDC8FF7C69A97AB_u64, 0x3FDD32FE7F38E95F_u64, 0x3FDDD46A0501C22A_u64, 0x3FDE7442617E8511_u64, 0x3FDF128F5EAF0476_u64, 0x3FDFAF588DD8F0A8_u64, 0x3FE02552A5EDCFC4_u64, 0x3FE0723E5C64DE05_u64, 0x3FE0BE72E3852947_u64, 0x3FE109F39D554B5C_u64, 0x3FE154C3D2C4D4AE_u64, 0x3FE19EE6B38BC834_u64, 0x3FE1E85F5EF03F95_u64, 0x3FE23130D7FABE07_u64, 0x3FE2795E1219AFE0_u64, 0x3FE2C0E9EC9C8D50_u64, 0x3FE307D7337F0F83_u64, 0x3FE34E289CB4E098_u64, 0x3FE393E0D42E28DE_u64, 0x3FE3D9026AD555BF_u64, 0x3FE41D8FE8667173_u64, 0x3FE4618BC1EC5D87_u64, 0x3FE4A4F85D303D80_u64, 0x3FE4E7D8127F5A75_u64, 0x3FE52A2D26DBC470_u64, 0x3FE56BF9D597F25E_u64, 0x3FE5AD404CB59DF2_u64, 0x3FE5EE02A928153A_u64, 0x3FE62E42FEFA38B4_u64]
+
+### Natural logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: `log(±0) == -infinity`, `log(+infinity) ==
+### +infinity`, a negative input gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded natural logarithm.
+routine B32.log_unchecked() -> B32
+  var ux = me.to_bits()
+  if ux < 0x00800000_u32 or ux >= 0x7F800000_u32
+    if ux == 0 or ux >= 0x7F800000_u32
+      # <= 0, NaN, infinity
+      return b32_log_special(x: me)
+    # subnormal: normalize
+    var n = ux.leading_zeros() - 8
+    ux = ux << n
+    ux = ux -% (n << 23)
+  if ux == 0x3F800000_u32
+    return 0.0_b32
+  var m = ux & 0x7FFFFF_u32
+  var j = LLVM::zero_extend[U32, U64]((m + 0x10000_u32) >>> 17)
+  var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
+  var ed = B64(from: e)
+  var tz = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](m) | 0x1FF800000_u64) << 29)
+  var tlj = B64.from_bits(bits: B32_LOG_TL[j])
+  var z = tz *! B64.from_bits(bits: B32_LOG_TR[j]) -! 1.0
+  var z2 = z *! z
+  var r = ((ed *! 0x1.62e42fefa39efp-1 +! tlj) +! z *! 0x1.00000006342eap+0) +! z2 *! (-0x1.0001f7fdc3977p-1 +! z *! 0x1.554a4e5cae9cfp-2)
+  var ub = B32(from: r)
+  var lb = B32(from: r +! 0x1.f06p-33)
+  if ub != lb
+    # the fast path cannot decide the rounding: a longer polynomial and a two-part log(2)
+    var c01 = -0x1p-1 +! z *! 0x1.55555555571cap-2
+    var c23 = -0x1.0000000002d85p-2 +! z *! 0x1.9999987d0c963p-3
+    var c46 = (-0x1.555554059a8bbp-3 +! z *! 0x1.24aebcf71a38fp-3) -! z2 *! 0x1.001c73915d758p-3
+    var f = z2 *! (c01 +! z2 *! (c23 +! z2 *! c46))
+    if (me -! 1.0_b32).abs() < 0x1p-10_b32
+      return B32(from: z +! f)
+    f = f -! 0x1.0ca86c3898dp-49 *! ed
+    f = f +! z
+    f = f +! (tlj -! B64.from_bits(bits: B32_LOG_TL[0]))
+    var el = ed *! 0x1.62e42fefa3ap-1
+    r = el +! f
+    ub = B32(from: r)
+    if (r.to_bits() & 0x0FFFFFFF_u64) == 0
+      # r lies on a B32 rounding boundary: nudge it by the rounding error of el + f
+      var dr = (el -! r) +! f
+      r = r +! dr *! 64.0
+      ub = B32(from: r)
+  return ub
+
+### log of ±0 (-infinity), +infinity (itself), NaN (itself) or a negative input (NaN).
+### :param x: The special input.
+### :returns: The special result.
+secret routine b32_log_special(x: B32) -> B32
+  var ux = x.to_bits()
+  if (ux << 1) == 0
+    return B32.from_bits(bits: 0xFF800000_u32)
+  if ux == 0x7F800000_u32
+    return x
+  if (ux << 1) > 0xFF000000_u32
+    return x +! x
+  return B32.from_bits(bits: 0xFFC00000_u32)

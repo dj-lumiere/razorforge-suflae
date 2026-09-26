@@ -1,0 +1,69 @@
+module Core
+
+# ============================================================================
+# Correctly rounded inverse hyperbolic sine of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/asinh/asinhf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Paul Zimmermann. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept. Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Inverse hyperbolic sine, correctly rounded: the exact asinh rounded to the nearest `B16` (ties to
+### even), identical on every platform. ±0 and ±infinity map to themselves, NaN gives NaN.
+### :returns: The correctly rounded inverse hyperbolic sine.
+routine B16.asinh() -> B16
+  var v = B32(from: me)
+  var u = v.to_bits()
+  var au = u & 0x7FFFFFFF_u32
+  if au >= 0x7F800000_u32
+    # +infinity or NaN: x + x (quiets a signaling NaN), and -infinity maps to itself
+    if u == 0x7F800000_u32 or au & 0x7FFFFF_u32 != 0
+      return me +! me
+    return me
+  # 2^(i-3) <= |x| < 2^(i-2)
+  var i = LLVM::reinterpret_bits[U32, S32](au >>> 23) - 124
+  var t = v
+  var tt = t *! t
+  if i <= 0
+    # |x| < 2^-2. For |x| <= 0x1.714p-5, asinh(x) rounds to x
+    if au <= 0x3D38A000_u32
+      if au == 0
+        return me
+      return if au == u then B16(from: v -! 0x1p-26_b32) else B16(from: v +! 0x1p-26_b32)
+    # an odd degree-7 polynomial
+    var c5 = LLVM::fma[B32](a: b16_asinh_p(i: 0, k: 3), b: tt, c: b16_asinh_p(i: 0, k: 2))
+    var c1 = LLVM::fma[B32](a: b16_asinh_p(i: 0, k: 1), b: tt, c: b16_asinh_p(i: 0, k: 0))
+    c1 = LLVM::fma[B32](a: c5, b: tt *! tt, c: c1)
+    return B16(from: t *! c1)
+  # |x| >= 2^-2: the polynomials are not odd, so evaluate on |x| and restore the sign
+  var s = 1.0_b32
+  if u >>> 31 == 1
+    s = -1.0_b32
+  t = t *! s
+  var c4 = LLVM::fma[B32](a: b16_asinh_p(i: i, k: 5), b: t, c: b16_asinh_p(i: i, k: 4))
+  var c2 = LLVM::fma[B32](a: b16_asinh_p(i: i, k: 3), b: t, c: b16_asinh_p(i: i, k: 2))
+  var c0 = LLVM::fma[B32](a: b16_asinh_p(i: i, k: 1), b: t, c: b16_asinh_p(i: i, k: 0))
+  c4 = LLVM::fma[B32](a: b16_asinh_p(i: i, k: 6), b: tt, c: c4)
+  c0 = LLVM::fma[B32](a: c2, b: tt, c: c0)
+  var y = LLVM::fma[B32](a: c4, b: tt *! tt, c: c0)
+  # the inputs the polynomials round wrongly
+  if i == 7 and au == 0x41936000_u32
+    y = 0x1.cdbffep+1_b32
+  if i == 10 and au == 0x436CC000_u32
+    y = 0x1.8a4002p+2_b32
+  if i == 11 and au == 0x43F10000_u32
+    y = 0x1.b7bffap+2_b32
+  if i == 12 and au == 0x44588000_u32
+    y = 0x1.dd4004p+2_b32
+  return B16(from: y *! s)
+
+### Coefficient `k` of the asinh polynomial for the binade index `i` (0..18).
+### :param i: The polynomial index.
+### :param k: The coefficient degree (0..6).
+### :returns: The binary32 coefficient.
+secret routine b16_asinh_p(i: S32, k: U64) -> B32
+  var row = LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](i))
+  return B32.from_bits(bits: B16_ASINH_P[row * 7 + k])
+
+# Row i (7 binary32 coefficients, bit patterns): P[0] is an odd degree-7 polynomial for asinh on [0, 2^-2] (its x, x^3, x^5, x^7 coefficients in slots 0..3), P[i] for 1 <= i < 19 a degree-6 polynomial for asinh on [2^(i-3), 2^(i-2)).
+secret preset B16_ASINH_P: Array[U32, 133] = [0x3F800001_u32, 0xBE2AAA6B_u32, 0x3D996252_u32, 0xBD299B79_u32, 0x00000000_u32, 0x00000000_u32, 0x00000000_u32, 0x37383EBD_u32, 0x3F7FF2D0_u32, 0x3AC35142_u32, 0xBE30443A_u32, 0x3C0E9B68_u32, 0x3DA1AF84_u32, 0xBD1430EB_u32, 0x3A9614B6_u32, 0x3F7CEAB8_u32, 0x3D5C555C_u32, 0xBE985B52_u32, 0x3E39D7C5_u32, 0xBD50AB27_u32, 0x3BB48400_u32, 0xBC8B8B14_u32, 0x3F89C173_u32, 0xBDFC560C_u32, 0xBDE33CAE_u32, 0x3D9696FF_u32, 0xBC9C7B13_u32, 0x3AFCEB8B_u32, 0xBD94B9CE_u32, 0x3FA1EF65_u32, 0xBEC8BB0E_u32, 0x3DC1130D_u32, 0xBC777113_u32, 0x3ABA32A3_u32, 0xB8781735_u32, 0x3E339157_u32, 0x3F6B5972_u32, 0xBE3EDF1A_u32, 0x3CE0865F_u32, 0xBB281661_u32, 0x390F1759_u32, 0xB652B21A_u32, 0x3F37BF60_u32, 0x3F02FF08_u32, 0xBD614875_u32, 0x3B89685F_u32, 0xB952D941_u32, 0x36B6ABE0_u32, 0xB3884294_u32, 0x3FAF695F_u32, 0x3E869D80_u32, 0xBC6AAD5C_u32, 0x3A104816_u32, 0xB75E8735_u32, 0x344174E9_u32, 0xB090A7AE_u32, 0x40036772_u32, 0x3E078BE1_u32, 0xBB6D1B37_u32, 0x3892114D_u32, 0xB56193EB_u32, 0x31C449B9_u32, 0xAD92DF26_u32, 0x402F9CD7_u32, 0x3D87C03B_u32, 0xBA6D9CF3_u32, 0x37126B93_u32, 0xB362254B_u32, 0x2F44C88A_u32, 0xAA933C25_u32, 0x405BF108_u32, 0x3D07CA49_u32, 0xB96DB2D3_u32, 0x3592787C_u32, 0xB1623607_u32, 0x2CC4D349_u32, 0xA79340EA_u32, 0x40842689_u32, 0x3C87C918_u32, 0xB86DAB0B_u32, 0x34126F81_u32, 0xAF622110_u32, 0x2A44BA8E_u32, 0xA49329E0_u32, 0x409A57E7_u32, 0x3C07BB7B_u32, 0xB76D79E4_u32, 0x329240C6_u32, 0xAD61BEBF_u32, 0x27C44DBF_u32, 0xA192C653_u32, 0x40B085B7_u32, 0x3B87BD6C_u32, 0xB66D8110_u32, 0x311247D4_u32, 0xAB61CE38_u32, 0x25445FB0_u32, 0x9E92D777_u32, 0x40C6B54C_u32, 0x3B07B797_u32, 0xB56D6C3A_u32, 0x2F923448_u32, 0xA961A55B_u32, 0x22C43299_u32, 0x9B92AEAF_u32, 0x40DCE4C3_u32, 0x3A87B28E_u32, 0xB46D5A96_u32, 0x2E1223F2_u32, 0xA76183CF_u32, 0x20440E53_u32, 0x98928E23_u32, 0x40F3134D_u32, 0x3A07B157_u32, 0xB36D5637_u32, 0x2C921FCF_u32, 0xA5617B1E_u32, 0x1DC404B6_u32, 0x95928563_u32, 0x4104A128_u32, 0x3987AE35_u32, 0xB26D4B70_u32, 0x2B121609_u32, 0xA3616766_u32, 0x1B43EFB9_u32, 0x929272F7_u32, 0x410FB83F_u32, 0x3907AE89_u32, 0xB16D4C85_u32, 0x299216F9_u32, 0xA1616939_u32, 0x18C3F197_u32, 0x8F92748B_u32]

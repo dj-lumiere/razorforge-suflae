@@ -1,0 +1,84 @@
+module Core
+
+# ============================================================================
+# Correctly rounded complementary error function of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/erfc/erfcf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Complementary error function `1 - erf(x)`, correctly rounded: the exact erfc rounded to the nearest
+### `B32` (ties to even), identical on every platform. `-infinity` maps to 2, `+infinity` to 0, and NaN
+### stays NaN.
+### :returns: The correctly rounded complementary error function.
+routine B32.erfc() -> B32
+  var ax = me.abs()
+  var axd = B64(from: ax)
+  var x2 = axd *! axd
+  var tu = me.to_bits()
+  var at = tu & 0x7FFFFFFF_u32
+  var sgn = LLVM::zero_extend[U32, U64](tu >>> 31)
+  var i = 0_u64
+  if at > 0x40051000_u32
+    i = 1
+  if tu > 0xC07547CA_u32
+    # x < -0x1.ea8f94p+1: erfc(x) rounds to 2
+    if tu >= 0xFF800000_u32
+      if tu == 0xFF800000_u32
+        return 2.0_b32
+      return me +! me
+    return 2.0_b32 -! 0x1p-25_b32
+  if at >= 0x4120DDFC_u32
+    # |x| >= 0x1.41bbf8p+3: erfc(x) < 2^-150 rounds to 0
+    if at >= 0x7F800000_u32
+      if at == 0x7F800000_u32
+        return 0.0_b32
+      return me +! me
+    return 0x1p-149_b32 *! 0.25_b32
+  if at <= 0x3DB80000_u32
+    # |x| <= 0x1.7p-4
+    if tu == 0xB76C9F62_u32
+      # x = -0x1.d93ec4p-17, an exceptional case
+      return 0x1.00010ap+0_b32 +! 0x1p-25_b32
+    if at <= 0x32E2DFC4_u32
+      # |x| <= 0x1.c5bf88p-26: erfc(x) rounds to 1
+      if at == 0
+        return 1.0_b32
+      if sgn == 0
+        return 1.0_b32 +! -0x1p-26_b32
+      return 1.0_b32 +! 0x1p-25_b32
+    # around 0, erfc(x) behaves as 1 - (odd polynomial)
+    var f0 = B64(from: me) *! (0x1.20dd750429b6dp+0 +! x2 *! (-0x1.812746b03610bp-2 +! x2 *! (0x1.ce2f218831d2fp-4 +! x2 *! (-0x1.b82c609607dcbp-6 +! x2 *! 0x1.553af09b8008ep-8))))
+    return B32(from: 1.0 -! f0)
+  # now -0x1.ea8f94p+1 <= x <= 0x1.41bbf8p+3, with |x| > 0x1.7p-4: erfc(x) = exp(-x^2) * s(x)
+  var jt = x2 *! 0x1.71547652b82fep+0 -! 0x1.00004p+10
+  var j = LLVM::reinterpret_bits[U64, S64](jt.to_bits() << 12) >> 48
+  var sc = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64]((j >> 7) + LLVM::reinterpret_bits[U64, S64](0x3FF_u64 | (sgn << 11))) << 52)
+  var jf = B64(from: j)
+  var d = (x2 +! 0x1.62e42fefap-8 *! jf) +! 0x1.cf79abd6f5dc8p-47 *! jf
+  var d2 = d *! d
+  var ej = LLVM::reinterpret_bits[S64, U64](j & 127)
+  var e0 = B64.from_bits(bits: B32_ERFC_E[ej])
+  var f = d +! d2 *! ((-0x1.ffffffffff333p-2 +! d *! 0x1.5555555556a14p-3) +! d2 *! (-0x1.55556666659b4p-5 +! d *! 0x1.1111074cc7b22p-7))
+  var b = i * 16
+  var z = (axd -! B64.from_bits(bits: B32_ERFC_CT[b])) /! (axd +! B64.from_bits(bits: B32_ERFC_CT[b + 1]))
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var z8 = z4 *! z4
+  var c = b + 3
+  var s = (((B64.from_bits(bits: B32_ERFC_CT[c]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 1])) +! z2 *! (B64.from_bits(bits: B32_ERFC_CT[c + 2]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 3]))) +! z4 *! ((B64.from_bits(bits: B32_ERFC_CT[c + 4]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 5])) +! z2 *! (B64.from_bits(bits: B32_ERFC_CT[c + 6]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 7])))) +! z8 *! (((B64.from_bits(bits: B32_ERFC_CT[c + 8]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 9])) +! z2 *! (B64.from_bits(bits: B32_ERFC_CT[c + 10]) +! z *! B64.from_bits(bits: B32_ERFC_CT[c + 11]))) +! z4 *! B64.from_bits(bits: B32_ERFC_CT[c + 12]))
+  s = B64.from_bits(bits: B32_ERFC_CT[b + 2]) +! z *! s
+  var r = (sc *! (e0 -! f *! e0)) *! s
+  var off = 0.0
+  if sgn == 1
+    off = 2.0
+  return B32(from: off +! r)
+
+### Table of 2^(j/128) for j in 0..127, as B64 bit patterns.
+secret preset B32_ERFC_E: Array[U64, 128] = [0x3FF0000000000000_u64, 0x3FF0163DA9FB3335_u64, 0x3FF02C9A3E778061_u64, 0x3FF04315E86E7F85_u64, 0x3FF059B0D3158574_u64, 0x3FF0706B29DDF6DE_u64, 0x3FF0874518759BC8_u64, 0x3FF09E3ECAC6F383_u64, 0x3FF0B5586CF9890F_u64, 0x3FF0CC922B7247F7_u64, 0x3FF0E3EC32D3D1A2_u64, 0x3FF0FB66AFFED31B_u64, 0x3FF11301D0125B51_u64, 0x3FF12ABDC06C31CC_u64, 0x3FF1429AAEA92DE0_u64, 0x3FF15A98C8A58E51_u64, 0x3FF172B83C7D517B_u64, 0x3FF18AF9388C8DEA_u64, 0x3FF1A35BEB6FCB75_u64, 0x3FF1BBE084045CD4_u64, 0x3FF1D4873168B9AA_u64, 0x3FF1ED5022FCD91D_u64, 0x3FF2063B88628CD6_u64, 0x3FF21F49917DDC96_u64, 0x3FF2387A6E756238_u64, 0x3FF251CE4FB2A63F_u64, 0x3FF26B4565E27CDD_u64, 0x3FF284DFE1F56381_u64, 0x3FF29E9DF51FDEE1_u64, 0x3FF2B87FD0DAD990_u64, 0x3FF2D285A6E4030B_u64, 0x3FF2ECAFA93E2F56_u64, 0x3FF306FE0A31B715_u64, 0x3FF32170FC4CD831_u64, 0x3FF33C08B26416FF_u64, 0x3FF356C55F929FF1_u64, 0x3FF371A7373AA9CB_u64, 0x3FF38CAE6D05D866_u64, 0x3FF3A7DB34E59FF7_u64, 0x3FF3C32DC313A8E5_u64, 0x3FF3DEA64C123422_u64, 0x3FF3FA4504AC801C_u64, 0x3FF4160A21F72E2A_u64, 0x3FF431F5D950A897_u64, 0x3FF44E086061892D_u64, 0x3FF46A41ED1D0057_u64, 0x3FF486A2B5C13CD0_u64, 0x3FF4A32AF0D7D3DE_u64, 0x3FF4BFDAD5362A27_u64, 0x3FF4DCB299FDDD0D_u64, 0x3FF4F9B2769D2CA7_u64, 0x3FF516DAA2CF6642_u64, 0x3FF5342B569D4F82_u64, 0x3FF551A4CA5D920F_u64, 0x3FF56F4736B527DA_u64, 0x3FF58D12D497C7FD_u64, 0x3FF5AB07DD485429_u64, 0x3FF5C9268A5946B7_u64, 0x3FF5E76F15AD2148_u64, 0x3FF605E1B976DC09_u64, 0x3FF6247EB03A5585_u64, 0x3FF6434634CCC320_u64, 0x3FF6623882552225_u64, 0x3FF68155D44CA973_u64, 0x3FF6A09E667F3BCD_u64, 0x3FF6C012750BDABF_u64, 0x3FF6DFB23C651A2F_u64, 0x3FF6FF7DF9519484_u64, 0x3FF71F75E8EC5F74_u64, 0x3FF73F9A48A58174_u64, 0x3FF75FEB564267C9_u64, 0x3FF780694FDE5D3F_u64, 0x3FF7A11473EB0187_u64, 0x3FF7C1ED0130C132_u64, 0x3FF7E2F336CF4E62_u64, 0x3FF80427543E1A12_u64, 0x3FF82589994CCE13_u64, 0x3FF8471A4623C7AD_u64, 0x3FF868D99B4492ED_u64, 0x3FF88AC7D98A6699_u64, 0x3FF8ACE5422AA0DB_u64, 0x3FF8CF3216B5448C_u64, 0x3FF8F1AE99157736_u64, 0x3FF9145B0B91FFC6_u64, 0x3FF93737B0CDC5E5_u64, 0x3FF95A44CBC8520F_u64, 0x3FF97D829FDE4E50_u64, 0x3FF9A0F170CA07BA_u64, 0x3FF9C49182A3F090_u64, 0x3FF9E86319E32323_u64, 0x3FFA0C667B5DE565_u64, 0x3FFA309BEC4A2D33_u64, 0x3FFA5503B23E255D_u64, 0x3FFA799E1330B358_u64, 0x3FFA9E6B5579FDBF_u64, 0x3FFAC36BBFD3F37A_u64, 0x3FFAE89F995AD3AD_u64, 0x3FFB0E07298DB666_u64, 0x3FFB33A2B84F15FB_u64, 0x3FFB59728DE5593A_u64, 0x3FFB7F76F2FB5E47_u64, 0x3FFBA5B030A1064A_u64, 0x3FFBCC1E904BC1D2_u64, 0x3FFBF2C25BD71E09_u64, 0x3FFC199BDD85529C_u64, 0x3FFC40AB5FFFD07A_u64, 0x3FFC67F12E57D14B_u64, 0x3FFC8F6D9406E7B5_u64, 0x3FFCB720DCEF9069_u64, 0x3FFCDF0B555DC3FA_u64, 0x3FFD072D4A07897C_u64, 0x3FFD2F87080D89F2_u64, 0x3FFD5818DCFBA487_u64, 0x3FFD80E316C98398_u64, 0x3FFDA9E603DB3285_u64, 0x3FFDD321F301B460_u64, 0x3FFDFC97337B9B5F_u64, 0x3FFE264614F5A129_u64, 0x3FFE502EE78B3FF6_u64, 0x3FFE7A51FBC74C83_u64, 0x3FFEA4AFA2A490DA_u64, 0x3FFECF482D8E67F1_u64, 0x3FFEFA1BEE615A27_u64, 0x3FFF252B376BBA97_u64, 0x3FFF50765B6E4540_u64, 0x3FFF7BFDAD9CBE14_u64, 0x3FFFA7C1819E90D8_u64, 0x3FFFD3C22B8F71F1_u64]
+
+### Two rational-reduction rows of 16 coefficients (for |x| <= 0x1.0a2p+1 and above), as B64 bit patterns:
+### the shift and pole of z = (|x| - a)/(|x| + b), then the polynomial s(z).
+secret preset B32_ERFC_CT: Array[U64, 32] = [0x3FEC162355429B28_u64, 0x400D99999999999A_u64, 0x3FDDA951CECE2B85_u64, 0xBFF70EF6CFF4BCC4_u64, 0x4003D7F7B3D617DE_u64, 0xC009D0AA47537C51_u64, 0x4009754EA9A3FCB1_u64, 0xC0027A5453FCC015_u64, 0x3FF1EF2E0531AEBA_u64, 0xBFCECA090F5A1C06_u64, 0xBFB7A3CD173A063C_u64, 0x3FB30FA68A68FDDD_u64, 0x3F555AD9A326993A_u64, 0xBF907E7B0BB39FBF_u64, 0x3F52328706C0E950_u64, 0x3F6D6AA0B7B19CFE_u64, 0x401137C8983F8516_u64, 0x400799999999999A_u64, 0x3FC05B53AA241333_u64, 0xBFCA3F53872BF870_u64, 0x3FBDE4C30742C9D5_u64, 0xBFACB24BFA591986_u64, 0x3F9666AEC059CA5F_u64, 0xBF7A61250EB26B0B_u64, 0x3F52B28B7924B34D_u64, 0x3F041B13A9D45013_u64, 0xBF16DD5E8A273613_u64, 0x3EF09CE8EA5E8DA5_u64, 0x3ED33923B4102981_u64, 0xBEC1DFD161E3F984_u64, 0xBE8C87618FCAE3B3_u64, 0x3E8E8A6FFA0BA2C7_u64]

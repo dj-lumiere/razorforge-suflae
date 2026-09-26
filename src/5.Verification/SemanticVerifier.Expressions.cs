@@ -551,7 +551,7 @@ public sealed partial class SemanticVerifier
         }
 
         if (TryReportFixedWidthMismatch(binary: binary, leftType: leftType, rightType: rightType) ||
-            TryReportUncheckedOperatorOutsideDanger(binary: binary))
+            TryReportUncheckedOperatorOutsideDanger(binary: binary, leftType: leftType))
         {
             return ErrorTypeSymbol.Instance;
         }
@@ -591,15 +591,18 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// S854: unchecked operators (<c>+%</c>, <c>-%</c>, …) require a <c>danger</c> block or an
-    /// <c>@dangerous</c> routine. Returns true when a violation was reported.
+    /// S854: unchecked operators (<c>+!</c>, <c>-!</c>, …) require a <c>danger</c> block or an
+    /// <c>@dangerous</c> routine. On an integer they are undefined behavior on overflow. On a binary or
+    /// decimal floating-point type they are raw IEEE 754 arithmetic (±infinity and NaN are defined values,
+    /// not undefined behavior), so they need no <c>danger</c>. Returns true when a violation was reported.
     /// </summary>
-    private bool TryReportUncheckedOperatorOutsideDanger(BinaryExpression binary)
+    private bool TryReportUncheckedOperatorOutsideDanger(BinaryExpression binary, TypeSymbol leftType)
     {
+        bool rawIeee = IsFloatType(type: leftType) || leftType.Name is "D32" or "D64" or "D128";
         if (binary.Operator is BinaryOperator.AddUnchecked or BinaryOperator.SubtractUnchecked
                 or BinaryOperator.MultiplyUnchecked or BinaryOperator.TrueDivideUnchecked
                 or BinaryOperator.FloorDivideUnchecked or BinaryOperator.ModuloUnchecked
-                or BinaryOperator.PowerUnchecked && !InDangerBlock)
+                or BinaryOperator.PowerUnchecked && !InDangerBlock && !rawIeee)
         {
             ReportError(code: SemanticDiagnosticCode.UncheckedOperatorOutsideDanger,
                 message: $"Unchecked operator '{binary.Operator.ToStringRepresentation()}' " +
@@ -1073,7 +1076,35 @@ public sealed partial class SemanticVerifier
             return true;
         }
 
+        // The unchecked family (`+! -! *! /! //! %! **!`) has no protocol: it exists exactly where the type
+        // defines the matching `*_unchecked` routine (the integers and the binary/decimal floating-point
+        // types). Without this check, `+!` on a type that lacks it (Decimal, Complex, ...) was accepted.
+        if (!_isReducedStdlibValidation && IsUncheckedOperator(op: binary.Operator) &&
+            leftType is RecordTypeSymbol or EntityTypeSymbol &&
+            _registry.LookupMemberRoutineOverload(type: leftType,
+                memberRoutineName: operatorMemberRoutine,
+                argTypes: [rightType]) == null)
+        {
+            ReportError(code: SemanticDiagnosticCode.BinaryOperatorNotFound,
+                message:
+                $"Operator '{binary.Operator.ToStringRepresentation()}' is not defined for " +
+                $"'{leftType.Name}': unchecked arithmetic exists only on the integer types and on the " +
+                "binary and decimal floating-point types (B16 to B128, D32 to D128). Use the checked " +
+                $"'{binary.Operator.ToStringRepresentation().TrimEnd(trimChar: '!')}' here.",
+                location: binary.Location);
+            return true;
+        }
+
         return false;
+    }
+
+    /// <summary>True for the unchecked arithmetic operators <c>+! -! *! /! //! %! **!</c>.</summary>
+    private static bool IsUncheckedOperator(BinaryOperator op)
+    {
+        return op is BinaryOperator.AddUnchecked or BinaryOperator.SubtractUnchecked
+            or BinaryOperator.MultiplyUnchecked or BinaryOperator.TrueDivideUnchecked
+            or BinaryOperator.FloorDivideUnchecked or BinaryOperator.ModuloUnchecked
+            or BinaryOperator.PowerUnchecked;
     }
 
     /// <summary>

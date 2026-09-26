@@ -339,12 +339,21 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeDestructuringPattern(DestructuringPattern pattern, TypeSymbol sourceType)
     {
-        foreach (DestructuringBinding binding in pattern.Bindings)
+        for (int position = 0; position < pattern.Bindings.Count; position++)
         {
+            DestructuringBinding binding = pattern.Bindings[index: position];
             TypeSymbol memberVariableType = ErrorTypeSymbol.Instance;
 
+            // `var (a, b) = pair` binds a tuple by position, the i-th name to `item{i}` (what
+            // ControlFlowLoweringPass lowers it to, whatever the names). User code reaches here already
+            // lowered, but a stdlib body is analyzed before that lowering, so the positional form must be
+            // typed here too. The parser fills MemberVariableName with the binding name, so it is ignored.
+            if (sourceType is TupleTypeSymbol tuple && position < tuple.ElementTypes.Count)
+            {
+                memberVariableType = tuple.ElementTypes[index: position];
+            }
             // Get member variable type from source type
-            if (binding.MemberVariableName != null && sourceType is RecordTypeSymbol record)
+            else if (binding.MemberVariableName != null && sourceType is RecordTypeSymbol record)
             {
                 memberVariableType = record
                                     .LookupMemberVariable(

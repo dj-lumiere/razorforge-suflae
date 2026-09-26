@@ -1,0 +1,236 @@
+module Core
+
+# ============================================================================
+# Correctly rounded e^x - 1 of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/expm1/expm1.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2024 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original is
+# kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The double-double helpers, the 2^(i/2^12) table and the degree-6 accurate exp polynomial come from the
+# exp port (B64Exp.rf).
+
+### Returns `e` raised to this value, minus 1, correctly rounded: the exact `e^x - 1` rounded to the
+### nearest `B64` (ties to even), identical on every platform and accurate near 0, with raw IEEE 754
+### propagation (overflow -> +infinity, `expm1(-infinity) == -1`, NaN -> NaN).
+### :returns: The correctly rounded `e^x - 1`, possibly +infinity.
+routine B64.expm1_unchecked() -> B64
+  var x = me
+  var ux = x.to_bits()
+  var aix = ux & 0x7FFFFFFFFFFFFFFF_u64
+  if aix < 0x3FD0000000000000_u64
+    # |x| < 0.25
+    if aix < 0x3CA0000000000000_u64
+      # |x| < 2^-53
+      if aix == 0_u64
+        return x
+      return LLVM::fma[B64](a: 0x1p-54, b: x.abs(), c: x)
+    var sx = 0x1p7 *! x
+    var fx = LLVM::rint[B64](value: sx)
+    var z = sx -! fx
+    var z2 = z *! z
+    # e^x - 1 = (e^(i/128) - 1) + e^(i/128) * (e^(z/128) - 1), with |i| <= 32 and |z| <= 1/2
+    var i = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](fx) + 32)
+    var th = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i + 1_u64])
+    var tl = B64.from_bits(bits: B64_EXPM1_TZ[2_u64 * i])
+    var fh = z *! 0x1p-7
+    var fl = z2 *! ((0x1p-15 +! z *! 0x1.55555555551adp-24) +! z2 *! (0x1.555555555599cp-33 +! z *! (0x1.11111ad1ad69dp-42 +! z *! 0x1.6c16c168b1fb5p-52)))
+    var eps = z2 *! 0x1.ap-65 +! 0x1p-104
+    var r = b64_exp_fasttwosum(x: th, y: fh)
+    var rh = r.item0
+    var rl = r.item1 +! (tl +! fl)
+    var f = b64_exp_muldd(xh: th, xl: tl, ch: fh, cl: fl)
+    f = b64_exp_fastsum(xh: rh, xl: rl, yh: f.item0, yl: f.item1)
+    fh = f.item0
+    fl = f.item1
+    var ub = fh +! (fl +! eps)
+    var lb = fh +! (fl -! eps)
+    if ub != lb
+      return b64_expm1_accurate(x: x)
+    return lb
+  # |x| >= 0.25
+  if aix >= 0x40862E42FEFA39F0_u64
+    # NaN
+    if aix > 0x7FF0000000000000_u64
+      return x +! x
+    # ±infinity
+    if aix == 0x7FF0000000000000_u64
+      if ux >>> 63 == 1
+        return -1.0
+      return x
+    # x >= 0x1.62e42fefa39fp+9: overflow
+    if ux >>> 63 == 0
+      return 0x1p1023 *! 0x1p1023
+  if ux >= 0xC0425E4F7B2737FA_u64
+    # x <= -0x1.25e4f7b2737fap+5: the result is within an ulp of -1
+    if ux >= 0xC042B708872320E2_u64
+      return -1.0 +! 0x1p-55
+    return ((0x1.25e4f7b2737fap+5 +! x) +! 0x1.8486612173c69p-51) *! 0x1.71547652b82fep-54 -! 0x1.fffffffffffffp-1
+  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+  var jt = LLVM::float_to_signed[B64, S64](t)
+  var ie = jt >> 12
+  var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
+  var th = tt.item0
+  var tl = tt.item1
+  var dx = (x -! 0x1.62e42ffp-13 *! t) +! 0x1.718432a1b0e26p-47 *! t
+  var dx2 = dx *! dx
+  var p = (1.0 +! dx *! 0x1p-1) +! dx2 *! (0x1.55555557e54ffp-3 +! dx *! 0x1.55555553a12f4p-5)
+  var fh = th
+  var tx = th *! dx
+  var fl = tl +! tx *! p
+  var eps = 1.64e-19 *! th
+  # off = -2^-ie, so that 2^ie * (fh + fl + off) = e^x - 1
+  var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
+  var e = 0.0
+  if ie < 53
+    var s = b64_exp_fasttwosum(x: off, y: fh)
+    fh = s.item0
+    e = s.item1
+  elseif ie < 75
+    var s = b64_exp_fasttwosum(x: fh, y: off)
+    fh = s.item0
+    e = s.item1
+  fl = fl +! e
+  var ub = fh +! (fl +! eps)
+  var lb = fh +! (fl -! eps)
+  if ub != lb
+    return b64_expm1_accurate(x: x)
+  return b64_exp_ldexp(x: lb, e: ie)
+
+### The slow accurate path of `expm1`, taken when the fast path cannot decide the rounding.
+### :param x: The argument, finite, with 2^-53 <= |x| and e^x - 1 neither overflowing nor within an ulp of -1.
+### :returns: The correctly rounded `e^x - 1`.
+secret routine b64_expm1_accurate(x: B64) -> B64
+  if x.abs() < 0.25
+    # odd-and-even Taylor expansion x + x^2/2 + x^3 * (1/6 + ...), with the high-order terms in double
+    var fl = x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[0_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[1_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[2_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[3_u64]) +! x *! (B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[4_u64]) +! x *! B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CL[5_u64]))))))
+    var i = 10_u64
+    var h0 = b64_exp_fasttwosum(x: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), y: fl)
+    var ch = h0.item0
+    var cl = B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]) +! h0.item1
+    while i > 0_u64
+      i = i - 1_u64
+      var m = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
+      var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXPM1_ACC_SMALL_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
+      ch = s.item0
+      cl = s.item1
+    var f = b64_expm1_mulddd(xh: ch, xl: cl, c: x)
+    f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
+    f = b64_expm1_mulddd(xh: f.item0, xl: f.item1, c: x)
+    var hx = 0.5 *! x
+    var x2h = x *! hx
+    var x2l = LLVM::fma[B64](a: x, b: hx, c: -x2h)
+    f = b64_exp_fastsum(xh: x2h, xl: x2l, yh: f.item0, yl: f.item1)
+    var a1 = b64_exp_fasttwosum(x: x, y: f.item0)
+    var a2 = b64_exp_fasttwosum(x: a1.item1, y: f.item1)
+    var a3 = b64_exp_fasttwosum(x: a1.item0, y: a2.item0)
+    var a4 = b64_exp_fasttwosum(x: a3.item1, y: a2.item1)
+    var v0 = a3.item0
+    var v1 = a4.item0
+    var u1 = v1.to_bits()
+    if (u1 & 0x000FFFFFFFFFFFFF_u64) == 0_u64
+      if (u1 << 1) == 0_u64
+        return b64_expm1_database(x: x, f: v0)
+      # v1 is a power of 2: nudge it one ulp toward the sign of the tail
+      if (u1 >>> 63) == (a4.item1.to_bits() >>> 63)
+        u1 = u1 +% 1_u64
+      else
+        u1 = u1 -% 1_u64
+      v1 = B64.from_bits(bits: u1)
+    return v0 +! v1
+  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+  var jt = LLVM::float_to_signed[B64, S64](t)
+  var ie = jt >> 12
+  var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](jt))
+  var th = tt.item0
+  var tl = tt.item1
+  # Cody-Waite argument reduction with a triple-double log(2)/2^12
+  var dx = x -! 0x1.62e42ffp-13 *! t
+  var dxl = 0x1.718432a1b0e26p-47 *! t
+  var dxll = 0x1.9ff0342542fc3p-102 *! t +! LLVM::fma[B64](a: 0x1.718432a1b0e26p-47, b: t, c: -dxl)
+  var dxh = dx +! dxl
+  dxl = ((dx -! dxh) +! dxl) +! dxll
+  # Horner evaluation of the degree-6 double-double polynomial of exp
+  var i = 6_u64
+  var ch = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i])
+  var cl = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64])
+  while i > 0_u64
+    i = i - 1_u64
+    var m = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
+    var s = b64_exp_fastsum(xh: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i]), xl: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64]), yh: m.item0, yl: m.item1)
+    ch = s.item0
+    cl = s.item1
+  var f = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
+  f = b64_exp_muldd(xh: f.item0, xl: f.item1, ch: th, cl: tl)
+  f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+  var fh = f.item0
+  var fl = f.item1
+  var off = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](3071_s64 - ie) << 52)
+  var e = 0.0
+  if ie < 53
+    var s1 = b64_exp_fasttwosum(x: off, y: fh)
+    fh = s1.item0
+    e = s1.item1
+  elseif ie < 104
+    var s1 = b64_exp_fasttwosum(x: fh, y: off)
+    fh = s1.item0
+    e = s1.item1
+  fl = fl +! e
+  var s2 = b64_exp_fasttwosum(x: fh, y: fl)
+  fh = s2.item0
+  var d = (s2.item1.to_bits() +% 8_u64) & 0x000FFFFFFFFFFFFF_u64
+  if d <= 8_u64
+    fh = b64_expm1_database(x: x, f: fh)
+  return b64_exp_ldexp(x: fh, e: ie)
+
+### Double-double times double `(xh + xl) * c`.
+### :param xh: The high part of the double-double factor.
+### :param xl: The low part of the double-double factor.
+### :param c: The double factor.
+### :returns: `(high, low)` of the product.
+secret routine b64_expm1_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
+  var h = c *! xh
+  return (h, c *! xl +! LLVM::fma[B64](a: c, b: xh, c: -h))
+
+### Looks `x` up among the arguments whose `e^x - 1` lies too close to a rounding boundary for the
+### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
+### :param x: The argument.
+### :param f: The accurate path's result (before scaling by 2^ie when |x| >= 0.25).
+### :returns: The corrected result.
+secret routine b64_expm1_database(x: B64, f: B64) -> B64
+  var ux = x.to_bits()
+  var a = 0_s64
+  var b = 37_s64
+  var m = (a + b) >> 1
+  while a <= b
+    var um = LLVM::reinterpret_bits[S64, U64](m)
+    var cm = B64_EXPM1_DB[um]
+    if cm < ux
+      a = m + 1
+    elseif cm == ux
+      var jf = f.to_bits()
+      var dr = B64.from_bits(bits: ((0x300E81651C_u64 >>> LLVM::int_truncate[U64, U32](um)) << 63) | ((((jf >>> 52) & 0x7FF_u64) -% 54_u64) << 52))
+      var s2 = 0x76F58B0D65BD5553_u64
+      if (um >>> 5) == 1_u64
+        s2 = 0xC06_u64
+      var t = (s2 >>> LLVM::int_truncate[U64, U32]((um << 1) & 63_u64)) & 3_u64
+      return b64_exp_pick(f: f, t: t, dr: dr)
+    else
+      b = m - 1
+    m = (a + b) >> 1
+  return f
+
+# Double-double coefficients (high, low) of the degree-10 polynomial (in x, times x^3) of the accurate
+# path for |x| < 0.25, as bit patterns.
+secret preset B64_EXPM1_ACC_SMALL_CH: Array[U64, 22] = [0x3FC5555555555555_u64, 0x3C65555555555554_u64, 0x3FA5555555555555_u64, 0x3C45555555555123_u64, 0x3F81111111111111_u64, 0x3C01111111118167_u64, 0x3F56C16C16C16C17_u64, 0xBBEF49F49E220CEA_u64, 0x3F2A01A01A01A01A_u64, 0x3B6A019EFF6F919C_u64, 0x3EFA01A01A01A01A_u64, 0x3B39FCFF48A75B41_u64, 0x3EC71DE3A556C734_u64, 0xBB6C14F73758CD7F_u64, 0x3E927E4FB7789F5C_u64, 0x3B3DFCE97931018F_u64, 0x3E5AE64567F544E3_u64, 0x3AFC513DA9E4C9C5_u64, 0x3E21EED8EFF8D831_u64, 0x3ACCA00AF84F2B60_u64, 0x3DE6124613A86E8F_u64, 0x3A8F27AC6000898F_u64]
+
+# Double coefficients of the highest-order terms of that polynomial, as bit patterns.
+secret preset B64_EXPM1_ACC_SMALL_CL: Array[U64, 6] = [0x3DA93974A8CA5354_u64, 0x3D6AE7F3E71E4908_u64, 0x3D2AE7F357341648_u64, 0x3CE952C7F96664CB_u64, 0x3CA686F8CE633AAE_u64, 0x3C62F49B2FBFB5B6_u64]
+
+# Double-double values (low, high) of e^(i/128) - 1, -32 <= i <= 32 (entry i + 32), as bit patterns.
+secret preset B64_EXPM1_TZ: Array[U64, 130] = [0xBC6797D4686C5393_u64, 0xBFCC5041854DF7D4_u64, 0xBC8EA1CB9D163339_u64, 0xBFCB881A23AEBB48_u64, 0x3C8F483A3E8CD60F_u64, 0xBFCABE60E1F21838_u64, 0x3C7DFFD920F493DB_u64, 0xBFC9F3129931FAB0_u64, 0xBC851BFDBB129094_u64, 0xBFC9262C1C3430A0_u64, 0x3C8CD3E5225E2206_u64, 0xBFC857AA375DB4E4_u64, 0x3C5E3A6BDAECE8F9_u64, 0xBFC78789B0A5E0C0_u64, 0xBC8DAF2AE0C2D3D4_u64, 0xBFC6B5C7478983D8_u64, 0xBC7FD36226FADD44_u64, 0xBFC5E25FB4FDE210_u64, 0x3C7D887CD0341AB0_u64, 0xBFC50D4FAB639758_u64, 0xBC8676A52A1A618B_u64, 0xBFC43693D679612C_u64, 0x3C79776B420AD283_u64, 0xBFC35E28DB4ECD9C_u64, 0x3C73D5FD7D70A5ED_u64, 0xBFC2840B5836CF68_u64, 0x3C5A94AD2C8FA0BF_u64, 0xBFC1A837E4BA3760_u64, 0x3C26AD4C353465B0_u64, 0xBFC0CAAB118A1278_u64, 0xBC78BBA170E59B65_u64, 0xBFBFD6C2D0E3D910_u64, 0xBC8E1E0A76CB0685_u64, 0xBFBE14AED893EEF0_u64, 0x3C8FE131F55E75F8_u64, 0xBFBC4F1331D22D40_u64, 0xBC8B5BEEE8BCEE31_u64, 0xBFBA85E8C62D9C10_u64, 0xBC77FE9B02C25E9B_u64, 0xBFB8B92870FA2B58_u64, 0xBC832AE7BDAF1116_u64, 0xBFB6E8CAFF341FE8_u64, 0x3C7A6CFE58CBD73B_u64, 0xBFB514C92F634788_u64, 0x3C68798DE3138A56_u64, 0xBFB33D1BB17DF2E8_u64, 0xBC3589321A7EF10B_u64, 0xBFB161BB26CBB590_u64, 0xBC78D0E700FCFB65_u64, 0xBFAF0540438FD5C0_u64, 0x3C8473EF07D5DD3B_u64, 0xBFAB3F864C080000_u64, 0xBC838E62149C16E2_u64, 0xBFA7723950130400_u64, 0xBC508BB6309BD394_u64, 0xBFA39D4A1A77E050_u64, 0xBC8BAD3FD501A227_u64, 0xBF9F8152AEE94500_u64, 0x3C63D27AC39ED253_u64, 0xBF97B88F290230E0_u64, 0xBC8B60BBD08AAC55_u64, 0xBF8FC055004416C0_u64, 0xBC4A00D03B3359DE_u64, 0xBF7FE0154AAEED80_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3C8861931C15E39B_u64, 0x3F80100AB00222C0_u64, 0x3C77AB864B3E9045_u64, 0x3F90202AD5778E40_u64, 0x3C74E5659D75E95B_u64, 0x3F984890D9043740_u64, 0x3C78E0BD083ABA81_u64, 0x3FA040AC0224FD90_u64, 0x3C345CC1CF959B1B_u64, 0x3FA465509D383EB0_u64, 0xBC8EB6980CE14DA7_u64, 0x3FA89246D053D180_u64, 0x3C77324137D6C342_u64, 0x3FACC79F4F5613A0_u64, 0xBC45272FF30EED1B_u64, 0x3FB082B577D34ED8_u64, 0xBC81280F19DACE1C_u64, 0x3FB2A5DD543CCC50_u64, 0xBC8D550AF31C8EC3_u64, 0x3FB4CD4FC989CD68_u64, 0x3C87923B72AA582D_u64, 0x3FB6F91575870690_u64, 0xBC776C2E732457F1_u64, 0x3FB92937074E0CD8_u64, 0x3C881F5C92A5200F_u64, 0x3FBB5DBD3F681220_u64, 0x3C8E8AC7A4D3206C_u64, 0x3FBD96B0EFF0E790_u64, 0xBC712DB6F4BBE33B_u64, 0x3FBFD41AFCBA45E8_u64, 0xBC58C4A5DF1EC7E5_u64, 0x3FC10B022DB7AE68_u64, 0xBC6BD4B1C37EA8A2_u64, 0x3FC22E3B09DC54D8_u64, 0x3C85AEB9860044D0_u64, 0x3FC353BC9FB00B20_u64, 0xBC64C26602C63FDA_u64, 0x3FC47B8B853AAFEC_u64, 0xBC87F644C1F9D314_u64, 0x3FC5A5AC59B963CC_u64, 0x3C8F5AA8EC61FC2D_u64, 0x3FC6D223C5B10638_u64, 0x3C27AB912C69FFEB_u64, 0x3FC800F67B00D7B8_u64, 0xBC5B3564BC0EC9CD_u64, 0x3FC9322934F54148_u64, 0x3C86A7062465BE33_u64, 0x3FCA65C0B85AC1A8_u64, 0xBC885718D2FF1BF4_u64, 0x3FCB9BC1D3910094_u64, 0xBC8045CB0C685E08_u64, 0x3FCCD4315E9E0834_u64, 0xBC16E7FB859D5055_u64, 0x3FCE0F143B41A554_u64, 0x3C851BBDEE020603_u64, 0x3FCF4C6F5508EE5C_u64, 0x3C6E17611AFC42C5_u64, 0x3FD04623D0B0F8C8_u64, 0xBC71C5B2E8735A43_u64, 0x3FD0E7510FD7C564_u64, 0xBC825FE139C4CFFD_u64, 0x3FD189C1ECAEB084_u64, 0xBC789843C4964554_u64, 0x3FD22D78F0FA061A_u64]
+
+# The arguments (bit patterns, sorted) whose e^x - 1 is too close to a rounding boundary for the accurate
+# path.
+secret preset B64_EXPM1_DB: Array[U64, 38] = [0x3FBE923C188EA79B_u64, 0x3FD1A0408712E00A_u64, 0x3FD1C38132777B26_u64, 0x3FD27F4980D511FF_u64, 0x3FD8172A0E02F90E_u64, 0x3FD8BBE2FB45C151_u64, 0x3FDBCAB27D05ABDE_u64, 0x3FE005AE04256BAB_u64, 0x3FEACCFBE46B4EF0_u64, 0x3FED086543694C5A_u64, 0x401273C188AA7B14_u64, 0x40183D4BCDEBB3F4_u64, 0x40308F51434652C3_u64, 0x4031D5C2DAEBE367_u64, 0x403C44CE0D716A1A_u64, 0x4042EE70220FB1C5_u64, 0x40489D56A0C38E6F_u64, 0x4057A60EE15E3E9D_u64, 0x4061F0DA93354198_u64, 0x40654CD1FEA7663A_u64, 0x406556C678D5E976_u64, 0x4072DA9E5E6AF0B0_u64, 0x4079E7B643238A14_u64, 0x407D6479EBA7C971_u64, 0x4080BC04AF1B09F5_u64, 0xBFBAB86CB1743B75_u64, 0xBFD119AAE6072D39_u64, 0xBFD175693A03B590_u64, 0xBFD474D4DE7C14BB_u64, 0xBFD789D025948EFA_u64, 0xBFD82B5DFAF59B4C_u64, 0xBFD9D871E078EBCE_u64, 0xBFE1397ADD4538AC_u64, 0xBFE22E24FA3D5CF9_u64, 0xBFEDC2B5DF1F7D3D_u64, 0xBFF0A54D87783D6F_u64, 0xBFF2A9CAD9998262_u64, 0xBFFE42A2ABB1BF0F_u64]

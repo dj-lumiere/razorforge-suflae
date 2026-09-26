@@ -1,0 +1,256 @@
+module Core
+
+# ============================================================================
+# Correctly rounded exponential e^x of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/exp/exp.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its exception-flag and errno handling are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The double-double helpers and the 2^(i/2^6), 2^(i/2^12) tables of this file are shared with the exp2 and
+# exp10 ports (B64Exp2.rf, B64Exp10.rf).
+
+### Returns `e` raised to this value, correctly rounded: the exact exponential rounded to the nearest
+### `B64` (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow ->
+### +infinity, `exp(-infinity) == 0`, NaN -> NaN).
+### :returns: The correctly rounded exponential, possibly +infinity.
+routine B64.exp_unchecked() -> B64
+  var x = me
+  var ux = x.to_bits()
+  var aix = ux & 0x7FFFFFFFFFFFFFFF_u64
+  # exp(x) rounds to 1 for |x| <= 2^-54
+  if aix <= 0x3C90000000000000_u64
+    return 1.0 +! x
+  if aix >= 0x40862E42FEFA39F0_u64
+    # NaN
+    if aix > 0x7FF0000000000000_u64
+      return x +! x
+    # ±infinity
+    if aix == 0x7FF0000000000000_u64
+      if ux >>> 63 == 1
+        return 0.0
+      return x
+    # x >= 0x1.62e42fefa39fp+9: overflow
+    if ux >>> 63 == 0
+      return 0x1p1023 *! 0x1p1023
+    # x <= -0x1.74910d52d3052p+9: underflow to 0
+    if aix >= 0x40874910D52D3052_u64
+      return 0x1p-1022 *! 0x1p-1022
+  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+  var jt = LLVM::float_to_signed[B64, S64](t)
+  var ujt = LLVM::reinterpret_bits[S64, U64](jt)
+  var ie = jt >> 12
+  var tt = b64_exp_table_2pow(j: ujt)
+  var th = tt.item0
+  var tl = tt.item1
+  # Cody-Waite argument reduction: |t| < 2^23 and l2h fits in 29 bits, so l2h*t is exact
+  var dx = (x -! 0x1.62e42ffp-13 *! t) +! 0x1.718432a1b0e26p-47 *! t
+  var dx2 = dx *! dx
+  # 1 + x*(c0 + c1*x + c2*x^2 + c3*x^3) approximates exp(x) on [-log(2)/2^13, log(2)/2^13] with absolute
+  # error below 2^-76.173
+  var p = (1.0 +! dx *! 0x1p-1) +! dx2 *! (0x1.55555557e54ffp-3 +! dx *! 0x1.55555553a12f4p-5)
+  var fh = th
+  var tx = th *! dx
+  var fl = tl +! tx *! p
+  var eps = 1.64e-19
+  if ux > 0xC086232BDD7ABCD2_u64
+    # subnormal result: x < -0x1.6232bdd7abcd2p+9
+    var bias = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1_s64 - ie) << 52)
+    var s = b64_exp_fasttwosum(x: bias, y: fh)
+    fh = s.item0
+    fl = fl +! s.item1
+    var sub_ub = fh +! (fl +! eps)
+    var sub_lb = fh +! (fl -! eps)
+    if sub_ub != sub_lb
+      return b64_exp_accurate(x: x)
+    return B64.from_bits(bits: sub_lb.to_bits() & 0x000FFFFFFFFFFFFF_u64)
+  var ub = fh +! (fl +! eps)
+  var lb = fh +! (fl -! eps)
+  if ub != lb
+    return b64_exp_accurate(x: x)
+  return b64_exp_ldexp(x: lb, e: ie)
+
+### The slow accurate path of `exp`, taken when the fast path cannot decide the rounding.
+### :param x: The argument, finite with |x| in (2^-54, 0x1.74910d52d3052p+9).
+### :returns: The correctly rounded exponential of `x`.
+secret routine b64_exp_accurate(x: B64) -> B64
+  var ux = x.to_bits()
+  if ((ux >>> 52) & 0x7FF_u64) < 0x3C9_u64
+    return 1.0 +! x
+  var t = LLVM::rint[B64](value: x *! 0x1.71547652b82fep+12)
+  var jt = LLVM::float_to_signed[B64, S64](t)
+  var ujt = LLVM::reinterpret_bits[S64, U64](jt)
+  var ie = jt >> 12
+  var tt = b64_exp_table_2pow(j: ujt)
+  var th = tt.item0
+  var tl = tt.item1
+  # Cody-Waite argument reduction with a triple-double log(2)/2^12
+  var dx = x -! 0x1.62e42ffp-13 *! t
+  var dxl = 0x1.718432a1b0e26p-47 *! t
+  var dxll = 0x1.9ff0342542fc3p-102 *! t +! LLVM::fma[B64](a: 0x1.718432a1b0e26p-47, b: t, c: -dxl)
+  var dxh = dx +! dxl
+  dxl = ((dx -! dxh) +! dxl) +! dxll
+  # Horner evaluation of the degree-6 double-double polynomial
+  var i = 6_u64
+  var ch = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i])
+  var cl = B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64])
+  while i > 0_u64
+    i = i - 1_u64
+    var r = b64_exp_fastfma_dw(ah: dxh, al: dxl, bh: ch, bl: cl, ch: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i]), cl: B64.from_bits(bits: B64_EXP_ACC_CH[2_u64 * i + 1_u64]))
+    ch = r.item0
+    cl = r.item1
+  var f = b64_exp_muldd(xh: dxh, xl: dxl, ch: ch, cl: cl)
+  var fh = f.item0
+  var fl = f.item1
+  if ux > 0xC086232BDD7ABCD2_u64
+    # subnormal result: x < -0x1.6232bdd7abcd2p+9
+    var bias = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1_s64 - ie) << 52)
+    f = b64_exp_muldd(xh: fh, xl: fl, ch: th, cl: tl)
+    f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+    fl = f.item1
+    var s = b64_exp_fasttwosum(x: bias, y: f.item0)
+    fl = fl +! s.item1
+    return B64.from_bits(bits: (s.item0 +! fl).to_bits() & 0x000FFFFFFFFFFFFF_u64)
+  if th == 1.0
+    var s = b64_exp_fasttwosum(x: th, y: fh)
+    fh = s.item0
+    var s2 = b64_exp_fasttwosum(x: s.item1, y: fl)
+    fl = s2.item0
+    var ul = fl.to_bits()
+    if (ul & 0x000FFFFFFFFFFFFF_u64) == 0_u64
+      # fl is a power of 2: nudge it one ulp toward the sign of the tail
+      if (ul >>> 63) == (s2.item1.to_bits() >>> 63)
+        ul = ul +% 1_u64
+      else
+        ul = ul -% 1_u64
+      fl = B64.from_bits(bits: ul)
+  else
+    f = b64_exp_muldd(xh: fh, xl: fl, ch: th, cl: tl)
+    f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+    fh = f.item0
+    fl = f.item1
+  var s3 = b64_exp_fasttwosum(x: fh, y: fl)
+  fh = s3.item0
+  var d = (s3.item1.to_bits() +% 2_u64) & 0x000FFFFFFFFFFFFF_u64
+  if d <= 2_u64
+    fh = b64_exp_database(x: x, f: fh)
+  return b64_exp_ldexp(x: fh, e: ie)
+
+### Looks `x` up among the arguments whose exponential lies too close to a rounding boundary for the
+### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
+### :param x: The argument.
+### :param f: The accurate path's result, before scaling by 2^ie.
+### :returns: The corrected (unscaled) result.
+secret routine b64_exp_database(x: B64, f: B64) -> B64
+  var ux = x.to_bits()
+  var a = 0_s64
+  var b = 50_s64
+  var m = (a + b) >> 1
+  while a <= b
+    var um = LLVM::reinterpret_bits[S64, U64](m)
+    var cm = B64_EXP_DB[um]
+    if cm < ux
+      a = m + 1
+    elseif cm == ux
+      var dr = B64.from_bits(bits: ((333811522313371_u64 >>> LLVM::int_truncate[U64, U32](um)) << 63) | 0x3C90000000000000_u64)
+      var s2 = 0x57F5FE2E5BDE4075_u64
+      if (um >>> 5) == 1_u64
+        s2 = 0x3C1F16B8ED_u64
+      var t = (s2 >>> LLVM::int_truncate[U64, U32]((um << 1) & 63_u64)) & 3_u64
+      return b64_exp_pick(f: f, t: t, dr: dr)
+    else
+      b = m - 1
+    m = (a + b) >> 1
+  return f
+
+### Picks, among the neighbours `f - 1ulp`, `f`, `f + 1ulp`, the one whose two low bits equal `t`, and
+### adds the tiny correction `dr` to it (the database's encoding of a hard-to-round result).
+### :param f: The approximate result.
+### :param t: The expected two low mantissa bits.
+### :param dr: The signed correction added after the pick.
+### :returns: The corrected result, or `f` when no neighbour matches.
+secret routine b64_exp_pick(f: B64, t: U64, dr: B64) -> B64
+  var jf = f.to_bits()
+  var k = 0_u64
+  while k < 3_u64
+    var r = (jf +% k) -% 1_u64
+    if (r & 3_u64) == t
+      return B64.from_bits(bits: r) +! dr
+    k = k + 1_u64
+  return f
+
+### The double-double value of `2^((j mod 2^12) / 2^12)`, as the product of the table entries
+### 2^(i0/2^6) and 2^(i1/2^12) where i0, i1 are bits 6..11 and 0..5 of `j`.
+### :param j: The reduced exponent (only its low 12 bits are used).
+### :returns: `(high, low)` of the power of two.
+secret routine b64_exp_table_2pow(j: U64) -> (B64, B64)
+  var i0 = (j >>> 6) & 0x3F_u64
+  var i1 = j & 0x3F_u64
+  return b64_exp_muldd(xh: B64.from_bits(bits: B64_EXP_T0[2_u64 * i0 + 1_u64]), xl: B64.from_bits(bits: B64_EXP_T0[2_u64 * i0]), ch: B64.from_bits(bits: B64_EXP_T1[2_u64 * i1 + 1_u64]), cl: B64.from_bits(bits: B64_EXP_T1[2_u64 * i1]))
+
+### Adds `e` to the binary exponent of `x` by integer addition on its bit pattern (no range checks).
+### :param x: The value to scale.
+### :param e: The exponent increment.
+### :returns: `x * 2^e` when the result stays normal.
+secret routine b64_exp_ldexp(x: B64, e: S64) -> B64
+  return B64.from_bits(bits: x.to_bits() +% (LLVM::reinterpret_bits[S64, U64](e) << 52))
+
+### Fast two-sum: `s = x + y` and the exact error `e`, valid when |x| >= |y| (or x == 0).
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: `(s, e)` with `s + e == x + y` exactly.
+secret routine b64_exp_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### Double-double sum `(xh + xl) + (yh + yl)`, with |xh| >= |yh|.
+### :param xh: The high part of the first operand.
+### :param xl: The low part of the first operand.
+### :param yh: The high part of the second operand.
+### :param yl: The low part of the second operand.
+### :returns: `(high, low)` of the sum.
+secret routine b64_exp_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
+  var s = b64_exp_fasttwosum(x: xh, y: yh)
+  return (s.item0, (xl +! yl) +! s.item1)
+
+### Double-double product `(xh + xl) * (ch + cl)`.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: `(high, low)` of the product.
+secret routine b64_exp_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = ch *! xh
+  return (ahhh, (ch *! xl +! cl *! xh) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
+
+### Double-word fused multiply-add `(ah + al) * (bh + bl) + (ch + cl)` (Jeannerod, Joldes, Louvet and
+### Muller, Algorithm 4, with its last two FMAs split into a product and a sum as in CORE-MATH).
+### :param ah: The high part of the first factor.
+### :param al: The low part of the first factor.
+### :param bh: The high part of the second factor.
+### :param bl: The low part of the second factor.
+### :param ch: The high part of the addend.
+### :param cl: The low part of the addend.
+### :returns: `(high, low)` of the result.
+secret routine b64_exp_fastfma_dw(ah: B64, al: B64, bh: B64, bl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var dh = LLVM::fma[B64](a: ah, b: bh, c: ch)
+  var t = ch -! dh
+  var e = LLVM::fma[B64](a: ah, b: bh, c: t)
+  var f = e +! cl
+  var g = ah *! bl +! f
+  return (dh, al *! bh +! g)
+
+# Double-double coefficients (high, low) of the degree-6 polynomial of the accurate path, as bit patterns.
+secret preset B64_EXP_ACC_CH: Array[U64, 14] = [0x3FF0000000000000_u64, 0x0000000000000000_u64, 0x3FE0000000000000_u64, 0x39C712F72ECEC2CF_u64, 0x3FC5555555555555_u64, 0x3C65555555554D07_u64, 0x3FA5555555555555_u64, 0x3C455194D28275DA_u64, 0x3F81111111111111_u64, 0x3C012FAA0E1C0F7B_u64, 0x3F56C16C16DA6973_u64, 0xBBF4BA45AB25D2A3_u64, 0x3F2A01A019EB7F31_u64, 0xBBC9091D845ECD36_u64]
+
+# The arguments (bit patterns, sorted) whose exponential is too close to a rounding boundary for the
+# accurate path.
+secret preset B64_EXP_DB: Array[U64, 51] = [0x3CAFFFFFFFFFFFFF_u64, 0x3F1BA07D73250DE7_u64, 0x3F76A4D1AF9CC989_u64, 0x3F95A75293A5DCDA_u64, 0x3FA42EA46949B3C7_u64, 0x3FA7C8BB0CF5D160_u64, 0x3FC0948D39A41695_u64, 0x3FCA065FEFAE814F_u64, 0x3FCF6E4C3CED7C72_u64, 0x3FD1A0408712E00A_u64, 0x3FDBCAB27D05ABDE_u64, 0x3FE005AE04256BAB_u64, 0x401273C188AA7B14_u64, 0x40183D4BCDEBB3F4_u64, 0x40308F51434652C3_u64, 0x4031D5C2DAEBE367_u64, 0x403C44CE0D716A1A_u64, 0x404E07E71BFCF06F_u64, 0x404F7216C4B435C9_u64, 0x40654CD1FEA7663A_u64, 0x407D6479EBA7C971_u64, 0xBF1664716B68A409_u64, 0xBF2A2FEFEFD580DF_u64, 0xBF3CE3F638D0C742_u64, 0xBF3CEFF32831E2C2_u64, 0xBF433ACCAE78B371_u64, 0xBF4D792B60084F92_u64, 0xBF77FB235D76CCE7_u64, 0xBF81FF9B8E8B38BE_u64, 0xBF854511E930898C_u64, 0xBF95C5ED0EC83666_u64, 0xBF98C56FF5326197_u64, 0xBF9A4187F2CA71F9_u64, 0xBFBA8F783D749A8F_u64, 0xBFBBD44FDAED819F_u64, 0xBFBDAF693D64FADA_u64, 0xBFC290EA09E36479_u64, 0xBFC8AEB636F3CE35_u64, 0xBFCD3F3799439415_u64, 0xBFCEA16274B0109B_u64, 0xBFE22E24FA3D5CF9_u64, 0xBFE85068C07FBBF6_u64, 0xBFEBDC7955D1482C_u64, 0xBFF2A9CAD9998262_u64, 0xBFFCC37EF7DE7501_u64, 0xC0002393D5976769_u64, 0xC0065061DAF79A78_u64, 0xC02E8BDBFCD9144E_u64, 0xC038F80E06F3A04C_u64, 0xC0559F038076039C_u64, 0xC06981587AD4542F_u64]
+
+# Double-double approximations (low, high) of 2^(i/2^6), 0 <= i < 64, as bit patterns.
+secret preset B64_EXP_T0: Array[U64, 128] = [0x0000000000000000_u64, 0x3FF0000000000000_u64, 0xBC719083535B085E_u64, 0x3FF02C9A3E778061_u64, 0x3C8D73E2A475B466_u64, 0x3FF059B0D3158574_u64, 0x3C6186BE4BB28500_u64, 0x3FF0874518759BC8_u64, 0x3C98A62E4ADC610A_u64, 0x3FF0B5586CF9890F_u64, 0x3C403A1727C57B52_u64, 0x3FF0E3EC32D3D1A2_u64, 0xBC96C51039449B3A_u64, 0x3FF11301D0125B51_u64, 0xBC932FBF9AF1369E_u64, 0x3FF1429AAEA92DE0_u64, 0xBC819041B9D78A76_u64, 0x3FF172B83C7D517B_u64, 0x3C8E5B4C7B4968E4_u64, 0x3FF1A35BEB6FCB75_u64, 0x3C9E016E00A2643C_u64, 0x3FF1D4873168B9AA_u64, 0x3C8DC775814A8494_u64, 0x3FF2063B88628CD6_u64, 0x3C99B07EB6C70572_u64, 0x3FF2387A6E756238_u64, 0x3C82BD339940E9DA_u64, 0x3FF26B4565E27CDD_u64, 0x3C8612E8AFAD1256_u64, 0x3FF29E9DF51FDEE1_u64, 0x3C90024754DB41D4_u64, 0x3FF2D285A6E4030B_u64, 0x3C86F46AD23182E4_u64, 0x3FF306FE0A31B715_u64, 0x3C932721843659A6_u64, 0x3FF33C08B26416FF_u64, 0xBC963AEABF42EAE2_u64, 0x3FF371A7373AA9CB_u64, 0xBC75E436D661F5E2_u64, 0x3FF3A7DB34E59FF7_u64, 0x3C8ADA0911F09EBC_u64, 0x3FF3DEA64C123422_u64, 0xBC5EF3691C309278_u64, 0x3FF4160A21F72E2A_u64, 0x3C489B7A04EF80D0_u64, 0x3FF44E086061892D_u64, 0x3C73C1A3B69062F0_u64, 0x3FF486A2B5C13CD0_u64, 0x3C7D4397AFEC42E2_u64, 0x3FF4BFDAD5362A27_u64, 0xBC94B309D25957E4_u64, 0x3FF4F9B2769D2CA7_u64, 0xBC807ABE1DB13CAC_u64, 0x3FF5342B569D4F82_u64, 0x3C99BB2C011D93AC_u64, 0x3FF56F4736B527DA_u64, 0x3C96324C054647AC_u64, 0x3FF5AB07DD485429_u64, 0x3C9BA6F93080E65E_u64, 0x3FF5E76F15AD2148_u64, 0xBC9383C17E40B496_u64, 0x3FF6247EB03A5585_u64, 0xBC9BB60987591C34_u64, 0x3FF6623882552225_u64, 0xBC9BDD3413B26456_u64, 0x3FF6A09E667F3BCD_u64, 0xBC6BBE3A683C88AA_u64, 0x3FF6DFB23C651A2F_u64, 0xBC816E4786887A9A_u64, 0x3FF71F75E8EC5F74_u64, 0xBC90245957316DD4_u64, 0x3FF75FEB564267C9_u64, 0xBC841577EE049930_u64, 0x3FF7A11473EB0187_u64, 0x3C705D02BA15797E_u64, 0x3FF7E2F336CF4E62_u64, 0xBC9D4C1DD41532D8_u64, 0x3FF82589994CCE13_u64, 0xBC9FC6F89BD4F6BA_u64, 0x3FF868D99B4492ED_u64, 0x3C96E9F156864B26_u64, 0x3FF8ACE5422AA0DB_u64, 0x3C85CC13A2E3976C_u64, 0x3FF8F1AE99157736_u64, 0xBC675FC781B57EBC_u64, 0x3FF93737B0CDC5E5_u64, 0xBC9D185B7C1B85D0_u64, 0x3FF97D829FDE4E50_u64, 0x3C7C7C46B071F2BE_u64, 0x3FF9C49182A3F090_u64, 0xBC9359495D1CD532_u64, 0x3FFA0C667B5DE565_u64, 0xBC9D2F6EDB8D41E2_u64, 0x3FFA5503B23E255D_u64, 0x3C90FAC90EF7FD32_u64, 0x3FFA9E6B5579FDBF_u64, 0x3C97A1CD345DCC82_u64, 0x3FFAE89F995AD3AD_u64, 0xBC62805E3084D708_u64, 0x3FFB33A2B84F15FB_u64, 0xBC75584F7E54AC3A_u64, 0x3FFB7F76F2FB5E47_u64, 0x3C823DD07A2D9E84_u64, 0x3FFBCC1E904BC1D2_u64, 0x3C811065895048DE_u64, 0x3FFC199BDD85529C_u64, 0x3C92884DFF483CAC_u64, 0x3FFC67F12E57D14B_u64, 0x3C7503CBD1E949DC_u64, 0x3FFCB720DCEF9069_u64, 0xBC9CBC3743797A9C_u64, 0x3FFD072D4A07897C_u64, 0x3C82ED02D75B3706_u64, 0x3FFD5818DCFBA487_u64, 0x3C9C2300696DB532_u64, 0x3FFDA9E603DB3285_u64, 0xBC91A5CD4F184B5C_u64, 0x3FFDFC97337B9B5F_u64, 0x3C839E8980A9CC90_u64, 0x3FFE502EE78B3FF6_u64, 0xBC9E9C23179C2894_u64, 0x3FFEA4AFA2A490DA_u64, 0x3C9DC7F486A4B6B0_u64, 0x3FFEFA1BEE615A27_u64, 0x3C99D3E12DD8A18A_u64, 0x3FFF50765B6E4540_u64, 0x3C874853F3A5931E_u64, 0x3FFFA7C1819E90D8_u64]
+
+# Double-double approximations (low, high) of 2^(i/2^12), 0 <= i < 64, as bit patterns.
+secret preset B64_EXP_T1: Array[U64, 128] = [0x0000000000000000_u64, 0x3FF0000000000000_u64, 0x3C9AE8E38C59C72A_u64, 0x3FF000B175EFFDC7_u64, 0xBC57B5D0D58EA8F4_u64, 0x3FF00162F3904052_u64, 0x3C94115CB6B16A8E_u64, 0x3FF0021478E11CE6_u64, 0xBC8D7C96F201BB2E_u64, 0x3FF002C605E2E8CF_u64, 0x3C984711D4C35EA0_u64, 0x3FF003779A95F959_u64, 0xBC80484245243778_u64, 0x3FF0042936FAA3D8_u64, 0xBC94B237DA2025FA_u64, 0x3FF004DADB113DA0_u64, 0xBC75E00E62D6B30E_u64, 0x3FF0058C86DA1C0A_u64, 0x3C9A1D6CEDBB9480_u64, 0x3FF0063E3A559473_u64, 0xBC94ACF197A00142_u64, 0x3FF006EFF583FC3D_u64, 0xBC6EAF2EA42391A6_u64, 0x3FF007A1B865A8CA_u64, 0x3C7DA93F90835F76_u64, 0x3FF0085382FAEF83_u64, 0xBC86A79084AB093C_u64, 0x3FF00905554425D4_u64, 0x3C986364F8FBE8F8_u64, 0x3FF009B72F41A12B_u64, 0xBC882E8E14E3110E_u64, 0x3FF00A6910F3B6FD_u64, 0xBC84F6B2A7609F72_u64, 0x3FF00B1AFA5ABCBF_u64, 0xBC7E1A258EA8F71A_u64, 0x3FF00BCCEB7707EC_u64, 0x3C74362CA5BC26F2_u64, 0x3FF00C7EE448EE02_u64, 0x3C9095A56C919D02_u64, 0x3FF00D30E4D0C483_u64, 0xBC6406AC4E81A646_u64, 0x3FF00DE2ED0EE0F5_u64, 0x3C9B5A6902767E08_u64, 0x3FF00E94FD0398E0_u64, 0xBC991B2060859320_u64, 0x3FF00F4714AF41D3_u64, 0x3C8427068AB22306_u64, 0x3FF00FF93412315C_u64, 0x3C9C1D0660524E08_u64, 0x3FF010AB5B2CBD11_u64, 0xBC9E7BDFB3204BE8_u64, 0x3FF0115D89FF3A8B_u64, 0x3C8843AA8B9CBBC6_u64, 0x3FF0120FC089FF63_u64, 0xBC734104EE7EDAE8_u64, 0x3FF012C1FECD613B_u64, 0xBC72B6AEB6176892_u64, 0x3FF0137444C9B5B5_u64, 0x3C7A8CD33B8A1BB2_u64, 0x3FF01426927F5278_u64, 0x3C72EDC08E5DA99A_u64, 0x3FF014D8E7EE8D2F_u64, 0x3C857BA2DC7E0C72_u64, 0x3FF0158B4517BB88_u64, 0x3C9B61299AB8CDB8_u64, 0x3FF0163DA9FB3335_u64, 0xBC990565902C5F44_u64, 0x3FF016F0169949ED_u64, 0x3C870FC41C5C2D54_u64, 0x3FF017A28AF25567_u64, 0x3C94B9A6E145D76C_u64, 0x3FF018550706AB62_u64, 0xBC7008EFF5142BFA_u64, 0x3FF019078AD6A19F_u64, 0xBC977669F033C7DE_u64, 0x3FF019BA16628DE2_u64, 0xBC909BB78EEEAD0A_u64, 0x3FF01A6CA9AAC5F3_u64, 0x3C9371231477ECE6_u64, 0x3FF01B1F44AF9F9E_u64, 0x3C75E7626621EB5A_u64, 0x3FF01BD1E77170B4_u64, 0xBC9BC72B100828A4_u64, 0x3FF01C8491F08F08_u64, 0xBC6CE39CBBAB8BBE_u64, 0x3FF01D37442D5070_u64, 0x3C816996709DA2E2_u64, 0x3FF01DE9FE280AC8_u64, 0xBC8C11F5239BF536_u64, 0x3FF01E9CBFE113EF_u64, 0x3C8E1D4EB5EDC6B4_u64, 0x3FF01F4F8958C1C6_u64, 0xBC9AFB99946EE3F0_u64, 0x3FF020025A8F6A35_u64, 0xBC98F06D8A148A32_u64, 0x3FF020B533856324_u64, 0xBC82BF310FC54EB6_u64, 0x3FF02168143B0281_u64, 0xBC9C95A035EB4176_u64, 0x3FF0221AFCB09E3E_u64, 0xBC9491793E46834C_u64, 0x3FF022CDECE68C4F_u64, 0xBC73E8D0D9C49090_u64, 0x3FF02380E4DD22AD_u64, 0xBC9314AA16278AA4_u64, 0x3FF02433E494B755_u64, 0x3C848DAF888E9650_u64, 0x3FF024E6EC0DA046_u64, 0x3C856DC8046821F4_u64, 0x3FF02599FB483385_u64, 0x3C945B42356B9D46_u64, 0x3FF0264D1244C719_u64, 0xBC7082EF51B61D7E_u64, 0x3FF027003103B10E_u64, 0x3C72106ED0920A34_u64, 0x3FF027B357854772_u64, 0xBC9FD4CF26EA5D0E_u64, 0x3FF0286685C9E059_u64, 0xBC909F8775E78084_u64, 0x3FF02919BBD1D1D8_u64, 0x3C564CBBA902CA28_u64, 0x3FF029CCF99D720A_u64, 0x3C94383EF231D206_u64, 0x3FF02A803F2D170D_u64, 0x3C94A47A505B3A46_u64, 0x3FF02B338C811703_u64, 0x3C9E471202234680_u64, 0x3FF02BE6E199C811_u64]

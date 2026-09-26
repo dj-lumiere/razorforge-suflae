@@ -242,10 +242,10 @@ routine B64.finite!() -> B64
 routine B64.neg() -> B64
   return LLVM::float_neg[B64](me)
 
-# Unchecked variants — raw IEEE 754 propagation (the float analog of integer `+%`/`+^`). inf/NaN
-# are valid IEEE values, not memory hazards, so these are plain (NOT `dangerous`) — the operator
-# spelling (`+~`/`-~`/`*~`/`/~`) and `_unchecked` name are the marker. Division by zero yields ±inf
-# (x != 0) or NaN (0/0), never undefined behaviour.
+# Unchecked variants — raw IEEE 754 arithmetic, spelled `+! -! *! /! **!`. ±inf and NaN are valid IEEE
+# values, not undefined behaviour, so these are plain (NOT `dangerous`) and need no `danger` block — the
+# `!` operator and the `_unchecked` name are the marker. Division by zero yields ±inf (x != 0) or NaN
+# (0/0). The plain `+ - * /` are checked: a result that is not finite crashes.
 
 ### Returns `me / you` with raw IEEE 754 semantics: `x/0` -> ±infinity, `0/0` -> NaN. No crash.
 ### :param you: The divisor.
@@ -330,16 +330,6 @@ routine B64.round() -> B64
 routine B64.int_truncate() -> B64
   return LLVM::float_truncate[B64](me)
 
-### Returns the sine of this value, interpreting it as radians.
-### :returns: The double-precision sine result.
-routine B64.sin() -> B64
-  return LLVM::sin[B64](me)
-
-### Returns the cosine of this value, interpreting it as radians.
-### :returns: The double-precision cosine result.
-routine B64.cos() -> B64
-  return LLVM::cos[B64](me)
-
 ### Returns `e` raised to this value. Checked: crashes (overflow) if the result is ±infinity.
 ### Use `exp_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision exponential result (always finite).
@@ -350,10 +340,6 @@ routine B64.exp!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Returns `e` raised to this value with raw IEEE 754 propagation (overflow -> +infinity).
-routine B64.exp_unchecked() -> B64
-  return LLVM::exp[B64](me)
 
 ### Returns the natural logarithm. Checked: crashes on a non-finite result (`log(0)` -> -inf,
 ### `log(<0)` -> NaN). Use `log_unchecked` for raw IEEE 754 propagation.
@@ -366,11 +352,6 @@ routine B64.log!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Returns the natural logarithm with raw IEEE 754 propagation (`log(0)` -> -inf, `log(<0)` ->
-### NaN).
-routine B64.log_unchecked() -> B64
-  return LLVM::log[B64](me)
-
 ### Returns the base-10 logarithm. Checked: crashes on a non-finite result.
 ### Use `log10_unchecked` for raw IEEE 754 propagation.
 ### :returns: The double-precision common-log result (always finite).
@@ -381,22 +362,6 @@ routine B64.log10!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Returns the base-10 logarithm with raw IEEE 754 propagation.
-routine B64.log10_unchecked() -> B64
-  return LLVM::log10[B64](me)
-
-### Raises this value to the power `exp`. Checked: crashes on a non-finite result (overflow -> inf,
-### domain error like `(-1)^0.5` -> NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
-### NOTE: contrary to mathematical convention (where 0**0 is indeterminate), `0 ** 0 == 1`,
-### following the IEEE 754 `pow` definition (which keeps `x ** 0 == 1` for every `x`).
-### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp` (always finite).
-### Raises this value to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain).
-### :param exp: The exponent applied to `me`.
-### :returns: `me` raised to `exp`, possibly ±infinity or NaN.
-routine B64.pow_unchecked(exp: B64) -> B64
-  return LLVM::pow[B64](me, exp)
 
 ### `**` operator: raises this value to `exp`, checked (crashes on non-finite result).
 ### NOTE: contrary to mathematical convention, `0 ** 0 == 1` (IEEE 754 `pow`).
@@ -661,67 +626,10 @@ routine B64.hash(k0: U64, k1: U64) -> U64
 # passthroughs (native/runtime/math_functions.c). Unique names are essential: a
 # bare `atan`/`cbrt`/... (or a method `x.cbrt()`) resolves to UnpackedFloat's
 # same-named 0-arg generic wherever the engine is in scope (a resolver quirk).
-# erf/erfc/tgamma/lgamma have no rf_b64_ passthrough but also no UnpackedFloat
-# twin, so their bare libm symbols bind fine.
+# The transcendental functions themselves are CORE-MATH ports under CoreMath/.
 # ============================================================================
-### C libm extern (rf_b64_ passthrough): sine (radians).
-routine C::rf_b64_sin(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): cosine (radians).
-routine C::rf_b64_cos(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): tangent (radians).
-routine C::rf_b64_tan(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): arc sine.
-routine C::rf_b64_asin(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): arc cosine.
-routine C::rf_b64_acos(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): arc tangent.
-routine C::rf_b64_atan(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): two-argument arc tangent atan2(y, x).
-routine C::rf_b64_atan2(y: B64, x: B64) -> B64
-### C libm extern (rf_b64_ passthrough): hyperbolic sine.
-routine C::rf_b64_sinh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): hyperbolic cosine.
-routine C::rf_b64_cosh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): hyperbolic tangent.
-routine C::rf_b64_tanh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): inverse hyperbolic sine.
-routine C::rf_b64_asinh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): inverse hyperbolic cosine.
-routine C::rf_b64_acosh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): inverse hyperbolic tangent.
-routine C::rf_b64_atanh(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): square root.
-routine C::rf_b64_sqrt(value: B64) -> B64
 ### C libm extern (rf_b64_ passthrough): cube root.
 routine C::rf_b64_cbrt(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): natural exponential e^x.
-routine C::rf_b64_exp(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): base-2 exponential 2^x.
-routine C::rf_b64_exp2(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): exp(x) - 1, accurate near zero.
-routine C::rf_b64_expm1(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): natural logarithm.
-routine C::rf_b64_log(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): base-2 logarithm.
-routine C::rf_b64_log2(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): base-10 logarithm.
-routine C::rf_b64_log10(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): log(1 + x), accurate near zero.
-routine C::rf_b64_log1p(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): base raised to exp.
-routine C::rf_b64_pow(base: B64, exp: B64) -> B64
-### C libm extern (rf_b64_ passthrough): hypotenuse sqrt(x^2 + y^2) without overflow.
-routine C::rf_b64_hypot(x: B64, y: B64) -> B64
-### C libm extern (rf_b64_ passthrough): fused multiply-add x*y + z with a single rounding.
-routine C::rf_b64_fma(x: B64, y: B64, z: B64) -> B64
-### C libm extern (bare symbol, no UnpackedFloat twin): error function.
-routine C::erf(value: B64) -> B64
-### C libm extern (bare symbol): complementary error function.
-routine C::erfc(value: B64) -> B64
-### C libm extern (bare symbol): gamma function.
-routine C::tgamma(value: B64) -> B64
-### C libm extern (bare symbol): natural log of the absolute value of gamma.
-routine C::lgamma(value: B64) -> B64
 
 # ============================================================================
 # B64 libm methods (the C99 doubles B64 didn't already have via LLVM intrinsics),
@@ -736,10 +644,6 @@ routine B64.expm1!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### exp(me) - 1 with raw IEEE 754 propagation.
-routine B64.expm1_unchecked() -> B64
-  return C::rf_b64_expm1(value: me)
-
 ### 2 raised to me. Checked: crashes on overflow. Use `exp2_unchecked` for raw IEEE.
 routine B64.exp2!() -> B64
   var r = me.exp2_unchecked()
@@ -748,10 +652,6 @@ routine B64.exp2!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### 2 raised to me with raw IEEE 754 propagation.
-routine B64.exp2_unchecked() -> B64
-  return LLVM::exp2[B64](value: me)
 
 ### log(1 + me), accurate near 0. Checked: crashes on a non-finite result. Use `log1p_unchecked` for
 ### raw IEEE.
@@ -763,10 +663,6 @@ routine B64.log1p!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### log(1 + me) with raw IEEE 754 propagation.
-routine B64.log1p_unchecked() -> B64
-  return C::rf_b64_log1p(value: me)
-
 ### Base-2 logarithm. Checked: crashes on a non-finite result. Use `log2_unchecked` for raw IEEE.
 routine B64.log2!() -> B64
   var r = me.log2_unchecked()
@@ -775,10 +671,6 @@ routine B64.log2!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Base-2 logarithm with raw IEEE 754 propagation.
-routine B64.log2_unchecked() -> B64
-  return LLVM::log2[B64](value: me)
 
 ### Euclidean distance sqrt(x^2 + y^2). Checked: crashes on overflow. Use `hypot_unchecked` for
 ### raw IEEE.
@@ -791,12 +683,6 @@ routine hypot!(x: B64, y: B64) -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Euclidean distance with raw IEEE 754 propagation (overflow -> +infinity).
-### :param x: One leg.
-### :param y: The other leg.
-routine hypot_unchecked(x: B64, y: B64) -> B64
-  return C::rf_b64_hypot(x: x, y: y)
 
 ### 3D Euclidean distance sqrt(x^2 + y^2 + z^2). Checked: crashes on overflow. Use
 ### `hypot_unchecked` for raw IEEE.
@@ -833,13 +719,6 @@ routine B64.fma!(b: B64, c: B64) -> B64
 routine B64.fma_unchecked(b: B64, c: B64) -> B64
   return LLVM::fma[B64](a: me, b: b, c: c)
 
-### Cube root.
-routine B64.cbrt() -> B64
-  return C::rf_b64_cbrt(value: me)
-
-### Tangent (radians).
-routine B64.tan() -> B64
-  return LLVM::tan[B64](value: me)
 
 ### Arc sine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `asin_unchecked` for raw
 ### IEEE.
@@ -851,10 +730,6 @@ routine B64.asin!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
-routine B64.asin_unchecked() -> B64
-  return LLVM::asin[B64](value: me)
-
 ### Arc cosine. Checked: crashes (domain) if `me` is outside [-1, 1]. Use `acos_unchecked` for raw
 ### IEEE.
 routine B64.acos!() -> B64
@@ -865,20 +740,6 @@ routine B64.acos!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN).
-routine B64.acos_unchecked() -> B64
-  return LLVM::acos[B64](value: me)
-
-### Arc tangent.
-routine B64.atan() -> B64
-  return LLVM::atan[B64](value: me)
-
-### Two-argument arc tangent atan2(y, x).
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-routine atan2(y: B64, x: B64) -> B64
-  return LLVM::atan2[B64](a: y, b: x)
-
 ### Hyperbolic sine. Checked: crashes on overflow. Use `sinh_unchecked` for raw IEEE.
 routine B64.sinh!() -> B64
   var r = me.sinh_unchecked()
@@ -888,10 +749,6 @@ routine B64.sinh!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity).
-routine B64.sinh_unchecked() -> B64
-  return LLVM::sinh[B64](value: me)
-
 ### Hyperbolic cosine. Checked: crashes on overflow. Use `cosh_unchecked` for raw IEEE.
 routine B64.cosh!() -> B64
   var r = me.cosh_unchecked()
@@ -900,18 +757,6 @@ routine B64.cosh!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity).
-routine B64.cosh_unchecked() -> B64
-  return LLVM::cosh[B64](value: me)
-
-### Hyperbolic tangent.
-routine B64.tanh() -> B64
-  return LLVM::tanh[B64](value: me)
-
-### Inverse hyperbolic sine.
-routine B64.asinh() -> B64
-  return C::rf_b64_asinh(value: me)
 
 ### Inverse hyperbolic cosine. Checked: crashes (domain) if `me < 1`. Use `acosh_unchecked` for raw
 ### IEEE.
@@ -923,10 +768,6 @@ routine B64.acosh!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Inverse hyperbolic cosine with raw IEEE 754 propagation (`me < 1` -> NaN).
-routine B64.acosh_unchecked() -> B64
-  return C::rf_b64_acosh(value: me)
-
 ### Inverse hyperbolic tangent. Checked: crashes if `|me| >= 1` (`±1` -> ±inf, `|me| > 1` -> NaN).
 ### Use `atanh_unchecked` for raw IEEE.
 routine B64.atanh!() -> B64
@@ -936,18 +777,6 @@ routine B64.atanh!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Inverse hyperbolic tangent with raw IEEE 754 propagation (`±1` -> ±inf, `|me| > 1` -> NaN).
-routine B64.atanh_unchecked() -> B64
-  return C::rf_b64_atanh(value: me)
-
-### Error function.
-routine B64.erf() -> B64
-  return C::erf(value: me)
-
-### Complementary error function.
-routine B64.erfc() -> B64
-  return C::erfc(value: me)
 
 ### Gamma function. Checked: crashes on a non-finite result (overflow or pole). Use
 ### `tgamma_unchecked` for raw IEEE.
@@ -959,45 +788,21 @@ routine B64.tgamma!() -> B64
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±infinity or NaN).
-routine B64.tgamma_unchecked() -> B64
-  return C::tgamma(value: me)
-
-### Natural log of |gamma(me)|.
-routine B64.lgamma() -> B64
-  return C::lgamma(value: me)
-
 # ============================================================================
 # Extended libm parity: exp10, sinpi/cospi/tanpi, nextafter, scalbn/ldexp,
 # frexp, modf, rint, fdim, fmod, remainder, fmax/fmin, trunc, frac, and
 # classification (signbit/is_normal/is_subnormal/fpclassify).
 # ============================================================================
-### C libm extern (rf_b64_ passthrough): base-10 exponential 10^x.
-routine C::rf_b64_exp10(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): sin(pi*x).
-routine C::rf_b64_sinpi(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): cos(pi*x).
-routine C::rf_b64_cospi(value: B64) -> B64
-### C libm extern (rf_b64_ passthrough): tan(pi*x).
-routine C::rf_b64_tanpi(value: B64) -> B64
 ### C libm extern (rf_b64_ passthrough): next representable value after x toward y.
 routine C::rf_b64_nextafter(x: B64, y: B64) -> B64
 ### C libm extern (rf_b64_ passthrough): x * 2^n (C scalbn).
 routine C::rf_b64_scalbn(value: B64, n: S64) -> B64
 ### C libm extern (rf_b64_ passthrough): unbiased radix-2 exponent as an integer (C ilogb).
 routine C::rf_b64_ilogb(value: B64) -> S64
-### C libm extern (rf_b64_ passthrough): round to nearest integer in the current mode (C rint).
-routine C::rf_b64_rint(value: B64) -> B64
 ### C libm extern (rf_b64_ passthrough): positive difference max(x - y, 0) (C fdim).
 routine C::rf_b64_fdim(x: B64, y: B64) -> B64
-### C libm extern (rf_b64_ passthrough): floating-point remainder (C fmod).
-routine C::rf_b64_fmod(x: B64, y: B64) -> B64
 ### C libm extern (rf_b64_ passthrough): IEEE remainder, ties to even (C remainder).
 routine C::rf_b64_remainder(x: B64, y: B64) -> B64
-### C libm extern (rf_b64_ passthrough): larger of x and y (C fmax).
-routine C::rf_b64_fmax(x: B64, y: B64) -> B64
-### C libm extern (rf_b64_ passthrough): smaller of x and y (C fmin).
-routine C::rf_b64_fmin(x: B64, y: B64) -> B64
 
 ### Base-10 exponential 10**me. Checked: crashes on overflow. Use `exp10_unchecked` for raw IEEE.
 routine B64.exp10!() -> B64
@@ -1007,22 +812,6 @@ routine B64.exp10!() -> B64
   if r.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Base-10 exponential with raw IEEE 754 propagation (overflow -> +infinity).
-routine B64.exp10_unchecked() -> B64
-  return C::rf_b64_exp10(value: me)
-
-### sin(pi*me), exact at integers/half-integers.
-routine B64.sinpi() -> B64
-  return C::rf_b64_sinpi(value: me)
-
-### cos(pi*me).
-routine B64.cospi() -> B64
-  return C::rf_b64_cospi(value: me)
-
-### tan(pi*me).
-routine B64.tanpi() -> B64
-  return C::rf_b64_tanpi(value: me)
 
 ### Next representable value after me toward you.
 routine B64.nextafter(you: B64) -> B64
@@ -1229,3 +1018,4 @@ routine B64.round_ties_away() -> B64
   var t = a.trunc()
   var rounded = if a - t >= 0.5_b64 then t + 1.0_b64 else t
   return rounded.copysign(sign: me)
+

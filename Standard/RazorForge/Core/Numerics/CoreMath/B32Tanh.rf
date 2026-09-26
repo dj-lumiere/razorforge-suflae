@@ -1,0 +1,52 @@
+module Core
+
+# ============================================================================
+# Correctly rounded hyperbolic tangent of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/tanh/tanhf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Hyperbolic tangent, correctly rounded: the exact tanh rounded to the nearest `B32` (ties to even),
+### identical on every platform. ±infinity maps to ±1, ±0 to itself, NaN stays NaN.
+### :returns: The correctly rounded hyperbolic tangent.
+routine B32.tanh() -> B32
+  var ux = me.to_bits()
+  var e = (ux >>> 23) & 0xFF_u32
+  if e == 0xFF_u32
+    if (ux << 9) != 0
+      return me +! me
+    return 1.0_b32.copysign(sign: me)
+  if e < 115_u32
+    # |x| < 2^-13
+    if e < 102_u32
+      # |x| < 2^-26
+      if (ux << 1) == 0
+        return me
+      return LLVM::fma[B32](a: -me, b: me.abs(), c: me)
+    var x2 = me *! me
+    return LLVM::fma[B32](a: me, b: -0x1.555556p-2_b32 *! x2, c: me)
+  if (ux << 1) > (0x41102CB3_u32 << 1)
+    return 1.0_b32.copysign(sign: me) -! 0x1p-25_b32.copysign(sign: me)
+  var z = B64(from: me)
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var z8 = z4 *! z4
+  # rational approximation tanh(z) = z * n(z^2) / d(z^2)
+  var n0 = 1.0 +! z2 *! 0x1.30877b8b72d33p-3
+  var n2 = 0x1.694aa09ae9e5ep-8 +! z2 *! 0x1.4101377abb729p-14
+  var n4 = 0x1.e0392b1db0018p-22 +! z2 *! 0x1.2533756e546f7p-30
+  var n6 = 0x1.d62e5abe6ae8ap-41 +! z2 *! 0x1.b06be534182dep-54
+  n0 = n0 +! z4 *! n2
+  n4 = n4 +! z4 *! n6
+  n0 = n0 +! z8 *! n4
+  var d0 = 1.0 +! z2 *! 0x1.ed99131b0ebeap-2
+  var d2 = 0x1.0d27ed6c95a69p-5 +! z2 *! 0x1.7cbdaca0e9fccp-11
+  var d4 = 0x1.b4e60b892578ep-18 +! z2 *! 0x1.a6f707c5c71abp-26
+  var d6 = 0x1.35a8b6e2cd94cp-35 +! z2 *! 0x1.ca8230677aa01p-47
+  d0 = d0 +! z4 *! d2
+  d4 = d4 +! z4 *! d6
+  d0 = d0 +! z8 *! d4
+  return B32(from: z *! n0 /! d0)

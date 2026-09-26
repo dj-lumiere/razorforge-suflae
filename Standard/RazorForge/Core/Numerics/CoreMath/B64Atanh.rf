@@ -1,0 +1,350 @@
+module Core
+
+# ============================================================================
+# Correctly rounded inverse hyperbolic tangent of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/atanh/atanh.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov <sibid@uvic.ca>.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno reporting is
+# dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The
+# log tables shared with asinh and acosh live in B64ArcHypShared.rf.
+
+### Inverse hyperbolic tangent with raw IEEE 754 propagation (`±1` -> ±inf, `|me| > 1` -> NaN), correctly
+### rounded: the exact `atanh(me)` rounded to the nearest `B64` (ties to even), identical on every
+### platform. `atanh(-x) == -atanh(x)`, and ±0 and NaN map to themselves.
+### :returns: The correctly rounded inverse hyperbolic tangent.
+routine B64.atanh_unchecked() -> B64
+  var x = me
+  var ax = x.abs()
+  var aix = ax.to_bits()
+  var sgn: B64 = 1.0
+  sgn = sgn.copysign(sign: x)
+  if aix >= 0x3FF0000000000000_u64
+    # |x| >= 1
+    if aix == 0x3FF0000000000000_u64
+      # pole: ±infinity
+      var inf = B64.from_bits(bits: 0x7FF0000000000000_u64)
+      return inf.copysign(sign: x)
+    if aix > 0x7FF0000000000000_u64
+      return x +! x
+    # the default NaN of x86 (C's sqrt(-1.0))
+    return B64.from_bits(bits: 0xFFF8000000000000_u64)
+  if aix < 0x3FD0000000000000_u64
+    # |x| < 2^-2
+    if aix < 0x3E4D12ED0AF1A27F_u64
+      # |x| < 0x1.d12ed0af1a27fp-27: atanh(x) rounds to x
+      return LLVM::fma[B64](a: x, b: 0x1p-55, c: x)
+    var x2 = x *! x
+    # p(x) = x + (0x1.5555555555555p-2 + 0x1.5555555555555p-56) x^3 + x^5 c(x) approximates atanh(x)
+    # with relative error <= 2^-64.377 on [0x1.d12ed0af1a27fp-27, 1/4]
+    var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
+    var x4 = x2 *! x2
+    var x3 = x2 *! x
+    var x8 = x4 *! x4
+    var dx3 = LLVM::fma[B64](a: x2, b: x, c: -x3) +! dx2 *! x
+    var p = ((0x1.999999999999ap-3 +! x2 *! 0x1.2492492492244p-3) +! x4 *! (0x1.c71c71c79715fp-4 +! x2 *! 0x1.745d16f777723p-4)) +! x8 *! (((0x1.3b13ca4174634p-4 +! x2 *! 0x1.110c9724989bdp-4) +! x4 *! (0x1.e2d17608a5b2ep-5 +! x2 *! 0x1.a0b56308cba0bp-5)) +! x8 *! 0x1.fb6341208ad2ep-5)
+    var t = LLVM::fma[B64](a: x2, b: p, c: 0x1.5555555555555p-56)
+    var s = b64_hyp_fasttwosum(x: 0x1.5555555555555p-2, y: t)
+    s = b64_atanh_muldd(xh: s.item0, xl: s.item1, ch: x3, cl: dx3)
+    var pl = s.item1
+    s = b64_hyp_fasttwosum(x: x, y: s.item0)
+    var ph = s.item0
+    pl = pl +! s.item1
+    var eps = x *! (x4 *! 0x1.dp-53 +! 0x1p-103)
+    var lb = ph +! (pl -! eps)
+    var ub = ph +! (pl +! eps)
+    if lb == ub
+      return lb
+    return b64_atanh_zero(x: x)
+  # |x| >= 1/4: atanh(x) = log((1 + |x|) / (1 - |x|)) / 2, with the quotient as a double-double th + tl
+  var ps = b64_hyp_fasttwosum(x: 1.0, y: ax)
+  var ph = ps.item0
+  var pl = ps.item1
+  var qs = b64_atanh_fasttwosub(x: 1.0, y: ax)
+  var qh = qs.item0
+  var ql = qs.item1
+  var iqh = 1.0 /! qh
+  var th = ph *! iqh
+  var tl = LLVM::fma[B64](a: ph, b: iqh, c: -th) +! (pl +! ph *! (LLVM::fma[B64](a: -qh, b: iqh, c: 1.0) -! ql *! iqh)) *! iqh
+  var tb = th.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](tb >>> 52) - 0x3FF
+  tb = tb & 0x000FFFFFFFFFFFFF_u64
+  var ed = LLVM::signed_to_float[S64, B64](e)
+  var i = tb >>> 47
+  var d = LLVM::reinterpret_bits[U64, S64](tb & 0x00007FFFFFFFFFFF_u64)
+  var bc0 = LLVM::reinterpret_bits[S64, U64](B64_AHYP_B_C0[i])
+  var bc1 = B64_AHYP_B_C1[i] * (d >> 16)
+  var j = (tb +% (bc0 << 33) +% LLVM::reinterpret_bits[S64, U64](bc1)) >>> 42
+  tb = tb | 0x3FF0000000000000_u64
+  var tf = B64.from_bits(bits: tb)
+  var i1 = j >>> 5
+  var i2 = j & 0x1F_u64
+  var r = (0.5 *! B64.from_bits(bits: B64_AHYP_R1[i1])) *! B64.from_bits(bits: B64_AHYP_R2[i2])
+  var dx = LLVM::fma[B64](a: r, b: tf, c: -0.5)
+  var dx2 = dx *! dx
+  var rx = r *! tf
+  var dxl = LLVM::fma[B64](a: r, b: tf, c: -rx)
+  var f = dx2 *! ((-0x1p+0 +! dx *! 0x1.555555555553p+0) +! dx2 *! ((-0x1.fffffffffffap+0 +! dx *! 0x1.99999e33a6366p+1) +! dx2 *! -0x1.555559ef9525fp+2))
+  var l2h = 0x1.62e42fefa3ap-2
+  var l2l = -0x1.0ca86c3898dp-50
+  var lh = (B64.from_bits(bits: B64_ATANH_L1_HI[i1]) +! B64.from_bits(bits: B64_ATANH_L2_HI[i2])) +! l2h *! ed
+  var ls = b64_hyp_fasttwosum(x: lh, y: rx -! 0.5)
+  lh = ls.item0
+  var ll = ls.item1
+  ll = ll +! (((l2l *! ed +! (B64.from_bits(bits: B64_ATANH_L1_LO[i1]) +! B64.from_bits(bits: B64_ATANH_L2_LO[i2]))) +! dxl) +! (0.5 *! tl) /! th)
+  ll = ll +! f
+  lh = lh *! sgn
+  ll = ll *! sgn
+  # 38e-24 in the original
+  var eps = 0x1.6f83716782967p-75 +! dx2 *! 0x1p-49
+  var lb = lh +! (ll -! eps)
+  var ub = lh +! (ll +! eps)
+  if lb == ub
+    return lb
+  var z = b64_hyp_fasttwosum(x: th, y: tl)
+  return b64_atanh_refine(x: x, zh: z.item0, zl: z.item1, a: 0x1.71547652b82fep+1 *! (lh +! ll).abs())
+
+### Subtracts two B64 values exactly when `|x| >= |y|`: returns `(s, e)` with `s + e == x - y`.
+### :param x: The minuend.
+### :param y: The subtrahend.
+### :returns: The rounded difference and its rounding error.
+secret routine b64_atanh_fasttwosub(x: B64, y: B64) -> (B64, B64)
+  var s = x -! y
+  var z = x -! s
+  var e = z -! y
+  return (s, e)
+
+### Adds the double-doubles `xh + xl` and `ch + cl` (the high parts with an exact two-sum).
+### :param xh: The high part of the first addend.
+### :param xl: The low part of the first addend.
+### :param ch: The high part of the second addend.
+### :param cl: The low part of the second addend.
+### :returns: The high and low parts of the sum.
+secret routine b64_atanh_adddd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var s = xh +! ch
+  var d = s -! xh
+  var l = ((ch -! d) +! (xh +! (d -! s))) +! (xl +! cl)
+  return (s, l)
+
+### Multiplies the double-double `xh + xl` by `ch + cl`, returning a renormalized double-double.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_atanh_muldd_acc(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahlh = ch *! xl
+  var alhh = cl *! xh
+  var ahhh = ch *! xh
+  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  ahhl = ahhl +! (alhh +! ahlh)
+  return b64_hyp_fasttwosum(x: ahhh, y: ahhl)
+
+### Multiplies the double-double `xh + xl` by `ch + cl` without renormalizing the result.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_atanh_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahlh = ch *! xl
+  var alhh = cl *! xh
+  var ahhh = ch *! xh
+  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  var l = ahhl +! (alhh +! ahlh)
+  return (ahhh, l)
+
+### One Horner step of a double-double polynomial: `(ch + cl) * (xh + xl) + (c_hi + c_lo)`.
+### :param xh: The high part of the variable.
+### :param xl: The low part of the variable.
+### :param ch: The high part of the running value.
+### :param cl: The low part of the running value.
+### :param c_hi: The high part of the next coefficient.
+### :param c_lo: The low part of the next coefficient.
+### :returns: The new running value as a double-double.
+secret routine b64_atanh_polydd_step(xh: B64, xl: B64, ch: B64, cl: B64, c_hi: B64, c_lo: B64) -> (B64, B64)
+  var p = b64_atanh_muldd_acc(xh: xh, xl: xl, ch: ch, cl: cl)
+  var s = b64_hyp_fasttwosum(x: c_hi, y: p.item0)
+  var l = p.item1 +! (s.item1 +! c_lo)
+  return (s.item0, l)
+
+### The accurate path of atanh for 0x1.d12ed0af1a27fp-27 <= |x| < 1/4, using a double-double polynomial.
+### :param x: The argument.
+### :returns: The correctly rounded atanh(x).
+secret routine b64_atanh_zero(x: B64) -> B64
+  var x2 = x *! x
+  var x2l = LLVM::fma[B64](a: x, b: x, c: -x2)
+  var y2 = x2 *! (0x1.1a9a91fd692afp-5 +! x2 *! (0x1.06dfbb35e7f44p-5 +! x2 *! (0x1.037bed4d7588fp-5 +! x2 *! (0x1.5aca6d6d720d6p-6 +! x2 *! 0x1.99ea5700d53a5p-5))))
+  var p = b64_hyp_polydd_init(l: y2, c_hi: 0x1.2f664d60473f9p-5, c_lo: 0x1.3adb3e2b7f35ep-61)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.47ae2d205013cp-5, c_lo: -0x1.0c9617e7bcff2p-60)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.642c84aa383ebp-5, c_lo: 0x1.632e747641b12p-59)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.8618618c779b6p-5, c_lo: -0x1.ab913de95c3bfp-61)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.af286bc9f90ccp-5, c_lo: 0x1.1e51a6e54fde9p-60)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.e1e1e1e1e2678p-5, c_lo: -0x1.f86ea96fb1435p-59)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.1111111111105p-4, c_lo: 0x1.4e1afd723ed1fp-59)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.3b13b13b13b14p-4, c_lo: -0x1.b893c3b36052ep-59)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.745d1745d1746p-4, c_lo: -0x1.7556c4165f4cap-59)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.c71c71c71c71cp-4, c_lo: 0x1.c71cd5c38a112p-58)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.2492492492492p-3, c_lo: 0x1.2492490f76b25p-57)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.999999999999ap-3, c_lo: -0x1.999999999611cp-57)
+  p = b64_atanh_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.5555555555555p-2, c_lo: 0x1.5555555555555p-56)
+  p = b64_hyp_mulddd(xh: p.item0, xl: p.item1, ch: x)
+  p = b64_atanh_muldd_acc(xh: x2, xl: x2l, ch: p.item0, cl: p.item1)
+  var s0 = b64_hyp_fasttwosum(x: x, y: p.item0)
+  var y0 = s0.item0
+  var s1 = b64_hyp_fasttwosum(x: s0.item1, y: p.item1)
+  var y1 = s1.item0
+  y2 = s1.item1
+  var tu = y1.to_bits()
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0
+    # y1 is a power of two: nudge it by one ulp toward y2 so the final rounding sees the sticky bits
+    if (y2.to_bits() ^ tu) >>> 63 == 1
+      tu = tu -% 1
+    else
+      tu = tu +% 1
+    y1 = B64.from_bits(bits: tu)
+  return y0 +! y1
+
+### The accurate path of atanh: log(zh + zl) / 2 to about 150 bits, where `zh + zl` approximates
+### `(1 + |x|) / (1 - |x|)` and `a` approximates `log2(zh + zl)`.
+### :param x: The argument (its sign, and the database lookup).
+### :param zh: The high part of `(1 + |x|) / (1 - |x|)`.
+### :param zl: The low part.
+### :param a: An approximation of `log2(zh + zl)`.
+### :returns: The correctly rounded atanh(x).
+secret routine b64_atanh_refine(x: B64, zh: B64, zl: B64, a: B64) -> B64
+  var t = zh.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](t >>> 52) - 0x3FF
+  t = (t & 0x000FFFFFFFFFFFFF_u64) | 0x3FF0000000000000_u64
+  var ed = LLVM::signed_to_float[S64, B64](e)
+  var v = ((a -! ed) +! 0x1.00008p+0).to_bits()
+  var i = (v -% 0x3FF0000000000000_u64) >>> 36
+  var i1 = i >>> 12
+  var i2 = (i >>> 8) & 0xF_u64
+  var i3 = (i >>> 4) & 0xF_u64
+  var i4 = i & 0xF_u64
+  var k1 = i2 + 17
+  var k2 = i3 + 34
+  var k3 = i4 + 51
+  var el2 = 0x1.f97b57a079ap-104 *! ed
+  var el1 = -0x1.0ca86c3898dp-50 *! ed
+  var el0 = 0x1.62e42fefa3ap-2 *! ed
+  var big0 = ((B64.from_bits(bits: B64_AHYP_LL0[i1]) +! B64.from_bits(bits: B64_AHYP_LL0[k1])) +! (B64.from_bits(bits: B64_AHYP_LL0[k2]) +! B64.from_bits(bits: B64_AHYP_LL0[k3]))) +! el0
+  var big1 = (B64.from_bits(bits: B64_AHYP_LL1[i1]) +! B64.from_bits(bits: B64_AHYP_LL1[k1])) +! (B64.from_bits(bits: B64_AHYP_LL1[k2]) +! B64.from_bits(bits: B64_AHYP_LL1[k3]))
+  var big2 = (B64.from_bits(bits: B64_AHYP_LL2[i1]) +! B64.from_bits(bits: B64_AHYP_LL2[k1])) +! (B64.from_bits(bits: B64_AHYP_LL2[k2]) +! B64.from_bits(bits: B64_AHYP_LL2[k3]))
+  var t12 = B64.from_bits(bits: B64_AHYP_RT1[i1]) *! B64.from_bits(bits: B64_AHYP_RT2[i2])
+  var t34 = B64.from_bits(bits: B64_AHYP_RT3[i3]) *! B64.from_bits(bits: B64_AHYP_RT4[i4])
+  var th = t12 *! t34
+  var tl = LLVM::fma[B64](a: t12, b: t34, c: -th)
+  var tf = B64.from_bits(bits: t)
+  var dh = th *! tf
+  var dl = LLVM::fma[B64](a: th, b: tf, c: -dh)
+  var sh = tl *! tf
+  var sl = LLVM::fma[B64](a: tl, b: tf, c: -sh)
+  var q = b64_hyp_fasttwosum(x: dh -! 1.0, y: dl)
+  var xh = q.item0
+  var xl = q.item1
+  # zl / 2^e, scaled like t = zh / 2^e
+  var zs = zl.to_bits() -% (LLVM::reinterpret_bits[S64, U64](e) << 52)
+  xl = xl +! th *! B64.from_bits(bits: zs)
+  q = b64_atanh_adddd(xh: xh, xl: xl, ch: sh, cl: sl)
+  xh = q.item0
+  xl = q.item1
+  sl = xh *! (-0x1p-3 +! xh *! (0x1.9999999a0754fp-4 +! xh *! -0x1.55555555c3157p-4))
+  q = b64_hyp_polydd_init(l: sl, c_hi: 0x1.5555555555555p-3, c_lo: 0x1.55540c15cf91fp-57)
+  q = b64_atanh_polydd_step(xh: xh, xl: xl, ch: q.item0, cl: q.item1, c_hi: -0x1p-2, c_lo: -0x1.932ce43199a8dp-110)
+  q = b64_atanh_polydd_step(xh: xh, xl: xl, ch: q.item0, cl: q.item1, c_hi: 0x1p-1, c_lo: 0x1.24b67ee516e3bp-111)
+  q = b64_atanh_muldd_acc(xh: xh, xl: xl, ch: q.item0, cl: q.item1)
+  q = b64_atanh_adddd(xh: q.item0, xl: q.item1, ch: el1, cl: el2)
+  q = b64_atanh_adddd(xh: q.item0, xl: q.item1, ch: big1, cl: big2)
+  var w0 = b64_hyp_fasttwosum(x: big0, y: q.item0)
+  var w1 = b64_hyp_fasttwosum(x: w0.item1, y: q.item1)
+  var v0 = w0.item0
+  var v1 = w1.item0
+  var tu = v1.to_bits()
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0
+    # v1 is a power of two (and has the sign of v2): add one ulp of v1 in the direction of its sign
+    tu = tu +% 1
+    v1 = B64.from_bits(bits: tu)
+  var er = (tu +% 1) & 0x000FFFFFFFFFFFFF_u64
+  var de = ((v0.to_bits() >>> 52) & 0x7FF_u64) -% ((tu >>> 52) & 0x7FF_u64)
+  var sgn: B64 = 1.0
+  sgn = sgn.copysign(sign: x)
+  v0 = v0 *! sgn
+  v1 = v1 *! sgn
+  var res = v0 +! v1
+  if de > 104 or er < 3
+    return b64_atanh_database(x: x, f: res)
+  return res
+
+### Exact atanh values for the arguments whose rounding the fast paths cannot decide.
+### :param x: The argument.
+### :param f: The value to return when `|x|` is not in the table.
+### :returns: The correctly rounded atanh(x), or `f`.
+secret routine b64_atanh_database(x: B64, f: B64) -> B64
+  var ax = x.abs()
+  var a = 0_s64
+  var b = 1_s64
+  var sgn: B64 = 1.0
+  sgn = sgn.copysign(sign: x)
+  while a <= b
+    var m = (a + b) // 2
+    var mu = LLVM::reinterpret_bits[S64, U64](m)
+    var key = B64.from_bits(bits: B64_ATANH_DB_X[mu])
+    if key < ax
+      a = m + 1
+    elseif key == ax
+      return sgn *! B64.from_bits(bits: B64_ATANH_DB_H[mu]) +! sgn *! B64.from_bits(bits: B64_ATANH_DB_L[mu])
+    else
+      b = m - 1
+  return f
+
+# -log(r1[i]) / 2 and -log(r2[j]) / 2 as double-doubles (low parts, then high parts), then the database:
+# arguments |x| (sorted) and the high and low parts of atanh(|x|), all as IEEE bit patterns.
+secret preset B64_ATANH_L1_LO: Array[U64, 33] = [
+  0x0000000000000000_u64, 0xBE4532C1269E2038_u64, 0x3E4CE42D81B54E84_u64, 0xBE525826F815EC3D_u64,
+  0x3E50DB1B1E7CEE11_u64, 0xBE51F3A8C6C95003_u64, 0xBE5774CD4FB8C30D_u64, 0x3E2452E56C030A0A_u64,
+  0x3E36B63C4966A79A_u64, 0xBE3B20A21CCB525E_u64, 0x3E54006CFB3D8F85_u64, 0xBE5CDB026B310C41_u64,
+  0xBE569124FDC0F16D_u64, 0xBE5084656CDC2727_u64, 0xBE5376FA8B0357FD_u64, 0x3E3E56AE55A47B4A_u64,
+  0x3E5070FF8834EEB4_u64, 0x3E5623516109F4FE_u64, 0xBE2EC656B95FBDAC_u64, 0x3E3F0CA2E729F510_u64,
+  0xBE57D260A858354A_u64, 0x3E4E7279075503D3_u64, 0x3E439E1A0A503873_u64, 0x3E5CD86D7B87C3D6_u64,
+  0x3E5060AB88DE341E_u64, 0x3E320A860D3F9390_u64, 0xBE4DACEE95FC2F10_u64, 0x3E545DE3A86E0ACA_u64,
+  0x3E4C164CBFB991AF_u64, 0x3E5D3F66B24225EF_u64, 0x3E5FC023EFA144BA_u64, 0x3E3086A8AF6F26C0_u64,
+  0xBE105C610CA86C39_u64]
+secret preset B64_ATANH_L1_HI: Array[U64, 33] = [
+  0x0000000000000000_u64, 0x3F862E5000000000_u64, 0x3F962E3C00000000_u64, 0x3FA0A2AC00000000_u64,
+  0x3FA62E4A00000000_u64, 0x3FABB9DC00000000_u64, 0x3FB0A2B200000000_u64, 0x3FB3687F00000000_u64,
+  0x3FB62E4100000000_u64, 0x3FB8F40A00000000_u64, 0x3FBBB9D100000000_u64, 0x3FBE7F9B00000000_u64,
+  0x3FC0A2B080000000_u64, 0x3FC2059580000000_u64, 0x3FC3687C00000000_u64, 0x3FC4CB5E80000000_u64,
+  0x3FC62E4400000000_u64, 0x3FC7912900000000_u64, 0x3FC8F40B00000000_u64, 0x3FCA56ED80000000_u64,
+  0x3FCBB9D680000000_u64, 0x3FCD1CB900000000_u64, 0x3FCE7F9D00000000_u64, 0x3FCFE27D80000000_u64,
+  0x3FD0A2B240000000_u64, 0x3FD1542440000000_u64, 0x3FD2059740000000_u64, 0x3FD2B70700000000_u64,
+  0x3FD3687B00000000_u64, 0x3FD419EC40000000_u64, 0x3FD4CB5F80000000_u64, 0x3FD57CD280000000_u64,
+  0x3FD62E4300000000_u64]
+secret preset B64_ATANH_L2_LO: Array[U64, 33] = [
+  0x0000000000000000_u64, 0xBE337E152A129E4E_u64, 0xBE53F6C916B8BE9C_u64, 0x3E520505936739D5_u64,
+  0xBE523E2E8CB541BA_u64, 0xBDFACB7983AC4F5E_u64, 0x3E36F7C7689C63AE_u64, 0x3E1F5CA695B4C58B_u64,
+  0xBE4C6C18BD953226_u64, 0x3E57A516C34846BD_u64, 0xBE4F3B83DD8B8530_u64, 0xBE0C3459046E4E57_u64,
+  0x3D9B5C7E34CB79F6_u64, 0xBE42487E9AF9A692_u64, 0x3E5F21BBC4AD79CE_u64, 0xBE2550FFC857B731_u64,
+  0x3E487458EC1B7B34_u64, 0x3E5103D4FE83EE81_u64, 0x3E4810483D3B398C_u64, 0xBE42085CB340608E_u64,
+  0x3E512698A119C42F_u64, 0xBE5EDB8C172B4C33_u64, 0xBE58B55B87A5E238_u64, 0x3E5BE5E17763F78A_u64,
+  0xBE1C2D496790073E_u64, 0x3E56542F523ABEEC_u64, 0xBE5B7FDBE5B193F8_u64, 0x3E5FA4D42FE30C7C_u64,
+  0x3E50D46AD04ADC86_u64, 0xBE51C22D02D17C4C_u64, 0x3E1A7D1E330DCCCE_u64, 0x3E0187025E656BA3_u64,
+  0xBE4532C1269E2038_u64]
+secret preset B64_ATANH_L2_HI: Array[U64, 33] = [
+  0x0000000000000000_u64, 0x3F36320000000000_u64, 0x3F46300000000000_u64, 0x3F50A24000000000_u64,
+  0x3F562DC000000000_u64, 0x3F5BBA0000000000_u64, 0x3F60A2A000000000_u64, 0x3F6368C000000000_u64,
+  0x3F662E6000000000_u64, 0x3F68F46000000000_u64, 0x3F6BBA0000000000_u64, 0x3F6E800000000000_u64,
+  0x3F70A2C000000000_u64, 0x3F7205C000000000_u64, 0x3F73687000000000_u64, 0x3F74CB7000000000_u64,
+  0x3F762E2000000000_u64, 0x3F77911000000000_u64, 0x3F78F44000000000_u64, 0x3F7A573000000000_u64,
+  0x3F7BB9D000000000_u64, 0x3F7D1CC000000000_u64, 0x3F7E7FE000000000_u64, 0x3F7FE2B000000000_u64,
+  0x3F80A2A800000000_u64, 0x3F81541000000000_u64, 0x3F8205A000000000_u64, 0x3F82B70000000000_u64,
+  0x3F83688800000000_u64, 0x3F8419F000000000_u64, 0x3F84CB7000000000_u64, 0x3F857CD000000000_u64,
+  0x3F862E5000000000_u64]
+secret preset B64_ATANH_DB_X: Array[U64, 2] = [
+  0x3FD2DBB7B1C91363_u64, 0x3FDC493DC899E4A5_u64]
+secret preset B64_ATANH_DB_H: Array[U64, 2] = [
+  0x3FD36F33D51C264D_u64, 0x3FDE611AA58AB608_u64]
+secret preset B64_ATANH_DB_L: Array[U64, 2] = [
+  0x3C70000000000000_u64, 0xBC70000000000000_u64]

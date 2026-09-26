@@ -1,0 +1,62 @@
+module Core
+
+# ============================================================================
+# Correctly rounded sin(pi*x) of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/sinpi/sinpif.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling and exception raising are dropped). Arithmetic uses the unchecked operators
+# `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The table is shared with `B32.cospi()` (B32Cospi.rf).
+
+### `sin(i*pi/64)` for i in 0..127, as B64 bit patterns.
+secret preset B32_SINPI_S: Array[U64, 128] = [0x0000000000000000_u64, 0x3FA91F65F10DD814_u64, 0x3FB917A6BC29B42C_u64, 0x3FC2C8106E8E613A_u64, 0x3FC8F8B83C69A60B_u64, 0x3FCF19F97B215F1B_u64, 0x3FD294062ED59F06_u64, 0x3FD58F9A75AB1FDD_u64, 0x3FD87DE2A6AEA963_u64, 0x3FDB5D1009E15CC0_u64, 0x3FDE2B5D3806F63B_u64, 0x3FE073879922FFEE_u64, 0x3FE1C73B39AE68C8_u64, 0x3FE30FF7FCE17035_u64, 0x3FE44CF325091DD6_u64, 0x3FE57D69348CECA0_u64, 0x3FE6A09E667F3BCD_u64, 0x3FE7B5DF226AAFAF_u64, 0x3FE8BC806B151741_u64, 0x3FE9B3E047F38741_u64, 0x3FEA9B66290EA1A3_u64, 0x3FEB728345196E3E_u64, 0x3FEC38B2F180BDB1_u64, 0x3FECED7AF43CC773_u64, 0x3FED906BCF328D46_u64, 0x3FEE212104F686E5_u64, 0x3FEE9F4156C62DDA_u64, 0x3FEF0A7EFB9230D7_u64, 0x3FEF6297CFF75CB0_u64, 0x3FEFA7557F08A517_u64, 0x3FEFD88DA3D12526_u64, 0x3FEFF621E3796D7E_u64, 0x3FF0000000000000_u64, 0x3FEFF621E3796D7E_u64, 0x3FEFD88DA3D12526_u64, 0x3FEFA7557F08A517_u64, 0x3FEF6297CFF75CB0_u64, 0x3FEF0A7EFB9230D7_u64, 0x3FEE9F4156C62DDA_u64, 0x3FEE212104F686E5_u64, 0x3FED906BCF328D46_u64, 0x3FECED7AF43CC773_u64, 0x3FEC38B2F180BDB1_u64, 0x3FEB728345196E3E_u64, 0x3FEA9B66290EA1A3_u64, 0x3FE9B3E047F38741_u64, 0x3FE8BC806B151741_u64, 0x3FE7B5DF226AAFAF_u64, 0x3FE6A09E667F3BCD_u64, 0x3FE57D69348CECA0_u64, 0x3FE44CF325091DD6_u64, 0x3FE30FF7FCE17035_u64, 0x3FE1C73B39AE68C8_u64, 0x3FE073879922FFEE_u64, 0x3FDE2B5D3806F63B_u64, 0x3FDB5D1009E15CC0_u64, 0x3FD87DE2A6AEA963_u64, 0x3FD58F9A75AB1FDD_u64, 0x3FD294062ED59F06_u64, 0x3FCF19F97B215F1B_u64, 0x3FC8F8B83C69A60B_u64, 0x3FC2C8106E8E613A_u64, 0x3FB917A6BC29B42C_u64, 0x3FA91F65F10DD814_u64, 0x0000000000000000_u64, 0xBFA91F65F10DD814_u64, 0xBFB917A6BC29B42C_u64, 0xBFC2C8106E8E613A_u64, 0xBFC8F8B83C69A60B_u64, 0xBFCF19F97B215F1B_u64, 0xBFD294062ED59F06_u64, 0xBFD58F9A75AB1FDD_u64, 0xBFD87DE2A6AEA963_u64, 0xBFDB5D1009E15CC0_u64, 0xBFDE2B5D3806F63B_u64, 0xBFE073879922FFEE_u64, 0xBFE1C73B39AE68C8_u64, 0xBFE30FF7FCE17035_u64, 0xBFE44CF325091DD6_u64, 0xBFE57D69348CECA0_u64, 0xBFE6A09E667F3BCD_u64, 0xBFE7B5DF226AAFAF_u64, 0xBFE8BC806B151741_u64, 0xBFE9B3E047F38741_u64, 0xBFEA9B66290EA1A3_u64, 0xBFEB728345196E3E_u64, 0xBFEC38B2F180BDB1_u64, 0xBFECED7AF43CC773_u64, 0xBFED906BCF328D46_u64, 0xBFEE212104F686E5_u64, 0xBFEE9F4156C62DDA_u64, 0xBFEF0A7EFB9230D7_u64, 0xBFEF6297CFF75CB0_u64, 0xBFEFA7557F08A517_u64, 0xBFEFD88DA3D12526_u64, 0xBFEFF621E3796D7E_u64, 0xBFF0000000000000_u64, 0xBFEFF621E3796D7E_u64, 0xBFEFD88DA3D12526_u64, 0xBFEFA7557F08A517_u64, 0xBFEF6297CFF75CB0_u64, 0xBFEF0A7EFB9230D7_u64, 0xBFEE9F4156C62DDA_u64, 0xBFEE212104F686E5_u64, 0xBFED906BCF328D46_u64, 0xBFECED7AF43CC773_u64, 0xBFEC38B2F180BDB1_u64, 0xBFEB728345196E3E_u64, 0xBFEA9B66290EA1A3_u64, 0xBFE9B3E047F38741_u64, 0xBFE8BC806B151741_u64, 0xBFE7B5DF226AAFAF_u64, 0xBFE6A09E667F3BCD_u64, 0xBFE57D69348CECA0_u64, 0xBFE44CF325091DD6_u64, 0xBFE30FF7FCE17035_u64, 0xBFE1C73B39AE68C8_u64, 0xBFE073879922FFEE_u64, 0xBFDE2B5D3806F63B_u64, 0xBFDB5D1009E15CC0_u64, 0xBFD87DE2A6AEA963_u64, 0xBFD58F9A75AB1FDD_u64, 0xBFD294062ED59F06_u64, 0xBFCF19F97B215F1B_u64, 0xBFC8F8B83C69A60B_u64, 0xBFC2C8106E8E613A_u64, 0xBFB917A6BC29B42C_u64, 0xBFA91F65F10DD814_u64]
+
+### Returns `sin(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Integers give a zero of the argument's sign, ±infinity gives NaN and NaN
+### maps to NaN.
+### :returns: The correctly rounded `sin(pi * me)`.
+routine B32.sinpi() -> B32
+  var ix = me.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](LLVM::zero_extend[U32, U64]((ix >>> 23) & 0xFF_u32))
+  if e == 0xFF_s64
+    if ix << 9 == 0_u32
+      return B32.from_bits(bits: 0x7FC00000_u32)
+    return me +! me
+  # m is the signed significand (two's complement), sgn all ones for a negative argument
+  var sgn = 0_u32
+  if ix >>> 31 == 1_u32
+    sgn = U32_MAX
+  var m = (((ix & 0x7FFFFF_u32) | 0x800000_u32) ^ sgn) -% sgn
+  var s = 143_s64 - e
+  if s < 0_s64
+    # |x| >= 0x1p+17
+    if s < -6_s64
+      # |x| >= 0x1p+23: x is an even integer
+      return 0.0_b32.copysign(sign: me)
+    var iq = (m << LLVM::int_truncate[S64, U32](-s - 1_s64)) & 127_u32
+    if iq == 0_u32 or iq == 64_u32
+      return 0.0_b32.copysign(sign: me)
+    return B32(from: B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64](iq)]))
+  if s > 30_s64
+    # |x| < 0x1p-14
+    var z = B64(from: me)
+    var z2 = z *! z
+    return B32(from: z *! (0x1.921fb54442d18p+1 +! z2 *! -0x1.4abbce625be53p+2))
+  var si = 25_s64 - s
+  if si >= 0_s64
+    if m << LLVM::int_truncate[S64, U32](si) == 0_u32
+      # x is an integer
+      return 0.0_b32.copysign(sign: me)
+  var k = LLVM::reinterpret_bits[U32, S32](m << LLVM::int_truncate[S64, U32](31_s64 - s))
+  var z = LLVM::signed_to_float[S32, B64](k)
+  var z2 = z *! z
+  var fs = 0x1.921fb54442d0fp-37 +! z2 *! (-0x1.4abbce6102b94p-112 +! z2 *! 0x1.4669fa3c58463p-189)
+  var fc = -0x1.3bd3cc9be45cfp-74 +! z2 *! (0x1.03c1f08088742p-150 +! z2 *! -0x1.55d1e5eff55a5p-228)
+  var iq = LLVM::reinterpret_bits[S32, U32](LLVM::reinterpret_bits[U32, S32](m) >> LLVM::int_truncate[S64, U32](s))
+  iq = (iq +% 1_u32) >>> 1
+  var ts = B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64](iq & 127_u32)])
+  var tc = B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64]((iq +% 32_u32) & 127_u32)])
+  var r = (ts +! (ts *! z2) *! fc) +! (tc *! z) *! fs
+  return B32(from: r)

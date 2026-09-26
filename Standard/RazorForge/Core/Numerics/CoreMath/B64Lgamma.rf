@@ -1,0 +1,688 @@
+module Core
+
+# ============================================================================
+# Correctly rounded log-gamma function of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/lgamma/lgamma.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2024 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno setting is dropped). The sign of gamma
+# (C's signgam) is not computed: this routine returns only ln|gamma(x)|.
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The double-double helpers and the fast logarithm `b64_gamma_logd` come from the tgamma port
+# (B64Tgamma.rf). Coefficient tables are stored as B64 bit patterns in the U64 preset B64_LGAMMA_T,
+# indexed by the offsets listed with it.
+
+### Returns the natural logarithm of the absolute value of the gamma function of this value, correctly
+### rounded: the exact ln|gamma(x)| rounded to the nearest `B64` (ties to even), identical on every
+### platform. Poles (zero and the negative integers) and ±infinity give +infinity, and NaN stays NaN.
+### :returns: The correctly rounded ln|gamma(x)|, possibly +infinity or NaN.
+routine B64.lgamma() -> B64
+  var x = me
+  var t = x.to_bits()
+  var nx = t << 1
+  if nx >= 0xFEAEA9B24F16A34C_u64
+    # |x| >= 0x1.006df1bfac84ep+1015
+    if t == 0x7F5754D9278B51A6_u64
+      return 0x1.ffffffffffffep+1023 -! 0x1p+969
+    if t == 0x7F5754D9278B51A7_u64
+      return 0x1.fffffffffffffp+1023 -! 0x1p+969
+    if nx >= (0x7FF_u64 << 53)
+      if nx == (0x7FF_u64 << 53)
+        # ±infinity
+        return x.abs()
+      # NaN: x + x also quiets a signaling NaN
+      return x +! x
+    # overflow, or a huge negative integer (a pole)
+    return 0x1.fp1023 *! 0x1.fp1023
+  var fx = x.floor()
+  if fx == x
+    # x is an integer
+    if x <= 0.0
+      # a pole
+      return 1.0 /! 0.0
+    if x == 1.0 or x == 2.0
+      return 0.0
+  var au = nx >>> 38
+  var fh = 0.0
+  var fl = 0.0
+  var eps = 0.0
+  if au < B64_LGAMMA_UBRD[0]
+    # |x| < 0.5: lgamma(x) = lgamma(1 + x) - ln|x|
+    var lg = b64_gamma_logd(x: x.abs())
+    var lh = lg.item0
+    var ll = lg.item1
+    if au < 0x1DA0000_u64
+      # |x| < 2^-75
+      fh = -lh
+      fl = -ll
+      eps = 0x1.6aad80c11872cp-73
+    elseif au < 0x1FD0000_u64
+      # |x| < 0.03125
+      var z = x
+      var z2 = z *! z
+      var z4 = z2 *! z2
+      var q = 1437_u64
+      var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
+      var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
+      var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
+      var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
+      fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
+      var f = b64_lgamma_polydddfst(x: z, n: 4_u64, base: 1429_u64, l: fl)
+      f = b64_gamma_mulddd(x: x, ch: f.item0, cl: f.item1)
+      f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
+      fh = f.item0
+      fl = f.item1
+      eps = 0x1.6aad80c11872cp-73
+    else
+      # -0.5 < x < -0.03125 or 0.03125 < x < 0.5: 1 + x is covered by the piece-wise approximation
+      var s = b64_gamma_fasttwosum(x: 1.0, y: x)
+      var tf = s.item0
+      var xl = s.item1
+      var au1 = tf.to_bits() >>> 37
+      var j = b64_lgamma_piece(au: au1)
+      var z = (tf -! b64_lgamma_t(i: 1068_u64 + j)) +! xl
+      var f = b64_lgamma_piece_poly(z: z, j: j)
+      if j == 4_u64
+        # the region around the root at 1
+        f = b64_gamma_mulddd(x: -x, ch: f.item0, cl: f.item1)
+      eps = f.item0.abs() *! 0x1.87f4d7d0af16bp-64
+      f = b64_gamma_sumdd(xh: -lh, xl: -ll, yh: f.item0, yl: f.item1)
+      fh = f.item0
+      fl = f.item1
+      eps = eps +! lh.abs() *! 0x1.2e3b40a0e9b4fp-71
+  else
+    # |x| >= 0.5
+    var ax = x.abs()
+    if au >= B64_LGAMMA_UBRD[19]
+      # |x| >= 8.29541: Stirling's asymptotic expansion
+      var lg = b64_gamma_logd(x: ax)
+      var lh = lg.item0 -! 1.0
+      var ll = lg.item1
+      if au >= 0x2198000_u64
+        # x >= 2^52
+        if au >= 0x3FABAA6_u64
+          # x >= 0x1.754cp+1014
+          var s = b64_gamma_fasttwosum(x: lh, y: ll)
+          lh = s.item0
+          ll = s.item1
+        var hlh = lh *! 0.5
+        var m = b64_gamma_mulddd(x: ax, ch: lh, cl: ll)
+        lh = m.item0
+        ll = m.item1 -! hlh
+      else
+        var m = b64_gamma_mulddd(x: ax -! 0.5, ch: lh, cl: ll)
+        lh = m.item0
+        ll = m.item1
+      var c = 1445_u64
+      var a = b64_gamma_fastsum(xh: lh, xl: ll, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
+      lh = a.item0
+      ll = a.item1
+      if ax < 0x1p100
+        var zh = 1.0 /! ax
+        var zl = LLVM::fma[B64](a: zh, b: -ax, c: 1.0) *! zh
+        var z2h = zh *! zh
+        var z4h = z2h *! z2h
+        var q = 1449_u64
+        var q0 = b64_lgamma_t(i: q) +! z2h *! b64_lgamma_t(i: q + 1_u64)
+        var q2 = b64_lgamma_t(i: q + 2_u64) +! z2h *! b64_lgamma_t(i: q + 3_u64)
+        var q4 = b64_lgamma_t(i: q + 4_u64)
+        fl = z2h *! (q0 +! z4h *! (q2 +! z4h *! q4))
+        var f = b64_gamma_fasttwosum(x: b64_lgamma_t(i: c + 2_u64), y: fl)
+        f = b64_gamma_muldd(xh: f.item0, xl: f.item1 +! b64_lgamma_t(i: c + 3_u64), ch: zh, cl: zl)
+        fh = f.item0
+        fl = f.item1
+      var f = b64_gamma_fastsum(xh: lh, xl: ll, yh: fh, yl: fl)
+      fh = f.item0
+      fl = f.item1
+      eps = fh.abs() *! 0x1.a90352e248a68p-65
+    else
+      # x in [0.5, 8.29541]: piece-wise polynomials
+      var j = b64_lgamma_piece(au: au)
+      var z = ax -! b64_lgamma_t(i: 1068_u64 + j)
+      var f = b64_lgamma_piece_poly(z: z, j: j)
+      if j == 4_u64
+        # the region around the root at 1
+        f = b64_gamma_mulddd(x: 1.0 -! ax, ch: f.item0, cl: f.item1)
+      if j == 10_u64
+        # the region around the root at 2
+        f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
+      fh = f.item0
+      fl = f.item1
+      eps = fh.abs() *! 0x1.9ad88bdabdb20p-64 +! 0x1.357c299a88ea7p-80
+    if (t >>> 63) == 1_u64
+      # x < 0: the reflection formula lgamma(x) = ln(pi / |x sin(pi x)|) - lgamma(-x)
+      var sp = b64_lgamma_sinpipid(x: x -! x.floor())
+      sp = b64_gamma_mulddd(x: -x, ch: sp.item0, cl: sp.item1)
+      var lg = b64_gamma_logd(x: sp.item0)
+      var s = b64_gamma_sumdd(xh: fh, xl: fl, yh: lg.item0, yl: lg.item1 +! sp.item1 /! sp.item0)
+      fh = -s.item0
+      fl = -s.item1
+      eps = eps +! lg.item0.abs() *! 0x1.e392010175ee6p-71
+  var ub = fh +! (fl +! eps)
+  var lb = fh +! (fl -! eps)
+  if ub != lb
+    return b64_lgamma_accurate(x: x)
+  return ub
+
+### Reads entry `i` of the coefficient table B64_LGAMMA_T.
+### :param i: The table index.
+### :returns: The table entry as a `B64`.
+secret routine b64_lgamma_t(i: U64) -> B64
+  return B64.from_bits(bits: B64_LGAMMA_T[i])
+
+### The index of the piece-wise approximation region of [0.5, 8.29541] holding the argument.
+### :param au: The argument's bits shifted right by 37 (at least B64_LGAMMA_UBRD[0]).
+### :returns: The region index in 0..18.
+secret routine b64_lgamma_piece(au: U64) -> U64
+  var ou = au - B64_LGAMMA_UBRD[0]
+  # the 32-bit product of the original wraps
+  var p = (ou *% 0x150D_u64) & 0xFFFFFFFF_u64
+  var j = ((0x157CED865_u64 -% p) *% ou +% 0x128000000000_u64) >>> 45
+  if au < B64_LGAMMA_UBRD[j]
+    j = j - 1_u64
+  return j
+
+### Evaluates the region-`j` polynomial of the piece-wise approximation at the offset `z`.
+### :param z: The offset from the region's reference point.
+### :param j: The region index.
+### :returns: The value as a (high, low) pair.
+secret routine b64_lgamma_piece_poly(z: B64, j: U64) -> (B64, B64)
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var q = 1087_u64 + 8_u64 * j
+  var q0 = b64_lgamma_t(i: q) +! z *! b64_lgamma_t(i: q + 1_u64)
+  var q2 = b64_lgamma_t(i: q + 2_u64) +! z *! b64_lgamma_t(i: q + 3_u64)
+  var q4 = b64_lgamma_t(i: q + 4_u64) +! z *! b64_lgamma_t(i: q + 5_u64)
+  var q6 = b64_lgamma_t(i: q + 6_u64) +! z *! b64_lgamma_t(i: q + 7_u64)
+  var fl = z *! ((q0 +! z2 *! q2) +! z4 *! (q4 +! z2 *! q6))
+  return b64_lgamma_polydddfst(x: z, n: 5_u64, base: 1239_u64 + 10_u64 * j, l: fl)
+
+### Looks `x` up among the arguments whose log-gamma lies too close to a rounding boundary for the
+### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
+### :param x: The argument.
+### :param f: The accurate path's result.
+### :returns: The corrected result.
+secret routine b64_lgamma_database(x: B64, f: B64) -> B64
+  var a = 0_s64
+  var b = 18_s64
+  var m = (a + b) // 2
+  while a <= b
+    var base = 0_u64 + 3_u64 * LLVM::reinterpret_bits[S64, U64](m)
+    var key = b64_lgamma_t(i: base)
+    if key < x
+      a = m + 1
+    elseif key == x
+      return b64_lgamma_t(i: base + 1_u64) +! b64_lgamma_t(i: base + 2_u64)
+    else
+      b = m - 1
+    m = (a + b) // 2
+  return f
+
+### Adds the triple-double l = lh + ll + lll to the triple-double f = fh + fl + fll.
+### :param fh: The high part of f.
+### :param fl: The middle part of f.
+### :param fll: The low part of f.
+### :param lh: The high part of l.
+### :param ll: The middle part of l.
+### :param lll: The low part of l.
+### :returns: The (high, middle, low) parts of the sum.
+secret routine b64_lgamma_add3(fh: B64, fl: B64, fll: B64, lh: B64, ll: B64, lll: B64) -> (B64, B64, B64)
+  var s = b64_gamma_sumdd(xh: fl, xl: fll, yh: ll, yl: lll)
+  var h = b64_gamma_twosum(x: fh, y: lh)
+  var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
+  return (h.item0, s2.item0, s2.item1)
+
+### ln(x1) + ln(x2) as a triple-double, for x1 = x - 1 and x2 = x - 2.
+### :param x: The argument, with x - 2 > 0.
+### :returns: The (high, middle, low) parts.
+secret routine b64_lgamma_log2terms(x: B64) -> (B64, B64, B64)
+  var l2 = b64_lgamma_logd_accurate(x: x -! 2.0)
+  var l1 = b64_lgamma_logd_accurate(x: x -! 1.0)
+  var s = b64_gamma_sumdd(xh: l1.item1, xl: l1.item2, yh: l2.item1, yl: l2.item2)
+  var h = b64_gamma_fasttwosum(x: l1.item0, y: l2.item0)
+  var s2 = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: h.item1, yl: 0.0)
+  return (h.item0, s2.item0, s2.item1)
+
+### The slow accurate path of `lgamma`, taken when the fast path cannot decide the rounding.
+### :param x: The argument, finite and not a pole.
+### :returns: The correctly rounded ln|gamma(x)|.
+secret routine b64_lgamma_accurate(x: B64) -> B64
+  var sx = x
+  var ax = x.abs()
+  var fh = 0.0
+  var fl = 0.0
+  var fll = 0.0
+  if ax < 0x1p-100
+    var l = b64_lgamma_logd_accurate(x: ax)
+    var s = b64_gamma_fasttwosum(x: -l.item0, y: -l.item1)
+    fh = s.item0
+    s = b64_gamma_fasttwosum(x: s.item1, y: -l.item2)
+    fl = s.item0
+    fll = s.item1
+    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+    if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
+      var one = 1.0
+      var h52 = 0x1p-52
+      fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
+  elseif ax < 0x1p-2
+    var f = b64_lgamma_polydddfst(x: sx, n: 34_u64, base: 57_u64, l: 0.0)
+    f = b64_gamma_mulddd(x: sx, ch: f.item0, cl: f.item1)
+    var l = b64_lgamma_logd_accurate(x: ax)
+    f = b64_gamma_sumdd(xh: f.item0, xl: f.item1, yh: -l.item1, yl: -l.item2)
+    var h = b64_gamma_twosum(x: -l.item0, y: f.item0)
+    fh = h.item0
+    var s = b64_gamma_twosum(x: h.item1, y: f.item1)
+    fl = s.item0
+    fll = s.item1
+    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+    if e == 0.0 and 1.0 +! 0x1p-54 == 1.0 -! 0x1p-54
+      var one = 1.0
+      var h52 = 0x1p-52
+      fl = fl *! (1.0 +! h52.copysign(sign: fl) *! one.copysign(sign: fll))
+  else
+    var r = (0.0, 0.0, 0.0)
+    if (ax -! 0.5).abs() < 0x1p-2
+      var f = b64_lgamma_polydddfst(x: ax -! 0.5, n: 30_u64, base: 125_u64, l: 0.0)
+      r = (f.item0, f.item1, 0.0)
+      if sx > 0.0
+        var l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: -l.item0, ll: -l.item1, lll: -l.item2)
+    elseif (ax -! 2.5).abs() < 0x1p-2
+      var f = b64_lgamma_polydddfst(x: ax -! 2.5, n: 30_u64, base: 125_u64, l: 0.0)
+      var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
+      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
+      if sx < 0.0
+        l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    elseif (ax -! 3.5).abs() < 0x1p-2
+      var l1 = b64_lgamma_log2terms(x: ax)
+      var f = b64_lgamma_polydddfst(x: ax -! 3.5, n: 30_u64, base: 125_u64, l: 0.0)
+      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
+      if sx < 0.0
+        var l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    elseif (ax -! 1.0).abs() < 0x1p-2
+      var f = b64_lgamma_polydddfst(x: ax -! 1.0, n: 34_u64, base: 57_u64, l: 0.0)
+      f = b64_gamma_mulddd(x: ax -! 1.0, ch: f.item0, cl: f.item1)
+      r = (f.item0, f.item1, 0.0)
+      if sx < 0.0
+        var l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    elseif (ax -! 1.5).abs() < 0x1p-2
+      var f = b64_lgamma_polydddfst(x: ax -! 1.5, n: 30_u64, base: 125_u64, l: 0.0)
+      r = (f.item0, f.item1, 0.0)
+      if sx < 0.0
+        var l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    elseif (ax -! 2.0).abs() < 0x1p-2
+      var l = b64_lgamma_logd_accurate(x: ax -! 1.0)
+      var f = b64_lgamma_polydddfst(x: ax -! 2.0, n: 34_u64, base: 57_u64, l: 0.0)
+      f = b64_gamma_mulddd(x: ax -! 2.0, ch: f.item0, cl: f.item1)
+      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l.item0, ll: l.item1, lll: l.item2)
+      if sx < 0.0
+        l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    elseif (ax -! 3.0).abs() < 0x1p-2
+      var l1 = b64_lgamma_log2terms(x: ax)
+      var f = b64_lgamma_polydddfst(x: ax -! 3.0, n: 34_u64, base: 57_u64, l: 0.0)
+      f = b64_gamma_mulddd(x: ax -! 3.0, ch: f.item0, cl: f.item1)
+      r = b64_lgamma_add3(fh: f.item0, fl: f.item1, fll: 0.0, lh: l1.item0, ll: l1.item1, lll: l1.item2)
+      if sx < 0.0
+        var l = b64_lgamma_logd_accurate(x: ax)
+        r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1, lll: l.item2)
+    else
+      # x > 3.75: Stirling's series, for 1 - sx = ax + 1 when sx < 0
+      var xh = ax
+      var xl = 0.0
+      if sx < 0.0
+        var s = b64_gamma_fasttwosum(x: ax, y: 1.0)
+        xh = s.item0
+        xl = s.item1
+      r = b64_lgamma_asym_accurate(xh: xh, xl: xl)
+    if sx < 0.0
+      # reflection: lgamma(sx) = ln(pi / |sin(pi sx)|) - lgamma(1 - sx)
+      var phi = -sx
+      if sx < -0.5
+        phi = sx -! sx.floor()
+      var sp = b64_lgamma_sinpipid_accurate(x: phi)
+      var l = b64_lgamma_logd_accurate(x: sp.item0)
+      r = b64_lgamma_add3(fh: r.item0, fl: r.item1, fll: r.item2, lh: l.item0, ll: l.item1 +! (sp.item1 /! sp.item0 +! l.item2), lll: 0.0)
+      r = (-r.item0, -r.item1, -r.item2)
+    var s = b64_gamma_fasttwosum(x: r.item0, y: r.item1)
+    var s2 = b64_gamma_fasttwosum(x: s.item1, y: r.item2)
+    s = b64_gamma_fasttwosum(x: s.item0, y: s2.item0)
+    fh = s.item0
+    s2 = b64_gamma_fasttwosum(x: s.item1, y: s2.item1)
+    fl = s2.item0
+    fll = s2.item1
+    var e = b64_gamma_fasttwosum(x: fh, y: 2.0 *! fl).item1
+    if e == 0.0
+      var h26 = 0x1p-26
+      fl = fl *! (1.0 +! h26.copysign(sign: fl) *! h26.copysign(sign: fll))
+  if fh.abs() < 0x1.8p-2
+    # near a root of lgamma for -10.5 < x < -2: a polynomial around the root
+    var k = 0_u64
+    while k < 17_u64
+      if fh.abs() < B64.from_bits(bits: B64_LGAMMA_RG_FH[k]) and sx > B64.from_bits(bits: B64_LGAMMA_RG_LO[k]) and sx < B64.from_bits(bits: B64_LGAMMA_RG_HI[k])
+        var f = b64_lgamma_root_poly(sx: sx, k: k)
+        fh = f.item0
+        fl = f.item1
+        break
+      k = k + 1_u64
+  if ((fl.to_bits() +% 2_u64) & 0x000FFFFFFFFFFFFF_u64) <= 2_u64
+    return b64_lgamma_database(x: sx, f: fh +! fl)
+  return fh +! fl
+
+### Evaluates the polynomial of root region `k` (a root x0 of lgamma for -10.5 < x < -2) at `sx`.
+### :param sx: The argument.
+### :param k: The region index in 0..16.
+### :returns: The value as a (high, low) pair.
+secret routine b64_lgamma_root_poly(sx: B64, k: U64) -> (B64, B64)
+  var x0 = B64_LGAMMA_RG_X0[k]
+  var c = B64_LGAMMA_RG_C[k]
+  var n = B64_LGAMMA_RG_N[k]
+  var kk = B64_LGAMMA_RG_K[k]
+  var sc = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1023 + B64_LGAMMA_RG_SC[k]) << 52)
+  var z = b64_gamma_fasttwosum(x: b64_lgamma_t(i: x0) +! sx, y: b64_lgamma_t(i: x0 + 1_u64))
+  var zh = z.item0
+  var zl = z.item1 +! b64_lgamma_t(i: x0 + 2_u64)
+  var sh = zh *! sc
+  var sl = zl *! sc
+  var fl = sh *! b64_lgamma_polyd(x: sh, n: kk, base: c + 2_u64 * (n - kk))
+  var f = b64_lgamma_polydd(xh: sh, xl: sl, n: n - kk, base: c, l: fl)
+  return b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
+
+### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
+### pairs (high, low) starting at `base`, with a double-double argument.
+### :param xh: The high part of the argument.
+### :param xl: The low part of the argument.
+### :param n: The number of coefficients.
+### :param base: The table index of the first coefficient's high part.
+### :param l: A low-order term added to the leading coefficient.
+### :returns: The value as a (high, low) pair.
+secret routine b64_lgamma_polydd(xh: B64, xl: B64, n: U64, base: U64, l: B64) -> (B64, B64)
+  var i = n - 1_u64
+  var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
+  var ch = s.item0
+  var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
+  while i > 0_u64
+    i = i - 1_u64
+    var m = b64_gamma_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+    var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+    ch = a.item0
+    cl = a.item1
+  return (ch, cl)
+
+### Evaluates the double-double polynomial `c[0] + c[1]*x + ... + (c[n-1] + l)*x^(n-1)` of the table
+### pairs (high, low) starting at `base`, with a double argument (accumulating with `fastsum`).
+### :param x: The argument.
+### :param n: The number of coefficients.
+### :param base: The table index of the first coefficient's high part.
+### :param l: A low-order term added to the leading coefficient.
+### :returns: The value as a (high, low) pair.
+secret routine b64_lgamma_polydddfst(x: B64, n: U64, base: U64, l: B64) -> (B64, B64)
+  var i = n - 1_u64
+  var s = b64_gamma_fasttwosum(x: b64_lgamma_t(i: base + 2_u64 * i), y: l)
+  var ch = s.item0
+  var cl = s.item1 +! b64_lgamma_t(i: base + 2_u64 * i + 1_u64)
+  while i > 0_u64
+    i = i - 1_u64
+    var m = b64_gamma_mulddd(x: x, ch: ch, cl: cl)
+    var a = b64_gamma_fastsum(xh: b64_lgamma_t(i: base + 2_u64 * i), xl: b64_lgamma_t(i: base + 2_u64 * i + 1_u64), yh: m.item0, yl: m.item1)
+    ch = a.item0
+    cl = a.item1
+  return (ch, cl)
+
+### Evaluates the double polynomial `c[0] + c[1]*x + ... + c[n-1]*x^(n-1)` of the high parts of the
+### table pairs starting at `base`.
+### :param x: The argument.
+### :param n: The number of coefficients.
+### :param base: The table index of the first coefficient's high part.
+### :returns: The value.
+secret routine b64_lgamma_polyd(x: B64, n: U64, base: U64) -> B64
+  var i = n - 1_u64
+  var ch = b64_lgamma_t(i: base + 2_u64 * i)
+  while i > 0_u64
+    i = i - 1_u64
+    ch = b64_lgamma_t(i: base + 2_u64 * i) +! x *! ch
+  return ch
+
+### sin(pi x) / pi as a double-double, for 0 < x < 1.
+### :param x: The argument.
+### :returns: The (high, low) pair.
+secret routine b64_lgamma_sinpipid(x: B64) -> (B64, B64)
+  var ax = (x -! 0.5).abs()
+  var sx = ax *! 128.0
+  var ix = LLVM::rint[B64](value: sx)
+  var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
+  var kx = 64_u64 - ky
+  if kx < 2_u64
+    # x close to 0 or 1: sin(pi z) / pi = z (1 + z^2 P(z^2)) with z = 0.5 - |x - 0.5|
+    var z = 0.5 -! ax
+    var z2 = z *! z
+    var z2l = LLVM::fma[B64](a: z, b: z, c: -z2)
+    var fl = z2 *! (0x1.9f9cb402bc42ap-1 +! z2 *! (-0x1.86a8e46ddf78dp-3 +! z2 *! 0x1.ac644e7aa33e6p-6))
+    var f = b64_gamma_fasttwosum(x: -0x1.a51a6625307d3p+0, y: fl)
+    f = b64_gamma_muldd(xh: z2, xl: z2l, ch: f.item0, cl: f.item1 +! (-0x1.16cc8f2044a4ap-55))
+    f = b64_gamma_mulddd(x: z, ch: f.item0, cl: f.item1)
+    var s = b64_gamma_fasttwosum(x: z, y: f.item0)
+    return (s.item0, f.item1 +! s.item1)
+  var d = ix -! sx
+  var d2 = d *! d
+  var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
+  var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
+  var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
+  var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
+  var pp = d2 *! (0x1.03c1f081b5ac4p-26 +! d2 *! (-0x1.55d3c7e3bd8bfp-42 +! d2 *! 0x1.e1f4826790653p-59))
+  var qq = d2 *! (-0x1.4abbce625be53p-19 +! d2 *! (0x1.466bc67748efcp-34 +! d2 *! (-0x1.32d26e446373ap-50)))
+  var q = b64_gamma_fasttwosum(x: 0x1.921fb54442d18p-6, y: qq)
+  var c = b64_gamma_muldd(xh: q.item0, xl: q.item1 +! 0x1.1a624b88c9448p-60, ch: ch, cl: cl)
+  var th = b64_gamma_fasttwosum(x: -0x1.3bd3cc9be45dep-12, y: pp)
+  th = b64_gamma_mulddd(x: d, ch: th.item0, cl: th.item1 +! (-0x1.692b66e3cf6e8p-66))
+  var ph = b64_gamma_muldd(xh: th.item0, xl: th.item1, ch: sh, cl: sl)
+  c = b64_gamma_fastsum(xh: c.item0, xl: c.item1, yh: ph.item0, yl: ph.item1)
+  c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
+  return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
+
+### sin(pi x) / pi as an accurate double-double, for 0 < x < 1.
+### :param x: The argument.
+### :returns: The (high, low) pair.
+secret routine b64_lgamma_sinpipid_accurate(x: B64) -> (B64, B64)
+  var y = (x -! 0.5).abs() *! 128.0
+  var ix = LLVM::rint[B64](value: y)
+  var d = ix -! y
+  var ky = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](ix))
+  var kx = 64_u64 - ky
+  var sh = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx + 1_u64)
+  var sl = b64_lgamma_t(i: 1670_u64 + 2_u64 * kx)
+  var ch = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky + 1_u64)
+  var cl = b64_lgamma_t(i: 1670_u64 + 2_u64 * ky)
+  var d2h = d *! d
+  var d2l = LLVM::fma[B64](a: d, b: d, c: -d2h)
+  var p = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 5_u64, base: 1800_u64, l: 0.0)
+  var q = b64_lgamma_polydd(xh: d2h, xl: d2l, n: 6_u64, base: 1810_u64, l: 0.0)
+  p = b64_gamma_mulddd(x: d, ch: p.item0, cl: p.item1)
+  p = b64_gamma_muldd(xh: sh, xl: sl, ch: p.item0, cl: p.item1)
+  q = b64_gamma_muldd(xh: ch, xl: cl, ch: q.item0, cl: q.item1)
+  var c = b64_gamma_fastsum(xh: q.item0, xl: q.item1, yh: p.item0, yl: p.item1)
+  c = b64_gamma_mulddd(x: d, ch: c.item0, cl: c.item1)
+  return b64_gamma_fastsum(xh: sh, xl: sl, yh: c.item0, yl: c.item1)
+
+### ln(x) as a triple-double, for a positive finite x (subnormals included).
+### :param x: The argument.
+### :returns: The (high, middle, low) parts.
+secret routine b64_lgamma_logd_accurate(x: B64) -> (B64, B64, B64)
+  var t = x.to_bits()
+  var ex = LLVM::reinterpret_bits[U64, S64](t >>> 52)
+  if ex == 0
+    var k = LLVM::reinterpret_bits[U64, S64](t.leading_zeros())
+    t = t << LLVM::int_truncate[S64, U32](k - 11)
+    ex = ex - (k - 12)
+  var e = ex - 0x3FF
+  t = t & 0x000FFFFFFFFFFFFF_u64
+  var ed = LLVM::signed_to_float[S64, B64](e)
+  var i = t >>> 47
+  var d = t & 0x00007FFFFFFFFFFF_u64
+  var prod = B64_GAMMA_LOGD_B1[i] * LLVM::reinterpret_bits[U64, S64](d >>> 16)
+  var j = (t +% (B64_GAMMA_LOGD_B0[i] << 33) +% LLVM::reinterpret_bits[S64, U64](prod)) >>> 42
+  t = t | (0x3FF_u64 << 52)
+  var i1 = j >>> 5
+  var i2 = j & 0x1F_u64
+  var r = b64_tgamma_t(i: 969_u64 + i1) *! b64_tgamma_t(i: 1002_u64 + i2)
+  var tf = B64.from_bits(bits: t)
+  var o = r *! tf
+  var dx = b64_gamma_fasttwosum(x: o -! 1.0, y: LLVM::fma[B64](a: r, b: tf, c: -o))
+  var dxh = dx.item0
+  var dxl = dx.item1
+  var c = 1652_u64
+  var fl = dxh *! (b64_lgamma_t(i: c + 12_u64) +! dxh *! (b64_lgamma_t(i: c + 14_u64) +! dxh *! b64_lgamma_t(i: c + 16_u64)))
+  var f = b64_lgamma_polydd(xh: dxh, xl: dxl, n: 6_u64, base: c, l: fl)
+  f = b64_gamma_muldd(xh: dxh, xl: dxl, ch: f.item0, cl: f.item1)
+  var h1 = 1454_u64 + 3_u64 * i1
+  var h2 = 1553_u64 + 3_u64 * i2
+  var s2 = b64_lgamma_t(i: h1 + 2_u64) +! b64_lgamma_t(i: h2 + 2_u64)
+  var s1 = b64_lgamma_t(i: h1 + 1_u64) +! b64_lgamma_t(i: h2 + 1_u64)
+  var s0 = b64_lgamma_t(i: h1) +! b64_lgamma_t(i: h2)
+  var l0 = 0x1.62e42fefa38p-1 *! ed
+  var l1 = 0x1.ef35793c76p-45 *! ed
+  var l2 = 0x1.cc01f97b57a08p-87 *! ed
+  l0 = l0 +! s2
+  var a = b64_gamma_sumdd(xh: l1, xl: l2, yh: s1, yl: s0)
+  a = b64_gamma_sumdd(xh: a.item0, xl: a.item1, yh: f.item0, yl: f.item1)
+  var b = b64_gamma_fasttwosum(x: l0, y: a.item0)
+  var b2 = b64_gamma_fasttwosum(x: b.item1, y: a.item1)
+  return (b.item0, b2.item0, b2.item1)
+
+### ln(gamma(x)) for x = xh + xl > 3.75 as a triple-double, from Stirling's asymptotic series.
+### :param xh: The high part of the argument.
+### :param xl: The low part of the argument.
+### :returns: The (high, middle, low) parts.
+secret routine b64_lgamma_asym_accurate(xh: B64, xl: B64) -> (B64, B64, B64)
+  var lg = b64_lgamma_logd_accurate(x: xh)
+  var l0 = lg.item0
+  var l1 = lg.item1
+  var l2 = lg.item2
+  if xh < 0x1p120
+    var zh = 1.0 /! xh
+    var dz = xl *! zh
+    var zl = (LLVM::fma[B64](a: zh, b: -xh, c: 1.0) -! dz) *! zh
+    if xl != 0.0
+      var dl = b64_gamma_mulddd(x: xl, ch: zh, cl: LLVM::fma[B64](a: zh, b: -xh, c: 1.0) *! zh)
+      var dl2 = dl.item1 -! (dl.item0 *! dl.item0) /! 2.0
+      var s = b64_gamma_sumdd(xh: l1, xl: l2, yh: dl.item0, yl: dl2)
+      l1 = s.item0
+      l2 = s.item1
+    var wh = xh -! 0.5
+    var wl = xl
+    if (xh.to_bits() >>> 52) > 0x432_u64
+      wh = xh
+      wl = xl -! 0.5
+    l0 = l0 -! 1.0
+    var l0x = l0 *! wh
+    var l0xl = LLVM::fma[B64](a: l0, b: wh, c: -l0x)
+    var l1x = l1 *! wh
+    var l1xl = LLVM::fma[B64](a: l1, b: wh, c: -l1x)
+    var l2x = l2 *! wh
+    var s = b64_gamma_sumdd(xh: l1x, xl: l2x, yh: l0xl, yl: l1xl)
+    s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: l0 *! wl, yl: l1 *! wl)
+    var z2 = b64_gamma_muldd(xh: zh, xl: zl, ch: zh, cl: zl)
+    var c = 1862_u64
+    var n = 27_u64
+    if xh >= 48.0
+      c = 1822_u64
+      n = 7_u64
+    elseif xh >= 14.5
+      c = 1838_u64
+      n = 11_u64
+    s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: b64_lgamma_t(i: c), yl: b64_lgamma_t(i: c + 1_u64))
+    var f = b64_lgamma_polydd(xh: z2.item0, xl: z2.item1, n: n, base: c + 2_u64, l: 0.0)
+    f = b64_gamma_muldd(xh: zh, xl: zl, ch: f.item0, cl: f.item1)
+    s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: f.item0, yl: f.item1)
+    var h = b64_gamma_fasttwosum(x: l0x, y: s.item0)
+    var h2 = b64_gamma_fasttwosum(x: h.item1, y: s.item1)
+    return (h.item0, h2.item0, h2.item1)
+  var wl = xl -! 0.5
+  l0 = l0 -! 1.0
+  var l0x = l0 *! xh
+  var l0xl = LLVM::fma[B64](a: l0, b: xh, c: -l0x)
+  var l1x = l1 *! xh
+  var l1xl = LLVM::fma[B64](a: l1, b: xh, c: -l1x)
+  var l2x = l2 *! xh
+  var s = b64_gamma_sumdd(xh: l1x, xl: l2x, yh: l0xl, yl: l1xl)
+  s = b64_gamma_sumdd(xh: s.item0, xl: s.item1, yh: l0 *! wl, yl: l1 *! wl)
+  return (l0x, s.item0, s.item1)
+
+# Upper borders of the piece-wise regions of [0.5, 8.29541], as the argument's bits shifted right by 37.
+secret preset B64_LGAMMA_UBRD: Array[U64, 20] = [0x1FF0000_u64, 0x1FF146C_u64, 0x1FF2B7B_u64, 0x1FF4532_u64, 0x1FF614C_u64, 0x1FF8310_u64, 0x1FF93F7_u64, 0x1FFA880_u64, 0x1FFC05E_u64, 0x1FFDB73_u64, 0x1FFF8A5_u64, 0x2001147_u64, 0x2002703_u64, 0x20041AC_u64, 0x200622A_u64, 0x20084D9_u64, 0x2009CE7_u64, 0x200BA2C_u64, 0x200DDD7_u64, 0x20104BA_u64]
+
+# The 17 root regions of the accurate path (roots of lgamma for -10.5 < x < -2), by region index:
+# table offsets of the triple-double root x0 and of the coefficient pairs, the pair count n, the count k
+# of trailing coefficients evaluated in double precision, the scale exponent (z is scaled by 2^sc), the
+# bound on |fh| and the open interval (lo, hi) of x (B64 bit patterns).
+secret preset B64_LGAMMA_RG_X0: Array[U64, 17] = [185_u64, 240_u64, 297_u64, 340_u64, 383_u64, 434_u64, 475_u64, 516_u64, 567_u64, 618_u64, 671_u64, 722_u64, 779_u64, 836_u64, 895_u64, 954_u64, 1011_u64]
+secret preset B64_LGAMMA_RG_C: Array[U64, 17] = [188_u64, 243_u64, 300_u64, 343_u64, 386_u64, 437_u64, 478_u64, 519_u64, 570_u64, 621_u64, 674_u64, 725_u64, 782_u64, 839_u64, 898_u64, 957_u64, 1014_u64]
+secret preset B64_LGAMMA_RG_N: Array[U64, 17] = [26_u64, 27_u64, 20_u64, 20_u64, 24_u64, 19_u64, 19_u64, 24_u64, 24_u64, 25_u64, 24_u64, 27_u64, 27_u64, 28_u64, 28_u64, 27_u64, 27_u64]
+secret preset B64_LGAMMA_RG_K: Array[U64, 17] = [6_u64, 6_u64, 7_u64, 7_u64, 7_u64, 7_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64, 6_u64]
+secret preset B64_LGAMMA_RG_SC: Array[S64, 17] = [3_s64, 4_s64, 6_s64, 8_s64, 7_s64, 10_s64, 10_s64, 12_s64, 12_s64, 14_s64, 15_s64, 17_s64, 17_s64, 20_s64, 20_s64, 24_s64, 24_s64]
+
+secret preset B64_LGAMMA_RG_FH: Array[U64, 17] = [4591208713871687680_u64, 4589563844476534784_u64, 4589964066709045248_u64, 4588868953127780352_u64, 4593671619917905920_u64, 4589308757778890752_u64, 4589449495267246080_u64, 4594005871452749824_u64, 4594041055824838656_u64, 4594586413592215552_u64, 4594028961196933120_u64, 4595759592499052544_u64, 4595760692010680320_u64, 4596363224382701568_u64, 4596363224382701568_u64, 4595759592499052544_u64, 4595759592499052544_u64]
+secret preset B64_LGAMMA_RG_LO: Array[U64, 17] = [13836431653168511713_u64, 13837309855095848960_u64, 13838435755002691584_u64, 13839561654909534208_u64, 13840124604862955520_u64, 13840687554816376832_u64, 13841250504769798144_u64, 13841813454723219456_u64, 13842376404676640768_u64, 13842939354630062080_u64, 13843502304583483392_u64, 13844065254536904704_u64, 13844346729513615360_u64, 13844628204490326016_u64, 13844909679467036672_u64, 13845191154443747328_u64, 13845472629420457984_u64]
+secret preset B64_LGAMMA_RG_HI: Array[U64, 17] = [13835058055282163712_u64, 13836431653168511713_u64, 13837309855095848960_u64, 13838435755002691584_u64, 13839561654909534208_u64, 13840124604862955520_u64, 13840687554816376832_u64, 13841250504769798144_u64, 13841813454723219456_u64, 13842376404676640768_u64, 13842939354630062080_u64, 13843502304583483392_u64, 13844065254536904704_u64, 13844346729513615360_u64, 13844628204490326016_u64, 13844909679467036672_u64, 13845191154443747328_u64]
+
+# Coefficient tables (B64 bit patterns), generated from lgamma.c.
+# Table layout (name: offset, count), pairs stored in the C order:
+#   DB: offset 0, 57 entries
+#   ACC_C0: offset 57, 68 entries
+#   ACC_B: offset 125, 60 entries
+#   X0_0: offset 185, 3 entries
+#   RC_0: offset 188, 52 entries
+#   X0_1: offset 240, 3 entries
+#   RC_1: offset 243, 54 entries
+#   X0_2: offset 297, 3 entries
+#   RC_2: offset 300, 40 entries
+#   X0_3: offset 340, 3 entries
+#   RC_3: offset 343, 40 entries
+#   X0_4: offset 383, 3 entries
+#   RC_4: offset 386, 48 entries
+#   X0_5: offset 434, 3 entries
+#   RC_5: offset 437, 38 entries
+#   X0_6: offset 475, 3 entries
+#   RC_6: offset 478, 38 entries
+#   X0_7: offset 516, 3 entries
+#   RC_7: offset 519, 48 entries
+#   X0_8: offset 567, 3 entries
+#   RC_8: offset 570, 48 entries
+#   X0_9: offset 618, 3 entries
+#   RC_9: offset 621, 50 entries
+#   X0_10: offset 671, 3 entries
+#   RC_10: offset 674, 48 entries
+#   X0_11: offset 722, 3 entries
+#   RC_11: offset 725, 54 entries
+#   X0_12: offset 779, 3 entries
+#   RC_12: offset 782, 54 entries
+#   X0_13: offset 836, 3 entries
+#   RC_13: offset 839, 56 entries
+#   X0_14: offset 895, 3 entries
+#   RC_14: offset 898, 56 entries
+#   X0_15: offset 954, 3 entries
+#   RC_15: offset 957, 54 entries
+#   X0_16: offset 1011, 3 entries
+#   RC_16: offset 1014, 54 entries
+#   OFFS: offset 1068, 19 entries
+#   CL: offset 1087, 152 entries
+#   CH: offset 1239, 190 entries
+#   SMALL_C0: offset 1429, 8 entries
+#   SMALL_Q: offset 1437, 8 entries
+#   ASYM_C: offset 1445, 4 entries
+#   ASYM_Q: offset 1449, 5 entries
+#   H1: offset 1454, 99 entries
+#   H2: offset 1553, 99 entries
+#   LOGDA_C: offset 1652, 18 entries
+#   STPI: offset 1670, 130 entries
+#   SPA_C: offset 1800, 10 entries
+#   SPA_S: offset 1810, 12 entries
+#   ASA_C1: offset 1822, 16 entries
+#   ASA_C2: offset 1838, 24 entries
+#   ASA_C3: offset 1862, 56 entries
+secret preset B64_LGAMMA_T: Array[U64, 1918] = [13844547158109525755_u64, 13845476145391578911_u64, 13600870874658897920_u64, 13841823160862075727_u64, 13834345136256371711_u64, 4363988038922010624_u64, 13838720193516100597_u64, 13832380715438999102_u64, 13587360075776786432_u64, 13837892859328874455_u64, 13827511567156016138_u64, 4359484439294640128_u64, 13837595749399492790_u64, 4594104698948992231_u64, 13573849276894674944_u64, 13837123567660776943_u64, 4605512985226336443_u64, 4359484439294640128_u64, 13836831319819315757_u64, 4591352737142304120_u64, 13569345677267304448_u64, 13836627807095044545_u64, 13813409735035797070_u64, 4345973640412528640_u64, 13836546578823904534_u64, 13815549592477076186_u64, 13569345677267304448_u64, 13836525983360160086_u64, 13815897915564791661_u64, 4345973640412528640_u64, 13836486543782745335_u64, 13816361575149918038_u64, 4345973640412528640_u64, 13836470862053233145_u64, 13816474257049469790_u64, 13569345677267304448_u64, 13836397345135788764_u64, 13816486319829924523_u64, 4345973640412528640_u64, 13832621696243255240_u64, 4606252503078545774_u64, 4359484439294640128_u64, 13832357429368388111_u64, 4606979603054068933_u64, 4359484439294640128_u64, 13831986469535683117_u64, 4607871280590847488_u64, 4363988038922010624_u64, 13831974205429745601_u64, 4607903780562624490_u64, 13587360075776786432_u64, 13822400389390079151_u64, 4609301233830412267_u64, 13587360075776786432_u64, 13822225808285989904_u64, 4609398124560976035_u64, 4363988038922010624_u64, 13826746352906778137_u64, 4347886311489650578_u64, 4605583343995783123_u64, 4355411013006401759_u64, 13824261767467545303_u64, 4342809714557278612_u64, 4598545970429941832_u64, 4353678541712108710_u64, 13820011909067989321_u64, 13570163880246830066_u64, 4595276961403683590_u64, 4342780222162526575_u64, 13817730001636598702_u64, 13575591345625769430_u64, 4593689982697759639_u64, 13566886671599018920_u64, 13816058936850480564_u64, 13570938396188536855_u64, 4591877346736037775_u64, 4344261882214410249_u64, 13814590385161553621_u64, 13570759297154336852_u64, 4590670697866738626_u64, 13569574194306903906_u64, 13813580029553826274_u64, 13558545837510123638_u64, 4589811706908249430_u64, 4347404693254575460_u64, 13812840444061441943_u64, 13569260450043211191_u64, 4589168089115694218_u64, 4340390951891707814_u64, 13812010286639389360_u64, 4344828941127726543_u64, 4588167250938252706_u64, 4330165854772116509_u64, 13811117882213874745_u64, 4340892527543852955_u64, 4587366587224074683_u64, 13567933262257432514_u64, 13810395490879062258_u64, 13568352821363424811_u64, 4586711515784916074_u64, 4336568602192889736_u64, 13809798691991688317_u64, 4335071504353187508_u64, 4586165554055062795_u64, 4326647270260726123_u64, 13809298319171016601_u64, 4338018315690511642_u64, 4585704896678055151_u64, 13558156745063444499_u64, 13808858486605965136_u64, 13561190161651851565_u64, 4585292410000361652_u64, 4339901324148113665_u64, 13808620760482551236_u64, 13568266828280516509_u64, 4585106358787062697_u64, 13558164798268146714_u64, 13806776856080350081_u64, 13560961683802259906_u64, 4582930315147949739_u64, 4340453188401964500_u64, 13810827625702505088_u64, 13568181265548518997_u64, 4587466397154855984_u64, 4338626676313856932_u64, 13816739734964453777_u64, 13570267644599775348_u64, 4585419580498600074_u64, 4327066244289639820_u64, 4602091569601982195_u64, 13575771836487255764_u64, 13817516814822830700_u64, 13567473960244596059_u64, 4588622130176680410_u64, 13566418761197436096_u64, 13807374127716410691_u64, 13546936033490766611_u64, 4580051572597887644_u64, 13530677255817386717_u64, 13799496251383653783_u64, 13558036022790713452_u64, 4572375117684173371_u64, 13552208084944790817_u64, 13792253758693327470_u64, 13544000135496600290_u64, 4565690379065471681_u64, 13544619556497268487_u64, 13785879799709746745_u64, 4321876921862648741_u64, 4559076335365365568_u64, 13528907306542971046_u64, 13779308356802493997_u64, 13533240287150203480_u64, 4553152699826058066_u64, 13504544672753961940_u64, 13773123527130124286_u64, 4303082372411073557_u64, 4546651424273165836_u64, 13518080306955905431_u64, 13767309037042071348_u64, 13524288982965086233_u64, 4540672854041817294_u64, 13518552607221559133_u64, 13761001013308235958_u64, 13516850628308572380_u64, 4534993901331785000_u64, 4272966712125709222_u64, 13755125311781910861_u64, 4290131603626819745_u64, 4528786343002233962_u64, 4283940919278079749_u64, 13749559657529499646_u64, 4283176225783239510_u64, 4522960788477785728_u64, 13503944975935307218_u64, 13743468391724211155_u64, 4275454794504480026_u64, 4517307181554540520_u64, 13496428306570947687_u64, 13737499717976376196_u64, 4272864918734565833_u64, 4512925235456600855_u64, 13495899652375856168_u64, 13733225707836593736_u64, 4268182751360764343_u64, 4612715146647763052_u64, 4360996701466196176_u64, 4115246677944776298_u64, 4609504490296398687_u64, 13584956064909403788_u64, 4603645202652132701_u64, 13585342137239222776_u64, 4582013111674501208_u64, 13556354709982599182_u64, 4580567148507733595_u64, 4339272759952527952_u64, 4564173509119125348_u64, 13543597627310129054_u64, 4560126823277174973_u64, 13535860410797767169_u64, 4546394751551070458_u64, 13526016167014530684_u64, 4540911187262796641_u64, 4293104203481440829_u64, 4528696507937714010_u64, 13502005629289662717_u64, 4522325390789372853_u64, 13487928075670276962_u64, 4511079470318111689_u64, 13490120208618789506_u64, 4504067833982232654_u64, 4256049140382328377_u64, 4493550994534076873_u64, 4245243387379183453_u64, 4486015378099431594_u64, 4239648781771261267_u64, 4476120806603875777_u64, 13455431681098625245_u64, 4468110462583573245_u64, 13442380428304288964_u64, 4458682166257085328_u64, 13439017619019162859_u64, 4450325063657417593_u64, 4202658493688455058_u64, 4441077007925229640_u64, 4193317788067459133_u64, 4432646418595555120_u64, 13411361032417718745_u64, 4423541346565488976_u64, 13405029454883272308_u64, 4415072787126165912_u64, 4170908394040392867_u64, 4406127031839031295_u64, 4141265667460619217_u64, 4397698119765087184_u64, 13367577999953406995_u64, 4388215860215592810_u64, 4140006710554432867_u64, 4376178782458710150_u64, 4131937099582945844_u64, 4613369650071984385_u64, 13590203041015820165_u64, 13344518316996918624_u64, 13834672322809999756_u64, 13587958291968406219_u64, 4603565572014627410_u64, 13583355864866741123_u64, 13813692735150656498_u64, 4345716433668881938_u64, 4579967628252672411_u64, 13555461869643002376_u64, 13792371184259595948_u64, 4324780650037239796_u64, 4558829468621670835_u64, 13533958231086823342_u64, 13772326766869135379_u64, 4297680850342052652_u64, 4538988946213052868_u64, 4288390009154717221_u64, 13752354049147529607_u64, 4272345316681819892_u64, 4519177607868997767_u64, 13484394113322298232_u64, 13732890087814685064_u64, 13484196298301862799_u64, 4499967869367318548_u64, 13463037741422324674_u64, 13713873625223632933_u64, 13461327903647997319_u64, 4481101297035292131_u64, 13462007250426951202_u64, 13694805150482424033_u64, 13452097095770918464_u64, 4461831015115665936_u64, 13436660399266804808_u64, 13675671563096885922_u64, 13425705032868400704_u64, 4442826874483384601_u64, 13422793289731331548_u64, 13656775804851994503_u64, 4191024138589486750_u64, 4424022792023737456_u64, 13402972622467774388_u64, 13638049824406607918_u64, 4166591243976641654_u64, 4405362706103644576_u64, 13356303487413422573_u64, 13619447700633169397_u64, 4140234897387884492_u64, 4386846311188405489_u64, 13356508874495810967_u64, 13601065787887827371_u64, 13360863652575296524_u64, 4367860005835126474_u64, 4117036194175163019_u64, 13578459207754936168_u64, 4115471877700987664_u64, 4614261133658708399_u64, 4372838544133433267_u64, 4129012107525750115_u64, 4620447641639038037_u64, 13592376429616610997_u64, 4600942495284678895_u64, 4357800024348339848_u64, 4583557448984255579_u64, 4336241391306085078_u64, 4567326360274955022_u64, 13549824982681980421_u64, 4551338649364085213_u64, 4302233889583137095_u64, 4535850244596644827_u64, 4282612763666723201_u64, 4520410587329928773_u64, 13480842001400674197_u64, 4505040688561214281_u64, 4255612842173069390_u64, 4490185544112058896_u64, 13471230373907752053_u64, 4474779805465945337_u64, 4231083169986013712_u64, 4459765538027272257_u64, 4208827724087505631_u64, 4445102456692660405_u64, 13425465140857842914_u64, 4429852966971350306_u64, 13406477497114049960_u64, 4414940046474481578_u64, 13395469768641194775_u64, 4400320295050747065_u64, 13384551881266655301_u64, 4385345628024780067_u64, 4130074481187568275_u64, 4370416574278325506_u64, 13337944393277172480_u64, 4355766375360176414_u64, 4109060888404035635_u64, 4341349527037355748_u64, 13288697304539209682_u64, 4326030900293243472_u64, 13303942727560025910_u64, 4616088949733732325_u64, 4356965756138230327_u64, 13333442136909813530_u64, 13849898840555804231_u64, 4384759610025377795_u64, 4607031642597635774_u64, 13584456925410438475_u64, 13811736544417623864_u64, 4337261122003907560_u64, 4570748463005047461_u64, 4315772251330137469_u64, 13776817987370428115_u64, 13527176090288241733_u64, 4536225382946292212_u64, 4295935180852279798_u64, 13742694397138435486_u64, 13498018580427928690_u64, 4502807390025666599_u64, 13481174521093842588_u64, 13709558010927925554_u64, 4240764283392683706_u64, 4469489662315162532_u64, 13447152688054026800_u64, 13676587379940804909_u64, 4199123422634062294_u64, 4436772280186976444_u64, 4196734412457983869_u64, 13643649256365683455_u64, 13384281548931227800_u64, 4404275359337928544_u64, 4151586548960063214_u64, 13611091015727529117_u64, 4130921431368552340_u64, 4371480412376402918_u64, 4126130212475209152_u64, 13578777800911943119_u64, 13338871353748684965_u64, 4338974932641045952_u64, 13317406351548668060_u64, 13546600287913846334_u64, 4076900870315119242_u64, 4306527115696870919_u64, 4061932043143719738_u64, 4616233935546455425_u64, 13595937099326176510_u64, 4121545827000172178_u64, 4628234067665622594_u64, 4380391252942192125_u64, 4612886778767032206_u64, 4358074600830564084_u64, 4599681211628690556_u64, 4350894551319718936_u64, 4587317649093618651_u64, 13554760851595896361_u64, 4575699134743522880_u64, 4333466759372281730_u64, 4563657416710417213_u64, 13546314227606950876_u64, 4552317880733328439_u64, 13532525273388301241_u64, 4540811348082350702_u64, 13517170812304739205_u64, 4529640021725580495_u64, 4280306941545102202_u64, 4518341597526332437_u64, 4272133667280516855_u64, 4507374077191319759_u64, 13472007601777220754_u64, 4496113232489337286_u64, 13477552449362716294_u64, 4485407946387944713_u64, 4239643246495571736_u64, 4474080314296451000_u64, 13451762898706138139_u64, 4463387083202859867_u64, 4205962124445148466_u64, 4452232987801557068_u64, 4210216315634841316_u64, 4441410752637330876_u64, 13405991104798282566_u64, 4430580508465841692_u64, 4181463235296460827_u64, 4419579217837245775_u64, 13399926933354208714_u64, 4409083394981346899_u64, 4167048904935948883_u64, 4397897350042259949_u64, 13360258238198916928_u64, 4387271810787739858_u64, 4142311833553702467_u64, 4376989402864911979_u64, 4126679702683420022_u64, 4365102565989954942_u64, 4124672488984051246_u64, 4617305998073195261_u64, 13593515548473234127_u64, 4112920465876751522_u64, 13861272930395743263_u64, 13617124023750343862_u64, 4619377361698830678_u64, 13592846254982180412_u64, 13826283918114315572_u64, 4363540260430133694_u64, 4586725622539888422_u64, 13551735004684167732_u64, 13794874603626812407_u64, 13553604929007808033_u64, 4556108301200624805_u64, 4309991368620582717_u64, 13764415031252259849_u64, 13508824613826849585_u64, 4526398711620337635_u64, 4272428171636739268_u64, 13734831054365696560_u64, 4267182168131691424_u64, 4496624486412497861_u64, 4253299537656574403_u64, 13705439841952865486_u64, 13460973658869275948_u64, 4467716920506952007_u64, 13448307745476936918_u64, 13676356268651805236_u64, 4209629937994816768_u64, 4438346958009693856_u64, 13414350240199101945_u64, 13647271625701000389_u64, 13403857892729399244_u64, 4409603087064417833_u64, 13380688887588444893_u64, 13618723335381162946_u64, 4134074915146761982_u64, 4380847287445102244_u64, 4123983028419471573_u64, 13589476707121474924_u64, 13341512980337373160_u64, 4617324770796549849_u64, 4362108298018466250_u64, 4119625485351674282_u64, 4638381258943606274_u64, 13609838596078869587_u64, 4619827640822542235_u64, 4371709687752263420_u64, 4603333957751108196_u64, 13584489419489779461_u64, 4587516957331975779_u64, 13569321284834477664_u64, 4572244438037177969_u64, 13555568871813356664_u64, 4557499394007282054_u64, 13537045009358264571_u64, 4542347310695688492_u64, 13515592667483765048_u64, 4527621746882841411_u64, 4286740702512548545_u64, 4513179818654843186_u64, 13495476885479724207_u64, 4498775626735152863_u64, 4252961460340901305_u64, 4484085299821714049_u64, 13465101618429956080_u64, 4469609199770074465_u64, 4225768585921321541_u64, 4455297085985009198_u64, 4195537195695992673_u64, 4441113111527154172_u64, 13413304349610102612_u64, 4427023559629362736_u64, 4158812138940804141_u64, 4412533570620118033_u64, 4164740918118860188_u64, 4398183347976180282_u64, 13371563032742072537_u64, 4384051483874256187_u64, 13364721687916970504_u64, 4369677820414991042_u64, 4126228658502451283_u64, 4618439850030396429_u64, 4375208893684170034_u64, 13344736462811832646_u64, 13872883414106529298_u64, 13628108216016290013_u64, 4634056530467287663_u64, 13599422268503353071_u64, 13843342327933935614_u64, 13592638311551406697_u64, 4606889755582135447_u64, 4348362697731164666_u64, 13817429201770992286_u64, 4311260340409304345_u64, 4581371748040975255_u64, 4332212875744155328_u64, 13792388544126171965_u64, 13542772694343003847_u64, 4557067005718546211_u64, 13529074062895621608_u64, 13768256334391995928_u64, 13528783653249801579_u64, 4532752244797646919_u64, 13493762514730614998_u64, 13744438504702049483_u64, 4276801258824958644_u64, 4509037912964663527_u64, 4256613426225337694_u64, 13720501771040050947_u64, 13459677773462297652_u64, 4485666662298930538_u64, 4236240226643787299_u64, 13696945031421416085_u64, 13454656186065928784_u64, 4461952406296506689_u64, 13433172476784497324_u64, 13673634142387868015_u64, 13432714696809087105_u64, 4438442644114062068_u64, 13416479236679696809_u64, 13650491729634876330_u64, 13408989236204225698_u64, 4415129560706817915_u64, 4149871438164187254_u64, 13627020614645136321_u64, 4157301022782908244_u64, 4392038527231415423_u64, 13373591433195446079_u64, 13604320905183675081_u64, 4138330705918281867_u64, 4368354037347566378_u64, 13314430936020411173_u64, 4618442977571339405_u64, 13588061629855349362_u64, 4113807476805750019_u64, 4649577270539383466_u64, 4398139654190414588_u64, 4634149192519712016_u64, 4388800092732190860_u64, 4620100596547157056_u64, 4371300290970133543_u64, 4607072997299555003_u64, 4362695659448726721_u64, 4594186006794879338_u64, 4347486709196862263_u64, 4581552932406288480_u64, 4339747998455546160_u64, 4569271299025504926_u64, 13550453282132556758_u64, 4557425309175094649_u64, 13517961415656525133_u64, 4545136232017867690_u64, 4298958919458409088_u64, 4533106531782660574_u64, 4288585809803290202_u64, 4521564690839513897_u64, 13497639958886254585_u64, 4509388231661411654_u64, 13466828513281011001_u64, 4497622378916348040_u64, 13462499894493087925_u64, 4486013060280225091_u64, 13463108176479405396_u64, 4474060127889992794_u64, 13455451656173422861_u64, 4462637454636058114_u64, 4204989966925421030_u64, 4450743792991275710_u64, 4209554512625508654_u64, 4439120046735149249_u64, 4194949872233084367_u64, 4427596034331377905_u64, 4181316502484597946_u64, 4415799012419418217_u64, 4163787167341799172_u64, 4404553913497278307_u64, 4164858264696164579_u64, 4392709527278851288_u64, 4133973538205228658_u64, 4381963842925148761_u64, 4130479166676094998_u64, 4369016057875922995_u64, 4124131627671902272_u64, 4619567094293038832_u64, 13576193103148595206_u64, 4107557744516652353_u64, 13885631156240427291_u64, 13643696283657765582_u64, 4650024451915661869_u64, 13631392419597540249_u64, 13863162799469462568_u64, 4392247712534217756_u64, 4630350491970122553_u64, 4388078796172421718_u64, 13844632773783663762_u64, 13600475057540018286_u64, 4612380216231179932_u64, 4370897183511800401_u64, 13827027115167857683_u64, 13583509915105596379_u64, 4595065605490189773_u64, 4339549377649290359_u64, 13809980761050763146_u64, 4341669942158425201_u64, 4578291314061485988_u64, 13533584785241713313_u64, 13793499544463931364_u64, 4323966102003505403_u64, 4562137724594114165_u64, 4306080698888157037_u64, 13777115942777570740_u64, 13537290348771605978_u64, 4545462700917944841_u64, 4294823709334392984_u64, 13760690883387225644_u64, 13519542253407456082_u64, 4529337072879446200_u64, 4286725750212283627_u64, 13744919249923691820_u64, 4269578144584925725_u64, 4513295997429512787_u64, 4268606490539555319_u64, 13728519097101794888_u64, 13474833242675695958_u64, 4497159857166199656_u64, 13473531252207342818_u64, 13712726512641008990_u64, 13462521492101627845_u64, 4481417647211278560_u64, 13452929985517181175_u64, 13696783568880631081_u64, 13444873072725773137_u64, 4466021248750882590_u64, 13444167066989096789_u64, 13679877264489726299_u64, 4211974156320787195_u64, 4619567541078851103_u64, 13596943109118379640_u64, 13357488711958096339_u64, 4662267984272194513_u64, 4417364816373723611_u64, 4645531760253188822_u64, 13627671829443886377_u64, 4630796985268683302_u64, 13610013405394050292_u64, 4616856208326692955_u64, 4365705901375244229_u64, 4603266659904865262_u64, 4354787482529684381_u64, 4589887223048917779_u64, 4342353270560784645_u64, 4576664248367906945_u64, 13552561605117683386_u64, 4563578266945171050_u64, 13540074754841488265_u64, 4550626511315409887_u64, 13522954268837443950_u64, 4537816237757984264_u64, 13518826062397866423_u64, 4525162042249863926_u64, 4282906676504310719_u64, 4512645870719120957_u64, 13495492897540429394_u64, 4499754104222496433_u64, 4249184446154648370_u64, 4486981605239846022_u64, 13465132190982440691_u64, 4474349292932842543_u64, 4230363183872394430_u64, 4461882549765188740_u64, 13440497119279761001_u64, 4449584223664714346_u64, 13427962549740549884_u64, 4436810176715258819_u64, 13411024838958306850_u64, 4424175101990691952_u64, 13402819991603280925_u64, 4411700899182380367_u64, 4144662142855884292_u64, 4399406386041943989_u64, 4147833098332454985_u64, 4387014315376769634_u64, 4145037926890823466_u64, 4374817044746745353_u64, 13351009971848166047_u64, 4361171266247572650_u64, 4119258071138701976_u64, 4620693189756541391_u64, 4363518496280745350_u64, 4117761605682305598_u64, 13899145800602890155_u64, 13652605726872934880_u64, 4663539980753891619_u64, 4418755681068264735_u64, 13876679418122167590_u64, 4410507732873815779_u64, 4643868450275658865_u64, 13616193686514264691_u64, 13858152380116767338_u64, 4382519086968480705_u64, 4625901849951399680_u64, 4377537926265259869_u64, 13840551242959561286_u64, 4372124627407423697_u64, 4608592801463879635_u64, 4350271912411859162_u64, 13823511731471519280_u64, 13580258911272881480_u64, 4591826927769655561_u64, 13570036585785938579_u64, 13807040870298362928_u64, 4329603329274226942_u64, 4575671649419149240_u64, 4335512891704948887_u64, 13790649840910667356_u64, 13542834820445310682_u64, 4559001916269325377_u64, 13532752668287304574_u64, 13774236639876687519_u64, 13522428868931053917_u64, 4542890876273170160_u64, 4296620553808314454_u64, 13758482958593731264_u64, 13512832026038393665_u64, 4526839344020504225_u64, 13508728667027819447_u64, 13742069700001504617_u64, 13489256228303965486_u64, 4510719147955148398_u64, 4253233947300010183_u64, 13726308760296074121_u64, 13481878372646282259_u64, 4494988910219916457_u64, 13469063309420996501_u64, 13710195712662896974_u64, 4244958159333673524_u64, 4478817314211171985_u64, 4227147056927800976_u64, 13694870933929866735_u64, 13450781889700405522_u64, 4464024177748250064_u64, 13429195286794747483_u64, 13677456216027611674_u64, 13429247800240138176_u64, 4620693231643440121_u64, 4377323788844145901_u64, 13357292104348774858_u64, 4675774940578215704_u64, 13656327360241375379_u64, 4663541428806553308_u64, 4422344497002765104_u64, 4653309163050937764_u64, 4410438381866895075_u64, 4643870642704630353_u64, 4388974348381497886_u64, 4634783040977328711_u64, 13617047875926769055_u64, 4625905169405823035_u64, 13584270520420103959_u64, 4617183290589729912_u64, 13596914831620447051_u64, 4608597827294979952_u64, 4362561664000780837_u64, 4600145878744881114_u64, 4342587098780386928_u64, 4591834537146113972_u64, 13569893503627962503_u64, 4583678196543583023_u64, 13551860755018972640_u64, 4575677409920163673_u64, 13558763088958672191_u64, 4567284892172430626_u64, 13543093911171644997_u64, 4559010637975299673_u64, 4311692835936737933_u64, 4550875334808645598_u64, 13532830594845406848_u64, 4542904081401616157_u64, 4299094283922433190_u64, 4535125997500637455_u64, 4293774205523426244_u64, 4526849340653484660_u64, 13497553041284668170_u64, 4518709963610456132_u64, 4276165417706974806_u64, 4510734283386212416_u64, 4268331496134949796_u64, 4502955351251668168_u64, 13472265689913317822_u64, 4495000371030014159_u64, 4252538344885335103_u64, 4486837709616329772_u64, 13458222219534426251_u64, 4478834497064450581_u64, 13453990883912438174_u64, 4471521359211350528_u64, 13449688787533465422_u64, 4464039403522001763_u64, 4212209005126502847_u64, 4454097274701426989_u64, 4205004844290184543_u64, 4621256166084201424_u64, 4372987595771799845_u64, 13349526979002993668_u64, 13913349802879605551_u64, 4444393109112393625_u64, 4678862611113577082_u64, 4432462207727882913_u64, 13892561623899198913_u64, 13648699909603856599_u64, 4660486624014745347_u64, 13639159193599829640_u64, 13875665021616410092_u64, 13631003786939331211_u64, 4643988796802817565_u64, 4401477746388078112_u64, 13859338659480849764_u64, 13611522823977393157_u64, 4628283066330856070_u64, 13602598105268232839_u64, 13844231161723604916_u64, 4381866769351129337_u64, 4612999885941193740_u64, 4371793163583984289_u64, 13828868109118846335_u64, 13578791909640550581_u64, 4598316382600405861_u64, 4346101874093218207_u64, 13813971472764965012_u64, 13568163306823670872_u64, 4583286044986565588_u64, 13551205365588476693_u64, 13799453818283997580_u64, 4329580671277276158_u64, 4568541951324891532_u64, 13541299678447354586_u64, 13784843618676750568_u64, 4316442967995009957_u64, 4554082341895052094_u64, 4300450243239589387_u64, 13770143346719208721_u64, 13525334183309507317_u64, 4539821410077778830_u64, 13520884185383966170_u64, 13755681596730347658_u64, 4278635249818851974_u64, 4525295221047784531_u64, 4281063824160432826_u64, 13741395789595567438_u64, 4277977552567737166_u64, 4510733186726011563_u64, 4260516751647028076_u64, 13727197461883429442_u64, 13485733233997609377_u64, 4496904508153193942_u64, 13476891809862037651_u64, 13713912691149721334_u64, 13469217381765787136_u64, 4480713916391681333_u64, 4232988113079166292_u64, 4621256169186879739_u64, 4367184736103919828_u64, 4124711746459846122_u64, 4689977920764089408_u64, 4438251150863295517_u64, 4678862825315628422_u64, 13655835125053707429_u64, 4669189883559469754_u64, 13643675788915887285_u64, 4660487034473806501_u64, 13638488375775133834_u64, 4652293268856223732_u64, 4412810943629693954_u64, 4643989190068521228_u64, 4402054928823687968_u64, 4635967167014877629_u64, 13615651320367608431_u64, 4628283819915943219_u64, 4382186761208817477_u64, 4620859646454210502_u64, 4380828674406824438_u64, 4613000607960020088_u64, 4364490695950796312_u64, 4605497071738373685_u64, 4362055620238868146_u64, 4598317074375222689_u64, 4355206500792671750_u64, 4590600393518395219_u64, 13569604904409138970_u64, 4583287370581909549_u64, 4339412853551238369_u64, 4576082698925022817_u64, 13559750636302366907_u64, 4568543221393539280_u64, 4325657619263399377_u64, 4561473339949228122_u64, 4317542280279349313_u64, 4554083558763121934_u64, 13534733081334078135_u64, 4546772994347080450_u64, 4305220781481647930_u64, 4539822575963320835_u64, 4299227569891997300_u64, 4532311173792487219_u64, 4288270862149237757_u64, 4525297455793979989_u64, 13494737529804585079_u64, 4518025299548505969_u64, 13491429655600970275_u64, 4510735315138218221_u64, 4265353403492543872_u64, 4503826890565210075_u64, 13487748669859485215_u64, 4496906684199851111_u64, 13472879670811753042_u64, 4490542316530748099_u64, 4244445510965881744_u64, 4480717036141399830_u64, 13458554848434683983_u64, 4621819117433837504_u64, 13601319263486094717_u64, 13359654706690466200_u64, 13928419226763360605_u64, 13682334212220027751_u64, 4690485716719739090_u64, 13669179993337979038_u64, 13901382297204730467_u64, 13658600478775199312_u64, 4666272240753826828_u64, 4422882044908424975_u64, 13878072778396684368_u64, 13625927569167844229_u64, 4643744310437421772_u64, 13615425587084323924_u64, 13856039044035709184_u64, 13601186349779494932_u64, 4621844747370071680_u64, 4381038841318675460_u64, 13834748925264999111_u64, 4360524093111942633_u64, 4600444419379804681_u64, 4351981452260299515_u64, 13813363404547960494_u64, 13555156800265653360_u64, 4579602959319282885_u64, 13560071430922491333_u64, 13792266278002565135_u64, 4327293884746269405_u64, 4558560250190356918_u64, 13535415091438992634_u64, 13771755361093985096_u64, 4276884423571803892_u64, 4537722319893662223_u64, 13519564993475962330_u64, 13750768344589850145_u64, 4276049713118643146_u64, 4517331572002917938_u64, 4275703102631213791_u64, 13730213180629467327_u64, 4261619368808125474_u64, 4496454687983382599_u64, 13478152334395435570_u64, 13709699943550788075_u64, 13469302617899686512_u64, 4476236064274844211_u64, 4209047771942398991_u64, 13689075688932722620_u64, 13442124119286266369_u64, 4455452100560227382_u64, 13438180364860750884_u64, 13669105109185303576_u64, 4196909578344764332_u64, 4436263352999166562_u64, 4192113776393383703_u64, 13646909012347929555_u64, 13402927922104669291_u64, 4621819117744105335_u64, 4375572168584847700_u64, 4129932851799319634_u64, 4705047210109985714_u64, 13673494871552384223_u64, 4690485734197452590_u64, 4445807956405243064_u64, 4678010290592458184_u64, 13655571993386919964_u64, 4666272266918834608_u64, 13648837192860867563_u64, 4654700786816442895_u64, 4397114480116877011_u64, 4643744349607741852_u64, 4402116393626539316_u64, 4632667074959166670_u64, 13612869385196561313_u64, 4621844806009992148_u64, 13601098674191531699_u64, 4611376989877614981_u64, 13589562497400357495_u64, 4600444507166686824_u64, 4356540662978062877_u64, 4589991443644054704_u64, 4348246037935922164_u64, 4579603090740618640_u64, 4331108089470910398_u64, 4568894354850025309_u64, 4324018968024933531_u64, 4558560348562500174_u64, 4317091561953843457_u64, 4548383494457120682_u64, 13517979477448517922_u64, 4537722467161660903_u64, 4292374162479592365_u64, 4527396435147426327_u64, 13508327252571016684_u64, 4517331682236692915_u64, 4272528225359181514_u64, 4506841334516753650_u64, 4236611635634230554_u64, 4496454853007969977_u64, 4247568817368720057_u64, 4486328049489426109_u64, 13465751099627867180_u64, 4476236311391708659_u64, 13453779556760482856_u64, 4465703865153503278_u64, 4215351942195970585_u64, 4455452283899919653_u64, 4206975792354640771_u64, 4445733238916764962_u64, 13420823725857305664_u64, 4436263511867034456_u64, 4171537471720053537_u64, 4423537174471612840_u64, 13404552233638922192_u64, 4603038142579081216_u64, 4603803110614237184_u64, 4604661146295730176_u64, 4605607900969172992_u64, 4606750153963995136_u64, 4607587603867238400_u64, 4608246241397047296_u64, 4609027339181883392_u64, 4609923587187408896_u64, 4610913639426162688_u64, 4611925326488928256_u64, 4612676369166368768_u64, 4613527726173716480_u64, 4614568306555224064_u64, 4615835407806889984_u64, 4616783423053234176_u64, 4617721471827968000_u64, 4618863898768965632_u64, 4620258689398341632_u64, 13839995782631036905_u64, 4619278014607350865_u64, 13845580466236234660_u64, 4625568389520769631_u64, 13852089920545667021_u64, 4631885228302814069_u64, 13858789078843297400_u64, 4639045736577542557_u64, 13835328047509197365_u64, 4613511480115012854_u64, 13839218115466069411_u64, 4617747446858900852_u64, 13843677945214018061_u64, 4622397293532285790_u64, 13848646222493554086_u64, 4627389470474501168_u64, 13830771082352297650_u64, 4608094163631717201_u64, 13832474899907544532_u64, 4610474113942522627_u64, 13835362761910335302_u64, 4613191125392255296_u64, 13838241802975733663_u64, 4616550937121308473_u64, 13826357682813371834_u64, 4602973933627807191_u64, 13826505932233626441_u64, 4603421319544333426_u64, 13827192353427189432_u64, 4604330019791410997_u64, 13828408927338379178_u64, 4605720558908677759_u64, 13820389599387047429_u64, 4596173258831252727_u64, 13818950411753835507_u64, 4595139579140679638_u64, 13818177584460477233_u64, 4594547296408367795_u64, 13817800544782048671_u64, 4594262345953508348_u64, 13817440461621147525_u64, 4591988153624328176_u64, 13813732348852819839_u64, 4589211827146391421_u64, 13810928927947318102_u64, 4586257803028166133_u64, 13808666716918768566_u64, 4584495809216637167_u64, 13813343821930691450_u64, 4587109519895335458_u64, 13808279210382960216_u64, 4582323601786750363_u64, 13803802329039275345_u64, 4578087110897515780_u64, 13799678213226015523_u64, 4574351148308440963_u64, 13809157635811270253_u64, 4582065188913181376_u64, 13802164370352822052_u64, 4575843048500461989_u64, 13795899124419715706_u64, 4569624081956952551_u64, 13790389759427426441_u64, 4563991858692749155_u64, 13805000011763113736_u64, 4577061384601852972_u64, 13796156361368390331_u64, 4568719881204741384_u64, 13788214565854080677_u64, 4561152603428490796_u64, 13781079399808671218_u64, 4553821565642368793_u64, 13801021965178428021_u64, 4572251435186513456_u64, 13790601122307441160_u64, 4562411929447647475_u64, 13781091571598106881_u64, 4553082685130822721_u64, 13771951349578664020_u64, 4543923098369551184_u64, 4567305279485788553_u64, 13784583830675708443_u64, 4555178395351046536_u64, 13772939452239949053_u64, 4544225491368788082_u64, 13761876063215490139_u64, 4533066112948262796_u64, 13751100943952874347_u64, 13792265114175238238_u64, 4561655406805203891_u64, 13777696647099260431_u64, 4547522844179111254_u64, 13764122015214949048_u64, 4534290984863570646_u64, 13751094965925340240_u64, 4521750448163821722_u64, 13787978673400755840_u64, 4556153603388487350_u64, 13771611838524139382_u64, 4540257464045360580_u64, 13755783131244440656_u64, 4524988964039793417_u64, 13741065729678494081_u64, 4510243847183420904_u64, 13783507530221885340_u64, 4550538073112168681_u64, 13764733852914957462_u64, 4532448848234543260_u64, 13747103413585202418_u64, 4515181625374164497_u64, 13730292948334088380_u64, 4498820958263928356_u64, 13778896339720258188_u64, 4544942995497865169_u64, 13758225285477810684_u64, 4524608016041852132_u64, 13738113899247612639_u64, 4505112715700356520_u64, 13719111782785473193_u64, 4486433881417402743_u64, 13774179921206412853_u64, 4539254122856702066_u64, 13750941194291968834_u64, 4516694906385559654_u64, 13728869676380213354_u64, 4494976490080641098_u64, 13707699563835962095_u64, 4473762696234159641_u64, 13769388570100241953_u64, 4533011049181176899_u64, 13743924387891543420_u64, 4508393368552039577_u64, 13719441433592433640_u64, 4484230728155901439_u64, 13696035101743531480_u64, 4460887899348370663_u64, 13764545062478061543_u64, 4527040969225981462_u64, 13736681150211348753_u64, 4499824732781196406_u64, 13709895137195562886_u64, 4473379395155046169_u64, 13683889934278515472_u64, 4447781019018740826_u64, 13759662157241884244_u64, 4521038783516254883_u64, 13729176522677807082_u64, 4491180857281504130_u64, 13700278800774499348_u64, 4462631904610270599_u64, 13671849504291930427_u64, 4434422456562673335_u64, 4602639063972512437_u64, 13581159682370025203_u64, 13834063129741893438_u64, 4366478119979823517_u64, 4612061551707296845_u64, 4369894751230510364_u64, 13835615041930218323_u64, 13596131699091715896_u64, 4613928225958494703_u64, 13595058641892816197_u64, 4600176420483840286_u64, 4337720013386108761_u64, 13832596010657731795_u64, 13584711960733815136_u64, 4610341170459278360_u64, 13585875922203220226_u64, 13832713026967552135_u64, 4360727502080280635_u64, 4610262933546609517_u64, 4360286589501176051_u64, 4597704289991002082_u64, 4353147621299007925_u64, 13831294722958211374_u64, 13590666929247452069_u64, 4608780855024312862_u64, 4367719451348376923_u64, 13830469079800050233_u64, 4362327463981120715_u64, 4606870373699862483_u64, 4361877834689242759_u64, 4593796496405529148_u64, 13575956636299269633_u64, 13829729784852495997_u64, 4353176718765152469_u64, 4607616004741346781_u64, 13572130699249050180_u64, 13827650237039536648_u64, 4360744061826934667_u64, 4603289342341070930_u64, 13578953051264652323_u64, 4603738431482851213_u64, 13578442699577967802_u64, 13829319493389062551_u64, 13586508566092559319_u64, 4601646727576219445_u64, 4354415839288588826_u64, 13822711706635340563_u64, 13576359583652263055_u64, 4598239684472870977_u64, 4353307472706251116_u64, 13810097218201541197_u64, 4344348854199971020_u64, 13824938044501910437_u64, 13577353956583699417_u64, 4604715350653400066_u64, 13579492305568418846_u64, 13822770801345116477_u64, 13581870302483404527_u64, 4596183098560157380_u64, 4353105507524405936_u64, 13814883536149377439_u64, 13573220471190221167_u64, 13821334138750033789_u64, 4352401157259876004_u64, 4603651140187613557_u64, 4338494113662995384_u64, 13820748010954048519_u64, 13571949063699503037_u64, 4593373622552536923_u64, 13571298631551335226_u64, 13816694748035253306_u64, 13554388357256233409_u64, 13810959250005119820_u64, 4341711982475052459_u64, 4602750386084717475_u64, 4351910731316957747_u64, 13818375388451824648_u64, 4349563279425130148_u64, 4589991532939288463_u64, 4347035203694341770_u64, 13816068563389035765_u64, 4329471305074868924_u64, 4593976301691000041_u64, 4352299163679173222_u64, 4601349169096319148_u64, 13581093820023164225_u64, 13816371674789628061_u64, 13566702782440130963_u64, 4586699649388495740_u64, 13566200563427635358_u64, 13812551954359756516_u64, 13572933920454148912_u64, 4599180122469406769_u64, 4357509255692975605_u64, 4600177818618789660_u64, 4345161930964088838_u64, 13814087549960915137_u64, 4333838613965762424_u64, 4583853204146387485_u64, 4340424648544944062_u64, 4601891902441922590_u64, 4356516807279203860_u64, 4599234737159100259_u64, 13579270847778160122_u64, 13812361154412859350_u64, 13560466316442908161_u64, 4580770768597415464_u64, 4324241897348493914_u64, 13796976609209954120_u64, 4331269715482130013_u64, 4597932127372238931_u64, 4352900579877086935_u64, 4604238891656025632_u64, 13579923937027876883_u64, 4598220198576151037_u64, 4349335856052298708_u64, 13809544202732934938_u64, 13565633543817073799_u64, 4577011684613007881_u64, 4329249704470563568_u64, 4602965268110825800_u64, 4355876342587046616_u64, 4605814926611062790_u64, 4361424588887678911_u64, 4596826312588665218_u64, 4339933769532688696_u64, 13807592646560282894_u64, 13561212104197586734_u64, 4573740848642448052_u64, 13549822398658867312_u64, 4606880370107960331_u64, 4362802854509902254_u64, 4607307281646183835_u64, 4361684837242997783_u64, 4595581051144736344_u64, 4341802085408760470_u64, 13805057436260338746_u64, 13556424307196499414_u64, 4570567173735708377_u64, 4327481479379640680_u64, 4609874380013828663_u64, 13582001303661662070_u64, 4608130209077422288_u64, 13564346965817627883_u64, 4594518184616697951_u64, 13577049694435301052_u64, 13802940980750526389_u64, 4333431748752799615_u64, 4567076898641473782_u64, 13544425866155987968_u64, 4612793659545152891_u64, 4367431854032561941_u64, 4608964331820271398_u64, 4364888672775834043_u64, 4593565315584136609_u64, 13573536821164589318_u64, 13800360799937413005_u64, 13557607480134701237_u64, 4563353521026215001_u64, 13545994421782127216_u64, 4615593157711071961_u64, 4363222225217076220_u64, 4609807586963966753_u64, 4366649117993930994_u64, 4592051128924342381_u64, 13565263655085298488_u64, 13798071495048133858_u64, 4323637131665686573_u64, 4559695955262738603_u64, 4318935199235996368_u64, 4617811115204986621_u64, 4377483999875385676_u64, 4610658962160257479_u64, 4360216636866140458_u64, 4590782075360519950_u64, 13564003003269408919_u64, 13795549098644666126_u64, 4315926054328156199_u64, 4556108374520630525_u64, 13536483678689641967_u64, 4620420003172592401_u64, 13598399895862328056_u64, 4611518906831454419_u64, 4358232562060810196_u64, 4589720586875109626_u64, 13557532761516052103_u64, 13793074894798984530_u64, 4319288899253332125_u64, 4552588249017771049_u64, 13531513541929133226_u64, 13826746352906778137_u64, 4347886353899832635_u64, 4605583343995783123_u64, 4355410894831261161_u64, 13824261767467545303_u64, 13548883684344790630_u64, 4598545970429941832_u64, 4357274093953570594_u64, 13820011909067988285_u64, 4595276961403681215_u64, 13817730001641127100_u64, 4593689982705270209_u64, 13816058918969404514_u64, 4591877323362685718_u64, 13814606652198259908_u64, 4590688323228991496_u64, 4601218545606032746_u64, 13569866266712031802_u64, 4590669220166325441_u64, 13564864321061650877_u64, 13791923578848402952_u64, 4560459356280336637_u64, 13782000755405874222_u64, 4560846237885750118_u64, 13788473768026688764_u64, 0_u64, 0_u64, 0_u64, 4181316432719076860_u64, 4417319920158258852_u64, 4581899181856325632_u64, 4163273215442139808_u64, 4415227948738287410_u64, 4586405257829580800_u64, 4182288795946624085_u64, 4416623134128278764_u64, 4589346584113856512_u64, 4180413692857597361_u64, 4412654205962986272_u64, 4590907468019613696_u64, 4171049034037018955_u64, 4417156962718063792_u64, 4592468597168832512_u64, 4177448227432656547_u64, 4417649333038789874_u64, 4593850425474785280_u64, 4179465493369301980_u64, 4409799867216077064_u64, 4594630739762700288_u64, 4181044464940607687_u64, 4416986039790994856_u64, 4595411326866956288_u64, 4179795521336689545_u64, 4415151088519362962_u64, 4596191826574557184_u64, 4180342615276967448_u64, 4388297207306524288_u64, 4596971854615273472_u64, 4163134815912902741_u64, 4407046934496797632_u64, 4597752396935471104_u64, 4170633149473148970_u64, 4405782923560532384_u64, 4598354164572176384_u64, 4182768853696418684_u64, 4416733746737312810_u64, 4598744422437511168_u64, 4168092899873058496_u64, 4392123788469042560_u64, 4599134386012413952_u64, 4180127163424181174_u64, 4406014792582631096_u64, 4599524607564910592_u64, 4183319925662839506_u64, 4415675616735167292_u64, 4599914915253878784_u64, 4175911747903580107_u64, 4416541246844517480_u64, 4600305125576749056_u64, 4181080001904946005_u64, 4410218840660162888_u64, 4600695448798695424_u64, 4182073723656625935_u64, 4411097770484830020_u64, 4601085703191646208_u64, 4162218469079939175_u64, 4415710405558070144_u64, 4601475694926573568_u64, 4180236810016733485_u64, 4414198777358905110_u64, 4601866083948793856_u64, 4174969234578055175_u64, 4399943254788863104_u64, 4602256264839196672_u64, 4175017956300730415_u64, 4413569715370268760_u64, 4602646486905839616_u64, 4181859878727355805_u64, 4413117768927560508_u64, 4602857691462557696_u64, 4178849013980361086_u64, 4413985014695982624_u64, 4603052794131509248_u64, 4178003480682969431_u64, 4408622825199784640_u64, 4603247870790897664_u64, 4175686153693271200_u64, 4413914133698238018_u64, 4603443071826321408_u64, 4180971375465641846_u64, 4409230766422196372_u64, 4603638058812825600_u64, 4170422866368913031_u64, 4410848048361358364_u64, 4603833238145890304_u64, 4167880157371597569_u64, 4407639676609351752_u64, 4604028264836208640_u64, 4171829247047389677_u64, 4414406630866632496_u64, 4604223303164954624_u64, 4147700587523709465_u64, 4408728642709317424_u64, 4604418534313441280_u64, 0_u64, 0_u64, 0_u64, 4180609720134241020_u64, 4407152440385818112_u64, 4559404168743223296_u64, 4182092657647727947_u64, 4416572830076330722_u64, 4563874665454370816_u64, 4174857481851796611_u64, 4418016601647790672_u64, 4566830698802446336_u64, 4180527631948184628_u64, 4398344196446867456_u64, 4568382481373331456_u64, 4175335268359875686_u64, 4410355629573166612_u64, 4569952960741638144_u64, 4182601186737282725_u64, 4417400736266508390_u64, 4571330234219757568_u64, 4182110422891217028_u64, 4388363214882687744_u64, 4572116538970603520_u64, 4170019542467535706_u64, 4413085800684747420_u64, 4572894536457256960_u64, 4181068253202681085_u64, 4406655119483000816_u64, 4573673059295428608_u64, 4182200397313614053_u64, 4413314092249965856_u64, 4574452108194742272_u64, 4182213005821043609_u64, 4408371817771619880_u64, 4575231683866918912_u64, 4181509175499228614_u64, 4415951091340016178_u64, 4575834504216444928_u64, 4180114999879504399_u64, 4417823362806989422_u64, 4576224819895205888_u64, 4180418366128726688_u64, 4409411234774195256_u64, 4576615400031911936_u64, 4182804766367422498_u64, 4414631116687863454_u64, 4577006244984913920_u64, 4180966657428710895_u64, 4414144749511761952_u64, 4577397355113742336_u64, 4178336080366178380_u64, 4408374377790049888_u64, 4577788730778451968_u64, 4182991092743969805_u64, 4416296536010784934_u64, 4578175920372449280_u64, 4177274030435960568_u64, 4407447322561997208_u64, 4578567825164337152_u64, 4154392341326551164_u64, 4387051455558258688_u64, 4578955538580242432_u64, 4181149999124086685_u64, 4413323836987305688_u64, 4579347973931794432_u64, 4179549170130514986_u64, 4414423783523030788_u64, 4579736212588724224_u64, 4180392438829288887_u64, 4417660708296281726_u64, 4580129179938586624_u64, 4183817000375823084_u64, 4413759490241951270_u64, 4580339383148740608_u64, 4171442593298349648_u64, 4405872172948179296_u64, 4580533896990490624_u64, 4163617940871998555_u64, 4415632113627260662_u64, 4580730780254994432_u64, 4180755318506232524_u64, 4416953104500934374_u64, 4580925558501933056_u64, 4164275779065755616_u64, 4407633825858938920_u64, 4581120468463779840_u64, 4178040557272069249_u64, 4415798901948226802_u64, 4581315510318661632_u64, 4171045322699801517_u64, 4398689736065969632_u64, 4581510684245360640_u64, 4174599312386867991_u64, 4407441878097961624_u64, 4581705990422724608_u64, 4178267464585186932_u64, 4416746734788519080_u64, 4581901429030125568_u64, 4607182418800017408_u64, 4078600164457699338_u64, 13826050856027422720_u64, 4163797584562041862_u64, 4599676419421066581_u64, 4356482039542667037_u64, 13821547256400052224_u64, 13505821854102424597_u64, 4596373779694328218_u64, 13576522364016083317_u64, 13818544856648471733_u64, 13565830870963998404_u64, 4594314991293225948_u64, 13571784407638469613_u64, 13817043658088732699_u64, 4351295214365445731_u64, 4592670952339296758_u64, 4346562893782396675_u64, 0_u64, 0_u64, 4322352763286208497_u64, 4575656317123594389_u64, 13553799496633934731_u64, 4580157204223303478_u64, 13555992049501155563_u64, 4582406518397497323_u64, 13560705345656099668_u64, 4584649958641311943_u64, 4340771150593576982_u64, 4585776201329821251_u64, 13561528863622278378_u64, 4586891830512287539_u64, 13568159319302432932_u64, 4588003405186333843_u64, 4337243252163069782_u64, 4589110255780940971_u64, 4347991750657881570_u64, 4589689867930616983_u64, 13565419390229084561_u64, 4590237570683975433_u64, 13551184685155929341_u64, 4590781916380154848_u64, 13565255053099034193_u64, 4591322577125662247_u64, 4346193946118699026_u64, 4591859227246681143_u64, 13562164967483621174_u64, 4592391543485245276_u64, 13547191760308959901_u64, 4592919205193957120_u64, 13571759779598762860_u64, 4593441894529133890_u64, 13574680489187922373_u64, 4593815458280085304_u64, 4350622898590662007_u64, 4594071359893784697_u64, 13576263892975465975_u64, 4594324307919054771_u64, 13561549783901582148_u64, 4594574149989463437_u64, 13570141814977703464_u64, 4594820735609489679_u64, 13574659413844611639_u64, 4595063916245176423_u64, 4354558926303212051_u64, 4595303545413601840_u64, 4353825137219074335_u64, 4595539478771115184_u64, 4331088558329165365_u64, 4595771574200284005_u64, 13547119353613710468_u64, 4595999691895500378_u64, 4342193143769834726_u64, 4596223694447194575_u64, 13577207009205444004_u64, 4596443446924605451_u64, 13577474401097904327_u64, 4596658816957057687_u64, 4333806814711879026_u64, 4596869674813696938_u64, 13576706781490979089_u64, 4597075893481634849_u64, 4345918757645563291_u64, 4597277348742456865_u64, 13570923601001354755_u64, 4597473919247046766_u64, 4352296966991395194_u64, 4597665486588682830_u64, 4353191481515352300_u64, 4597851935374361621_u64, 4349530714735784773_u64, 4598033153294306415_u64, 13577350285760890427_u64, 4598192125367447414_u64, 4355403941430829949_u64, 4598277341331653194_u64, 13579688057279897785_u64, 4598359782981498350_u64, 4349172768518806791_u64, 4598439400657215705_u64, 4347314142768952473_u64, 4598516146400094505_u64, 13581538356217436833_u64, 4598589973981368948_u64, 13569734111982033261_u64, 4598660838930064664_u64, 13565510490668306975_u64, 4598728698559786371_u64, 4355953958080851559_u64, 4598793511994430559_u64, 13579012130011628741_u64, 4598855240192807730_u64, 13576882483609230916_u64, 4598913845972159346_u64, 4356983863780200341_u64, 4598969294030555337_u64, 4350512495231506352_u64, 4599021550968158663_u64, 13581119253935494596_u64, 4599070585307344124_u64, 4359296952458119116_u64, 4599116367511659305_u64, 4354005362026404345_u64, 4599158870003616236_u64, 4359130288021327495_u64, 4599198067181303031_u64, 13580800220896165539_u64, 4599233935433805530_u64, 4358891285381412850_u64, 4599266453155429623_u64, 13580811801228480421_u64, 4599295600758715723_u64, 13581155310068253939_u64, 4599321360686237507_u64, 4337790153048002290_u64, 4599343717421177862_u64, 13561650794313103241_u64, 4599362657496675633_u64, 13579971910847376863_u64, 4599378169503937555_u64, 13576946352623845726_u64, 4599390244099110484_u64, 4357476038575785542_u64, 4599398874008909786_u64, 4358956166130027462_u64, 4599404054035000492_u64, 13580235372587216982_u64, 4599405781057128579_u64, 13777563753836856798_u64, 13535167045110777746_u64, 4490154932466047684_u64, 13471158413477914158_u64, 13642913160586117114_u64, 4166251641905846958_u64, 4345445120671278422_u64, 13318670866006396885_u64, 13491215588900882848_u64, 4005413561863963253_u64, 4582731459160452376_u64, 4337430599130438663_u64, 13746300790445030995_u64, 4278513180835346784_u64, 4455298890751912674_u64, 13431664887420054305_u64, 13606268569680788870_u64, 4139575987980154816_u64, 4306856879088102236_u64, 13284343398217522207_u64, 13451742389375826946_u64, 3982820755766585498_u64, 4601218545606032745_u64, 4355905854441002854_u64, 4590669220166325589_u64, 4347474840286999495_u64, 13791923578851126295_u64, 4323257743497331991_u64, 4560459359808757782_u64, 4314363874703526019_u64, 13782001362529206704_u64, 13541282584699432657_u64, 4560903004309261820_u64, 4318544826372083407_u64, 13789857713623247739_u64, 4319651743482473309_u64, 4573979818289568032_u64, 13547376703926968873_u64, 4601218545606032745_u64, 4355905854441029416_u64, 4590669220166325589_u64, 4347474840277317205_u64, 13791923578851126295_u64, 4323257128523688916_u64, 4560459359808757786_u64, 13539057306357620890_u64, 13782001362529236626_u64, 4311693577936471326_u64, 4560903004447062878_u64, 4318105727967249361_u64, 13789857891741190875_u64, 4321046472157085418_u64, 4574040535889928344_u64, 13550769100847944985_u64, 13807546047327920973_u64, 4337071984550761999_u64, 4595625859879302937_u64, 13575369200228752298_u64, 13832091764561411621_u64, 4367083161244708115_u64, 4621513522622822424_u64, 4379198526416075913_u64, 4601218545606032745_u64, 4355905854535064656_u64, 4590669220166325589_u64, 4347474824374880797_u64, 13791923578851126295_u64, 4323580375988575161_u64, 4560459359808757768_u64, 13539116750687557344_u64, 13782001362529232076_u64, 13536570820596290194_u64, 4560903004446371952_u64, 13534381915109961330_u64, 13789857891749874268_u64, 13542248551786140030_u64, 4574040542114675977_u64, 4319322632926183752_u64, 13807546589950161636_u64, 4333374188068938727_u64, 4595639707899025413_u64, 13576763190587564352_u64, 13832315729042157340_u64, 4355681206135105699_u64, 4623688716137085599_u64, 4376069101805970931_u64, 13862944778281727650_u64, 13615141182240974265_u64, 4656509303439741544_u64, 13632053782596559198_u64, 13896887125365916423_u64, 4430291660573484399_u64, 4690759930901438948_u64, 4448538339122824357_u64, 13931234023567481197_u64, 13687066508289631509_u64, 4724690091194047635_u64, 4481055109452185009_u64, 13963766147140609528_u64, 13719735200606437905_u64, 4755796337411627932_u64, 13728213934878401669_u64, 13993064203289403108_u64, 13749336357072522363_u64, 4782709673377098858_u64, 4525258667431177813_u64, 14017337241943407218_u64, 13774953738703052260_u64, 4804220968510753608_u64, 4558825762205324477_u64, 14035868708364377457_u64, 4561382659555646602_u64, 4818996443093750427_u64, 13794917145675091868_u64, 14045411273453109067_u64, 4573073616796064604_u64, 4820430145141440981_u64, 4575907853860249824_u64]

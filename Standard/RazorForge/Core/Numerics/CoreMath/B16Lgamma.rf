@@ -1,0 +1,165 @@
+module Core
+
+# ============================================================================
+# Correctly rounded log-gamma of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/lgamma/lgammaf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov and Paul Zimmermann. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept. The original also sets the C global `signgam` (the sign
+# of gamma(x)); this routine returns only the value. Arithmetic uses the unchecked operators
+# `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Natural logarithm of the absolute value of gamma(x), correctly rounded: the exact log|gamma(x)|
+### rounded to the nearest `B16` (ties to even), identical on every platform. Poles (zero and the
+### negative integers) and ±infinity give +infinity, NaN gives NaN.
+### :returns: The correctly rounded log-gamma.
+routine B16.lgamma() -> B16
+  var x = B32(from: me)
+  var fx = LLVM::floor[B32](x)
+  var ax = x.abs()
+  var tu = ax.to_bits()
+  if tu >= 0x7F800000_u32
+    if tu == 0x7F800000_u32
+      return B16.from_bits(bits: 0x7C00_u16)
+    return B16(from: x +! x)
+  if fx == x
+    # an integer: a pole at zero and the negative integers, and exact zeros at 1 and 2
+    if x <= 0.0_b32
+      return B16.from_bits(bits: 0x7C00_u16)
+    if x == 1.0_b32 or x == 2.0_b32
+      return 0.0_b16
+  var s = B64(from: x)
+  var z = B64(from: ax)
+  var f = 0.0
+  if ax < 0x1.52p-1_b32
+    # a rational approximation of lgamma(x) + log|x| near zero
+    var c0 = 0x1.0fc0fad268c4dp+2
+    f = (c0 *! s) *! b16_lgamma_r8(x: s, roots: B16_LGAMMA_RN_SMALL) /! b16_lgamma_r8(x: s, roots: B16_LGAMMA_RD_SMALL) -! b16_lgamma_ln(x: z)
+  else
+    if ax > 0x1.afc1ap+1_b32
+      if x >= 0x1.ff4p+12_b32
+        # lgamma(0x1.ff4p+12) rounds to the largest finite B16, larger inputs overflow
+        if x > 0x1.ff4p+12_b32
+          return B16.from_bits(bits: 0x7C00_u16)
+        return B16.from_bits(bits: 0x7BFF_u16)
+      # Stirling's series
+      var lz = b16_lgamma_ln(x: z)
+      f = (z -! 0.5) *! (lz -! 1.0) +! 0x1.acfe390c97d69p-2
+      var iz = 1.0 /! z
+      var iz2 = iz *! iz
+      if ax > 1198.0_b32
+        f = f +! iz *! 0x1.5555555555555p-4
+      else
+        if ax > 0x1.279a7p+6_b32
+          f = f +! iz *! (0x1.555555547fbadp-4 +! iz2 *! -0x1.6c0fd270c465p-9)
+        else
+          if ax > 0x1.555556p+3_b32
+            var iz4 = iz2 *! iz2
+            f = f +! iz *! ((0x1.555555554de0bp-4 +! iz2 *! -0x1.6c16bdc45944fp-9) +! iz4 *! (0x1.a0077f300ecb3p-11 +! iz2 *! -0x1.2e9cfff3b29c2p-11))
+          else
+            var iz4 = iz2 *! iz2
+            var iz8 = iz4 *! iz4
+            var p = ((0x1.5555555551286p-4 +! iz2 *! -0x1.6c16c0e7c4cf4p-9) +! iz4 *! (0x1.a0193267fe6f2p-11 +! iz2 *! -0x1.37e87ec19cb45p-11)) +! iz8 *! ((0x1.b40011dfff081p-11 +! iz2 *! -0x1.c16c8946b19b6p-10) +! iz4 *! (0x1.e9f47ace150d8p-9 +! iz2 *! -0x1.4f5843a71a338p-8))
+            f = f +! iz *! p
+      if x < 0.0_b32
+        # the reflection formula lgamma(x) = log(pi) - lgamma(-x) - log|x sin(pi x)|
+        f = 0x1.250d048e7a1bdp+0 -! f -! lz
+        var lp = b16_lgamma_ln(x: b16_lgamma_sinpi(x: B64(from: x -! fx)))
+        f = f -! lp
+    else
+      # a rational approximation with exact zeros at 1 and 2
+      var c0 = 0x1.3cc0e6a0106b3p+2
+      f = (z -! 1.0) *! (z -! 2.0) *! c0 *! b16_lgamma_r7(x: z) /! b16_lgamma_r8(x: z, roots: B16_LGAMMA_RD_MID)
+      if x < 0.0_b32
+        if tu < 0x40301B93_u32 and tu > 0x402F95C2_u32
+          # near the zero of lgamma at -0x1.5fb410a1bd901p+1
+          var h = (s +! 0x1.5fb410a1bd901p+1) -! 0x1.a19a96d2e6f85p-54
+          var h2 = h *! h
+          var h4 = h2 *! h2
+          f = h *! ((-0x1.ea12da904b18cp+0 +! h *! 0x1.3267f3c265a54p+3) +! h2 *! (-0x1.4185ac30cadb3p+4 +! h *! 0x1.f504accc3f2e4p+5) +! h4 *! ((-0x1.8588444c679b4p+7 +! h *! 0x1.43740491dc22p+9) +! h2 *! (-0x1.12400ea23f9e6p+11 +! h *! 0x1.dac829f365795p+12)))
+        else
+          if tu > 0x401CECCB_u32 and tu < 0x401D95CA_u32
+            # near the zero of lgamma at -0x1.3a7fc9600f86cp+1
+            var h = (s +! 0x1.3a7fc9600f86cp+1) +! 0x1.55f64f98af8dp-55
+            var h2 = h *! h
+            var h4 = h2 *! h2
+            f = h *! ((0x1.83fe966af535fp+0 +! h *! 0x1.36eebb002f61ap+2) +! h2 *! (0x1.694a60589a0b3p+0 +! h *! 0x1.1718d7aedb0b5p+3) +! h4 *! ((0x1.733a045eca0d3p+2 +! h *! 0x1.8d4297421205bp+4) +! h2 *! 0x1.7feea5fb29965p+4))
+          else
+            if tu > 0x40492009_u32 and tu < 0x404940EF_u32
+              # near the zero of lgamma at -0x1.9260dbc9e59afp+1
+              var h = (s +! 0x1.9260dbc9e59afp+1) +! 0x1.f717cd335a7b3p-53
+              var h2 = h *! h
+              var h4 = h2 *! h2
+              f = h *! ((0x1.f20a65f2fac55p+2 +! h *! 0x1.9d4d297715105p+4) +! h2 *! (0x1.c1137124d5b21p+6 +! h *! 0x1.267203d24de38p+9) +! h4 *! ((0x1.99a63399a0b44p+11 +! h *! 0x1.2941214faaf0cp+14) +! h2 *! 0x1.bb912c0c9cdd1p+16))
+            else
+              f = 0x1.250d048e7a1bdp+0 -! f
+              var lp = b16_lgamma_ln(x: b16_lgamma_sinpi(x: B64(from: x -! fx)) *! z)
+              f = f -! lp
+  return b16_narrow_b64(d: f)
+
+### The product `(x - r0)(x - r1)...(x - r6)` over the 7 numerator roots of the mid-range rational
+### approximation, grouped as in the original.
+### :param x: The evaluation point.
+### :returns: The product.
+secret routine b16_lgamma_r7(x: B64) -> B64
+  var c0 = B64.from_bits(bits: B16_LGAMMA_RN_MID[0])
+  var c1 = B64.from_bits(bits: B16_LGAMMA_RN_MID[1])
+  var c2 = B64.from_bits(bits: B16_LGAMMA_RN_MID[2])
+  var c3 = B64.from_bits(bits: B16_LGAMMA_RN_MID[3])
+  var c4 = B64.from_bits(bits: B16_LGAMMA_RN_MID[4])
+  var c5 = B64.from_bits(bits: B16_LGAMMA_RN_MID[5])
+  var c6 = B64.from_bits(bits: B16_LGAMMA_RN_MID[6])
+  return (((x -! c0) *! (x -! c1)) *! ((x -! c2) *! (x -! c3))) *! (((x -! c4) *! (x -! c5)) *! (x -! c6))
+
+### The product `(x - r0)(x - r1)...(x - r7)` over 8 roots, grouped as in the original.
+### :param x: The evaluation point.
+### :param roots: The 8 roots as binary64 bit patterns.
+### :returns: The product.
+secret routine b16_lgamma_r8(x: B64, roots: Array[U64, 8]) -> B64
+  var c0 = B64.from_bits(bits: roots[0])
+  var c1 = B64.from_bits(bits: roots[1])
+  var c2 = B64.from_bits(bits: roots[2])
+  var c3 = B64.from_bits(bits: roots[3])
+  var c4 = B64.from_bits(bits: roots[4])
+  var c5 = B64.from_bits(bits: roots[5])
+  var c6 = B64.from_bits(bits: roots[6])
+  var c7 = B64.from_bits(bits: roots[7])
+  return (((x -! c0) *! (x -! c1)) *! ((x -! c2) *! (x -! c3))) *! (((x -! c4) *! (x -! c5)) *! ((x -! c6) *! (x -! c7)))
+
+### An approximation of `sin(pi x)` for `0 <= x <= 1`.
+### :param x: The fractional argument.
+### :returns: sin(pi x).
+secret routine b16_lgamma_sinpi(x: B64) -> B64
+  var y = x -! 0.5
+  var x2 = y *! y
+  var x4 = x2 *! x2
+  var x8 = x4 *! x4
+  return (0.25 -! x2) *! ((0x1p+2 +! x2 *! -0x1.de9e64df22ea4p+1) +! x4 *! (0x1.472be122401f8p+0 +! x2 *! -0x1.d4fcd82df91bp-3) +! x8 *! ((0x1.9f05c97e0aab2p-6 +! x2 *! -0x1.f3091c427b611p-10) +! x4 *! (0x1.b22c9bfdca547p-14 +! x2 *! -0x1.15484325ef569p-18)))
+
+### An approximation of the natural logarithm of a positive normal binary64.
+### :param x: The argument.
+### :returns: log(x).
+secret routine b16_lgamma_ln(x: B64) -> B64
+  var tu = x.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](tu >>> 52) - 0x3FF
+  var i = (tu >>> 48) & 0xF_u64
+  var m = B64.from_bits(bits: (tu & 0x000FFFFFFFFFFFFF_u64) | 0x3FF0000000000000_u64)
+  var z = B64.from_bits(bits: B16_LGAMMA_LN_IX[i]) *! m -! 1.0
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var p = ((0x1.fffffffffff24p-1 +! z *! -0x1.ffffffffd1d67p-2) +! z2 *! (0x1.55555537802dep-2 +! z *! -0x1.ffffeca81b866p-3)) +! z4 *! ((0x1.999611761d772p-3 +! z *! -0x1.54f3e581b61bfp-3) +! z2 *! (0x1.1e642b4cb5143p-3 +! z *! -0x1.9115a5af1e1edp-4))
+  return B64(from: e) *! 0x1.62e42fefa39efp-1 +! B64.from_bits(bits: B16_LGAMMA_LN_IL[i]) +! z *! p
+
+# Roots of the numerator of the rational approximation for |x| < 0x1.52p-1 (bit patterns).
+secret preset B16_LGAMMA_RN_SMALL: Array[U64, 8] = [0xC03505BDF4B65AC0_u64, 0xC0151C80EB47E068_u64, 0x3FF0000000007CB8_u64, 0xC004AC529250A1FC_u64, 0xBFFA8C99DBE1621A_u64, 0xBFF4ABDCC74115EA_u64, 0xBFF1B87FE5A5B923_u64, 0xBFF05B8A4D47FF64_u64]
+# Roots of its denominator (bit patterns).
+secret preset B16_LGAMMA_RD_SMALL: Array[U64, 8] = [0xC044DB2CFE9A5265_u64, 0xC02062E99D1C4F27_u64, 0xC00C81BC2ECF25F6_u64, 0xC00108E55C10091B_u64, 0xBFF7DD25AF0B83D4_u64, 0xBFF36BF1880125FC_u64, 0xBFF1379FC8023D9C_u64, 0xBFF03712E41525D2_u64]
+# Roots of the numerator of the rational approximation for 0x1.52p-1 <= |x| <= 0x1.afc1ap+1 (bit patterns).
+secret preset B16_LGAMMA_RN_MID: Array[U64, 7] = [0xC04667923FF14DF7_u64, 0xC022D35F25AD8F64_u64, 0xC00B8C9EAB9D5BD3_u64, 0xBFF7A4A97F494127_u64, 0xBFE3A6C8295B4445_u64, 0xBFCDA44E8B810024_u64, 0xBFA9061E81C77E4A_u64]
+# Roots of its denominator (bit patterns).
+secret preset B16_LGAMMA_RD_MID: Array[U64, 8] = [0xC05491A899E84C52_u64, 0xC02D202961B9E098_u64, 0xC014CED68C631ED6_u64, 0xC002589EEDF40738_u64, 0xBFF1302E33372710_u64, 0xBFDC36B802F26DFF_u64, 0xBFC3DED448ACC39D_u64, 0xBF9BFFC491078EAF_u64]
+# log(1/ix[i]) for the logarithm's 16-entry table reduction (bit patterns).
+secret preset B16_LGAMMA_LN_IL: Array[U64, 16] = [0x3C659CAEEC280116_u64, 0x3FAF0A30C01162AA_u64, 0x3FBE27076E2AF2EB_u64, 0x3FC5FF3070A793D6_u64, 0x3FCC8FF7C79A9A20_u64, 0x3FD1675CABABA60F_u64, 0x3FD4618BC21C5EC2_u64, 0x3FD739D7F6BBD007_u64, 0x3FD9F323ECBF984D_u64, 0x3FDC8FF7C79A9A21_u64, 0x3FDF128F5FAF06EC_u64, 0x3FE0BE72E4252A83_u64, 0x3FE1E85F5E7040D1_u64, 0x3FE307D7334F10BE_u64, 0x3FE41D8FE84672AF_u64, 0x3FE52A2D265BC5AB_u64]
+# Approximations of 1/(1 + i/16 + 1/32) for the logarithm's table reduction (bit patterns).
+secret preset B16_LGAMMA_LN_IX: Array[U64, 16] = [0x3FF0000000000000_u64, 0x3FEE1E1E1E1E1E1E_u64, 0x3FEC71C71C71C71C_u64, 0x3FEAF286BCA1AF28_u64, 0x3FE999999999999A_u64, 0x3FE8618618618618_u64, 0x3FE745D1745D1746_u64, 0x3FE642C8590B2164_u64, 0x3FE5555555555555_u64, 0x3FE47AE147AE147B_u64, 0x3FE3B13B13B13B14_u64, 0x3FE2F684BDA12F68_u64, 0x3FE2492492492492_u64, 0x3FE1A7B9611A7B96_u64, 0x3FE1111111111111_u64, 0x3FE0842108421084_u64]

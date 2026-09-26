@@ -1,0 +1,82 @@
+module Core
+
+# ============================================================================
+# Correctly rounded inverse hyperbolic tangent of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/atanh/atanhf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling and floating-point exception raising are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Inverse hyperbolic tangent, correctly rounded: the exact atanh rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: `±1` gives ±infinity, `|me| > 1` (or
+### NaN) gives NaN, and ±0 maps to itself.
+### :returns: The correctly rounded inverse hyperbolic tangent.
+routine B32.atanh_unchecked() -> B32
+  # atanh(x) = (log(1 + x) - log(1 - x)) / 2
+  var ux = me.to_bits()
+  var ax = ux << 1
+  if ax < 0x7A300000_u32 or ax >= 0x7F000000_u32
+    if ax >= 0x7F000000_u32
+      # |x| >= 1 or NaN
+      if ax == 0x7F000000_u32
+        return me /! 0.0_b32
+      if ax > 0xFF000000_u32
+        return me +! me
+      return B32.from_bits(bits: 0xFFC00000_u32)
+    if ax < 0x73713744_u32
+      # |x| < 0x1.f5a956p-12
+      if ax == 0
+        return me
+      return LLVM::fma[B32](a: me, b: 0x1p-25_b32, c: me)
+    var z = B64(from: me)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var r = (0x1.5555555555527p-2 +! z2 *! 0x1.9999999ba4ee8p-3) +! z4 *! (0x1.24922c280990ap-3 +! z2 *! 0x1.c8236aae809c6p-4)
+    return B32(from: z +! (z *! z2) *! r)
+  var sgn = 1.0
+  if (ux >>> 31) == 1
+    sgn = -1.0
+  var e = ax >>> 24
+  var md = ((ux << 8) | 0x80000000_u32) >>> (126_u32 - e)
+  var mn = 0_u32 -% md
+  var nz = mn.leading_zeros() + 1
+  mn = mn << nz
+  var jn = LLVM::zero_extend[U32, U64](mn >>> 26)
+  var jd = LLVM::zero_extend[U32, U64](md >>> 26)
+  var tn = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](mn) << 20) | (1023_u64 << 52))
+  var td = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](md) << 20) | (1023_u64 << 52))
+  var zn = tn *! B64.from_bits(bits: B32_ATANH_TR[jn]) -! 1.0
+  var zd = td *! B64.from_bits(bits: B32_ATANH_TR[jd]) -! 1.0
+  var zn2 = zn *! zn
+  var zd2 = zd *! zd
+  var nzi = LLVM::zero_extend[U32, U64](nz)
+  var rn = ((B64.from_bits(bits: B32_ATANH_TL[jn]) -! B64.from_bits(bits: B32_ATANH_LN2N[nzi - 1])) +! zn *! 0x1.fffffffce5a6ap-2) +! zn2 *! (-0x1.0001f81ec0ab8p-2 +! zn *! 0x1.555a0f53d79a5p-3)
+  var rd = (B64.from_bits(bits: B32_ATANH_TL[jd]) +! zd *! 0x1.fffffffce5a6ap-2) +! zd2 *! (-0x1.0001f81ec0ab8p-2 +! zd *! 0x1.555a0f53d79a5p-3)
+  var r = sgn *! (rd -! rn)
+  var ub = B32(from: r)
+  var lb = B32(from: r +! sgn *! 0x1.f0fab08151146p-33)
+  if ub != lb
+    # too close to a rounding boundary: evaluate both logarithms with longer polynomials
+    var zn4 = zn2 *! zn2
+    var zd4 = zd2 *! zd2
+    var nzf = B64(from: nzi)
+    var fn = zn *! (((0x1p-1 +! zn *! -0x1.000000000001bp-2) +! zn2 *! (0x1.55555555555bap-3 +! zn *! -0x1.fffffff26d72ep-4)) +! zn4 *! ((0x1.99999989035p-4 +! zn *! -0x1.555c39cb9ee8p-4) +! zn2 *! 0x1.24992d8b014a1p-4))
+    fn = fn +! 0x1.0ca86c3898dp-50 *! nzf
+    fn = fn +! B64.from_bits(bits: B32_ATANH_TL[jn])
+    var en = nzf *! 0x1.62e42fefa3ap-2
+    var fd = zd *! (((0x1p-1 +! zd *! -0x1.000000000001bp-2) +! zd2 *! (0x1.55555555555bap-3 +! zd *! -0x1.fffffff26d72ep-4)) +! zd4 *! ((0x1.99999989035p-4 +! zd *! -0x1.555c39cb9ee8p-4) +! zd2 *! 0x1.24992d8b014a1p-4))
+    fd = fd +! B64.from_bits(bits: B32_ATANH_TL[jd])
+    r = (fd -! fn) +! en
+    ub = B32(from: sgn *! r)
+  return ub
+
+### Table of approximate reciprocals of 1 + j/64, for j in 0..63, as B64 bit patterns.
+secret preset B32_ATANH_TR: Array[U64, 64] = [0x3FEFC07F02000000_u64, 0x3FEF44659E000000_u64, 0x3FEECC07B3000000_u64, 0x3FEE573AC9000000_u64, 0x3FEDE5D6E4000000_u64, 0x3FED77B655000000_u64, 0x3FED0CB58F000000_u64, 0x3FECA4B305000000_u64, 0x3FEC3F8F02000000_u64, 0x3FEBDD2B8A000000_u64, 0x3FEB7D6C3E000000_u64, 0x3FEB203640000000_u64, 0x3FEAC5701B000000_u64, 0x3FEA6D01A7000000_u64, 0x3FEA16D3F9000000_u64, 0x3FE9C2D14F000000_u64, 0x3FE970E4F8000000_u64, 0x3FE920FB4A000000_u64, 0x3FE8D3018D000000_u64, 0x3FE886E5F1000000_u64, 0x3FE83C977B000000_u64, 0x3FE7F405FD000000_u64, 0x3FE7AD2209000000_u64, 0x3FE767DCE4000000_u64, 0x3FE724287F000000_u64, 0x3FE6E1F76B000000_u64, 0x3FE6A13CD1000000_u64, 0x3FE661EC6A000000_u64, 0x3FE623FA77000000_u64, 0x3FE5E75BB9000000_u64, 0x3FE5AC056B000000_u64, 0x3FE571ED3C000000_u64, 0x3FE5390949000000_u64, 0x3FE5015015000000_u64, 0x3FE4CAB887000000_u64, 0x3FE49539E4000000_u64, 0x3FE460CBC8000000_u64, 0x3FE42D6626000000_u64, 0x3FE3FB0140000000_u64, 0x3FE3C995A4000000_u64, 0x3FE3991C2C000000_u64, 0x3FE3698DF4000000_u64, 0x3FE33AE45B000000_u64, 0x3FE30D1901000000_u64, 0x3FE2E025C0000000_u64, 0x3FE2B404AD000000_u64, 0x3FE288B013000000_u64, 0x3FE25E2271000000_u64, 0x3FE2345679000000_u64, 0x3FE20B470C000000_u64, 0x3FE1E2EF3B000000_u64, 0x3FE1BB4A40000000_u64, 0x3FE1945381000000_u64, 0x3FE16E0689000000_u64, 0x3FE1485F0E000000_u64, 0x3FE12358E7000000_u64, 0x3FE0FEF011000000_u64, 0x3FE0DB20A9000000_u64, 0x3FE0B7E6EC000000_u64, 0x3FE0953F39000000_u64, 0x3FE073260A000000_u64, 0x3FE05197F8000000_u64, 0x3FE03091B5000000_u64, 0x3FE0101010000000_u64]
+
+### Table of -log of the entries of the reciprocal table, halved, as B64 bit patterns.
+secret preset B32_ATANH_TL: Array[U64, 64] = [0x3F6FE02A69106789_u64, 0x3F87B91B1155B11B_u64, 0x3F939E87BA1EBD60_u64, 0x3F9B42DD713971BF_u64, 0x3FA16536EE637AE1_u64, 0x3FA51B073C96183F_u64, 0x3FA8C345DA019B21_u64, 0x3FAC5E5492ABC743_u64, 0x3FAFEC912FBBEABB_u64, 0x3FB1B72AD33F67A0_u64, 0x3FB371FC1F6E8F74_u64, 0x3FB526E5E5A1B438_u64, 0x3FB6D60FE601D21D_u64, 0x3FB87FA06438C911_u64, 0x3FBA23BC223AB563_u64, 0x3FBBC28673A58CD6_u64, 0x3FBD5C216B8FBB91_u64, 0x3FBEF0ADCAEC5936_u64, 0x3FC040259530D041_u64, 0x3FC1058BF8D24AD5_u64, 0x3FC1C898C09D99FB_u64, 0x3FC2895A13E286A3_u64, 0x3FC347DD9A447D55_u64, 0x3FC404308716A7E4_u64, 0x3FC4BE5F963B78A1_u64, 0x3FC5767718015A6C_u64, 0x3FC62C82F3A5C795_u64, 0x3FC6E08EAB13A1E4_u64, 0x3FC792A55FE147A2_u64, 0x3FC842D1D9928B17_u64, 0x3FC8F11E873A62C7_u64, 0x3FC99D958207E08B_u64, 0x3FCA484090C1BB0A_u64, 0x3FCAF129324B786B_u64, 0x3FCB9858970710FB_u64, 0x3FCC3DD7A6DDAD4D_u64, 0x3FCCE1AF0B65F3EB_u64, 0x3FCD83E725022F3E_u64, 0x3FCE2488197C6C26_u64, 0x3FCEC399D3D68CC0_u64, 0x3FCF6123FAC028AC_u64, 0x3FCFFD2E07E7F498_u64, 0x3FD04BDF9E3B26D2_u64, 0x3FD0986F4FA93521_u64, 0x3FD0E4498651CC8C_u64, 0x3FD12F719595EFBC_u64, 0x3FD179EABB0A99A1_u64, 0x3FD1C3B81E933C25_u64, 0x3FD20CDCD0E0AB6E_u64, 0x3FD2555BCF50F7CB_u64, 0x3FD29D37FF34B08B_u64, 0x3FD2E47437640268_u64, 0x3FD32B1338401D71_u64, 0x3FD37117B5C147B6_u64, 0x3FD3B6844A13FC23_u64, 0x3FD3FB5B857F6F42_u64, 0x3FD43F9FE2F7CE67_u64, 0x3FD48353D11488DF_u64, 0x3FD4C679B014EE3A_u64, 0x3FD50913CC03686B_u64, 0x3FD54B2468259498_u64, 0x3FD58CADB57D7989_u64, 0x3FD5CDB1DCAA1765_u64, 0x3FD60E32F46788D9_u64]
+
+### Table of n*log(2)/2 for n in 1..24 (rounded so that the fast path's error bound holds), as B64 bit patterns.
+secret preset B32_ATANH_LN2N: Array[U64, 24] = [0x3FD62E42FEDB2A44_u64, 0x3FE62E42FEEAB21A_u64, 0x3FF0A2B23F33E789_u64, 0x3FF62E42FEF27604_u64, 0x3FFBB9D3BEB10480_u64, 0x4000A2B23F37C97E_u64, 0x4003687A9F1710BC_u64, 0x40062E42FEF657FA_u64, 0x4008F40B5ED59F38_u64, 0x400BB9D3BEB4E676_u64, 0x400E7F9C1E942DB4_u64, 0x4010A2B23F39BA79_u64, 0x401205966F295E18_u64, 0x4013687A9F1901B7_u64, 0x4014CB5ECF08A556_u64, 0x40162E42FEF848F5_u64, 0x401791272EE7EC93_u64, 0x4018F40B5ED79032_u64, 0x401A56EF8EC733D1_u64, 0x401BB9D3BEB6D770_u64, 0x401D1CB7EEA67B0F_u64, 0x401E7F9C1E961EAE_u64, 0x401FE2804E85C24D_u64, 0x4020A2B23F3AB2F6_u64]

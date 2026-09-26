@@ -331,7 +331,7 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.TrueDivideUnchecked => "truediv_unchecked",
                 BinaryOperator.FloorDivideUnchecked => "floordiv_unchecked",
                 BinaryOperator.ModuloUnchecked => "mod_unchecked",
-                BinaryOperator.PowerUnchecked => null, // TBD
+                BinaryOperator.PowerUnchecked => "pow_unchecked",
 
                 // Ordering (overloadable)
                 BinaryOperator.Equal => "eq",

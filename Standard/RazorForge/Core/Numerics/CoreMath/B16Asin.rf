@@ -1,0 +1,92 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc sine of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/asin/asinf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Paul Zimmermann. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the
+# original is kept (its errno domain/underflow reports are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+#
+# The evaluation runs in B32: odd minimax polynomials on [0, 0.25] and [0.25, 0.5], and for
+# |x| >= 0.5 the reduction asin(x) = pi/2 - 2*asin(sqrt((1-|x|)/2)). A handful of inputs whose B32
+# result would round wrongly are returned explicitly.
+
+### Returns the arc sine of this value (in radians), correctly rounded: the exact arc sine rounded to
+### the nearest `B16` (ties to even), identical on every platform. Raw IEEE 754 propagation: `|me| > 1`,
+### ±infinity and NaN give NaN (the default NaN 0xFE00, as the original's `0.0f / 0.0f` on x86-64).
+### :returns: The correctly rounded arc sine.
+routine B16.asin_unchecked() -> B16
+  var v = B32(from: me)
+  var u = v.to_bits()
+  var au = u & 0x7FFFFFFF_u32
+  var negative = (u >>> 31) == 1_u32
+  # NaN, infinity or |x| >= 1
+  if au >= 0x3F800000_u32
+    if au == 0x3F800000_u32
+      var r = B16(from: 0x1.921fb6p+0_b32)
+      return if negative then -r else r
+    # the original's NaN test compares au >> 23 with 0x3ff, which never holds, so a NaN input also
+    # takes this path
+    return B16.from_bits(bits: 0xFE00_u16)
+  var t = v
+  var reduce = au >= 0x3F000000_u32
+  if reduce
+    # argument reduction: asin(x) = pi/2 - 2*asin(sqrt((1-x)/2))
+    if negative
+      t = -t
+    t = LLVM::sqrt[B32]((1.0_b32 -! t) *! 0.5_b32)
+    au = t.to_bits() & 0x7FFFFFFF_u32
+  # now 0 <= |t| <= 0.5 (the polynomials are odd, so a negative t needs no reduction)
+  var tt = t *! t
+  var y = t
+  if au < 0x3E800000_u32
+    # |t| < 0.25
+    if au <= 0x3D388000_u32 and not reduce
+      # for |x| <= 0x1.71p-5, asin(x) rounds to x
+      if au == 0_u32
+        return me
+      if au == u
+        return B16(from: v +! 0x1p-26_b32)
+      return B16(from: v -! 0x1p-26_b32)
+    if au == 0x3DD30000_u32
+      # |x| = 0x1.a6p-4
+      var r = B16(from: 0x1.a6c00ap-4_b32)
+      return if au == u then r else -r
+    if au == 0x3D688000_u32
+      # |x| = 0x1.d1p-5
+      var r = B16(from: 0x1.d14004p-5_b32)
+      return if au == u then r else -r
+    if au == 0x3DFA0000_u32
+      # |x| = 0x1.f4p-4
+      var r = B16(from: 0x1.f5400ap-4_b32)
+      return if au == u then r else -r
+    # degree-5 odd polynomial for asin on [0, 0.25], evaluated as t + t^3*(c1 + c2*t^2)
+    var c1 = LLVM::fma[B32](a: 0x1.43696ep-4_b32, b: tt, c: 0x1.552e8ep-3_b32)
+    y = LLVM::fma[B32](a: c1, b: tt *! t, c: t)
+  else
+    # 0.25 <= |t| <= 0.5
+    if au == 0x3EB24000_u32
+      # |x| = 0x1.648p-2
+      var r = B16(from: 0x1.6c2012p-2_b32)
+      return if au == u then r else -r
+    if au == 0x3ED96000_u32
+      # |x| = 0x1.b2cp-2
+      var r = B16(from: 0x1.c0fffap-2_b32)
+      return if au == u then r else -r
+    if au == 0x3EF0A000_u32
+      # |x| = 0x1.e14p-2
+      var r = B16(from: 0x1.f4fffp-2_b32)
+      return if au == u then r else -r
+    # degree-7 odd polynomial for asin on [0.25, 0.5]
+    var c5 = LLVM::fma[B32](a: 0x1.08e44p-4_b32, b: tt, c: 0x1.258e54p-4_b32)
+    var c1 = LLVM::fma[B32](a: 0x1.55a7ep-3_b32, b: tt, c: 1.0_b32)
+    y = LLVM::fma[B32](a: c5, b: tt *! tt, c: c1)
+    y = t *! y
+  if reduce
+    # argument reconstruction
+    y = 0x1.921fb6p+0_b32 -! 2.0_b32 *! y
+    if negative
+      y = -y
+  return B16(from: y)

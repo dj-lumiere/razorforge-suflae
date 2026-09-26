@@ -1,0 +1,259 @@
+module Core
+
+# ============================================================================
+# Correctly rounded power function of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/pow/powf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Maxence Ponsardin. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its inexact-flag save/restore is dropped). Arithmetic uses the unchecked operators
+# `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### `me` raised to `exp` with raw IEEE 754 propagation, correctly rounded: the exact power rounded to the
+### nearest `B16` (ties to even), identical on every platform. Overflow gives ±infinity, a negative base
+### with a non-integer exponent gives NaN, and the special cases follow C `pow` (`pow(x, ±0) = 1`,
+### `pow(1, y) = 1`, `pow(-1, ±infinity) = 1`, ...).
+### :param exp: The exponent applied to `me`.
+### :returns: The correctly rounded power.
+routine B16.pow_unchecked(exp: B16) -> B16
+  var x = me
+  var y = exp
+  var xu = LLVM::zero_extend[U16, U32](x.to_bits())
+  var yu = LLVM::zero_extend[U16, U32](y.to_bits())
+  var sign = 0_u64
+  if xu & 0x7FFF_u32 == 0x3C00_u32
+    # |x| = 1
+    if xu >>> 15 == 1
+      # x = -1: ±1 for an integer y, NaN otherwise
+      if yu & 0x7FFF_u32 > 0x7C00_u32
+        return y +! y
+      if b16_pow_isint(u: yu)
+        if b16_pow_isodd(u: yu)
+          return x
+        return -x
+      return B16.from_bits(bits: 0xFE00_u16)
+    # 1^y = 1, except for a signaling NaN y
+    if yu & 0x7FFF_u32 > 0x7C00_u32 and yu & 0x0200_u32 == 0
+      return y +! y
+    return x
+  if yu & 0x7FFF_u32 == 0
+    # x^0 = 1, except for a signaling NaN x
+    if xu & 0x7FFF_u32 > 0x7C00_u32 and xu & 0x0200_u32 == 0
+      return x +! x
+    return 1.0_b16
+  if yu & 0x7FFF_u32 >= 0x7C00_u32
+    # y = ±infinity or NaN (|x| = 1 was handled above)
+    if xu & 0x7FFF_u32 > 0x7C00_u32
+      return x +! x
+    if yu & 0x7FFF_u32 == 0x7C00_u32
+      # 0 when |x| < 1 and y = +inf or |x| > 1 and y = -inf, else +inf
+      var small = xu & 0x7FFF_u32 < 0x3C00_u32
+      var neg = yu >>> 15 == 1
+      if small != neg
+        return B16.from_bits(bits: 0x0000_u16)
+      return B16.from_bits(bits: 0x7C00_u16)
+    return y +! y
+  if xu & 0x7FFF_u32 == 0
+    # x = ±0: a signed zero or infinity, negative only for -0 and an odd integer y
+    var odd_neg = b16_pow_isodd(u: yu) and xu >>> 1 != 0
+    if yu >>> 15 == 1
+      if odd_neg
+        return B16.from_bits(bits: 0xFC00_u16)
+      return B16.from_bits(bits: 0x7C00_u16)
+    if odd_neg
+      return B16.from_bits(bits: 0x8000_u16)
+    return B16.from_bits(bits: 0x0000_u16)
+  if xu >= 0x7C00_u32
+    # x = ±infinity, NaN, or x < 0
+    if xu & 0x7FFF_u32 == 0x7C00_u32
+      # ±infinity: the sign survives only for an odd y, and a negative y gives a zero
+      if not b16_pow_isodd(u: yu)
+        xu = xu & 0x7FFF_u32
+      if yu >>> 15 == 1
+        xu = xu & 0x8000_u32
+      return B16.from_bits(bits: LLVM::int_truncate[U32, U16](xu))
+    if xu & 0x7FFF_u32 > 0x7C00_u32
+      return x +! x
+    # x < 0: NaN for a non-integer y, else |x|^y with the sign of an odd y
+    if not b16_pow_isint(u: yu)
+      return B16.from_bits(bits: 0xFE00_u16)
+    if b16_pow_isodd(u: yu)
+      sign = 1_u64 << 63
+    xu = xu & 0x7FFF_u32
+  # the inputs the approximation rounds wrongly
+  if xu == 0x1C94_u32 and yu == 0x31BC_u32
+    return B16(from: 0x1.848p-2_b32 -! 0x1p-14_b32)
+  if xu == 0x537B_u32 and yu == 0x25BF_u32
+    return B16(from: 0x1.18cp+0_b32 -! 0x1p-12_b32)
+  if xu == 0x756B_u32 and yu == 0x112E_u32
+    return B16(from: 0x1.01cp+0_b32 -! 0x1p-12_b32)
+  if xu == 0x0D36_u32 and yu == 0x2316_u32
+    return B16(from: 0x1.cap-1_b32 +! 0x1p-13_b32)
+  if xu == 0x273B_u32 and yu == 0x38B3_u32
+    return B16(from: 0x1.f8p-4_b32 +! 0x1p-16_b32)
+  if xu == 0x32BB_u32 and yu == 0x4242_u32
+    return B16(from: 0x1.f2cp-8_b32 +! 0x1p-20_b32)
+  if xu == 0x4D47_u32 and yu == 0x9D5F_u32
+    return b16_narrow_b64(d: 0x1.f8p-1 -! 0x1p-13)
+  if xu == 0x2E27_u32 and yu == 0xC107_u32
+    return b16_narrow_b64(d: 0x1.688p+8 -! 0x1p-4)
+  if xu == 0x14CB_u32 and yu == 0xBE46_u32
+    return b16_narrow_b64(d: 0x1.35cp+15 -! 0x1p-3)
+  if xu == 0x7ABF_u32 and yu == 0x8CC5_u32
+    return b16_narrow_b64(d: 0x1.fe8p-1 -! 0x1p-13)
+  if xu == 0x650C_u32 and yu == 0x9BED_u32
+    return b16_narrow_b64(d: 0x1.f2p-1 +! 0x1p-13)
+  if xu == 0x29A0_u32 and yu == 0xB5CF_u32
+    return b16_narrow_b64(d: 0x1.8ep+1 +! 0x1p-11)
+  if xu == 0x17E9_u32 and yu == 0xB1CF_u32
+    return b16_narrow_b64(d: 0x1.8ep+1 +! 0x1p-11)
+  if xu == 0x5988_u32 and yu == 0x9443_u32
+    return b16_narrow_b64(d: 0x1.fd4p-1 +! 0x1p-13)
+  var xd = B64(from: B16.from_bits(bits: LLVM::int_truncate[U32, U16](xu)))
+  var yd = B64(from: y)
+  var isex = b16_pow_is_exact(xu: xu, yu: yu, y: y)
+  var ret = 0_u64
+  if isex > 0xFF_u64
+    # x = 2^E with an integer y*E in range: the exact power of two
+    ret = isex
+  else
+    ret = b16_pow_exp(x: b16_pow_log(x: xd) *! yd).to_bits()
+    if isex != 0
+      # y = n/2^F in a small set: when the result is exact, round away the approximation error
+      var rounded = (ret +% (1_u64 << 40)) & (0xFFFFFE_u64 << 40)
+      var test1 = b16_pow_fast(x: xd, y: isex >>> 4).to_bits()
+      var test2 = b16_pow_fast(x: B64.from_bits(bits: rounded), y: isex & 0xF_u64).to_bits()
+      if test1 == test2
+        ret = rounded
+  return b16_narrow_b64(d: B64.from_bits(bits: ret +% sign))
+
+### Whether the binary16 value with bits `u` is an integer (zero counts).
+### :param u: The binary16 bit pattern, zero-extended.
+### :returns: `true` for an integer.
+secret routine b16_pow_isint(u: U32) -> Bool
+  if u & 0x7FFF_u32 == 0
+    return true
+  return (u & 0x7FFF_u32) >>> 10 >= 25 - (0x400_u32 | u).trailing_zeros()
+
+### Whether the binary16 value with bits `u` is an odd integer.
+### :param u: The binary16 bit pattern, zero-extended.
+### :returns: `true` for an odd integer.
+secret routine b16_pow_isodd(u: U32) -> Bool
+  if u & 0x7FFF_u32 == 0
+    return false
+  return (u & 0x7FFF_u32) >>> 10 == 25 - (0x400_u32 | u).trailing_zeros()
+
+### Classifies the inputs whose power may be exactly representable: a power of two x = 2^E with
+### -25 <= y*E <= 15 and y*E an integer (returns the binary64 bits of 2^(y*E)), or y in
+### {1/4, 1/2, 3/4, 1, 5/4, 3/2, 7/4, 2, 5/2, 3, 7/2, 4, 5, 6, 7} (returns (n << 4) + 2^-F for y = n 2^F),
+### else 0.
+### :param xu: The bits of |x|, zero-extended.
+### :param yu: The bits of y, zero-extended.
+### :param y: y itself.
+### :returns: The classification.
+secret routine b16_pow_is_exact(xu: U32, yu: U32, y: B16) -> U64
+  var yexp_tz = ((yu >>> 10) & 0x1F_u32) + (yu | 0x400_u32).trailing_zeros()
+  if xu & 0x3FF_u32 == 0
+    # x = 2^E with E >= -14
+    var e = LLVM::reinterpret_bits[U32, S32](xu >>> 10) - 15
+    var ye = LLVM::float_to_signed[B32, S32](LLVM::signed_to_float[S32, B32](e) *! B32(from: y))
+    if yexp_tz + LLVM::reinterpret_bits[S32, U32](e).trailing_zeros() >= 25 and -25 <= ye and ye <= 15
+      return LLVM::reinterpret_bits[S64, U64](0x3FF_s64 + LLVM::sign_extend[S32, S64](ye)) << 52
+  else
+    if xu.trailing_zeros() + xu.leading_zeros() == 31
+      # x = 2^E with E < -14 (a subnormal power of two)
+      var e = LLVM::reinterpret_bits[U32, S32](xu.trailing_zeros()) - 24
+      var ye = LLVM::float_to_signed[B32, S32](LLVM::signed_to_float[S32, B32](e) *! B32(from: y))
+      if yexp_tz + LLVM::reinterpret_bits[S32, U32](e).trailing_zeros() >= 25 and -25 <= ye and ye <= 15
+        return LLVM::reinterpret_bits[S64, U64](0x3FF_s64 + LLVM::sign_extend[S32, S64](ye)) << 52
+  if yu & 0xFF_u32 == 0
+    if yu == 0x3400_u32
+      return 0x14
+    if yu == 0x3800_u32
+      return 0x12
+    if yu == 0x3A00_u32
+      return 0x34
+    if yu == 0x3C00_u32
+      return 0x11
+    if yu == 0x3D00_u32
+      return 0x54
+    if yu == 0x3E00_u32
+      return 0x32
+    if yu == 0x3F00_u32
+      return 0x74
+    if yu == 0x4000_u32
+      return 0x21
+    if yu == 0x4100_u32
+      return 0x52
+    if yu == 0x4200_u32
+      return 0x31
+    if yu == 0x4300_u32
+      return 0x72
+    if yu == 0x4400_u32
+      return 0x41
+    if yu == 0x4500_u32
+      return 0x51
+    if yu == 0x4600_u32
+      return 0x61
+    if yu == 0x4700_u32
+      return 0x71
+  return 0
+
+### `x^y` for `0 <= y < 8` by square-and-multiply (three bits of y, as in the original).
+### :param x: The base.
+### :param y: The exponent (0..7).
+### :returns: x^y in binary64.
+secret routine b16_pow_fast(x: B64, y: U64) -> B64
+  var r = 1.0
+  if y & 4_u64 != 0
+    r = r *! x
+  r = r *! r
+  if y & 2_u64 != 0
+    r = r *! x
+  r = r *! r
+  if y & 1_u64 != 0
+    r = r *! x
+  return r
+
+### An approximation of `log(x)` for a positive normal binary64 x.
+### :param x: The argument.
+### :returns: log(x).
+secret routine b16_pow_log(x: B64) -> B64
+  var u = x.to_bits()
+  var expo = LLVM::reinterpret_bits[U64, S64](u >>> 52) - 1023
+  var i = (u & (0x3F_u64 << 46)) >>> 46
+  var r = LLVM::unsigned_to_float[U64, B64](u & 0x3FFFFFFFFFFF_u64) *! B64.from_bits(bits: B16_POW_LOG_TL[i])
+  r = r *! LLVM::fma[B64](a: LLVM::fma[B64](a: LLVM::fma[B64](a: LLVM::fma[B64](a: 0x1.999999999999ap-3, b: r, c: -0.25), b: r, c: 0x1.5555555555555p-2), b: r, c: -0.5), b: r, c: 1.0)
+  return LLVM::fma[B64](a: 0x1.62e42fefa39efp-1, b: B64(from: expo), c: B64.from_bits(bits: B16_POW_LOG_TB[i]) +! r)
+
+### An approximation of `exp(x)`, saturated below at 2^-25 and above at 2^16 (both beyond the binary16
+### range).
+### :param x: The argument.
+### :returns: exp(x).
+secret routine b16_pow_exp(x: B64) -> B64
+  var u = x.to_bits()
+  if u & (0x7FF_u64 << 52) == 0x7FF_u64 << 52
+    # NaN or infinity (the original's -infinity test compares against 0xff << 25, which never matches)
+    if u == 0xFF_u64 << 25
+      return 0.0
+    return x +! x
+  if u > 0xC031542457337D44_u64
+    # x < -0x1.1542457337d44p+4 (unsigned compare of negative bit patterns)
+    return 0x1p-25
+  if x > 0x1.62e42fefa39efp+3
+    return 0x1.ffcp+15 +! 0x1p+5
+  var j = LLVM::rint[B64](value: 0x1.71547652b82fep+6 *! x)
+  var jint = LLVM::float_to_signed[B64, S64](j)
+  var i = LLVM::reinterpret_bits[S64, U64](jint) & 0x3F_u64
+  var xp = LLVM::fma[B64](a: -0x1.62e42fefa39efp-7, b: j, c: x)
+  xp = LLVM::fma[B64](a: LLVM::fma[B64](a: LLVM::fma[B64](a: 0x1.55555555555p-3, b: xp, c: 0.5), b: xp, c: 1.0), b: xp, c: 1.0)
+  var ret = (xp *! B64.from_bits(bits: B16_POW_EXP_TB[i])).to_bits()
+  ret = ret +% (LLVM::reinterpret_bits[S64, U64](jint >> 6) << 52)
+  return B64.from_bits(bits: ret)
+
+# log(1 + i/64) rounded to binary64 (bit patterns), for 0 <= i < 64.
+secret preset B16_POW_LOG_TB: Array[U64, 64] = [0x0000000000000000_u64, 0x3F8FC0A8B0FC03E4_u64, 0x3F9F829B0E783300_u64, 0x3FA77458F632DCFC_u64, 0x3FAF0A30C01162A6_u64, 0x3FB341D7961BD1D1_u64, 0x3FB6F0D28AE56B4C_u64, 0x3FBA926D3A4AD563_u64, 0x3FBE27076E2AF2E6_u64, 0x3FC0D77E7CD08E59_u64, 0x3FC29552F81FF523_u64, 0x3FC44D2B6CCB7D1E_u64, 0x3FC5FF3070A793D4_u64, 0x3FC7AB890210D909_u64, 0x3FC9525A9CF456B4_u64, 0x3FCAF3C94E80BFF3_u64, 0x3FCC8FF7C79A9A22_u64, 0x3FCE27076E2AF2E6_u64, 0x3FCFB9186D5E3E2B_u64, 0x3FD0A324E27390E3_u64, 0x3FD1675CABABA60E_u64, 0x3FD22941FBCF7966_u64, 0x3FD2E8E2BAE11D31_u64, 0x3FD3A64C556945EA_u64, 0x3FD4618BC21C5EC2_u64, 0x3FD51AAD872DF82D_u64, 0x3FD5D1BDBF5809CA_u64, 0x3FD686C81E9B14AF_u64, 0x3FD739D7F6BBD007_u64, 0x3FD7EAF83B82AFC3_u64, 0x3FD89A3386C1425B_u64, 0x3FD947941C2116FB_u64, 0x3FD9F323ECBF984C_u64, 0x3FDA9CEC9A9A084A_u64, 0x3FDB44F77BCC8F63_u64, 0x3FDBEB4D9DA71B7C_u64, 0x3FDC8FF7C79A9A22_u64, 0x3FDD32FE7E00EBD5_u64, 0x3FDDD46A04C1C4A1_u64, 0x3FDE744261D68788_u64, 0x3FDF128F5FAF06ED_u64, 0x3FDFAF588F78F31F_u64, 0x3FE02552A5A5D0FF_u64, 0x3FE0723E5C1CDF40_u64, 0x3FE0BE72E4252A83_u64, 0x3FE109F39E2D4C97_u64, 0x3FE154C3D2F4D5EA_u64, 0x3FE19EE6B467C96F_u64, 0x3FE1E85F5E7040D0_u64, 0x3FE23130D7BEBF43_u64, 0x3FE2795E1289B11B_u64, 0x3FE2C0E9ED448E8C_u64, 0x3FE307D7334F10BE_u64, 0x3FE34E289D9CE1D3_u64, 0x3FE393E0D3562A1A_u64, 0x3FE3D9026A7156FB_u64, 0x3FE41D8FE84672AE_u64, 0x3FE4618BC21C5EC2_u64, 0x3FE4A4F85DB03EBB_u64, 0x3FE4E7D811B75BB1_u64, 0x3FE52A2D265BC5AB_u64, 0x3FE56BF9D5B3F399_u64, 0x3FE5AD404C359F2D_u64, 0x3FE5EE02A9241675_u64]
+# 2^-52 / (1 + i/64) rounded to binary64 (bit patterns), for 0 <= i < 64: it scales the low 46 mantissa bits to the reduced argument.
+secret preset B16_POW_LOG_TL: Array[U64, 64] = [0x3CB0000000000000_u64, 0x3CAF81F81F81F820_u64, 0x3CAF07C1F07C1F08_u64, 0x3CAE9131ABF0B767_u64, 0x3CAE1E1E1E1E1E1E_u64, 0x3CADAE6076B981DB_u64, 0x3CAD41D41D41D41D_u64, 0x3CACD85689039B0B_u64, 0x3CAC71C71C71C71C_u64, 0x3CAC0E070381C0E0_u64, 0x3CABACF914C1BAD0_u64, 0x3CAB4E81B4E81B4F_u64, 0x3CAAF286BCA1AF28_u64, 0x3CAA98EF606A63BE_u64, 0x3CAA41A41A41A41A_u64, 0x3CA9EC8E951033D9_u64, 0x3CA999999999999A_u64, 0x3CA948B0FCD6E9E0_u64, 0x3CA8F9C18F9C18FA_u64, 0x3CA8ACB90F6BF3AA_u64, 0x3CA8618618618618_u64, 0x3CA8181818181818_u64, 0x3CA7D05F417D05F4_u64, 0x3CA78A4C8178A4C8_u64, 0x3CA745D1745D1746_u64, 0x3CA702E05C0B8170_u64, 0x3CA6C16C16C16C17_u64, 0x3CA6816816816817_u64, 0x3CA642C8590B2164_u64, 0x3CA6058160581606_u64, 0x3CA5C9882B931057_u64, 0x3CA58ED2308158ED_u64, 0x3CA5555555555555_u64, 0x3CA51D07EAE2F815_u64, 0x3CA4E5E0A72F0539_u64, 0x3CA4AFD6A052BF5B_u64, 0x3CA47AE147AE147B_u64, 0x3CA446F86562D9FB_u64, 0x3CA4141414141414_u64, 0x3CA3E22CBCE4A902_u64, 0x3CA3B13B13B13B14_u64, 0x3CA3813813813814_u64, 0x3CA3521CFB2B78C1_u64, 0x3CA323E34A2B10BF_u64, 0x3CA2F684BDA12F68_u64, 0x3CA2C9FB4D812CA0_u64, 0x3CA29E4129E4129E_u64, 0x3CA27350B8812735_u64, 0x3CA2492492492492_u64, 0x3CA21FB78121FB78_u64, 0x3CA1F7047DC11F70_u64, 0x3CA1CF06ADA2811D_u64, 0x3CA1A7B9611A7B96_u64, 0x3CA1811811811812_u64, 0x3CA15B1E5F75270D_u64, 0x3CA135C81135C811_u64, 0x3CA1111111111111_u64, 0x3CA0ECF56BE69C90_u64, 0x3CA0C9714FBCDA3B_u64, 0x3CA0A6810A6810A7_u64, 0x3CA0842108421084_u64, 0x3CA0624DD2F1A9FC_u64, 0x3CA0410410410410_u64, 0x3CA0204081020408_u64]
+# 2^(i/64) rounded to binary64 (bit patterns), for 0 <= i < 64.
+secret preset B16_POW_EXP_TB: Array[U64, 64] = [0x3FF0000000000000_u64, 0x3FF02C9A3E778061_u64, 0x3FF059B0D3158574_u64, 0x3FF0874518759BC8_u64, 0x3FF0B5586CF9890F_u64, 0x3FF0E3EC32D3D1A2_u64, 0x3FF11301D0125B51_u64, 0x3FF1429AAEA92DE0_u64, 0x3FF172B83C7D517B_u64, 0x3FF1A35BEB6FCB75_u64, 0x3FF1D4873168B9AA_u64, 0x3FF2063B88628CD6_u64, 0x3FF2387A6E756238_u64, 0x3FF26B4565E27CDD_u64, 0x3FF29E9DF51FDEE1_u64, 0x3FF2D285A6E4030B_u64, 0x3FF306FE0A31B715_u64, 0x3FF33C08B26416FF_u64, 0x3FF371A7373AA9CB_u64, 0x3FF3A7DB34E59FF7_u64, 0x3FF3DEA64C123422_u64, 0x3FF4160A21F72E2A_u64, 0x3FF44E086061892D_u64, 0x3FF486A2B5C13CD0_u64, 0x3FF4BFDAD5362A27_u64, 0x3FF4F9B2769D2CA7_u64, 0x3FF5342B569D4F82_u64, 0x3FF56F4736B527DA_u64, 0x3FF5AB07DD485429_u64, 0x3FF5E76F15AD2149_u64, 0x3FF6247EB03A5585_u64, 0x3FF6623882552225_u64, 0x3FF6A09E667F3BCC_u64, 0x3FF6DFB23C651A2F_u64, 0x3FF71F75E8EC5F74_u64, 0x3FF75FEB564267C9_u64, 0x3FF7A11473EB0187_u64, 0x3FF7E2F336CF4E62_u64, 0x3FF82589994CCE13_u64, 0x3FF868D99B4492EC_u64, 0x3FF8ACE5422AA0DB_u64, 0x3FF8F1AE99157736_u64, 0x3FF93737B0CDC5E5_u64, 0x3FF97D829FDE4E4F_u64, 0x3FF9C49182A3F090_u64, 0x3FFA0C667B5DE565_u64, 0x3FFA5503B23E255D_u64, 0x3FFA9E6B5579FDC0_u64, 0x3FFAE89F995AD3AD_u64, 0x3FFB33A2B84F15FB_u64, 0x3FFB7F76F2FB5E47_u64, 0x3FFBCC1E904BC1D2_u64, 0x3FFC199BDD85529C_u64, 0x3FFC67F12E57D14B_u64, 0x3FFCB720DCEF9069_u64, 0x3FFD072D4A07897B_u64, 0x3FFD5818DCFBA487_u64, 0x3FFDA9E603DB3285_u64, 0x3FFDFC97337B9B5F_u64, 0x3FFE502EE78B3FF6_u64, 0x3FFEA4AFA2A490D9_u64, 0x3FFEFA1BEE615A27_u64, 0x3FFF50765B6E4541_u64, 0x3FFFA7C1819E90D8_u64]

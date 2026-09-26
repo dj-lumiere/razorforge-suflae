@@ -1,0 +1,1171 @@
+module Core
+
+# ============================================================================
+# Shared argument reduction and kernels of the correctly rounded B64 cosine and tangent
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/cos/cos.c and src/binary64/tan/tan.c, which share this code
+# (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Paul Zimmermann and Tom Hubrecht. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest
+# path of the original is kept.
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# A 128-bit floating-point value ("dint", the C dint64_t) is the tuple `(r, ex, sgn)`, standing for
+# (-1)^sgn * r/2^128 * 2^ex, where r is the 128-bit significand (normalized: top bit set, unless zero).
+
+### Builds a 128-bit value from its high and low 64-bit halves.
+### :param hi: The high 64 bits.
+### :param lo: The low 64 bits.
+### :returns: `hi * 2^64 + lo`.
+secret routine b64_trig_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### The high 64 bits of a 128-bit value.
+### :param r: The value.
+### :returns: `floor(r / 2^64)`.
+secret routine b64_trig_hi(r: U128) -> U64
+  return LLVM::int_truncate[U128, U64](r >>> 64)
+
+### The low 64 bits of a 128-bit value.
+### :param r: The value.
+### :returns: `r mod 2^64`.
+secret routine b64_trig_lo(r: U128) -> U64
+  return LLVM::int_truncate[U128, U64](r)
+
+### The full 128-bit product of two 64-bit values.
+### :param a: The first factor.
+### :param b: The second factor.
+### :returns: `a * b`.
+secret routine b64_trig_mul64(a: U64, b: U64) -> U128
+  return LLVM::zero_extend[U64, U128](a) *% LLVM::zero_extend[U64, U128](b)
+
+### The dint zero, which converts back to 0.
+### :returns: `(0, -1076, 0)`.
+secret routine b64_trig_dint_zero() -> (U128, S64, U64)
+  return (LLVM::zero_extend[U64, U128](0_u64), -1076_s64, 0_u64)
+
+### Compares the absolute values of two dints.
+### :param a: The first dint.
+### :param b: The second dint.
+### :returns: -1, 0 or 1 as |a| is less than, equal to or greater than |b|.
+secret routine b64_trig_dint_cmp_abs(a: (U128, S64, U64), b: (U128, S64, U64)) -> S64
+  var a_zero = b64_trig_hi(r: a.item0) == 0
+  var b_zero = b64_trig_hi(r: b.item0) == 0
+  if a_zero
+    if b_zero
+      return 0_s64
+    return -1_s64
+  if b_zero
+    return 1_s64
+  if a.item1 > b.item1
+    return 1_s64
+  if a.item1 < b.item1
+    return -1_s64
+  if a.item0 > b.item0
+    return 1_s64
+  if a.item0 < b.item0
+    return -1_s64
+  return 0_s64
+
+### Adds two dints, with error bounded by 2 ulps (exact in the Sterbenz case).
+### :param a0: The first addend.
+### :param b0: The second addend.
+### :returns: The sum.
+secret routine b64_trig_dint_add(a0: (U128, S64, U64), b0: (U128, S64, U64)) -> (U128, S64, U64)
+  if a0.item0 == LLVM::zero_extend[U64, U128](0_u64)
+    return b0
+  var a = a0
+  var b = b0
+  var c = b64_trig_dint_cmp_abs(a: a0, b: b0)
+  if c == 0
+    if (a0.item2 ^ b0.item2) != 0
+      return b64_trig_dint_zero()
+    return (a0.item0, a0.item1 + 1, a0.item2)
+  if c == -1
+    a = b0
+    b = a0
+  # from now on |a| > |b|, thus a.ex >= b.ex (or b is zero)
+  var aa = a.item0
+  var bb = b.item0
+  var k = a.item1 - b.item1
+  if k != 0
+    if k > 0 and k < 128
+      bb = bb >>> LLVM::int_truncate[S64, U32](k)
+    else
+      bb = LLVM::zero_extend[U64, U128](0_u64)
+  var cc = aa
+  var rex = a.item1
+  if (a.item2 ^ b.item2) != 0
+    cc = aa -% bb
+    # C is not zero since |a| != |b|
+    var ex = LLVM::int_truncate[U128, U32](cc.leading_zeros())
+    if ex > 0
+      if k == 1
+        cc = (aa << ex) -% (b.item0 << (ex - 1))
+      else
+        cc = (aa << ex) -% (bb << ex)
+      rex = rex - LLVM::zero_extend[U32, S64](ex)
+      ex = LLVM::int_truncate[U64, U32](b64_trig_hi(r: cc).leading_zeros())
+    cc = cc << ex
+    rex = rex - LLVM::zero_extend[U32, S64](ex)
+  else
+    cc = aa +% bb
+    if cc < aa
+      cc = (LLVM::zero_extend[U64, U128](1_u64) << 127) | (cc >>> 1)
+      rex = rex + 1
+  return (cc, rex, a.item2)
+
+### Normalizes a product significand so that its top bit is set, and builds the dint.
+### :param r: The significand of the product, with one of its two top bits set.
+### :param ex: The sum of the factors' exponents.
+### :param sgn: The sign bit of the product.
+### :returns: The normalized product.
+secret routine b64_trig_dint_mul_finish(r: U128, ex: S64, sgn: U64) -> (U128, S64, U64)
+  var top = b64_trig_hi(r: r) >>> 63
+  var shifted = r
+  if top == 0
+    shifted = r << 1
+  return (shifted, ex + LLVM::reinterpret_bits[U64, S64](top) - 1, sgn)
+
+### Multiplies two dints, with error bounded by 6 ulps.
+### :param a: The first factor.
+### :param b: The second factor.
+### :returns: The product.
+secret routine b64_trig_dint_mul(a: (U128, S64, U64), b: (U128, S64, U64)) -> (U128, S64, U64)
+  var ah = b64_trig_hi(r: a.item0)
+  var al = b64_trig_lo(r: a.item0)
+  var bh = b64_trig_hi(r: b.item0)
+  var bl = b64_trig_lo(r: b.item0)
+  var m1 = b64_trig_mul64(a: ah, b: bl)
+  var m2 = b64_trig_mul64(a: al, b: bh)
+  var r = b64_trig_mul64(a: ah, b: bh)
+  r = r +% ((m1 >>> 64) +% (m2 >>> 64))
+  return b64_trig_dint_mul_finish(r: r, ex: a.item1 + b.item1, sgn: a.item2 ^ b.item2)
+
+### Multiplies two dints assuming the low half of `b` is zero, with error bounded by 2 ulps.
+### :param a: The first factor.
+### :param b: The second factor, whose low 64 bits are ignored.
+### :returns: The product.
+secret routine b64_trig_dint_mul21(a: (U128, S64, U64), b: (U128, S64, U64)) -> (U128, S64, U64)
+  var bh = b64_trig_hi(r: b.item0)
+  var hi = b64_trig_mul64(a: b64_trig_hi(r: a.item0), b: bh)
+  var lo = b64_trig_mul64(a: b64_trig_lo(r: a.item0), b: bh)
+  var r = hi +% (lo >>> 64)
+  return b64_trig_dint_mul_finish(r: r, ex: a.item1 + b.item1, sgn: a.item2 ^ b.item2)
+
+### Converts a non-zero `B64` to a dint.
+### :param b: The value.
+### :returns: The dint equal to `b`.
+secret routine b64_trig_dint_fromd(b: B64) -> (U128, S64, U64)
+  var u = b.to_bits()
+  var e = (u >>> 52) & 0x7FF_u64
+  var m = u & 0x000FFFFFFFFFFFFF_u64
+  if e != 0
+    m = m + (1_u64 << 52)
+  var ex = LLVM::reinterpret_bits[U64, S64](e) - 0x3FE
+  var t = m.leading_zeros()
+  var sgn = 0_u64
+  if b < 0.0
+    sgn = 1_u64
+  var hi = m << LLVM::int_truncate[U64, U32](t)
+  if t > 11
+    ex = ex - LLVM::reinterpret_bits[U64, S64](t - 12)
+  return (b64_trig_u128(hi: hi, lo: 0_u64), ex, sgn)
+
+### Converts a dint to the nearest `B64` (ties to even).
+### :param a: The dint.
+### :returns: The rounded value.
+secret routine b64_trig_dint_tod(a: (U128, S64, U64)) -> B64
+  var hi = b64_trig_hi(r: a.item0)
+  var lo = b64_trig_lo(r: a.item0)
+  var aex = a.item1
+  var sgn = a.item2
+  # subnormal results: round the significand to the available precision
+  if aex <= -1023
+    var sh = LLVM::int_truncate[S64, U32](-(1011 + aex))
+    var h = hi >>> sh
+    var md = (hi >>> (sh - 1)) & 1_u64
+    var sticky = (hi & (0xFFFFFFFFFFFFFFFF_u64 >>> sh)) != 0 or lo != 0
+    if sticky
+      h = h + md
+    else
+      h = h + (h & md)
+    hi = h << sh
+    lo = 0_u64
+    if hi == 0
+      aex = aex + 1
+      hi = 1_u64 << 63
+  var rbits = (hi >>> 11) | (0x3FF_u64 << 52)
+  var rd = 0.0
+  if ((hi >>> 10) & 1_u64) != 0
+    rd = rd +! 0x1p-53
+  if (hi & 0x3FF_u64) != 0 or lo != 0
+    rd = rd +! 0x1p-54
+  if sgn != 0
+    rd = -rd
+  var r = B64.from_bits(bits: rbits | (sgn << 63))
+  r = r +! rd
+  var e = 0.0
+  if aex > -1022
+    if aex > 1024
+      if aex == 1025
+        r = r *! 0x1p+1
+        e = 0x1p+1023
+      else
+        r = 0x1.fffffffffffffp+1023
+        e = 0x1.fffffffffffffp+1023
+    else
+      e = B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](aex + 1022) & 0x7FF_u64) << 52)
+  else
+    if aex < -1073
+      if aex == -1074
+        r = r *! 0x1p-1
+        e = 0x1p-1074
+      else
+        r = 0x1p-1074
+        e = 0x1p-1074
+    else
+      e = B64.from_bits(bits: 1_u64 << LLVM::int_truncate[S64, U32](aex + 1073))
+  return r *! e
+
+### Error-free product `a * b = hi + lo`.
+### :param a: The first factor.
+### :param b: The second factor.
+### :returns: `(hi, lo)`.
+secret routine b64_trig_a_mul(a: B64, b: B64) -> (B64, B64)
+  var hi = a *! b
+  return (hi, LLVM::fma[B64](a: a, b: b, c: -hi))
+
+### Product of a double and a double-double, `a * (bh + bl)`, with error bounded by ulp(lo).
+### :param a: The double factor.
+### :param bh: The high part of the double-double factor.
+### :param bl: The low part of the double-double factor.
+### :returns: `(hi, lo)`.
+secret routine b64_trig_s_mul(a: B64, bh: B64, bl: B64) -> (B64, B64)
+  var p = b64_trig_a_mul(a: a, b: bh)
+  return (p.item0, LLVM::fma[B64](a: a, b: bl, c: p.item1))
+
+### Double-double product `(ah + al) * (bh + bl)` without the `al * bl` term.
+### :param ah: The high part of the first factor.
+### :param al: The low part of the first factor.
+### :param bh: The high part of the second factor.
+### :param bl: The low part of the second factor.
+### :returns: `(hi, lo)`.
+secret routine b64_trig_d_mul(ah: B64, al: B64, bh: B64, bl: B64) -> (B64, B64)
+  var p = b64_trig_a_mul(a: ah, b: bh)
+  var t = LLVM::fma[B64](a: al, b: bh, c: p.item1)
+  return (p.item0, LLVM::fma[B64](a: ah, b: bl, c: t))
+
+### Error-free sum `a + b = hi + lo` for |a| >= |b| (Fast2Sum).
+### :param a: The larger operand.
+### :param b: The smaller operand.
+### :returns: `(hi, lo)`.
+secret routine b64_trig_fast_two_sum(a: B64, b: B64) -> (B64, B64)
+  var hi = a +! b
+  var e = hi -! a
+  return (hi, b -! e)
+
+### Double-double approximation of sin2pi(xh + xl) for -2^-24 <= xh + xl < 2^-11 + 2^-24, given
+### uh + ul ~ (xh + xl)^2 (degree-7 odd polynomial).
+### :param xh: The high part of the argument.
+### :param xl: The low part of the argument.
+### :param uh: The high part of the argument's square.
+### :param ul: The low part of the argument's square.
+### :returns: `(h, l)`.
+secret routine b64_trig_eval_ps_fast(xh: B64, xl: B64, uh: B64, ul: B64) -> (B64, B64)
+  var h = -0x1.331554ca19669p6
+  h = LLVM::fma[B64](a: h, b: uh, c: 0x1.466bc678d8d63p6)
+  h = LLVM::fma[B64](a: h, b: uh, c: -0x1.4abbce625be53p5)
+  var p = b64_trig_s_mul(a: h, bh: uh, bl: ul)
+  var s = b64_trig_fast_two_sum(a: 0x1.921fb54442d18p+2, b: p.item0)
+  var l = p.item1 +! (0x1.1a62645446203p-52 +! s.item1)
+  # multiply by xh + xl
+  return b64_trig_d_mul(ah: s.item0, al: l, bh: xh, bl: xl)
+
+### Double-double approximation of cos2pi(x) for -2^-24 <= x < 2^-11 + 2^-24, given uh + ul ~ x^2
+### (degree-6 even polynomial).
+### :param uh: The high part of the argument's square.
+### :param ul: The low part of the argument's square.
+### :returns: `(h, l)`.
+secret routine b64_trig_eval_pc_fast(uh: B64, ul: B64) -> (B64, B64)
+  var h = -0x1.55a5c590f9e6ap6
+  h = LLVM::fma[B64](a: h, b: uh, c: 0x1.03c1f080ad892p6)
+  h = LLVM::fma[B64](a: h, b: uh, c: -0x1.3bd3cc9be45dep4)
+  var p = b64_trig_s_mul(a: h, bh: uh, bl: ul)
+  var s = b64_trig_fast_two_sum(a: 0x1p+0, b: p.item0)
+  return (s.item0, p.item1 +! (-0x1.923015cp-77 +! s.item1))
+
+### Builds a dint from its fields.
+### :param hi: The high 64 bits of the significand.
+### :param lo: The low 64 bits of the significand.
+### :param ex: The exponent.
+### :param sgn: The sign bit.
+### :returns: The dint.
+secret routine b64_trig_dint(hi: U64, lo: U64, ex: S64, sgn: U64) -> (U128, S64, U64)
+  return (b64_trig_u128(hi: hi, lo: lo), ex, sgn)
+
+### Dint approximation of sin2pi(X) for 0 <= X < 2^-11, given X2 ~ X^2 (degree-11 odd polynomial,
+### relative error below 2^-124.648).
+### :param x: X.
+### :param x2: X^2.
+### :returns: sin2pi(X).
+secret routine b64_trig_eval_ps(x: (U128, S64, U64), x2: (U128, S64, U64)) -> (U128, S64, U64)
+  var y = b64_trig_dint_mul21(a: x2, b: b64_trig_dint(hi: 0xF16AB2898EAE62F9_u64, lo: 0xA7F0339113B8B3C5_u64, ex: 4_s64, sgn: 1_u64))
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xA83C1A43BF1C6485_u64, lo: 0x7D5F8F76FA7D74ED_u64, ex: 6_s64, sgn: 0_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0x9969667315EC2D9D_u64, lo: 0xE59D6AB8509A2025_u64, ex: 7_s64, sgn: 1_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xA335E33BAD570E92_u64, lo: 0x3F33BE0021AA54D2_u64, ex: 7_s64, sgn: 0_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xA55DE7312DF295F5_u64, lo: 0x5DC72F712AA57DB4_u64, ex: 6_s64, sgn: 1_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xC90FDAA22168C234_u64, lo: 0xC4C6628B80DC1CD1_u64, ex: 3_s64, sgn: 0_u64))
+  return b64_trig_dint_mul(a: y, b: x)
+
+### Dint approximation of cos2pi(X) for 0 <= X < 2^-11, given X2 ~ X^2 (degree-10 even polynomial,
+### error below 2^-125.999).
+### :param x2: X^2.
+### :returns: cos2pi(X).
+secret routine b64_trig_eval_pc(x2: (U128, S64, U64)) -> (U128, S64, U64)
+  var y = b64_trig_dint_mul21(a: x2, b: b64_trig_dint(hi: 0xD368F6F4207CFE49_u64, lo: 0x0EC63157807EBFFA_u64, ex: 5_s64, sgn: 1_u64))
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xF0FA83448DD1E094_u64, lo: 0x0E0603CE7044EEBA_u64, ex: 6_s64, sgn: 0_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0xAAE9E3F1E5FFCFE2_u64, lo: 0xA508509534006249_u64, ex: 7_s64, sgn: 1_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0x81E0F840DAD61D9A_u64, lo: 0x9980F00630CB655E_u64, ex: 7_s64, sgn: 0_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  y = b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0x9DE9E64DF22EF2D2_u64, lo: 0x56E26CD9808C1949_u64, ex: 5_s64, sgn: 1_u64))
+  y = b64_trig_dint_mul(a: y, b: x2)
+  return b64_trig_dint_add(a0: y, b0: b64_trig_dint(hi: 0x8000000000000000_u64, lo: 0_u64, ex: 1_s64, sgn: 0_u64))
+
+### Normalizes a dint so that the top bit of its significand is set (unless it is zero).
+### :param x: The dint.
+### :returns: The normalized dint.
+secret routine b64_trig_normalize(x: (U128, S64, U64)) -> (U128, S64, U64)
+  if x.item0 == LLVM::zero_extend[U64, U128](0_u64)
+    return x
+  var cnt = x.item0.leading_zeros()
+  return (x.item0 << LLVM::int_truncate[U128, U32](cnt), x.item1 - LLVM::reinterpret_bits[U64, S64](LLVM::int_truncate[U128, U64](cnt)), x.item2)
+
+### Word `j` of the 1/(2pi) table: 1/(2pi) ~ sum of `T[j] / 2^(64(j+1))`.
+### :param j: The word index, 0 <= j < 20.
+### :returns: The table word.
+secret routine b64_trig_t(j: U64) -> U64
+  return B64_TRIG_T[j]
+
+### Reduces a normalized non-negative dint X to X/(2pi) mod 1, with relative error below 2^-126.67;
+### the result is normalized.
+### :param x: The normalized dint.
+### :returns: X/(2pi) mod 1.
+secret routine b64_trig_reduce(x: (U128, S64, U64)) -> (U128, S64, U64)
+  var e = x.item1
+  var xhi = b64_trig_hi(r: x.item0)
+  if e <= 1
+    # |X| < 2: multiply by T[0]/2^64 + T[1]/2^128
+    var u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: 1_u64))
+    var tiny = b64_trig_lo(r: u)
+    var lo = b64_trig_hi(r: u)
+    u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: 0_u64))
+    lo = lo +% b64_trig_lo(r: u)
+    var carry = 0_u64
+    if lo < b64_trig_lo(r: u)
+      carry = 1_u64
+    var hi = b64_trig_hi(r: u) +% carry
+    var y = b64_trig_normalize(x: (b64_trig_u128(hi: hi, lo: lo), x.item1, x.item2))
+    var d = x.item1 - y.item1
+    if d != 0
+      # put the upper d bits of tiny into the low word
+      var extra = tiny >>> LLVM::int_truncate[S64, U32](64 - d)
+      y = (y.item0 | LLVM::zero_extend[U64, U128](extra), y.item1, y.item2)
+    return y
+  # now 2 <= e <= 1024: only T[i] .. T[i+4] contribute
+  var i = 0_u64
+  if e >= 127
+    i = LLVM::reinterpret_bits[S64, U64]((e - 127 + 64 - 1) // 64)
+  var u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: i + 3))
+  var c0 = b64_trig_lo(r: u)
+  var c1 = b64_trig_hi(r: u)
+  u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: i + 2))
+  c1 = c1 +% b64_trig_lo(r: u)
+  var c2 = b64_trig_hi(r: u)
+  if c1 < b64_trig_lo(r: u)
+    c2 = c2 +% 1
+  u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: i + 1))
+  c2 = c2 +% b64_trig_lo(r: u)
+  var c3 = b64_trig_hi(r: u)
+  if c2 < b64_trig_lo(r: u)
+    c3 = c3 +% 1
+  u = b64_trig_mul64(a: xhi, b: b64_trig_t(j: i))
+  c3 = c3 +% b64_trig_lo(r: u)
+  var c4 = b64_trig_hi(r: u)
+  if c3 < b64_trig_lo(r: u)
+    c4 = c4 +% 1
+  # hi*T[i]/2^128 is multiplied by 2^f
+  var f = e - 64 * LLVM::reinterpret_bits[U64, S64](i)
+  var hi = 0_u64
+  var lo = 0_u64
+  var tiny = 0_u64
+  if f < 64
+    var fs = LLVM::int_truncate[S64, U32](f)
+    hi = (c4 << fs) | (c3 >>> (64_u32 - fs))
+    lo = (c3 << fs) | (c2 >>> (64_u32 - fs))
+    tiny = (c2 << fs) | (c1 >>> (64_u32 - fs))
+  elseif f == 64
+    hi = c3
+    lo = c2
+    tiny = c1
+  else
+    # 65 <= f <= 127: one extra term
+    var g = LLVM::int_truncate[S64, U32](f - 64)
+    var w = b64_trig_hi(r: b64_trig_mul64(a: xhi, b: b64_trig_t(j: i + 4)))
+    c0 = c0 +% w
+    if c0 < w
+      c1 = c1 +% 1
+      if c1 == 0
+        c2 = c2 +% 1
+        if c2 == 0
+          c3 = c3 +% 1
+    hi = (c3 << g) | (c2 >>> (64_u32 - g))
+    lo = (c2 << g) | (c1 >>> (64_u32 - g))
+    tiny = (c1 << g) | (c0 >>> (64_u32 - g))
+  var y = b64_trig_normalize(x: (b64_trig_u128(hi: hi, lo: lo), 0_s64, x.item2))
+  if y.item1 < 0
+    # put the upper -ex bits of tiny into the low word
+    var extra = tiny >>> LLVM::int_truncate[S64, U32](64 + y.item1)
+    y = (y.item0 | LLVM::zero_extend[U64, U128](extra), y.item1, y.item2)
+  return y
+
+### Splits 0 <= X < 1 exactly as i/2^11 + X' with 0 <= X' < 2^-11.
+### :param x: The normalized dint X.
+### :returns: `(i, X')`, X' normalized.
+secret routine b64_trig_reduce2(x: (U128, S64, U64)) -> (U64, (U128, S64, U64))
+  if x.item1 <= -11
+    return (0_u64, x)
+  var sh = LLVM::int_truncate[S64, U32](64 - 11 - x.item1)
+  var hi = b64_trig_hi(r: x.item0)
+  var i = hi >>> sh
+  hi = hi & ((1_u64 << sh) - 1)
+  return (i, b64_trig_normalize(x: (b64_trig_u128(hi: hi, lo: b64_trig_lo(r: x.item0)), x.item1, x.item2)))
+
+### Truncates c1/2^64 + c0/2^128 to a double-double.
+### :param c1: The high word.
+### :param c0: The low word.
+### :returns: `(h, l)`.
+secret routine b64_trig_set_dd(c1_in: U64, c0_in: U64) -> (B64, B64)
+  var c1 = c1_in
+  var c0 = c0_in
+  if c1 != 0
+    var e = c1.leading_zeros()
+    if e != 0
+      var es = LLVM::int_truncate[U64, U32](e)
+      c1 = (c1 << es) | (c0 >>> (64_u32 - es))
+      c0 = c0 << es
+    var f = 0x3FE_u64 - e
+    var h = B64.from_bits(bits: (f << 52) | ((c1 << 1) >>> 12))
+    c0 = (c1 << 53) | (c0 >>> 11)
+    if c0 != 0
+      var g = c0.leading_zeros()
+      if g != 0
+        c0 = c0 << LLVM::int_truncate[U64, U32](g)
+      return (h, B64.from_bits(bits: ((f -% 53 -% g) << 52) | ((c0 << 1) >>> 12)))
+    return (h, 0.0)
+  if c0 != 0
+    var e = c0.leading_zeros()
+    var f = 0x3FE_u64 -% 64 -% e
+    # the most significant bit is shifted out
+    c0 = c0 << LLVM::int_truncate[U64, U32](e + 1)
+    var h = B64.from_bits(bits: (f << 52) | (c0 >>> 12))
+    c0 = c0 << 52
+    if c0 != 0
+      var g = c0.leading_zeros()
+      c0 = c0 << LLVM::int_truncate[U64, U32](g + 1)
+      return (h, B64.from_bits(bits: ((f -% 64 -% g) << 52) | (c0 >>> 12)))
+    return (h, 0.0)
+  return (0.0, 0.0)
+
+### The first two words of the reduction of a large x (> 0x1.921fb54442d17p+2): returns c1, c0 with
+### c1/2^64 + c0/2^128 ~ frac(x/(2pi)). With `with_t2`, the upper part of the next product is added in (as
+### the tangent does), else it is dropped (as the cosine does).
+### :param x: The argument.
+### :param with_t2: Whether to add the upper part of the next table product.
+### :returns: `(c1, c0)`.
+secret routine b64_trig_reduce_fast_large(x: B64, with_t2: Bool) -> (U64, U64)
+  var ux = x.to_bits()
+  var e = (ux >>> 52) & 0x7FF_u64
+  var m = (1_u64 << 52) | (ux & 0x000FFFFFFFFFFFFF_u64)
+  var c0 = 0_u64
+  var c1 = 0_u64
+  var c2 = 0_u64
+  var bits = 0_u64
+  var i = 0_u64
+  if e > 1074
+    i = (e - 1075) // 64
+  if e <= 1074
+    # 2^2 <= x < 2^52
+    var u = b64_trig_mul64(a: m, b: b64_trig_t(j: 1_u64))
+    c0 = b64_trig_lo(r: u)
+    c1 = b64_trig_hi(r: u)
+    if with_t2
+      c0 = c0 +% b64_trig_hi(r: b64_trig_mul64(a: m, b: b64_trig_t(j: 2_u64)))
+      if c0 < b64_trig_lo(r: u)
+        c1 = c1 +% 1
+    u = b64_trig_mul64(a: m, b: b64_trig_t(j: 0_u64))
+    c1 = c1 +% b64_trig_lo(r: u)
+    c2 = b64_trig_hi(r: u)
+    if c1 < b64_trig_lo(r: u)
+      c2 = c2 +% 1
+    bits = 1075 - e
+  else
+    # 2^52 <= x < 2^1024
+    var u = b64_trig_mul64(a: m, b: b64_trig_t(j: i + 2))
+    c0 = b64_trig_lo(r: u)
+    c1 = b64_trig_hi(r: u)
+    if with_t2
+      c0 = c0 +% b64_trig_hi(r: b64_trig_mul64(a: m, b: b64_trig_t(j: i + 3)))
+      if c0 < b64_trig_lo(r: u)
+        c1 = c1 +% 1
+    u = b64_trig_mul64(a: m, b: b64_trig_t(j: i + 1))
+    c1 = c1 +% b64_trig_lo(r: u)
+    c2 = b64_trig_hi(r: u)
+    if c1 < b64_trig_lo(r: u)
+      c2 = c2 +% 1
+    u = b64_trig_mul64(a: m, b: b64_trig_t(j: i))
+    c2 = c2 +% b64_trig_lo(r: u)
+    bits = 1139 + (i << 6) - e
+  # bits is the number of low bits of c2 contributing to frac(x/(2pi))
+  if bits == 64
+    return (c2, c1)
+  var bs = LLVM::int_truncate[U64, U32](bits)
+  c0 = (c1 << (64_u32 - bs)) | (c0 >>> bs)
+  c1 = (c2 << (64_u32 - bs)) | (c1 >>> bs)
+  return (c1, c0)
+
+### Fast argument reduction for x > 0x1.6a09e667f3bccp-27: returns `(i, h, l, err1)` with i/2^11 + h + l
+### approximating frac(x/(2pi)), 0 <= i < 2^11, and err1 the cosine's bound on its absolute error.
+### :param x: The argument, finite and positive.
+### :param with_t2: Whether the large-x reduction adds the upper part of the next table product.
+### :returns: `(i, h, l, err1)`.
+secret routine b64_trig_reduce_fast(x: B64, with_t2: Bool) -> (U64, B64, B64, B64)
+  var h = 0.0
+  var l = 0.0
+  var err1 = 0x1.01p-76
+  if x <= 0x1.921fb54442d17p+2
+    # |CH + CL - 1/(2pi)| < 2^-110.523
+    var p = b64_trig_a_mul(a: 0x1.45f306dc9c883p-3, b: x)
+    h = p.item0
+    l = LLVM::fma[B64](a: -0x1.6b01ec5417056p-57, b: x, c: p.item1)
+    # error < 2^-104.116 * h
+    err1 = 0x1.d9p-105 *! h
+  else
+    var c = b64_trig_reduce_fast_large(x: x, with_t2: with_t2)
+    var d = b64_trig_set_dd(c1_in: c.item0, c0_in: c.item1)
+    h = d.item0
+    l = d.item1
+  var fi = LLVM::floor[B64](h *! 0x1p11)
+  h = LLVM::fma[B64](a: fi, b: -0x1p-11, c: h)
+  return (LLVM::float_to_unsigned[B64, U64](fi), h, l, err1)
+
+### The dint entry `i` (0 <= i < 256) of the sin2pi(i/2^11) table.
+### :param i: The index.
+### :returns: The dint.
+secret routine b64_trig_s(i: U64) -> (U128, S64, U64)
+  return (b64_trig_u128(hi: B64_TRIG_S[2 * i], lo: B64_TRIG_S[2 * i + 1]), B64_TRIG_S_EX[i], 0_u64)
+
+### The dint entry `i` (0 <= i < 256) of the cos2pi(i/2^11) table.
+### :param i: The index.
+### :returns: The dint.
+secret routine b64_trig_c(i: U64) -> (U128, S64, U64)
+  return (b64_trig_u128(hi: B64_TRIG_C[2 * i], lo: B64_TRIG_C[2 * i + 1]), B64_TRIG_C_EX[i], 0_u64)
+
+### The dint 2^-11.
+### :returns: `(2^127, -10, 0)`.
+secret routine b64_trig_magic() -> (U128, S64, U64)
+  return b64_trig_dint(hi: 0x8000000000000000_u64, lo: 0_u64, ex: -10_s64, sgn: 0_u64)
+
+### The accurate reduction shared by cos and tan: reduces |x| to R = i/2^11 + X with 0 <= R < 1/4
+### (using the symmetries up to pi/2), and returns sin2pi and cos2pi of the pieces.
+### :param ax: |x|, a finite positive value.
+### :returns: `(i, quadrant, X, cos2pi(X), sin2pi(X))`, where quadrant holds bit 0 = i was >= 2^10
+### (pi <= x mod 2pi), bit 1 = i mod 2^10 was >= 2^9, bit 2 = i mod 2^9 was >= 2^8.
+secret routine b64_trig_accurate_reduce(ax: B64) -> (U64, U64, (U128, S64, U64), (U128, S64, U64), (U128, S64, U64))
+  var xd = b64_trig_reduce(x: b64_trig_dint_fromd(b: ax))
+  var r2 = b64_trig_reduce2(x: xd)
+  var i = r2.item0
+  var xx = r2.item1
+  var quadrant = 0_u64
+  if (i & 0x400_u64) != 0
+    quadrant = quadrant | 1_u64
+    i = i & 0x3FF_u64
+  if (i & 0x200_u64) != 0
+    quadrant = quadrant | 2_u64
+    i = i & 0x1FF_u64
+  if (i & 0x100_u64) != 0
+    quadrant = quadrant | 4_u64
+    # X -> 2^-11 - X
+    xx = b64_trig_dint_add(a0: b64_trig_magic(), b0: (xx.item0, xx.item1, 1_u64))
+    i = 0x1FF_u64 - i
+  var x2 = b64_trig_dint_mul(a: xx, b: xx)
+  var u = b64_trig_eval_pc(x2: x2)
+  var v = b64_trig_eval_ps(x: xx, x2: x2)
+  return (i, quadrant, xx, u, v)
+
+### 1/(2pi) rounded down to 1280 bits: 1/(2pi) ~ sum of T[j] / 2^(64(j+1)).
+secret preset B64_TRIG_T: Array[U64, 20] = [0x28be60db9391054a_u64, 0x7f09d5f47d4d3770_u64, 0x36d8a5664f10e410_u64, 0x7f9458eaf7aef158_u64,
+  0x6dc91b8e909374b8_u64, 0x1924bba82746487_u64, 0x3f877ac72c4a69cf_u64, 0xba208d7d4baed121_u64,
+  0x3a671c09ad17df90_u64, 0x4e64758e60d4ce7d_u64, 0x272117e2ef7e4a0e_u64, 0xc7fe25fff7816603_u64,
+  0xfbcbc462d6829b47_u64, 0xdb4d9fb3c9f2c26d_u64, 0xd3d18fd9a797fa8b_u64, 0x5d49eeb1faf97c5e_u64,
+  0xcf41ce7de294a4ba_u64, 0x9afed7ec47e35742_u64, 0x1580cc11bf1edaea_u64, 0xfc33ef0826bd0d87_u64]
+
+### For 0 <= i < 256, entries 2i (high) and 2i+1 (low) hold the significand of the 128-bit sin2pi(i/2^11) (to nearest).
+secret preset B64_TRIG_S: Array[U64, 512] = [0x0_u64, 0x0_u64, 0xc90fc5f66525d257_u64, 0x480f7956b6470765_u64,
+  0xc90f87f3380388d5_u64, 0xcb3ff35bd4d81baa_u64, 0x96cb587284b81770_u64, 0xb767005691b9d9d1_u64,
+  0xc90e8fe6f63c2330_u64, 0xf1d7d06db39ea9fc_u64, 0xfb514b55ccbe541a_u64, 0xd784e031f9af76d6_u64,
+  0x96c9b5df1877e9b5_u64, 0xf91ee371d6467dca_u64, 0xafea690fd5912ef3_u64, 0xf56e3c87ae3c56df_u64,
+  0xc90aafbd1b33efc9_u64, 0xc539edcbfda0cf2c_u64, 0xe22a7a6729d8e453_u64, 0x850021e392744a4f_u64,
+  0xfb49b98e8e7807f6_u64, 0xb21ccebc9caac3_u64, 0x8a342eda160bf5ae_u64, 0xde5b1068d174be9c_u64,
+  0x96c32baca2ae68b4_u64, 0x37b2dd49d5fca3c0_u64, 0xa351cb7fc30bc889_u64, 0xb56007d16d4ad5a3_u64,
+  0xafe00694866a1b44_u64, 0xcd34d2751c2e1da7_u64, 0xbc6dd52c3a342eb5_u64, 0xf10bfca3d6464012_u64,
+  0xc8fb2f886ec09f37_u64, 0x6a17954b2b7c5171_u64, 0xd5880deafc18b534_u64, 0x73d1472472f4a390_u64,
+  0xe214689606bf1676_u64, 0x438b4a73aecd2541_u64, 0xeea037cc04764844_u64, 0xc4e92d01a2f42935_u64,
+  0xfb2b73cfc106ff68_u64, 0xf0a0e36a000c7350_u64, 0x83db0a7231831d8f_u64, 0x60e782313f6161af_u64,
+  0x8a2009a6b84d9402_u64, 0x77724a2b2a669bc4_u64, 0x9064b3a76a22640c_u64, 0x56e0a8b0d177b55d_u64,
+  0x96a9049670cfae65_u64, 0xf77574094d3c35c4_u64, 0x9cecf8962d14c822_u64, 0x50ffe4f5caa7f1fa_u64,
+  0xa3308bc93904ad69_u64, 0xdec1b7f2768bdafa_u64, 0xa973ba526a6850d9_u64, 0x76f8c63986598c79_u64,
+  0xafb68054d520c60b_u64, 0xfdd2fc0936594c2d_u64, 0xb5f8d9f3cd8945d6_u64, 0x924bef13600f9852_u64,
+  0xbc3ac352ead90abe_u64, 0xeb13e106732687f1_u64, 0xc27c389609850433_u64, 0xb228a03916371f6f_u64,
+  0xc8bd35e14da15f0e_u64, 0xc7396c894bbf7389_u64, 0xcefdb7592542e1e9_u64, 0x6b47b8c44e5b037e_u64,
+  0xd53db9224ae01bca_u64, 0x7337412cf70716cb_u64, 0xdb7d3761c7b263b6_u64, 0xbb286d23e11c8337_u64,
+  0xe1bc2e3cf616a7ac_u64, 0x31883b30137c6e62_u64, 0xe7fa99d983ee098f_u64, 0xeeb8f9c33340a2f2_u64,
+  0xee38765d74fe4897_u64, 0xed16b994af6c18ae_u64, 0xf475bfef2551f5b9_u64, 0x14e1a5488eaeab96_u64,
+  0xfab272b54b9871a2_u64, 0x704729ae56d78a37_u64, 0x8077456b7dc2d967_u64, 0x3eac8308f1113e5e_u64,
+  0x8395023dd418e919_u64, 0xdb1f70118c9c2198_u64, 0x86b26de5933c2e8e_u64, 0xc5a9decdfaad4db5_u64,
+  0x89cf8676d7abb55b_u64, 0x97965c9860c34e44_u64, 0x8cec4a05f12739e8_u64, 0xdcdca90cc73b116a_u64,
+  0x9008b6a763de75b7_u64, 0xa6e3df5975cca9da_u64, 0x9324ca6fe9a04b4e_u64, 0x899c4de737feec22_u64,
+  0x964083747309d113_u64, 0xa89a11e07c1fe_u64, 0x995bdfca28b53a54_u64, 0x49c4863de522b217_u64,
+  0x9c76dd866c689dcc_u64, 0xe7bc08111d0bfca4_u64, 0x9f917abeda4498df_u64, 0xf3ff913a4aadb85e_u64,
+  0xa2abb58949f2ced7_u64, 0xa5dbee6084ee1260_u64, 0xa5c58bfbcfd4436a_u64, 0x69fcb11e19f58619_u64,
+  0xa8defc2cbe2f8fcc_u64, 0xcd12a1f6ab6b095_u64, 0xabf80432a65ef190_u64, 0x8c95c4c91179176b_u64,
+  0xaf10a22459fe32a6_u64, 0x3feef3bb58b1f10d_u64, 0xb228d418ec1869ad_u64, 0x16031a34d4fc855d_u64,
+  0xb5409827b25591f0_u64, 0xcd73fb5d8d45d302_u64, 0xb857ec684627fa4c_u64, 0x187e26d290714d70_u64,
+  0xbb6ecef285f98a3a_u64, 0xbddd8a0365d6b1d3_u64, 0xbe853dde9658dc60_u64, 0xdfe1b074e22fc666_u64,
+  0xc19b3744e3262dcd_u64, 0xad5a41de48f6b26f_u64, 0xc4b0b93e20c0213f_u64, 0xdab4e426409b23a0_u64,
+  0xc7c5c1e34d3055b2_u64, 0x5cc8c00e4fccd850_u64, 0xcada4f4db157cf77_u64, 0xfa6171200ab2efc3_u64,
+  0xcdee5f96e21b332c_u64, 0x65a3132adfb7dfd5_u64, 0xd101f0d8c18ed1c1_u64, 0xaadb580a1eba209f_u64,
+  0xd415012d802284f0_u64, 0xdf4005ef6a64aa02_u64, 0xd7278eaf9dcd5b55_u64, 0x1779df36d1cc8912_u64,
+  0xda399779eb391377_u64, 0xcbabaeb97af8e8aa_u64, 0xdd4b19a78aed6515_u64, 0xece7f445cecf1e28_u64,
+  0xe05c1353f27b17e5_u64, 0xebc61ade6ca83cd_u64, 0xe36c829aeba6e720_u64, 0x26a0eecdb4f16266_u64,
+  0xe67c659895943123_u64, 0x82b0aecadf808123_u64, 0xe98bba6965ef725f_u64, 0xb91caf23416e7e80_u64,
+  0xec9a7f2a2a188aeb_u64, 0x7244ee20f591983b_u64, 0xefa8b1f8084ccdfc_u64, 0x1050cdf22f34182f_u64,
+  0xf2b650f080d0da8d_u64, 0x587f3fa044e2d27d_u64, 0xf5c35a316f1a3c80_u64, 0x643720de93ba81bd_u64,
+  0xf8cfcbd90af8d57a_u64, 0x4221dc4ba772598d_u64, 0xfbdba405e9c00cca_u64, 0xd24d3023da491920_u64,
+  0xfee6e0d6ff6fc5a4_u64, 0x8b74fe2508ab8fc2_u64, 0x80f8c035cfee8d76_u64, 0xfd958d68e8b49e6b_u64,
+  0x827dc071bfed6ffa_u64, 0xfb4c92369f0cf008_u64, 0x8402702f5b30f2a9_u64, 0xcb07b25a7b0372a7_u64,
+  0x8586ce7ededc809d_u64, 0x9d3dc689006896f4_u64, 0x870ada70ba4e6d49_u64, 0x9d52755ece3f70_u64,
+  0x888e93158fb3bb04_u64, 0x984156f553344306_u64, 0x8a11f77e349bc245_u64, 0xa66d1d936c38c329_u64,
+  0x8b9506bbb28bb922_u64, 0x575f33366be0afef_u64, 0x8d17bfdf47921ac8_u64, 0xcb590d74f64e77c9_u64,
+  0x8e9a21fa66d9ee8d_u64, 0xf2be3ecae62789d4_u64, 0x901c2c1eb93dee39_u64, 0x632b9cff5cfee724_u64,
+  0x919ddd5e1ddb8b33_u64, 0x609c464b3dd676ec_u64, 0x931f34caaaa5d23a_u64, 0x6a1ff8bfe6396e28_u64,
+  0x94a03176acf82d45_u64, 0xae4ba773da6bf754_u64, 0x9620d274aa290339_u64, 0xe06a955a5b8e301d_u64,
+  0x97a116d7601c3515_u64, 0xfc8b7184b21f2d50_u64, 0x9920fdb1c5d5783d_u64, 0x9dd1eedf18a2e4df_u64,
+  0x9aa086170c0a8d86_u64, 0x9ffa0d23f3c26c62_u64, 0x9c1faf1a9db554af_u64, 0xdab6b478577e7be5_u64,
+  0x9d9e77d020a5bbe6_u64, 0xdb895384528d0d60_u64, 0x9f1cdf4b76138b02_u64, 0x98dbd3555ebcdefe_u64,
+  0xa09ae4a0bb300a19_u64, 0x2f895f44a303cc0b_u64, 0xa21886e449b78316_u64, 0xd29d23a624acd00c_u64,
+  0xa395c52ab8829dfc_u64, 0x2be036401ba87cc2_u64, 0xa5129e88dc17976a_u64, 0x82d9495ead5be348_u64,
+  0xa68f1213c73b5124_u64, 0x17218792857f4c5a_u64, 0xa80b1ee0cb823c27_u64, 0x3269f4702b88324a_u64,
+  0xa986c40579e11c0a_u64, 0x8e3bdf8085321556_u64, 0xab020097a33da341_u64, 0xc1654b64a0081b46_u64,
+  0xac7cd3ad58fee7f0_u64, 0x811f953984eff83e_u64, 0xadf73c5ced9db0f3_u64, 0x9a5318ac6fe94e4d_u64,
+  0xaf7139bcf5349ac6_u64, 0x9fe5f4ea48965e2c_u64, 0xb0eacae4461013ed_u64, 0x63c66682bae74898_u64,
+  0xb263eee9f93e3088_u64, 0x695a5332090bb09b_u64, 0xb3dca4e56b1e54bb_u64, 0x992d96e5021e3c37_u64,
+  0xb554ebee3bf0b58e_u64, 0x971f4da709ad4378_u64, 0xb6ccc31c5065afee_u64, 0x35ebacd79f209137_u64,
+  0xb8442987d22cf576_u64, 0x9cc3ef36746de3b8_u64, 0xb9bb1e4930848ead_u64, 0xcdb0531c4e58484b_u64,
+  0xbb31a07920c7b256_u64, 0x55b92083658bb897_u64, 0xbca7af309efd7182_u64, 0xa4b0d21fc5036a5_u64,
+  0xbe1d4988ee67380c_u64, 0xd1f90f79f46c7e01_u64, 0xbf926e9b9a0f2127_u64, 0x91a1b5eb79658c67_u64,
+  0xc1071d8275561f9b_u64, 0x721853f8e528a934_u64, 0xc27b55579c81f96d_u64, 0xcdc2bd470675104d_u64,
+  0xc3ef1535754b168d_u64, 0x3122c2a59efddc37_u64, 0xc5625c36af6a222f_u64, 0xf4ff2895ab6ebe89_u64,
+  0xc6d5297645257e8d_u64, 0x14d24739de27e2e9_u64, 0xc8477c0f7bde8a98_u64, 0x4ce0246ad4fa74_u64,
+  0xc9b9531de49eb968_u64, 0x4319e5ad5b0dcb84_u64, 0xcb2aadbd5ca47af5_u64, 0xfaa3dfe675a65ee2_u64,
+  0xcc9b8b0a0deff5d4_u64, 0x2e663b3c7555a6c3_u64, 0xce0bea206fcf9192_u64, 0x3c540a9eec47af38_u64,
+  0xcf7bca1d476c516d_u64, 0xa81290bdbaad62e4_u64, 0xd0eb2a1da855fefd_u64, 0xb9302788604e88f1_u64,
+  0xd25a093ef50f2482_u64, 0x721fc87ba1d42456_u64, 0xd3c8669edf98d680_u64, 0x87967926fdcecec4_u64,
+  0xd536415b69fe4c54_u64, 0x1df22346611c6b4b_u64, 0xd6a39892e6e04764_u64, 0x3090d44db12c418c_u64,
+  0xd8106b63fa0048a0_u64, 0xa573f2aa90434ba5_u64, 0xd97cb8ed98cb93f5_u64, 0x2e349483e3fb2a6a_u64,
+  0xdae8804f0ae6015b_u64, 0x362cb974182e3030_u64, 0xdc53c0a7eab49b35_u64, 0x3ccca3982328ed8b_u64,
+  0xddbe791825e8099e_u64, 0x1a5bd9269d408d7e_u64, 0xdf28a8bffe06ca56_u64, 0xcce2634be2bf54df_u64,
+  0xe0924ec008f734fd_u64, 0x8aa895d5bf3e84ea_u64, 0xe1fb6a3931894b38_u64, 0xf7a1f9bd9ba13b6b_u64,
+  0xe363fa4cb8005482_u64, 0x7b32c72e31824e51_u64, 0xe4cbfe1c329c453a_u64, 0xd40e9e6b989f89e5_u64,
+  0xe63374c98e22f0b4_u64, 0x2872ce1bfc7ad1cd_u64, 0xe79a5d770e6905dc_u64, 0xf1b65cc5fd780262_u64,
+  0xe900b7474edad637_u64, 0x431626c10485bdda_u64, 0xea66815d4304e6c8_u64, 0xcc39cfcc29960b1_u64,
+  0xebcbbadc371c4aaa_u64, 0x1d90f780ae951140_u64, 0xed3062e7d086c6f0_u64, 0xc71debc372b6f9d4_u64,
+  0xee9478a40e62bf86_u64, 0x2a24164daec85ccb_u64, 0xeff7fb354a0eecb1_u64, 0x527233b40d3432bb_u64,
+  0xf15ae9c037b1d8f0_u64, 0x6c48e9e3420b0f1e_u64, 0xf2bd4369e6c126d3_u64, 0x7f232aee178c6323_u64,
+  0xf41f0757c2889e84_u64, 0x3c7f10db458c337c_u64, 0xf58034af92b102a7_u64, 0x93fa6107c4327527_u64,
+  0xf6e0ca977bc6ac45_u64, 0xe1079824233fef46_u64, 0xf840c835ffbfed66_u64, 0xa9a56012067c570c_u64,
+  0xf9a02cb1fe833a0d_u64, 0x8da894471de1a18_u64, 0xfafef732b66d1742_u64, 0x343fbf4a7d42af3_u64,
+  0xfc5d26dfc4d5cfda_u64, 0x27c07c911290b8d1_u64, 0xfdbabae12696eea4_u64, 0x2377c3799c052fa_u64,
+  0xff17b25f38907dad_u64, 0xa9c6ba50490539f_u64, 0x803a06415c170525_u64, 0x6f53873e2f1477ff_u64,
+  0x80e7e43a61f5b6cb_u64, 0x5ca183dc973abc22_u64, 0x819572af6decac84_u64, 0x9fba97fdf0c4d24c_u64,
+  0x8242b1357110d372_u64, 0x6fb2123fedfa6e22_u64, 0x82ef9f618dc5b70e_u64, 0x91a965931f1a200a_u64,
+  0x839c3cc917ff6cb4_u64, 0xbfd79717f2880abf_u64, 0x8448890195846099_u64, 0x246efcff30cb064a_u64,
+  0x84f483a0be2f0403_u64, 0x51917cac857fd5f5_u64, 0x85a02c3c7c2f5ca5_u64, 0x327888fe4b62687b_u64,
+  0x864b826aec4c74e5_u64, 0x85043222c9bdd18d_u64, 0x86f685c25e25acf5_u64, 0x7e0b9b07548471a2_u64,
+  0x87a135d95473ec89_u64, 0x4e091160e2430712_u64, 0x884b9246854ab50b_u64, 0x4f14c8afe4560291_u64,
+  0x88f59aa0da591421_u64, 0xb892ca8361d8c84c_u64, 0x899f4e7f712a765e_u64, 0xc88302a31afce54a_u64,
+  0x8a48ad799b6759f3_u64, 0x660558a02136130a_u64, 0x8af1b726df15e13c_u64, 0x545f7d79ead8fa19_u64,
+  0x8b9a6b1ef6da4502_u64, 0x21a6675f51580bc4_u64, 0x8c42c8f9d2372644_u64, 0x101a5adbcb9ffb43_u64,
+  0x8cead04f95cdbf66_u64, 0x4d49cbaf15aecd80_u64, 0x8d9280b89b9df49b_u64, 0xde2d43c6b67a7cbe_u64,
+  0x8e39d9cd73464364_u64, 0xbba4cfecbff54867_u64, 0x8ee0db26e24390f8_u64, 0xaf0e2345f3bd24b4_u64,
+  0x8f87845de430d777_u64, 0x9311a82459aa0f72_u64, 0x902dd50bab06b1b7_u64, 0xb144016c7a30b39a_u64,
+  0x90d3ccc99f5ac58b_u64, 0x9d1072e09b72292_u64, 0x91796b31609f0c54_u64, 0x6714fe6925b78cc4_u64,
+  0x921eafdcc560f9c5_u64, 0x33d0a284a8c954ad_u64, 0x92c39a65db88809d_u64, 0x1f8481e704e4a767_u64,
+  0x93682a66e896f544_u64, 0xb17821911e71c16e_u64, 0x940c5f7a69e5ce1c_u64, 0x1489a97671a42_u64,
+  0x94b0393b14e54156_u64, 0xd6c7af02d5c16fd9_u64, 0x9553b743d75ac03f_u64, 0xac0106650f4ef023_u64,
+  0x95f6d92fd79f4fba_u64, 0xd9f8e1a446e973b9_u64, 0x96999e9a74ddbde3_u64, 0xa7a7556c3b33abc1_u64,
+  0x973c071f4750b49c_u64, 0xc0a03934f0cce19b_u64, 0x97de125a2080a8ed_u64, 0xd243aa0843a2c144_u64,
+  0x987fbfe70b81a708_u64, 0x19cec845ac87a5c6_u64, 0x99210f624d30facb_u64, 0xc4b992a37fb9b9bd_u64,
+  0x99c200686472b4a8_u64, 0x1ab42d43235757b6_u64, 0x9a6292960a6f0ab0_u64, 0x7e92c655656e6b85_u64,
+  0x9b02c58832cf95c0_u64, 0x698b94f50326a043_u64, 0x9ba298dc0bfc6a88_u64, 0x9a5614e8ffbeac6f_u64,
+  0x9c420c2eff590e5f_u64, 0xc7fd954194e6d8aa_u64, 0x9ce11f1eb18147b1_u64, 0x3e93627de8fd5779_u64,
+  0x9d7fd1490285c9e3_u64, 0xe25e39549638ae68_u64, 0x9e1e224c0e28bc94_u64, 0x2cad377d5c9c35d8_u64,
+  0x9ebc11c62c1a1dfb_u64, 0xcc141e10c6460c8b_u64, 0x9f599f55f0340061_u64, 0xa88d5f46834bbf8d_u64,
+  0x9ff6ca9a2ab6a26d_u64, 0x22cc118a0c118aa0_u64, 0xa0939331e8846237_u64, 0x7cec6df5bea167cf_u64,
+  0xa12ff8bc735d8af6_u64, 0x71acea2819360c35_u64, 0xa1cbfad9521bfd1b_u64, 0x166c36e7bb3c402f_u64,
+  0xa267992848eeb0c0_u64, 0x3b5167ee359a234e_u64, 0xa302d34959951243_u64, 0x9443372e20d4377c_u64,
+  0xa39da8dcc39a38e5_u64, 0xca9a8a720d4c69c_u64, 0xa4381983048ff747_u64, 0xbf623cf5301a2dde_u64,
+  0xa4d224dcd849c5b0_u64, 0x23d251cc8d7975cc_u64, 0xa56bca8b391785db_u64, 0x189d39ffe11aaa2b_u64,
+  0xa6050a2f60002049_u64, 0x8c33ebf3aa8501fb_u64, 0xa69de36ac4fbfadc_u64, 0x9b3ad6e4022183d9_u64,
+  0xa73655df1f2f489e_u64, 0x149f6e75993468a3_u64, 0xa7ce612e65243291_u64, 0x6b2a39f856a69781_u64,
+  0xa86604facd04d969_u64, 0x3463a2c2e6e9cc55_u64, 0xa8fd40e6ccd52ffd_u64, 0x6cc14c4f53e2e82d_u64,
+  0xa99414951aacae5e_u64, 0xd147625fda929af8_u64, 0xaa2a7fa8acefdd63_u64, 0xb714ee81b53b4b9d_u64,
+  0xaac081c4ba89ba8a_u64, 0xe1b3dfc4dbda9bfd_u64, 0xab561a8cbb24f410_u64, 0xf17cee69b0d2ecde_u64,
+  0xabeb49a46764fd15_u64, 0x1becda8089c1a94c_u64, 0xac800eafb91ef9a9_u64, 0xf86ba0dde982fb59_u64,
+  0xad146952eb9282af_u64, 0x44bf16268608db96_u64, 0xada859327ba24151_u64, 0x9d30d4cfeb04f1fb_u64,
+  0xae3bddf3280c620d_u64, 0x3d53817865422565_u64, 0xaecef739f1a2df10_u64, 0xf74d099042e8f326_u64,
+  0xaf61a4ac1b83a1de_u64, 0xa89a9b8f726b95bf_u64, 0xaff3e5ef2b507c06_u64, 0x8c679e67fc462d51_u64,
+  0xb085baa8e966f6da_u64, 0xe4cad00d5c94bcd2_u64, 0xb117227f6117f9f9_u64, 0x8d8be132d576e614_u64,
+  0xb1a81d18e0df4889_u64, 0x24784f32c3e3e5bd_u64, 0xb238aa1bfa9ad507_u64, 0x8cc7d4bd05ffd5ae_u64,
+  0xb2c8c92f83c1eb87_u64, 0xac9f7ebbc469ef59_u64, 0xb35879fa959c323c_u64, 0x5d6635109164f740_u64,
+  0xb3e7bc248d78802e_u64, 0xa156468ef6c18c60_u64, 0xb4768f550ce389fd_u64, 0x4a85350f69018c55_u64]
+
+### The exponents of the sin2pi(i/2^11) dints.
+secret preset B64_TRIG_S_EX: Array[S64, 256] = [128_s64, -8_s64, -7_s64, -6_s64, -6_s64, -6_s64, -5_s64, -5_s64, -5_s64, -5_s64, -5_s64, -4_s64, -4_s64, -4_s64, -4_s64, -4_s64,
+  -4_s64, -4_s64, -4_s64, -4_s64, -4_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64,
+  -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -3_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64,
+  -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64,
+  -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64, -2_s64,
+  -2_s64, -2_s64, -2_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64,
+  -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64,
+  -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64,
+  -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64,
+  -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64,
+  -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, -1_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64]
+
+### For 0 <= i < 256, entries 2i (high) and 2i+1 (low) hold the significand of the 128-bit cos2pi(i/2^11) (to nearest).
+secret preset B64_TRIG_C: Array[U64, 512] = [0x8000000000000000_u64, 0x0_u64, 0xffffb10b10e80e95_u64, 0x3031437d7eccb9df_u64,
+  0xfffec42c7454926b_u64, 0x38e310779edfec68_u64, 0xfffd3964bc6275ba_u64, 0x69fff9ae0dedb047_u64,
+  0xfffb10b4dc96dabb_u64, 0xb47903f7a19f8ee2_u64, 0xfff84a1e29de8571_u64, 0x8cc193c5d508e13f_u64,
+  0xfff4e5a25a8d095b_u64, 0x43366df666fd54ff_u64, 0xfff0e343865bbb13_u64, 0x5428ed0647c9e5d1_u64,
+  0xffec4304266865d9_u64, 0x5657552366961732_u64, 0xffe704e71533c508_u64, 0x53aa9423bb0adc21_u64,
+  0xffe128ef8e9fc17a_u64, 0x7d209f32d42d864e_u64, 0xffdaaf212fed72db_u64, 0x4fd8f038449ec436_u64,
+  0xffd3977ff7bae4e9_u64, 0x664649b4d541b9c5_u64, 0xffcbe2104600a0a9_u64, 0x5595ca3f421ae09c_u64,
+  0xffc38ed6dc0ef98b_u64, 0x1c676208aa3be545_u64, 0xffba9dd8dc8b1e83_u64, 0xccfed60a91097c48_u64,
+  0xffb10f1bcb6bef1d_u64, 0x421e8edaaf59453e_u64, 0xffa6e2a58df6947d_u64, 0xd2c665c2da3e7844_u64,
+  0xff9c187c6abade6a_u64, 0x1e1862cca089938b_u64, 0xff90b0a7098f6443_u64, 0x2dabd3195a05710f_u64,
+  0xff84ab2c738d6a03_u64, 0x519c314973ccae6b_u64, 0xff780814130c893c_u64, 0x3ea4f30adda3016f_u64,
+  0xff6ac765b39e1e19_u64, 0x1b9d5851979f28fb_u64, 0xff5ce92982087867_u64, 0x50a7bb6a6ee3b0f1_u64,
+  0xff4e6d680c41d0a9_u64, 0xf668633f1ab858a_u64, 0xff3f542a416b0134_u64, 0xb085c1828f69296a_u64,
+  0xff2f9d7971ca0364_u64, 0x27e31939e2eec09c_u64, 0xff1f495f4ec430d7_u64, 0xf5971326a3540ea9_u64,
+  0xff0e57e5ead848d1_u64, 0x1f1901544271c3f8_u64, 0xfefcc917b99839a5_u64, 0xe0abd3a9b64df725_u64,
+  0xfeea9cff8fa2ae54_u64, 0xec34413e87ef2740_u64, 0xfed7d3a8a29c603b_u64, 0x2f88b949a72ff96c_u64,
+  0xfec46d1e89292cf0_u64, 0x41390efdc726e9ef_u64, 0xfeb0696d3ae4f04d_u64, 0xb7b6cc53c3abc817_u64,
+  0xfe9bc8a1105c22a5_u64, 0xd3af6ee4f2101c20_u64, 0xfe868ac6c3043b2e_u64, 0xb4f70c910505e10_u64,
+  0xfe70afeb6d33d6a2_u64, 0x2907cf2b3f6feac2_u64, 0xfe5a381c8a1aa224_u64, 0xd54faa364b7da8f6_u64,
+  0xfe432367f5b90a62_u64, 0x87b8875373a818a4_u64, 0xfe2b71dbecd7aefc_u64, 0x8598c2c429caf7_u64,
+  0xfe1323870cfe9a3d_u64, 0x90cd1d959db674ef_u64, 0xfdfa3878546c3d28_u64, 0x9bfe5c51e91cbdcd_u64,
+  0xfde0b0bf220c2fd4_u64, 0xe276d247626a23fd_u64, 0xfdc68c6b356db62f_u64, 0x499ddb331d19539d_u64,
+  0xfdabcb8caeba091b_u64, 0xfac7397cc07a6470_u64, 0xfd906e340eaa6401_u64, 0xd6e270740a186977_u64,
+  0xfd747472367dd6c5_u64, 0x61beb8cd2696fc78_u64, 0xfd57de5867eedc39_u64, 0x6c696582f346fd91_u64,
+  0xfd3aabf84528b50b_u64, 0xeae6bd951c1dabbe_u64, 0xfd1cdd63d0bc8735_u64, 0x863b87258f11ad7e_u64,
+  0xfcfe72ad6d9641f2_u64, 0xa06fab9f9d106709_u64, 0xfcdf6be7def1464c_u64, 0xa4e064308f4999f4_u64,
+  0xfcbfc926484cd43a_u64, 0xa3e22b4d38917e73_u64, 0xfc9f8a7c2d603c60_u64, 0x5d582cac7cb4391c_u64,
+  0xfc7eaffd720ed673_u64, 0x2880268f2e62955_u64, 0xfc5d39be5a5bbc4b_u64, 0x1c0d254b6c8da4bd_u64,
+  0xfc3b27d38a5d49ab_u64, 0x256778ffcb5c1769_u64, 0xfc187a52063060c2_u64, 0x9433b49289417ea2_u64,
+  0xfbf5314f31eb7375_u64, 0x25aafd7fdba12c5f_u64, 0xfbd14ce0d191516e_u64, 0x7190c94899dff1b8_u64,
+  0xfbaccd1d0903bb09_u64, 0xe63ae8632b84473c_u64, 0xfb87b21a5bf5b917_u64, 0x75df66f0ec3dd459_u64,
+  0xfb61fbefadddb985_u64, 0x61ce9d5ef5a81487_u64, 0xfb3baab441e770f7_u64, 0xb4b54683879c9c17_u64,
+  0xfb14be7fbae58156_u64, 0x2172a361fd2a722f_u64, 0xfaed376a1b42e559_u64, 0x2079880c450348ac_u64,
+  0xfac5158bc4f4211f_u64, 0x4a188aa367f90ab1_u64, 0xfa9c58fd796837d4_u64, 0x10655ecd5cc771d8_u64,
+  0xfa7301d859796671_u64, 0x1fe196a53fb5b237_u64, 0xfa491035e55da3a3_u64, 0xd24377c77a591e24_u64,
+  0xfa1e842ffc96e4e0_u64, 0x431c393c7f62da65_u64, 0xf9f35de0dde328ab_u64, 0xba5dbf4510eddc8f_u64,
+  0xf9c79d63272c4628_u64, 0x4504ae08d19b2980_u64, 0xf99b42d1d57781eb_u64, 0x78685d850f80ecdc_u64,
+  0xf96e4e4844d4e82a_u64, 0x80e8c17bf80e8f02_u64, 0xf940bfe2304e6c45_u64, 0xc0e2a1352ed7f292_u64,
+  0xf91297bbb1d6cdbe_u64, 0x68fc6e4d6a920bd2_u64, 0xf8e3d5f1423842a0_u64, 0x9701914c7f8fbcd7_u64,
+  0xf8b47a9fb902e76c_u64, 0xac9f07f54ff5bc14_u64, 0xf88485e44c7af48a_u64, 0xb36a9dfaadafc1e1_u64,
+  0xf853f7dc9186b952_u64, 0xc7adc6b4988891bb_u64, 0xf822d0a67b9c5cb5_u64, 0xa776175bd284fe05_u64,
+  0xf7f110605caf6390_u64, 0xa76f7efc19aed41c_u64, 0xf7beb728e51dfcb8_u64, 0x730785813f78aa1e_u64,
+  0xf78bc51f239e12c6_u64, 0x214cffcee9dd33ca_u64, 0xf7583a62852a23b2_u64, 0x4becad887680c197_u64,
+  0xf7241712d4edde49_u64, 0xf99107e50d631330_u64, 0xf6ef5b503c328589_u64, 0x50ca117eb18beed7_u64,
+  0xf6ba073b424b19e8_u64, 0x2c791f59cc1ffc23_u64, 0xf6841af4cc8048a4_u64, 0xce8c455197cdf8a7_u64,
+  0xf64d969e1dfc2119_u64, 0x119d358de0493956_u64, 0xf6167a58d7b59026_u64, 0x9dc7e5954c5a8f24_u64,
+  0xf5dec646f85ba1c6_u64, 0xc8c615e72768d6b5_u64, 0xf5a67a8adc4088ca_u64, 0xed0dd4bf62edd13f_u64,
+  0xf56d97473d446cda_u64, 0x275a2bbb2bab6c8a_u64, 0xf5341c9f32bffeb9_u64, 0x8da64484aaa0febc_u64,
+  0xf4fa0ab6316ed2ec_u64, 0x163c5c7f03b718c5_u64, 0xf4bf61b00b5982b7_u64, 0x890ac4aafa6a37bf_u64,
+  0xf48421b0efbf939b_u64, 0xf8f9d3b87d11fd52_u64, 0xf4484add6b01254b_u64, 0x667e06866c07c369_u64,
+  0xf40bdd5a6688662f_u64, 0x5019794a1f5896e5_u64, 0xf3ced94d28b2ce8a_u64, 0x18ef535a7ffa7a3d_u64,
+  0xf3913edb54ba2242_u64, 0x50f29b4b49f31c37_u64, 0xf3530e2aea9d3966_u64, 0xd981acdcf6bc3e4_u64,
+  0xf314476247088f74_u64, 0xa5486bdc455d56a2_u64, 0xf2d4eaa8233e997d_u64, 0x431be53f92ece9e6_u64,
+  0xf294f82394ffe320_u64, 0xebadcdbf915e8f6c_u64, 0xf2546ffc0e72f286_u64, 0xaf0eed81e8c51e55_u64,
+  0xf21352595e0bf350_u64, 0xe7112e89103cc0c7_u64, 0xf1d19f63ae7428a2_u64, 0x844e6a35ddc2b713_u64,
+  0xf18f574386712643_u64, 0x8f6bac72988088b0_u64, 0xf14c7a21c8cbd0f4_u64, 0x2730081c758fb42b_u64,
+  0xf1090827b43725fd_u64, 0x67127db35b287316_u64, 0xf0c5017ee336ca0f_u64, 0xc4e557b119ef3185_u64,
+  0xf08066514c055f7e_u64, 0x973ea9903ed5125f_u64, 0xf03b36c9407aa3e8_u64, 0x992d39ec5c561d28_u64,
+  0xeff573116df1555d_u64, 0x62aef7b55319d1d4_u64, 0xefaf1b54dd2cdf0f_u64, 0xf03a18a5e16ab641_u64,
+  0xef682fbef23ecda6_u64, 0x767c0e8ad33bc085_u64, 0xef20b07b6c6c0b37_u64, 0xe2398bf0eeb28cde_u64,
+  0xeed89db66611e307_u64, 0x86f8c20fb664b01b_u64, 0xee8ff79c548acd0f_u64, 0xa1d2c3d018a9279f_u64,
+  0xee46be5a0813016b_u64, 0x7872773830d368be_u64, 0xedfcf21cabacd3b1_u64, 0xfee6a1eebfa13b4a_u64,
+  0xedb29311c504d652_u64, 0x11815196b9fbf5df_u64, 0xed67a1673455c601_u64, 0x7289102076a125e5_u64,
+  0xed1c1d4b344c3d4f_u64, 0xddffe98c4f8aa031_u64, 0xecd006ec59ea306f_u64, 0xa8392eb238578ab0_u64,
+  0xec835e79946a3145_u64, 0x7e610231ac1d6181_u64, 0xec3624222d227bd1_u64, 0x278047ae3dd0889_u64,
+  0xebe85815c767cb00_u64, 0x1e99ccb9adc62ca6_u64, 0xeb99fa84606ff5ff_u64, 0xdae311e656e0661_u64,
+  0xeb4b0b9e4f345617_u64, 0x39e39c6c2ab3655d_u64, 0xeafb8b944453f52f_u64, 0x3383bbb5156bf1d7_u64,
+  0xeaab7a9749f584fe_u64, 0x24db98ad3a0647a1_u64, 0xea5ad8d8c3a91f05_u64, 0x4a0ca5ea449b1c83_u64,
+  0xea09a68a6e49cd62_u64, 0x15ad45b4a1b5e823_u64, 0xe9b7e3de5fdedc8b_u64, 0xcd24d4bd1056c826_u64,
+  0xe9659107077cf60f_u64, 0x89a92b199adfbafa_u64, 0xe912ae372d27045d_u64, 0xacb1c26a06e5ae02_u64,
+  0xe8bf3ba1f1aedfbb_u64, 0xf8972affb3d98e1f_u64, 0xe86b397ace95c46f_u64, 0x9fec1e78c4376186_u64,
+  0xe816a7f595ec9232_u64, 0xbfe8378abfb87b6f_u64, 0xe7c187467233d508_u64, 0xdbfb0fe56c6f80fe_u64,
+  0xe76bd7a1e63b9786_u64, 0x125129529d48a92f_u64, 0xe715993ccd02fe9c_u64, 0xe2ba81b9ce96e02e_u64,
+  0xe6becc4c5997af06_u64, 0x82fcedb4c6434d76_u64, 0xe667710616f4fc59_u64, 0xdd2a3e32c3859960_u64,
+  0xe60f879fe7e2e1e5_u64, 0x7613b68f6ab03130_u64, 0xe5b7105006d4c560_u64, 0x9b695cd67c93bd79_u64,
+  0xe55e0b4d05c80388_u64, 0x5a7c210a3a15e7ea_u64, 0xe50478cdce2246bc_u64, 0xe1f5a58c80292554_u64,
+  0xe4aa5909a08fa7b4_u64, 0x122785ae67f5515d_u64, 0xe44fac3814e09856_u64, 0x20d63b5b9e3cd6ac_u64,
+  0xe3f4729119e798d9_u64, 0x56992551ae074e99_u64, 0xe398ac4cf556b732_u64, 0xd1197dc12c63176_u64,
+  0xe33c59a4439cd8ec_u64, 0x36563e2ffad8351a_u64, 0xe2df7acff7c2cf83_u64, 0xd6fe4dd22e60a4a2_u64,
+  0xe28210095b483751_u64, 0xfd39138aa2d508ed_u64, 0xe224198a0e002123_u64, 0xe0521df01a1be6f5_u64,
+  0xe1c5978c05ed8691_u64, 0xf4e8a8372f8c5810_u64, 0xe1668a498f1f892c_u64, 0xe2f9d4600f4d0325_u64,
+  0xe106f1fd4b8d7c96_u64, 0x6ba8a9d9ba877899_u64, 0xe0a6cee232f2bb9c_u64, 0x6d6c98fe79817946_u64,
+  0xe046213392aa486c_u64, 0x55ff6038a5197367_u64, 0xdfe4e92d0d8a37f5_u64, 0x720588ff6547d884_u64,
+  0xdf83270a9bbee890_u64, 0xab01350f013d78dd_u64, 0xdf20db088aa60404_u64, 0x64a58b2f103485dd_u64,
+  0xdebe05637ca94cfb_u64, 0x4b19aa71fec3ae6d_u64, 0xde5aa65869193805_u64, 0x4248f15548f69ca_u64,
+  0xddf6be249c075037_u64, 0xd597b10a01676659_u64, 0xdd924d05b620678a_u64, 0x739c45b982193b5e_u64,
+  0xdd2d5339ac8692fd_u64, 0x49c6e0ea76cbcaac_u64, 0xdcc7d0fec8aaf2aa_u64, 0xb2069fd0b482b4e8_u64,
+  0xdc61c693a82745d5_u64, 0xaca8017e375b64e5_u64, 0xdbfb34373c974b0e_u64, 0xccb7fd40d543f4a1_u64,
+  0xdb941a28cb71ec87_u64, 0x2c19b63253da43fc_u64, 0xdb2c78a7ede238a9_u64, 0x5a98479cbef2ecbc_u64,
+  0xdac44ff490a02710_u64, 0x5b267c1bcff0ab62_u64, 0xda5ba04ef3c929f4_u64, 0xe257bde73d83dc1a_u64,
+  0xd9f269f7aab88c29_u64, 0x28e81dcb6dab91ac_u64, 0xd988ad2f9bdf9bbb_u64, 0xc4e4dc69fc2fff6f_u64,
+  0xd91e6a38009da15a_u64, 0x1bb35ad6d2e74b67_u64, 0xd8b3a1526517a48b_u64, 0x1ed1a8ff78f1b632_u64,
+  0xd84852c0a80ffcdb_u64, 0x24b9fe00663574a4_u64, 0xd7dc7ec4fabdb011_u64, 0xced12d2899b803db_u64,
+  0xd77025a1e0a39d8b_u64, 0xcb78e80e67ba1b8_u64, 0xd703479a2f6776cc_u64, 0x6cb3bfd65b38562b_u64,
+  0xd695e4f10ea88570_u64, 0x83f082b570611d7_u64, 0xd627fde9f7d63e7e_u64, 0x7afbefc05e9f7d99_u64,
+  0xd5b992c8b606a351_u64, 0x7190b755535d4f18_u64, 0xd54aa3d165cc7018_u64, 0x7d00ae97abaa4096_u64,
+  0xd4db3148750d1819_u64, 0xf630e8b6dac83e69_u64, 0xd46b3b72a2d68fc9_u64, 0xdc4663a3168698d2_u64,
+  0xd3fac294ff34e4d0_u64, 0xb77d4f6bd0ee8591_u64, 0xd389c6f4eb07a41c_u64, 0xa8faac741a6394dc_u64,
+  0xd31848d817d70e16_u64, 0xeeeaddb72f00e0dd_u64, 0xd2a6488487a91918_u64, 0x4300fd1c1ce507e5_u64,
+  0xd233c6408cd64236_u64, 0x981ba7e42537275f_u64, 0xd1c0c252c9de2c86_u64, 0xda7485a5aeffeb4c_u64,
+  0xd14d3d02313c0eed_u64, 0x744fea20e8abef92_u64, 0xd0d93696053af098_u64, 0x77a18eb13d2ecde5_u64,
+  0xd064af55d7c9b43e_u64, 0x6b8a685f6cb61c21_u64, 0xcfefa7898a4ef23c_u64, 0xdaf200dd81212d10_u64,
+  0xcf7a1f794d7ca1b1_u64, 0xdfcb60445c1bf973_u64, 0xcf04176da12390ac_u64, 0x4d27090f10c454e_u64,
+  0xce8d8faf5406ab8b_u64, 0xf5babff66def7892_u64, 0xce16888783ae13b3_u64, 0x93e391861a034684_u64,
+  0xcd9f023f9c3a059e_u64, 0x23af31db7179a4aa_u64, 0xcd26fd2158358e7d_u64, 0x649474e36b8db9d3_u64,
+  0xccae7976c0691177_u64, 0x83e907fbd7aaf0b0_u64, 0xcc35778a2bac9ca1_u64, 0xf839ce18e08bfb50_u64,
+  0xcbbbf7a63eba0dd5_u64, 0x70cbb7f3343451be_u64, 0xcb41fa15ebff0777_u64, 0x2293661be51140ab_u64,
+  0xcac77f24736eb553_u64, 0xd9944be1631846d8_u64, 0xca4c871d625361a9_u64, 0x5328edeb3e6784de_u64,
+  0xc9d1124c931fda7a_u64, 0x8335241be1693225_u64, 0xc95520fe2d40a74b_u64, 0x83b0e96e1249c2b0_u64,
+  0xc8d8b37ea4ed0f62_u64, 0xb562c00b34ee771_u64, 0xc85bca1abaf7f0a7_u64, 0x65862939b83382e0_u64,
+  0xc7de651f7ca06749_u64, 0x2b31bc86877fd2c_u64, 0xc76084da43624634_u64, 0xd5c149509e9059f1_u64,
+  0xc6e22998b4c6608e_u64, 0xcfe6c1b1a6b4e2a4_u64, 0xc66353a8c232a43c_u64, 0xe993503baf5afb41_u64,
+  0xc5e40358a8ba05a7_u64, 0x43da25d99267326b_u64, 0xc56438f6f0ec3cca_u64, 0xab4906075507e74_u64,
+  0xc4e3f4d26ea553b6_u64, 0xdd40950cf1ed92fa_u64, 0xc463373a40dd06a3_u64, 0x9dd768f30ca8e85c_u64,
+  0xc3e2007dd175f5a4_u64, 0xa87e78136665cdb2_u64, 0xc36050ecd50ca830_u64, 0x8ac9e1386e4cbabb_u64,
+  0xc2de28d74ac6628b_u64, 0x74c8f010d986a9e0_u64, 0xc25b888d7c1fcd38_u64, 0xb7041e9bc8c18b0d_u64,
+  0xc1d8705ffcbb6e90_u64, 0xbdf0715cb8b20bd7_u64, 0xc154e09faa2ff69a_u64, 0x17858573216e0a22_u64,
+  0xc0d0d99dabd65d44_u64, 0x2bda5328933c854a_u64, 0xc04c5bab7297d322_u64, 0x6dd06968e0ed1957_u64,
+  0xbfc7671ab8bb84c6_u64, 0xe4e62d86dd136e78_u64, 0xbf41fc3d81b430db_u64, 0xd46655d6b012455_u64,
+  0xbebc1b6619ed9116_u64, 0x2715ef03f8543355_u64, 0xbe35c4e716999630_u64, 0x29d7f7b67d43b177_u64,
+  0xbdaef913557d76f0_u64, 0xac85320f528d6d5d_u64, 0xbd27b83dfcbe9279_u64, 0x2ea36923d5d8e213_u64,
+  0xbca002ba7aaf25ea_u64, 0x4a48496734be336d_u64, 0xbc17d8dc859ad583_u64, 0x727c405ffc73af56_u64,
+  0xbb8f3af81b93095c_u64, 0xfce8d84068e825b6_u64, 0xbb062961823b1ddc_u64, 0x5120e35e1c1a250c_u64,
+  0xba7ca46d46946802_u64, 0x33201477347447d8_u64, 0xb9f2ac703cca0db3_u64, 0x39db32d014440024_u64,
+  0xb96841bf7ffcb21a_u64, 0x9de1e3b22b8bf4db_u64, 0xb8dd64b0720df647_u64, 0xa726f4f0828585c9_u64,
+  0xb8521598bb6bce26_u64, 0x1c041d1ea5fb3fdb_u64, 0xb7c654ce4adba9f2_u64, 0x2e7a35723f3ed035_u64,
+  0xb73a22a755457448_u64, 0x7f86f63bb23f496a_u64, 0xb6ad7f7a557e64f2_u64, 0xeb2d28ef943dc88c_u64,
+  0xb6206b9e0c13a892_u64, 0xea7c015f12b987f7_u64, 0xb592e7697f14dd4a_u64, 0x737dd2824b608d13_u64]
+
+### The exponents of the cos2pi(i/2^11) dints.
+secret preset B64_TRIG_C_EX: Array[S64, 256] = [1_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64,
+  0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64]
+
+### For 0 <= i < 256, entries 3i..3i+2 are d, s, c: with xi = i/2^11 + d, s and c approximate sin2pi(xi) and
+### cos2pi(xi) with 53+15 bits of accuracy.
+secret preset B64_TRIG_SC: Array[B64, 768] = [0x0p+0_b64, 0x0p+0_b64, 0x1p+0_b64,
+  -0x1.c0f6cp-35_b64, 0x1.921f892b900fep-9_b64, 0x1.ffff621623fap-1_b64,
+  -0x1.9c7935ep-35_b64, 0x1.921f0ea27ce01p-8_b64, 0x1.fffd8858eca2ep-1_b64,
+  -0x1.d14d1acp-34_b64, 0x1.2d96af779b0bbp-7_b64, 0x1.fffa72c986392p-1_b64,
+  -0x1.dba8f6a8p-33_b64, 0x1.921d1ce2d0a1cp-7_b64, 0x1.fff62169dddaap-1_b64,
+  0x1.a6b7cdfp-32_b64, 0x1.f6a29bdb7377p-7_b64, 0x1.fff0943c02419p-1_b64,
+  0x1.b49618dp-33_b64, 0x1.2d936d1506f3dp-6_b64, 0x1.ffe9cb44829cp-1_b64,
+  -0x1.398d6fcp-35_b64, 0x1.5fd4d1e21de6dp-6_b64, 0x1.ffe1c687174b1p-1_b64,
+  -0x1.e9e9a8c8p-31_b64, 0x1.9215597791e0ap-6_b64, 0x1.ffd886097afcfp-1_b64,
+  -0x1.34e844cp-32_b64, 0x1.c454f2e9480c7p-6_b64, 0x1.ffce09ce95933p-1_b64,
+  -0x1.989a8a4p-32_b64, 0x1.f693709b94f92p-6_b64, 0x1.ffc251dfbac0cp-1_b64,
+  0x1.04a9b99p-30_b64, 0x1.146860e69a571p-5_b64, 0x1.ffb55e40a5c43p-1_b64,
+  -0x1.56947cp-36_b64, 0x1.2d865748774adp-5_b64, 0x1.ffa72efff95d1p-1_b64,
+  -0x1.c348768p-35_b64, 0x1.46a396d34121ap-5_b64, 0x1.ff97c420a8451p-1_b64,
+  0x1.9e80552p-32_b64, 0x1.5fc00e6e4c65cp-5_b64, 0x1.ff871dacd8761p-1_b64,
+  0x1.3f11d74p-34_b64, 0x1.78dbaa97099ebp-5_b64, 0x1.ff753bb18af95p-1_b64,
+  0x1.c039af4p-33_b64, 0x1.91f65fc0abc0ap-5_b64, 0x1.ff621e370ca7ap-1_b64,
+  0x1.53e1f8p-35_b64, 0x1.ab101bf74ac2ep-5_b64, 0x1.ff4dc54b00181p-1_b64,
+  0x1.114a649p-29_b64, 0x1.c428d7de920e9p-5_b64, 0x1.ff3830f2e9043p-1_b64,
+  0x1.adf0ef4p-31_b64, 0x1.dd40723a3cdfbp-5_b64, 0x1.ff21614b9d9adp-1_b64,
+  -0x1.d21f5918p-30_b64, 0x1.f656e1e9e59cdp-5_b64, 0x1.ff09565e83d77p-1_b64,
+  -0x1.4f54d708p-30_b64, 0x1.07b612d6be078p-4_b64, 0x1.fef0102c634e3p-1_b64,
+  -0x1.1efec9ap-30_b64, 0x1.1440118ba7bdp-4_b64, 0x1.fed58ecf342dap-1_b64,
+  0x1.cc17ba88p-29_b64, 0x1.20c96cf0a7eedp-4_b64, 0x1.feb9d24646fa6p-1_b64,
+  0x1.121dbe4p-33_b64, 0x1.2d5209628edfp-4_b64, 0x1.fe9cdacf99cffp-1_b64,
+  -0x1.9ecf61p-34_b64, 0x1.39d9f103bf7f7p-4_b64, 0x1.fe7ea854e6b08p-1_b64,
+  -0x1.04ede8ep-31_b64, 0x1.466116c629e5cp-4_b64, 0x1.fe5f3af4ee201p-1_b64,
+  -0x1.1821cecp-31_b64, 0x1.52e773c9920c7p-4_b64, 0x1.fe3e92c0e4108p-1_b64,
+  0x1.cdec726p-31_b64, 0x1.5f6d02131f0b2p-4_b64, 0x1.fe1cafc7f1a24p-1_b64,
+  -0x1.edece4dp-31_b64, 0x1.6bf1b2653648cp-4_b64, 0x1.fdf99233c230cp-1_b64,
+  -0x1.2aa4d1cp-31_b64, 0x1.787585bc45f0fp-4_b64, 0x1.fdd53a01d11d9p-1_b64,
+  0x1.d461592p-32_b64, 0x1.84f871e32cf68p-4_b64, 0x1.fdafa74f16482p-1_b64,
+  0x1.f0cbd728p-29_b64, 0x1.917a71d3d2956p-4_b64, 0x1.fd88da29f302ep-1_b64,
+  -0x1.583247p-30_b64, 0x1.9dfb6c9865b06p-4_b64, 0x1.fd60d2e14a6b1p-1_b64,
+  -0x1.2e81bf4p-30_b64, 0x1.aa7b706bfdbbap-4_b64, 0x1.fd3791484ff5p-1_b64,
+  -0x1.13941418p-28_b64, 0x1.b6fa680a05c27p-4_b64, 0x1.fd0d15a4b8471p-1_b64,
+  0x1.71098ffp-30_b64, 0x1.c3785eba12b42p-4_b64, 0x1.fce15fceddccfp-1_b64,
+  -0x1.c3519e8p-32_b64, 0x1.cff53302f059p-4_b64, 0x1.fcb4703b969e1p-1_b64,
+  0x1.2f522a5p-27_b64, 0x1.dc70fb84af16ep-4_b64, 0x1.fc8646987fc1dp-1_b64,
+  -0x1.ae9bed8p-33_b64, 0x1.e8eb7f8a589e2p-4_b64, 0x1.fc56e3b91ca3ap-1_b64,
+  0x1.f8868b2p-30_b64, 0x1.f564e87d2330fp-4_b64, 0x1.fc264701f9a09p-1_b64,
+  -0x1.b07985f8p-29_b64, 0x1.00ee8835051f4p-3_b64, 0x1.fbf47105f7439p-1_b64,
+  0x1.cbdaa94p-30_b64, 0x1.072a05e1d4d8ep-3_b64, 0x1.fbc16172a9e36p-1_b64,
+  0x1.37c5b908p-28_b64, 0x1.0d64df9619f0dp-3_b64, 0x1.fb8d18b635327p-1_b64,
+  -0x1.068b5fc8p-28_b64, 0x1.139f09bc617f5p-3_b64, 0x1.fb5797351da85p-1_b64,
+  -0x1.8ea66818p-29_b64, 0x1.19d8919fa4ec8p-3_b64, 0x1.fb20dc7da8affp-1_b64,
+  0x1.6278ceb8p-28_b64, 0x1.2011719d50b87p-3_b64, 0x1.fae8e8bd4427fp-1_b64,
+  -0x1.096df84p-29_b64, 0x1.264993433763ap-3_b64, 0x1.faafbcbfca356p-1_b64,
+  0x1.9b2534fp-29_b64, 0x1.2c810967bbf7p-3_b64, 0x1.fa7557d8d987ep-1_b64,
+  0x1.215b4ep-34_b64, 0x1.32b7bfa25c91bp-3_b64, 0x1.fa39bac71954bp-1_b64,
+  -0x1.94db891p-30_b64, 0x1.38edb9d29b39dp-3_b64, 0x1.f9fce56700a6dp-1_b64,
+  0x1.7727f7b8p-29_b64, 0x1.3f22f7c3cce3ap-3_b64, 0x1.f9bed7b8c8d8cp-1_b64,
+  -0x1.0cb33038p-29_b64, 0x1.45576971dd53p-3_b64, 0x1.f97f925d53c83p-1_b64,
+  -0x1.9071106p-31_b64, 0x1.4b8b175c71e22p-3_b64, 0x1.f93f14feb8022p-1_b64,
+  0x1.62741e78p-29_b64, 0x1.51bdfa7ea30d5p-3_b64, 0x1.f8fd5fe3efac8p-1_b64,
+  0x1.f8e16d0cp-28_b64, 0x1.57f00e80e6e12p-3_b64, 0x1.f8ba733a1ceb1p-1_b64,
+  -0x1.76acbcap-31_b64, 0x1.5e2143b7bc1c2p-3_b64, 0x1.f8764fad5e9bfp-1_b64,
+  -0x1.0a0f73ap-30_b64, 0x1.6451a76411746p-3_b64, 0x1.f830f4ad232d8p-1_b64,
+  0x1.ca11d1bcp-28_b64, 0x1.6a8135d7bd143p-3_b64, 0x1.f7ea625eb5af7p-1_b64,
+  -0x1.02f23628p-29_b64, 0x1.70afd74071191p-3_b64, 0x1.f7a299d3f182ap-1_b64,
+  0x1.b34dcb8p-29_b64, 0x1.76dda08544b5cp-3_b64, 0x1.f7599a1ac7ecdp-1_b64,
+  0x1.161ff4p-32_b64, 0x1.7d0a7bf2d4abap-3_b64, 0x1.f70f64322da74p-1_b64,
+  -0x1.c49b8b4p-31_b64, 0x1.83366ddb3de23p-3_b64, 0x1.f6c3f7e7c2707p-1_b64,
+  0x1.21da851p-29_b64, 0x1.8961743b1429p-3_b64, 0x1.f6775552a6ba2p-1_b64,
+  0x1.ac63edap-30_b64, 0x1.8f8b851098588p-3_b64, 0x1.f6297cef0cdd6p-1_b64,
+  0x1.27ef489cp-27_b64, 0x1.95b4a5b9f2cebp-3_b64, 0x1.f5da6e7820551p-1_b64,
+  0x1.ae8937p-30_b64, 0x1.9bdcc07900146p-3_b64, 0x1.f58a2b0689c82p-1_b64,
+  0x1.eb48c7ep-29_b64, 0x1.a203e4a4f950ep-3_b64, 0x1.f538b1d392049p-1_b64,
+  -0x1.bfd282fp-29_b64, 0x1.a829ffaad0d79p-3_b64, 0x1.f4e603d51f1aap-1_b64,
+  0x1.7ccf638p-29_b64, 0x1.ae4f1fa80e1b5p-3_b64, 0x1.f492204c5ef9ep-1_b64,
+  -0x1.2435c578p-28_b64, 0x1.b4732b72ebc86p-3_b64, 0x1.f43d0890e1e72p-1_b64,
+  0x1.0293fecp-30_b64, 0x1.ba9634155f866p-3_b64, 0x1.f3e6bbb6c2ea4p-1_b64,
+  -0x1.7bb1f92p-29_b64, 0x1.c0b82461f65ep-3_b64, 0x1.f38f3ae6f9afcp-1_b64,
+  0x1.27aaebcp-29_b64, 0x1.c6d906faacf65p-3_b64, 0x1.f3368589e17a2p-1_b64,
+  -0x1.2e2bcd5p-27_b64, 0x1.ccf8c3f74a6c9p-3_b64, 0x1.f2dc9cfb5fa74p-1_b64,
+  -0x1.6f070acp-30_b64, 0x1.d31773ba218a8p-3_b64, 0x1.f2817fd4d045bp-1_b64,
+  0x1.469adfcp-29_b64, 0x1.d935004779e57p-3_b64, 0x1.f2252f59c122dp-1_b64,
+  0x1.4f51c18p-32_b64, 0x1.df5164301377ap-3_b64, 0x1.f1c7abdeaa3efp-1_b64,
+  0x1.78e44dap-29_b64, 0x1.e56ca4202807cp-3_b64, 0x1.f168f51c5d5d5p-1_b64,
+  0x1.49bb5f8p-32_b64, 0x1.eb86b4a1b7e9bp-3_b64, 0x1.f1090bc4b68p-1_b64,
+  -0x1.67ba541p-28_b64, 0x1.f19f9369d5e93p-3_b64, 0x1.f0a7effdc937fp-1_b64,
+  0x1.c0cab95p-29_b64, 0x1.f7b74ab7219d2p-3_b64, 0x1.f045a1219e594p-1_b64,
+  -0x1.2b77e32p-30_b64, 0x1.fdcdc0ca3288dp-3_b64, 0x1.efe220cf5c751p-1_b64,
+  -0x1.e0d8cbp-33_b64, 0x1.01f18054c8362p-2_b64, 0x1.ef7d6e54c347dp-1_b64,
+  -0x1.ecd5b9cp-29_b64, 0x1.04fb7f6d35d68p-2_b64, 0x1.ef178a6f9a987p-1_b64,
+  0x1.eb24de5p-29_b64, 0x1.0804e1d369ff2p-2_b64, 0x1.eeb074934fdfp-1_b64,
+  0x1.4a897c4p-30_b64, 0x1.0b0d9d7b0d042p-2_b64, 0x1.ee482e14bcdep-1_b64,
+  0x1.336c376p-30_b64, 0x1.0e15b555e7becp-2_b64, 0x1.eddeb6908ca8cp-1_b64,
+  -0x1.3952d9p-31_b64, 0x1.111d25efd48b8p-2_b64, 0x1.ed740e7eb8dd6p-1_b64,
+  0x1.fc2a5d4p-31_b64, 0x1.1423ef5c7e1bdp-2_b64, 0x1.ed0835dc24e89p-1_b64,
+  0x1.a88ed37p-29_b64, 0x1.172a0eb8361dap-2_b64, 0x1.ec9b2d0ec8288p-1_b64,
+  -0x1.8ca4cb94p-27_b64, 0x1.1a2f7b10b6d7p-2_b64, 0x1.ec2cf55d6117cp-1_b64,
+  0x1.0144524p-27_b64, 0x1.1d3446fd0cd3fp-2_b64, 0x1.ebbd8c1d62f96p-1_b64,
+  -0x1.abf810cp-28_b64, 0x1.203855b85f89ap-2_b64, 0x1.eb4cf57454132p-1_b64,
+  0x1.5d4c5d58p-28_b64, 0x1.233bbcca40561p-2_b64, 0x1.eadb2e40746cap-1_b64,
+  -0x1.a1b0c58p-29_b64, 0x1.263e685b1d714p-2_b64, 0x1.ea68396d87754p-1_b64,
+  -0x1.77c8dacp-29_b64, 0x1.294061d2eb611p-2_b64, 0x1.e9f41597393c8p-1_b64,
+  0x1.915540ep-30_b64, 0x1.2c41a580014cfp-2_b64, 0x1.e97ec348fb87fp-1_b64,
+  -0x1.abb6d9bp-28_b64, 0x1.2f422b2d0990cp-2_b64, 0x1.e90843c55b996p-1_b64,
+  -0x1.b8ee5d58p-28_b64, 0x1.3241f8cea2836p-2_b64, 0x1.e890962268c49p-1_b64,
+  -0x1.1cd29828p-28_b64, 0x1.35410a8396266p-2_b64, 0x1.e817baf85c094p-1_b64,
+  -0x1.e216afp-32_b64, 0x1.383f5e08283e2p-2_b64, 0x1.e79db2a188b0ap-1_b64,
+  -0x1.24afc3p-31_b64, 0x1.3b3cef6993c0bp-2_b64, 0x1.e7227dbf82004p-1_b64,
+  -0x1.aa1657cp-31_b64, 0x1.3e39be4767224p-2_b64, 0x1.e6a61c62d5274p-1_b64,
+  -0x1.c5b65fap-30_b64, 0x1.4135c898485bbp-2_b64, 0x1.e6288ee07fea5p-1_b64,
+  0x1.23e8978p-32_b64, 0x1.44310de3c284bp-2_b64, 0x1.e5a9d54bbd26cp-1_b64,
+  -0x1.2b1d77ap-29_b64, 0x1.472b8976d498dp-2_b64, 0x1.e529f06cb187dp-1_b64,
+  -0x1.daaa348p-31_b64, 0x1.4a253cb97efd1p-2_b64, 0x1.e4a8e007231a2p-1_b64,
+  -0x1.322f5708p-28_b64, 0x1.4d1e2260c3422p-2_b64, 0x1.e426a500f6e33p-1_b64,
+  0x1.64758e8p-29_b64, 0x1.50163eca0b337p-2_b64, 0x1.e3a33e996b722p-1_b64,
+  0x1.12486278p-28_b64, 0x1.530d89a17e007p-2_b64, 0x1.e31eae3fb917bp-1_b64,
+  -0x1.6c3416ccp-27_b64, 0x1.5603fcf8cd8a3p-2_b64, 0x1.e298f502a579bp-1_b64,
+  0x1.ab481ffp-29_b64, 0x1.58f9a896aa209p-2_b64, 0x1.e2121016e14fcp-1_b64,
+  -0x1.6eb838bp-29_b64, 0x1.5bee77aaf890bp-2_b64, 0x1.e18a032eb4df5p-1_b64,
+  -0x1.d159b8p-32_b64, 0x1.5ee2734efeef5p-2_b64, 0x1.e100ccaa6bd78p-1_b64,
+  -0x1.a42e4ap-34_b64, 0x1.61d595bedeabcp-2_b64, 0x1.e0766d944915ep-1_b64,
+  -0x1.43d0dcp-30_b64, 0x1.64c7dd5cc0cd1p-2_b64, 0x1.dfeae63903034p-1_b64,
+  -0x1.8c7bdb7p-27_b64, 0x1.67b9453ca2122p-2_b64, 0x1.df5e378482eaep-1_b64,
+  0x1.1c0ead6p-30_b64, 0x1.6aa9d844c980ap-2_b64, 0x1.ded05f6a23a52p-1_b64,
+  0x1.7d526p-31_b64, 0x1.6d99867e90d92p-2_b64, 0x1.de4160e97b2e2p-1_b64,
+  0x1.924e0368p-28_b64, 0x1.7088555d3c816p-2_b64, 0x1.ddb13afb14e37p-1_b64,
+  -0x1.74b7c3ep-30_b64, 0x1.73763c09fba09p-2_b64, 0x1.dd1fef5335416p-1_b64,
+  -0x1.7943adp-30_b64, 0x1.766340685c982p-2_b64, 0x1.dc8d7ccf2567ap-1_b64,
+  0x1.79dd614p-29_b64, 0x1.794f5f7522b88p-2_b64, 0x1.dbf9e402aa5c3p-1_b64,
+  0x1.7b64f32p-30_b64, 0x1.7c3a939c32d81p-2_b64, 0x1.db652607e0db1p-1_b64,
+  -0x1.2bea5ce8p-28_b64, 0x1.7f24db825141cp-2_b64, 0x1.dacf43268b5bp-1_b64,
+  0x1.733c024p-30_b64, 0x1.820e3b8bf15ap-2_b64, 0x1.da383a7aed887p-1_b64,
+  -0x1.eac0fc94p-27_b64, 0x1.84f6a51d077b3p-2_b64, 0x1.d9a00efd84537p-1_b64,
+  0x1.aca37338p-27_b64, 0x1.87de2f4704f98p-2_b64, 0x1.d906bbf17f4dap-1_b64,
+  -0x1.910c4fp-30_b64, 0x1.8ac4b7dc0d986p-2_b64, 0x1.d86c4862b5d6ep-1_b64,
+  -0x1.33bb86p-31_b64, 0x1.8daa52b4dc041p-2_b64, 0x1.d7d0b0374a559p-1_b64,
+  -0x1.69e1507p-27_b64, 0x1.908ef408ad22p-2_b64, 0x1.d733f5e71c3bcp-1_b64,
+  0x1.cffacf08p-27_b64, 0x1.9372ab7784d36p-2_b64, 0x1.d696161d786c9p-1_b64,
+  -0x1.8629d9fp-26_b64, 0x1.965552b0849abp-2_b64, 0x1.d5f7190eeae23p-1_b64,
+  0x1.415p-30_b64, 0x1.99371687c64f3p-2_b64, 0x1.d556f5155d9ddp-1_b64,
+  -0x1.bd37aad8p-27_b64, 0x1.9c17cf40715cbp-2_b64, 0x1.d4b5b2caf8386p-1_b64,
+  0x1.d02cde7p-26_b64, 0x1.9ef79ea4d995dp-2_b64, 0x1.d4134ac5eb246p-1_b64,
+  -0x1.10547acp-30_b64, 0x1.a1d653d9adf5ep-2_b64, 0x1.d36fc7d291602p-1_b64,
+  -0x1.01a1a228p-27_b64, 0x1.a4b40f9c0120bp-2_b64, 0x1.d2cb22b45236bp-1_b64,
+  0x1.3ce2bacp-29_b64, 0x1.a790ce2056b9ap-2_b64, 0x1.d2255c3ae11a5p-1_b64,
+  -0x1.ccb4a6p-32_b64, 0x1.aa6c828db4ea8p-2_b64, 0x1.d17e774d4e3e2p-1_b64,
+  0x1.5db4bp-29_b64, 0x1.ad47321f29847p-2_b64, 0x1.d0d672bc0b122p-1_b64,
+  0x1.32f6a6ep-29_b64, 0x1.b020d7a285e23p-2_b64, 0x1.d02d4fb84d334p-1_b64,
+  0x1.cf8e39bcp-26_b64, 0x1.b2f97c27f7494p-2_b64, 0x1.cf830c2248c5ep-1_b64,
+  0x1.8927bbp-30_b64, 0x1.b5d10129a750ap-2_b64, 0x1.ced7af22cb105p-1_b64,
+  -0x1.3dec3c1p-28_b64, 0x1.b8a77f8d0bbc5p-2_b64, 0x1.ce2b32e50d6cdp-1_b64,
+  -0x1.26ba536p-28_b64, 0x1.bb7cf08f0290dp-2_b64, 0x1.cd7d98fcf3b1ep-1_b64,
+  0x1.23c568ep-29_b64, 0x1.be51524e3aa53p-2_b64, 0x1.cccee1da3d56ep-1_b64,
+  -0x1.f3b3afp-29_b64, 0x1.c1249c1f5f2f6p-2_b64, 0x1.cc1f0f95e1e24p-1_b64,
+  -0x1.1286a47p-28_b64, 0x1.c3f6d2ef7054bp-2_b64, 0x1.cb6e20ff37e81p-1_b64,
+  0x1.641214ep-29_b64, 0x1.c6c7f594003d9p-2_b64, 0x1.cabc165bf1b6p-1_b64,
+  0x1.0cda7c9p-27_b64, 0x1.c997ff2bffccbp-2_b64, 0x1.ca08f0dee434cp-1_b64,
+  -0x1.5557ac9p-28_b64, 0x1.cc66e7b42e8f1p-2_b64, 0x1.c954b28bca62ep-1_b64,
+  0x1.555eb62p-28_b64, 0x1.cf34bccc567a1p-2_b64, 0x1.c89f57f6e20f3p-1_b64,
+  -0x1.4e0e361p-28_b64, 0x1.d2016cbb5e39ap-2_b64, 0x1.c7e8e59999e1fp-1_b64,
+  0x1.446da1ep-29_b64, 0x1.d4cd039d0ed05p-2_b64, 0x1.c731585f970ebp-1_b64,
+  0x1.103d328p-29_b64, 0x1.d797767638decp-2_b64, 0x1.c678b3174afe1p-1_b64,
+  0x1.5814d6p-28_b64, 0x1.da60c7ae9dc22p-2_b64, 0x1.c5bef522be6fbp-1_b64,
+  -0x1.5e2321ep-29_b64, 0x1.dd28f054cbb3fp-2_b64, 0x1.c5042052c8c42p-1_b64,
+  -0x1.a259ffep-29_b64, 0x1.dfeff54854631p-2_b64, 0x1.c44833611bc7dp-1_b64,
+  -0x1.4f28d8p-31_b64, 0x1.e2b5d34665b35p-2_b64, 0x1.c38b2f278ea7ep-1_b64,
+  -0x1.de571p-36_b64, 0x1.e57a86d137f2p-2_b64, 0x1.c2cd1493d05c2p-1_b64,
+  0x1.e0d8d14p-29_b64, 0x1.e83e0ffb7bfb4p-2_b64, 0x1.c20de3a08ea07p-1_b64,
+  -0x1.12a858ep-28_b64, 0x1.eb0067e48baf4p-2_b64, 0x1.c14d9e2bd511ep-1_b64,
+  0x1.9a17403p-27_b64, 0x1.edc19997a4431p-2_b64, 0x1.c08c413089b2ep-1_b64,
+  0x1.68c8636p-29_b64, 0x1.f0819163d1bcp-2_b64, 0x1.bfc9d21568f32p-1_b64,
+  0x1.4cc5eb8p-29_b64, 0x1.f3405a482e11dp-2_b64, 0x1.bf064dd580fc9p-1_b64,
+  -0x1.fce7cd8p-27_b64, 0x1.f5fde8f3f11d4p-2_b64, 0x1.be41b798f6b97p-1_b64,
+  -0x1.af8169p-29_b64, 0x1.f8ba4c98a9816p-2_b64, 0x1.bd7c0b1a7f14bp-1_b64,
+  0x1.6e39e2p-33_b64, 0x1.fb7575d1ea75p-2_b64, 0x1.bcb54cac5dde5p-1_b64,
+  0x1.30f9256p-28_b64, 0x1.fe2f665dcd168p-2_b64, 0x1.bbed7bd1e17bp-1_b64,
+  0x1.626de2p-31_b64, 0x1.00740ca0d5fbbp-1_b64, 0x1.bb2499f9fe7a3p-1_b64,
+  0x1.5cc703p-30_b64, 0x1.01cfc8afeea0ep-1_b64, 0x1.ba5aa650dd495p-1_b64,
+  -0x1.6191e6p-32_b64, 0x1.032ae54fe4057p-1_b64, 0x1.b98fa2065a5e6p-1_b64,
+  -0x1.6b1485p-31_b64, 0x1.0485624c328c8p-1_b64, 0x1.b8c38d39737bcp-1_b64,
+  -0x1.11fbc3ap-29_b64, 0x1.05df3e66a716dp-1_b64, 0x1.b7f668a580fdp-1_b64,
+  -0x1.0eca7fp-27_b64, 0x1.07387825589ecp-1_b64, 0x1.b728352c44517p-1_b64,
+  -0x1.8073bc9ep-25_b64, 0x1.089109ef1284dp-1_b64, 0x1.b658f630112edp-1_b64,
+  -0x1.9dcf0adp-27_b64, 0x1.09e9051603e29p-1_b64, 0x1.b588a13ab750fp-1_b64,
+  -0x1.06ea9fp-29_b64, 0x1.0b405820e78e7p-1_b64, 0x1.b4b740d3cc07bp-1_b64,
+  -0x1.36a8d0cp-30_b64, 0x1.0c9704a1ea4e5p-1_b64, 0x1.b3e4d40f5524dp-1_b64,
+  0x1.63d1f3p-30_b64, 0x1.0ded0bc01a533p-1_b64, 0x1.b3115a3a628afp-1_b64,
+  0x1.f3181f14p-26_b64, 0x1.0f4270e4787bfp-1_b64, 0x1.b23cd1314c779p-1_b64,
+  -0x1.f269b78p-29_b64, 0x1.109723e75c5cfp-1_b64, 0x1.b167430cfebdbp-1_b64,
+  0x1.1d84dc08p-27_b64, 0x1.11eb36bc9db52p-1_b64, 0x1.b090a4915ee88p-1_b64,
+  -0x1.08e60068p-27_b64, 0x1.133e9ba0061d8p-1_b64, 0x1.afb8fe69a6527p-1_b64,
+  0x1.cda72abp-27_b64, 0x1.14915d557a7c9p-1_b64, 0x1.aee049bc0aeep-1_b64,
+  -0x1.f32f95p-30_b64, 0x1.15e36dfb6bb55p-1_b64, 0x1.ae068f6991699p-1_b64,
+  0x1.138092dp-28_b64, 0x1.1734d6f34d7fp-1_b64, 0x1.ad2bc96c1e1f5p-1_b64,
+  0x1.6b382dd4p-26_b64, 0x1.188595ae376a5p-1_b64, 0x1.ac4ff962bdb6dp-1_b64,
+  -0x1.f12fafap-28_b64, 0x1.19d59f592a587p-1_b64, 0x1.ab7326685eb57p-1_b64,
+  -0x1.2909e5ap-28_b64, 0x1.1b2500aed7ac6p-1_b64, 0x1.aa954823cf815p-1_b64,
+  -0x1.d66a8978p-25_b64, 0x1.1c73aa0150cf9p-1_b64, 0x1.a9b668fb0503fp-1_b64,
+  0x1.311ea86p-27_b64, 0x1.1dc1b7db74db1p-1_b64, 0x1.a8d675d9c6cc8p-1_b64,
+  -0x1.41c02b8p-31_b64, 0x1.1f0f08a1a06a4p-1_b64, 0x1.a7f5853bb4309p-1_b64,
+  -0x1.ca1f4edp-26_b64, 0x1.205ba57211271p-1_b64, 0x1.a71391146958fp-1_b64,
+  -0x1.910ce77p-28_b64, 0x1.21a7988f8326bp-1_b64, 0x1.a63092626202fp-1_b64,
+  0x1.2bfadbeep-25_b64, 0x1.22f2dc71afab6p-1_b64, 0x1.a54c8cd9fd0d9p-1_b64,
+  -0x1.5f1c02a8p-27_b64, 0x1.243d5df4afb93p-1_b64, 0x1.a4678dbbe5e73p-1_b64,
+  -0x1.db12b9p-30_b64, 0x1.2587347f493a4p-1_b64, 0x1.a38184db0df23p-1_b64,
+  -0x1.7b29ep-30_b64, 0x1.26d05490f2f61p-1_b64, 0x1.a29a7a2f40b49p-1_b64,
+  -0x1.b3ddca4p-29_b64, 0x1.2818be6930629p-1_b64, 0x1.a1b26d8f070d7p-1_b64,
+  0x1.e112744p-29_b64, 0x1.2960730ff2bcdp-1_b64, 0x1.a0c95e3df5e0ep-1_b64,
+  -0x1.5269766p-28_b64, 0x1.2aa76dafcbbf4p-1_b64, 0x1.9fdf4fae1df6fp-1_b64,
+  -0x1.09777e1p-28_b64, 0x1.2bedb1b6b4e15p-1_b64, 0x1.9ef43f6cbe162p-1_b64,
+  0x1.ae2051fp-28_b64, 0x1.2d333e4617f25p-1_b64, 0x1.9e082e148680ep-1_b64,
+  -0x1.36f6ced8p-27_b64, 0x1.2e780cb47180ep-1_b64, 0x1.9d1b207f383c3p-1_b64,
+  -0x1.23fdc6bp-28_b64, 0x1.2fbc23fba2f44p-1_b64, 0x1.9c2d1197130a7p-1_b64,
+  0x1.bc540ep-33_b64, 0x1.30ff7fd6d967dp-1_b64, 0x1.9b3e0478b961bp-1_b64,
+  -0x1.cfb4ed7p-28_b64, 0x1.32421da0bf0e9p-1_b64, 0x1.9a4dfb1c89326p-1_b64,
+  0x1.55802aecp-26_b64, 0x1.3384042a92b1dp-1_b64, 0x1.995cf06920d11p-1_b64,
+  0x1.60719e4p-28_b64, 0x1.34c52608e3a92p-1_b64, 0x1.986aee6d6837ep-1_b64,
+  -0x1.cbf2e48p-30_b64, 0x1.36058ac8863b6p-1_b64, 0x1.9777ef832c986p-1_b64,
+  0x1.9061c32p-27_b64, 0x1.374533ab707dp-1_b64, 0x1.9683f2ad7e2ecp-1_b64,
+  -0x1.da84dfep-27_b64, 0x1.3884160f9488fp-1_b64, 0x1.958f000fdd50ap-1_b64,
+  0x1.92e8a74p-29_b64, 0x1.39c23eba6b22ap-1_b64, 0x1.94990dd9cee51p-1_b64,
+  -0x1.bff5d9ap-29_b64, 0x1.3affa20756bddp-1_b64, 0x1.93a225056084ap-1_b64,
+  0x1.4c462p-36_b64, 0x1.3c3c4498e98ebp-1_b64, 0x1.92aa41fbb951cp-1_b64,
+  -0x1.e4613e9p-28_b64, 0x1.3d782261dff62p-1_b64, 0x1.91b167e92d706p-1_b64,
+  0x1.0eb2964p-30_b64, 0x1.3eb33ed579bbep-1_b64, 0x1.90b794146043cp-1_b64,
+  -0x1.60abec2p-29_b64, 0x1.3fed94c834d8ap-1_b64, 0x1.8fbcca9583479p-1_b64,
+  0x1.6954977p-27_b64, 0x1.4127281ddac03p-1_b64, 0x1.8ec1085083553p-1_b64,
+  0x1.a16fec2p-29_b64, 0x1.425ff1f841235p-1_b64, 0x1.8dc452ca328d3p-1_b64,
+  -0x1.27bcdd3p-27_b64, 0x1.4397f44aa44f2p-1_b64, 0x1.8cc6a8771e165p-1_b64,
+  -0x1.60dded4p-28_b64, 0x1.44cf317a563dbp-1_b64, 0x1.8bc8076122736p-1_b64,
+  -0x1.9a8f405cp-26_b64, 0x1.4605a2b02d705p-1_b64, 0x1.8ac875232f3efp-1_b64,
+  0x1.32777dcp-27_b64, 0x1.473b532bc5a67p-1_b64, 0x1.89c7e8713120cp-1_b64,
+  -0x1.1418a7bp-26_b64, 0x1.4870306ca20e2p-1_b64, 0x1.88c670a0ea774p-1_b64,
+  -0x1.fed182ep-28_b64, 0x1.49a44886b534p-1_b64, 0x1.87c401fdf05e5p-1_b64,
+  0x1.86144d8p-27_b64, 0x1.4ad796ea1410cp-1_b64, 0x1.86c0a04dbacc5p-1_b64,
+  0x1.1bc2e6p-33_b64, 0x1.4c0a14640d2afp-1_b64, 0x1.85bc51aa114c2p-1_b64,
+  -0x1.f53d2fep-28_b64, 0x1.4d3bc5aaa8cd5p-1_b64, 0x1.84b7121b30a13p-1_b64,
+  -0x1.2e100ap-30_b64, 0x1.4e6cab91556bep-1_b64, 0x1.83b0e0e6b6cccp-1_b64,
+  -0x1.fa58c62p-29_b64, 0x1.4f9cc1c69fddep-1_b64, 0x1.82a9c1c1ab463p-1_b64,
+  0x1.bb491ep-33_b64, 0x1.50cc09fdcbd92p-1_b64, 0x1.81a1b3342f858p-1_b64,
+  0x1.a11541p-28_b64, 0x1.51fa82c3aa029p-1_b64, 0x1.8098b67ea8509p-1_b64,
+  0x1.ab0a5d3p-27_b64, 0x1.53282b20b96b6p-1_b64, 0x1.7f8ecc791953p-1_b64,
+  -0x1.cba0438p-28_b64, 0x1.5454fe43a7d7cp-1_b64, 0x1.7e83f96af78ap-1_b64,
+  -0x1.0dd83a4p-29_b64, 0x1.5581033a81573p-1_b64, 0x1.7d783712e20ecp-1_b64,
+  -0x1.e9a8299p-28_b64, 0x1.56ac33fbb8253p-1_b64, 0x1.7c6b8acf90fa6p-1_b64,
+  0x1.225c4aap-29_b64, 0x1.57d6939d4b513p-1_b64, 0x1.7b5df1da18065p-1_b64,
+  -0x1.82e66ep-27_b64, 0x1.59001b9e64d79p-1_b64, 0x1.7a4f72157cfdfp-1_b64,
+  0x1.51a6a354p-26_b64, 0x1.5a28d5b36d597p-1_b64, 0x1.794002a7c9023p-1_b64,
+  0x1.13917f4p-26_b64, 0x1.5b50b4e10bec1p-1_b64, 0x1.782faf6dc7ba2p-1_b64,
+  0x1.49310ccp-30_b64, 0x1.5c77bc15ab4efp-1_b64, 0x1.771e75c43942ep-1_b64,
+  0x1.24d493cp-30_b64, 0x1.5d9dee9de49dbp-1_b64, 0x1.760c529bc17bp-1_b64,
+  -0x1.04638f7p-26_b64, 0x1.5ec347044e0f4p-1_b64, 0x1.74f94b0af972p-1_b64,
+  -0x1.3f41b28p-29_b64, 0x1.5fe7cb834600cp-1_b64, 0x1.73e55936a516p-1_b64,
+  -0x1.a5f6f5cp-30_b64, 0x1.610b7515d1562p-1_b64, 0x1.72d083b8214ebp-1_b64,
+  0x1.19fb2ep-28_b64, 0x1.622e459eafbc1p-1_b64, 0x1.71bac8c7b0592p-1_b64,
+  -0x1.56d2c2bp-28_b64, 0x1.6350396fe4e62p-1_b64, 0x1.70a42bec51665p-1_b64,
+  -0x1.3c156c2p-28_b64, 0x1.64715385bed93p-1_b64, 0x1.6f8caa4969708p-1_b64,
+  -0x1.f23e576p-29_b64, 0x1.659191d2fd57fp-1_b64, 0x1.6e7445d74f711p-1_b64,
+  0x1.1e4be38p-30_b64, 0x1.66b0f41d484c4p-1_b64, 0x1.6d5afecd4938dp-1_b64,
+  -0x1.397cc8d8p-27_b64, 0x1.67cf76eac73dfp-1_b64, 0x1.6c40d89625f63p-1_b64,
+  -0x1.202f686p-28_b64, 0x1.68ed1e0990551p-1_b64, 0x1.6b25cf728c35p-1_b64]

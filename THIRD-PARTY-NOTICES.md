@@ -93,6 +93,42 @@ THE SOFTWARE.
 
 ---
 
+## CORE-MATH — correctly rounded mathematical functions
+
+Used by the RazorForge `B16`, `B32`, and `B64` math routines under
+`Standard/RazorForge/Core/Numerics/CoreMath/` (acos, acosh, asin, asinh, atan, atan2, atanh, cbrt, cos,
+cosh, cospi, erf, erfc, exp, exp10, exp2, expm1, hypot, lgamma, log, log10, log1p, log2, pow, sin, sinh,
+sinpi, tan, tanh, tanpi, tgamma). Each routine is a port of the CORE-MATH C implementation for that
+format (round-to-nearest path only) and returns the correctly rounded result. Every port file names its
+upstream source file and repeats that file's copyright line, and `LICENSE-CORE-MATH` sits next to them.
+
+- Project: **CORE-MATH** — https://core-math.gitlabpages.inria.fr/
+- Copyright © 2021-2026 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht, Maxence Ponsardin,
+  Cyprien Peignier, INRIA, and CERN (per-file lines in the ports).
+- License: **MIT License**.
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
 ## Intel® Decimal Floating-Point Math Library (BID / "libbid")
 
 Used by the RazorForge IEEE 754-2008 decimal engines: **`Decimal`** (decimal256)

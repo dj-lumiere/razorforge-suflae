@@ -1,0 +1,743 @@
+module Core
+
+# ============================================================================
+# Correctly rounded sine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/sin/sin.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Paul Zimmermann and Tom Hubrecht and Alexei Sibidanov. Distributed under the MIT
+# license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The 128-bit
+# fixed-point accurate path uses U128 with wrapping operators, as the C code uses unsigned __int128.
+
+### Returns the sine of this value, interpreting it as radians, correctly rounded: the exact sine rounded
+### to the nearest `B64` (ties to even), identical on every platform. `sin(-x) == -sin(x)`, ±0 map to
+### themselves, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded sine.
+routine B64.sin() -> B64
+  var x = me
+  var ux = x.to_bits()
+  var au = ux << 1
+  # |x| <= 0x1.7137449123ef6p-26: sin(x) rounds like x - x^3/6
+  if au <= 0x7CAE26E892247DEC_u64
+    if au == 0
+      return x
+    return LLVM::fma[B64](a: x, b: -0x1p-54, c: x)
+  var e = (ux >>> 52) & 0x7FF_u64
+  # |x| < 2^31
+  if e < 1054
+    return b64_sin_moderate(x: x, sbit: ux >>> 63)
+  # NaN, +infinity and -infinity
+  if e == 0x7FF
+    return x -! x
+  return b64_sin_large(x: x)
+
+### Builds a 128-bit value from its high and low 64-bit halves.
+### :param hi: The high 64 bits.
+### :param lo: The low 64 bits.
+### :returns: `hi * 2^64 + lo`.
+secret routine b64_sin_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### Entry `i` of a table of 128-bit values stored as (low, high) pairs of `U64`.
+### :param lo: The low half, `TABLE[2i]`.
+### :param hi: The high half, `TABLE[2i + 1]`.
+### :returns: The 128-bit entry.
+secret routine b64_sin_pair(lo: U64, hi: U64) -> U128
+  return b64_sin_u128(hi: hi, lo: lo)
+
+### The high half of a 128 x 128-bit fixed-point product, `floor(a * b / 2^128)` up to the dropped
+### low-times-low partial product.
+### :param a: The first factor.
+### :param b: The second factor.
+### :returns: The approximate high half of the product.
+secret routine b64_sin_mhuu(a: U128, b: U128) -> U128
+  var ah = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](a >>> 64))
+  var al = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](a))
+  var bh = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](b >>> 64))
+  var bl = LLVM::zero_extend[U64, U128](LLVM::int_truncate[U128, U64](b))
+  var ahbh = ah *% bh
+  var ahbl = ah *% bl
+  var albh = al *% bh
+  return ahbh +% ((ahbl >>> 64) +% (albh >>> 64))
+
+### Rounds `(-1)^sbit * r / 2^128` to a `B64`, for `r` non-zero and the result not subnormal.
+### :param r: The 128-bit fixed-point magnitude.
+### :param sbit: The sign bit (0 or 1).
+### :returns: The rounded value.
+secret routine b64_sin_u128_tod(r: U128, sbit: U64) -> B64
+  var sh = LLVM::int_truncate[U128, U32](r.leading_zeros())
+  # upper 53 non-zero bits and the round bit
+  var h = LLVM::int_truncate[U128, U64](r >>> (75_u32 - sh))
+  var rbit = LLVM::int_truncate[U128, U64](r >>> (74_u32 - sh)) & 1_u64
+  var vbits = 0x3CA0000000000000_u64
+  if sbit == 1
+    vbits = 0xBCA0000000000000_u64
+  # scale ±2^-53 by 2^-sh
+  var v = B64.from_bits(bits: vbits -% (LLVM::zero_extend[U32, U64](sh) << 52))
+  var a = LLVM::unsigned_to_float[U64, B64](h) *! v
+  var scale = 0x1p-54
+  if rbit == 1
+    scale = 0x1p-53
+  var b = a *! scale
+  return a +! b
+
+### Error-free sum `x + y = s + e` for |x| >= |y| (Fast2Sum).
+### :param x: The larger operand.
+### :param y: The smaller operand.
+### :returns: `(s, e)`.
+secret routine b64_sin_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### Double-double sum `(xh + xl) + (yh + yl)`, with |xh| >= |yh|.
+### :param xh: The high part of the first operand.
+### :param xl: The low part of the first operand.
+### :param yh: The high part of the second operand.
+### :param yl: The low part of the second operand.
+### :returns: `(high, low)` of the sum.
+secret routine b64_sin_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
+  var s = b64_sin_fasttwosum(x: xh, y: yh)
+  return (s.item0, (xl +! yl) +! s.item1)
+
+### Double-double product `(xh + xl) * (ch + cl)`.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: `(high, low)` of the product.
+secret routine b64_sin_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = xh *! ch
+  return (ahhh, (xh *! cl +! xl *! ch) +! LLVM::fma[B64](a: xh, b: ch, c: -ahhh))
+
+### Word `j` of the 1/(2pi) table: 1/(2pi) ~ sum of `T[j] / 2^(64j)`.
+### :param j: The word index, 0 <= j < 20.
+### :returns: The table word.
+secret routine b64_sin_t(j: U64) -> U64
+  return B64_SIN_T[j]
+
+### Argument reduction for |x| >= 2^31: returns `(k, r)` with x/(2pi) mod 1 = k/2^15 + r + s, where
+### 0 <= r < 2^-15 and 0 <= s < 2^-67.988 (r is returned centered, minus 2^-16).
+### :param x: The argument |x|, finite with |x| >= 2^31.
+### :returns: `(k, r)`.
+secret routine b64_sin_reduce_large(x: B64) -> (U64, B64)
+  var u64 = x.to_bits()
+  var e = (u64 >>> 52) & 0x7FF_u64
+  var m = (1_u64 << 52) | (u64 & 0x000FFFFFFFFFFFFF_u64)
+  var i = (e - 1011) // 64
+  var f = LLVM::int_truncate[U64, U32]((e - 1011) & 0x3F_u64)
+  var v0 = b64_sin_t(j: i)
+  var v1 = b64_sin_t(j: i + 1)
+  if f != 0
+    v0 = (b64_sin_t(j: i) << f) | (b64_sin_t(j: i + 1) >>> (64_u32 - f))
+    v1 = (b64_sin_t(j: i + 1) << f) | (b64_sin_t(j: i + 2) >>> (64_u32 - f))
+  var u = b64_sin_u128(hi: v0, lo: v1)
+  u = LLVM::zero_extend[U64, U128](m) *% u
+  # round r to nearest, where 0x810000000000000 = 2^59 + 2^52
+  var magic = b64_sin_u128(hi: 0x0001000000000000_u64, lo: 0x0810000000000000_u64)
+  u = u +% magic
+  # the next 53 bits of u after the first 15
+  var t = LLVM::unsigned_to_float[U128, B64]((u << 15) >>> 75)
+  var r = t *! 0x1p-68 -! 0x1p-16
+  return (LLVM::int_truncate[U128, U64](u >>> 113), r)
+
+### Returns Sr with Sr/2^128 approximating sin(2 pi r), for 0 <= r < 2^-14, where u, u2 and u4 are r,
+### r^2 and r^4 in 128-bit fixed point and u2h = floor(u2 / 2^64).
+### :param u: r / 2^128.
+### :param u2: r^2 / 2^128.
+### :param u2h: floor(u2 / 2^64).
+### :param u4: r^4 / 2^128.
+### :returns: Sr.
+secret routine b64_sin_eval_ps(u: U128, u2: U128, u2h: U128, u4: U128) -> U128
+  # Estrin's scheme: the degree-{1,3} part plus r^4 times the degree-{5,7} part, with alternating signs
+  var ps0 = b64_sin_u128(hi: 0xFFFFFFFFFFFFFFFF_u64, lo: 0xFFFFFFFFFFFFC396_u64)
+  var ps1 = b64_sin_u128(hi: 0x2AAAAAAAAAAAAAAA_u64, lo: 0xAAAAA9646E8F872E_u64)
+  var ps2 = b64_sin_u128(hi: 0x0222222222222220_u64, lo: 0x467B898367FB1249_u64)
+  var ps3 = b64_sin_u128(hi: 0_u64, lo: 0x000D00D00BFFF5EE_u64)
+  var sh = ps2 -% ps3 *% u2h
+  sh = b64_sin_mhuu(a: sh, b: u4)
+  var s = b64_sin_mhuu(a: ps1, b: u2)
+  s = ps0 -% s
+  s = s +% sh
+  return b64_sin_mhuu(a: s, b: u)
+
+### Returns Cr with Cr/2^128 approximating cos(2 pi r), for 0 <= r < 2^-14, where u2 and u4 are r^2
+### and r^4 in 128-bit fixed point and u2h = floor(u2 / 2^64).
+### :param u2: r^2 / 2^128.
+### :param u2h: floor(u2 / 2^64).
+### :param u4: r^4 / 2^128.
+### :returns: Cr.
+secret routine b64_sin_eval_pc(u2: U128, u2h: U128, u4: U128) -> U128
+  var pc0 = b64_sin_u128(hi: 0xFFFFFFFFFFFFFFFF_u64, lo: 0xFFFFFFFFFFFFFFFF_u64)
+  var pc1 = b64_sin_u128(hi: 0x7FFFFFFFFFFFFFFF_u64, lo: 0xFFFFFFFFFA998BF0_u64)
+  var pc2 = b64_sin_u128(hi: 0x0AAAAAAAAAAAAAAA_u64, lo: 0xAAA2CAECC94962C7_u64)
+  var pc3 = b64_sin_u128(hi: 0x005B05B05B05AC1A_u64, lo: 0x642013BC289028B6_u64)
+  var pc4 = b64_sin_u128(hi: 0_u64, lo: 0x0001A0193D9A550C_u64)
+  var sh = pc3 -% u2h *% pc4
+  sh = pc2 -% b64_sin_mhuu(a: sh, b: u2)
+  var s = b64_sin_mhuu(a: pc1, b: u2)
+  s = pc0 -% s
+  return s +% b64_sin_mhuu(a: sh, b: u4)
+
+### Argument reduction for the accurate path: returns `(k, r, neg)` with x/(2pi) mod 1 = k/2^13 +
+### (-1)^neg r/2^128 + eps, |r/2^128| <= 2^-14 and 0 <= eps < 2^-127.999.
+### :param x: The argument, finite with |x| >= 2^-16.
+### :returns: `(k, r, neg)`.
+secret routine b64_sin_reduce_large_acc(x: B64) -> (U64, U128, U64)
+  var ux = x.to_bits()
+  var e = (ux >>> 52) & 0x7FF_u64
+  var m = (1_u64 << 52) | (ux & 0x000FFFFFFFFFFFFF_u64)
+  # i = ceil((e - 1074) / 64) - 1, possibly -1 (then the first word is 0)
+  var ip1 = (e - 947) // 64
+  var f = LLVM::int_truncate[U64, U32]((e + 64 - 1011) & 0x3F_u64)
+  var v0 = 0_u64
+  if ip1 >= 1
+    v0 = b64_sin_t(j: ip1 - 1)
+  var v1 = b64_sin_t(j: ip1)
+  var v2 = b64_sin_t(j: ip1 + 1)
+  if f != 0
+    v0 = (v0 << f) | (v1 >>> (64_u32 - f))
+    v1 = (v1 << f) | (v2 >>> (64_u32 - f))
+    v2 = (v2 << f) | (b64_sin_t(j: ip1 + 2) >>> (64_u32 - f))
+  var mm = LLVM::zero_extend[U64, U128](m)
+  var u = mm *% b64_sin_u128(hi: v0, lo: v1)
+  var v = mm *% LLVM::zero_extend[U64, U128](v2)
+  # add the contribution of m*V2 from 2^-76 to 2^-128
+  u = u +% (v >>> 64)
+  var k = LLVM::int_truncate[U128, U64](u >>> 115)
+  var mask = b64_sin_u128(hi: 0x0007FFFFFFFFFFFF_u64, lo: 0xFFFFFFFFFFFFFFFF_u64)
+  # ignore the leading 13 bits, then round k to nearest to have |r/2^128| < 2^-14
+  u = u & mask
+  var neg = LLVM::int_truncate[U128, U64](u >>> 114)
+  if neg != 0
+    k = (k + 1) & 0x1FFF_u64
+    u = (mask +% LLVM::zero_extend[U64, U128](1_u64)) -% u
+  return (k, u, neg)
+
+### The accurate path of `sin` in 128-bit fixed point, for |x| >= 2^-16.
+### :param x: The argument, finite with |x| >= 2^-16.
+### :returns: The correctly rounded sine.
+secret routine b64_sin_large_accurate(x: B64) -> B64
+  var red = b64_sin_reduce_large_acc(x: x)
+  var k = red.item0
+  var r = red.item1
+  var neg = red.item2
+  # twopi/2^128 approximates 2pi/2^3: replace r by 2pi*r
+  var twopi = b64_sin_u128(hi: 0xC90FDAA22168C234_u64, lo: 0xC4C6628B80DC1CD1_u64)
+  r = b64_sin_mhuu(a: twopi, b: r << 3)
+  var u2 = b64_sin_mhuu(a: r, b: r)
+  var u4 = b64_sin_mhuu(a: u2, b: u2)
+  var u2h = u2 >>> 64
+  # x/(2pi) mod 1 = k/2^13 + r + eps: with k = 2^12 s + 2^6 i1 + i2, t1 = pi i1/2^6 and t2 = pi i2/2^12,
+  # sin(pi k/2^12) and cos(pi k/2^12) follow from sin/cos of t1 and t2, up to the sign (-1)^s
+  var sbit = 1_u64
+  if x > 0.0
+    sbit = 0_u64
+  sbit = sbit ^ (k >>> 12)
+  var i1 = (k >>> 6) & 0x3F_u64
+  var i2 = k & 0x3F_u64
+  # |sin(t1)| and |cos(t1)| through sin(pi - t) = sin(t) and cos(t) = sin(t + pi/2)
+  var s1 = b64_sin_s1u(i: 32_u64)
+  var c1 = s1
+  if i1 <= 32
+    s1 = b64_sin_s1u(i: i1)
+    c1 = b64_sin_s1u(i: 32 - i1)
+  else
+    s1 = b64_sin_s1u(i: 64 - i1)
+    c1 = b64_sin_s1u(i: i1 - 32)
+  var c2 = b64_sin_pair(lo: B64_SIN_C2U[2 * i2], hi: B64_SIN_C2U[2 * i2 + 1])
+  var s2 = b64_sin_pair(lo: B64_SIN_S2U[2 * i2], hi: B64_SIN_S2U[2 * i2 + 1])
+  var s1u = b64_sin_mhuu(a: s1, b: c2)
+  var t = b64_sin_mhuu(a: c1, b: s2)
+  # sin(t1 + t2) >= 0 for 0 <= t1 + t2 < pi
+  if i1 < 32
+    s1u = s1u +% t
+  else
+    s1u = s1u -% t
+  # cos(t1 + t2)
+  var c1u = b64_sin_mhuu(a: c1, b: c2)
+  t = b64_sin_mhuu(a: s1, b: s2)
+  if i1 < 32
+    c1u = c1u -% t
+  else
+    c1u = c1u +% t
+  var sr = b64_sin_eval_ps(u: r, u2: u2, u2h: u2h, u4: u4)
+  var cr = b64_sin_eval_pc(u2: u2, u2h: u2h, u4: u4)
+  # sin(x) ~ sin(z) cos(r) + cos(z) sin(r), where the first term is >= 0
+  s1u = b64_sin_mhuu(a: s1u, b: cr)
+  c1u = b64_sin_mhuu(a: c1u, b: sr)
+  var nonneg = 1_u64
+  if i1 >= 32
+    nonneg = 0_u64
+  if (nonneg ^ neg) == 1
+    s1u = s1u +% c1u
+  elseif s1u < c1u
+    s1u = c1u -% s1u
+    sbit = sbit ^ 1
+  else
+    s1u = s1u -% c1u
+  return b64_sin_u128_tod(r: s1u, sbit: sbit)
+
+### Entry `i` of the sin(pi i/2^6) table, 0 <= i <= 32, as a 128-bit fixed-point value.
+### :param i: The index.
+### :returns: The table entry.
+secret routine b64_sin_s1u(i: U64) -> U128
+  return b64_sin_pair(lo: B64_SIN_S1U[2 * i], hi: B64_SIN_S1U[2 * i + 1])
+
+### The accurate path of `sin` for |x| < 2^-16: x + (c3h + c3l) x^3 + c5 x^5 with relative error below
+### 2^-112.743, evaluated in double-double.
+### :param x: The argument, 0x1.7137449123ef6p-26 < |x| < 2^-16.
+### :returns: The correctly rounded sine.
+secret routine b64_sin_small_accurate(x: B64) -> B64
+  var c3h = -0x1.5555555555555p-3
+  var c3l = -0x1.55554b00de7e8p-57
+  var c5 = 0x1.111111110848p-7
+  var x2h = x *! x
+  var x2l = LLVM::fma[B64](a: x, b: x, c: -x2h)
+  var h = c5 *! x2h
+  h = h +! c3l
+  var s = b64_sin_fasttwosum(x: c3h, y: h)
+  var p = b64_sin_muldd(xh: s.item0, xl: s.item1, ch: x2h, cl: x2l)
+  p = b64_sin_muldd(xh: p.item0, xl: p.item1, ch: x, cl: 0.0)
+  var l = p.item1
+  var q = b64_sin_fasttwosum(x: x, y: p.item0)
+  l = l +! q.item1
+  return q.item0 +! l
+
+### Combines the table values of sin and cos at `j`/2^15 turns (j = 2^7 i1 + i2) with the polynomial
+### values `sh ~ sin(r)` and `ch ~ cos(r) - 1`: returns `(Sh, Sl + Sh ch + Ch sh)`.
+### :param i1: The coarse table index, 0 <= i1 < 128.
+### :param i2: The fine table index, 0 <= i2 < 128.
+### :param sh: The sine polynomial value.
+### :param ch: The cosine-minus-one polynomial value.
+### :returns: `(fh, fl)` approximating sin of the reduced argument.
+secret routine b64_sin_combine(i1: U64, i2: U64, sh: B64, ch: B64) -> (B64, B64)
+  var a = 4 * i1
+  var b = 4 * i2
+  var p1 = b64_sin_muldd(xh: B64_SIN_U1[a], xl: B64_SIN_U1[a + 1], ch: B64_SIN_U2[b + 2], cl: B64_SIN_U2[b + 3])
+  var p2 = b64_sin_muldd(xh: B64_SIN_U2[b], xl: B64_SIN_U2[b + 1], ch: B64_SIN_U1[a + 2], cl: B64_SIN_U1[a + 3])
+  var s = b64_sin_fastsum(xh: p1.item0, xl: p1.item1, yh: p2.item0, yl: p2.item1)
+  var cc = B64_SIN_U1[a + 2] *! B64_SIN_U2[b + 2] -! B64_SIN_U1[a] *! B64_SIN_U2[b]
+  return (s.item0, s.item1 +! s.item0 *! ch +! cc *! sh)
+
+### The fast path of `sin` for 0x1.7137449123ef6p-26 < |x| < 2^31.
+### :param x: The argument.
+### :param sbit: The sign bit of `x`.
+### :returns: The correctly rounded sine.
+secret routine b64_sin_moderate(x: B64, sbit: U64) -> B64
+  var ax = x.abs()
+  # |invpi/2^14 - 1/pi| < 2^-55.496
+  var k = LLVM::rint[B64](value: 0x1.45f306dc9c883p+12 *! ax)
+  # |2^14 (pih + pil) + pi| < 2^-108.041, and rh is exact
+  var rh = LLVM::fma[B64](a: k, b: -0x1.921fb54442d18p-13, c: ax)
+  var rl = k *! -0x1.1a62633145c07p-67
+  var r = rh +! rl
+  var r2 = r *! r
+  var j = LLVM::reinterpret_bits[S64, U64](LLVM::float_to_signed[B64, S64](k))
+  # a reduction by an odd multiple of pi flips the sign
+  var sgn = sbit ^ ((j >>> 14) & 1_u64)
+  var i1 = (j >>> 7) & 0x7F_u64
+  var i2 = j & 0x7F_u64
+  # r - c3 r^3 approximates sin(r) with absolute error < 2^-76.494, -r^2/2 + c4 r^4 approximates
+  # cos(r) - 1 with absolute error < 2^-92.723, for |r| <= 2^-13.339
+  var sh = r *! (1.0 -! 0x1.55555553068fp-3 *! r2)
+  var ch = r2 *! (-0.5 +! 0x1.55555553bfd3p-5 *! r2)
+  var f = b64_sin_combine(i1: i1, i2: i2, sh: sh, ch: ch)
+  var fh = f.item0
+  var fl = f.item1
+  if sgn == 1
+    fh = -fh
+    fl = -fl
+  fl = fl -! 0x1.dep-64
+  var lb = fh +! fl
+  var ub = fh +! (fl +! 0x1.dep-63)
+  if ub == lb
+    return lb
+  if x.abs() < 0x1p-16
+    return b64_sin_small_accurate(x: x)
+  return b64_sin_large_accurate(x: x)
+
+### The fast path of `sin` for |x| >= 2^31.
+### :param x: The argument, finite with |x| >= 2^31.
+### :returns: The correctly rounded sine.
+secret routine b64_sin_large(x: B64) -> B64
+  var red = b64_sin_reduce_large(x: x.abs())
+  var j = red.item0
+  var r = red.item1
+  # x/(2pi) ~ k + j/2^15 + r with 0 <= r < 2^-15
+  var sbit = 1_u64
+  if x > 0.0
+    sbit = 0_u64
+  var r2 = r *! r
+  # a reduction by an odd multiple of pi flips the sign
+  sbit = sbit ^ (j >>> 14)
+  var i1 = (j >>> 7) & 0x7F_u64
+  var i2 = j & 0x7F_u64
+  var sh = r *! (0x1.921fb54442d18p2 -! 0x1.4abbcdb6b26d1p5 *! r2)
+  var ch = r2 *! (-0x1.3bd3cc9be45dep4 +! 0x1.03c1eee483083p6 *! r2)
+  var f = b64_sin_combine(i1: i1, i2: i2, sh: sh, ch: ch)
+  var fh = f.item0
+  var fl = f.item1
+  if sbit == 1
+    fh = -fh
+    fl = -fl
+  var lb = fh +! (fl -! 0x1.41p-63)
+  var ub = fh +! (fl +! 0x1.41p-63)
+  if lb == ub
+    return lb
+  return b64_sin_large_accurate(x: x)
+
+### 1/(2pi) rounded down to 1280 bits: 1/(2pi) ~ sum of T[j] / 2^(64j), with T[19] zeroed as in the C table.
+secret preset B64_SIN_T: Array[U64, 20] = [0x0_u64, 0x28be60db9391054a_u64, 0x7f09d5f47d4d3770_u64, 0x36d8a5664f10e410_u64,
+  0x7f9458eaf7aef158_u64, 0x6dc91b8e909374b8_u64, 0x1924bba82746487_u64, 0x3f877ac72c4a69cf_u64,
+  0xba208d7d4baed121_u64, 0x3a671c09ad17df90_u64, 0x4e64758e60d4ce7d_u64, 0x272117e2ef7e4a0e_u64,
+  0xc7fe25fff7816603_u64, 0xfbcbc462d6829b47_u64, 0xdb4d9fb3c9f2c26d_u64, 0xd3d18fd9a797fa8b_u64,
+  0x5d49eeb1faf97c5e_u64, 0xcf41ce7de294a4ba_u64, 0x9afed7ec47e35742_u64, 0x0_u64]
+
+### For 0 <= j < 128, entries 4j..4j+3 are sh, sl, ch, cl: double-double sin(j pi/2^7) and cos(j pi/2^7).
+secret preset B64_SIN_U1: Array[B64, 512] = [0x0p+0_b64, 0x0p+0_b64, 0x1p+0_b64, 0x0p+0_b64,
+  0x1.92155f7a3667ep-6_b64, -0x1.b1d63091a013p-64_b64, 0x1.ffd886084cd0dp-1_b64, -0x1.1354d4556e4cbp-55_b64,
+  0x1.91f65f10dd814p-5_b64, -0x1.912bd0d569a9p-61_b64, 0x1.ff621e3796d7ep-1_b64, -0x1.c57bc2e24aa15p-57_b64,
+  0x1.2d52092ce19f6p-4_b64, -0x1.9a088a8bf6b2cp-59_b64, 0x1.fe9cdad01883ap-1_b64, 0x1.521ecd0c67e35p-57_b64,
+  0x1.917a6bc29b42cp-4_b64, -0x1.e2718d26ed688p-60_b64, 0x1.fd88da3d12526p-1_b64, -0x1.87df6378811c7p-55_b64,
+  0x1.f564e56a9730ep-4_b64, 0x1.a2704729ae56dp-59_b64, 0x1.fc26470e19fd3p-1_b64, 0x1.1ec8668ecaceep-55_b64,
+  0x1.2c8106e8e613ap-3_b64, 0x1.13000a89a11ep-58_b64, 0x1.fa7557f08a517p-1_b64, -0x1.7a0a8ca13571fp-55_b64,
+  0x1.5e214448b3fc6p-3_b64, 0x1.531ff779ddac6p-57_b64, 0x1.f8764fa714ba9p-1_b64, 0x1.ab256778ffcb6p-56_b64,
+  0x1.8f8b83c69a60bp-3_b64, -0x1.26d19b9ff8d82p-57_b64, 0x1.f6297cff75cbp-1_b64, 0x1.562172a361fd3p-56_b64,
+  0x1.c0b826a7e4f63p-3_b64, -0x1.af1439e521935p-62_b64, 0x1.f38f3ac64e589p-1_b64, -0x1.d7bafb51f72e6p-56_b64,
+  0x1.f19f97b215f1bp-3_b64, -0x1.42deef11da2c4p-57_b64, 0x1.f0a7efb9230d7p-1_b64, 0x1.52c7adc6b4989p-56_b64,
+  0x1.111d262b1f677p-2_b64, 0x1.824c20ab7aa9ap-56_b64, 0x1.ed740e7684963p-1_b64, 0x1.e82c791f59cc2p-56_b64,
+  0x1.294062ed59f06p-2_b64, -0x1.5d28da2c4612dp-56_b64, 0x1.e9f4156c62ddap-1_b64, 0x1.760b1e2e3f81ep-55_b64,
+  0x1.4135c94176601p-2_b64, 0x1.0c97c4afa2518p-56_b64, 0x1.e6288ec48e112p-1_b64, -0x1.16b56f2847754p-57_b64,
+  0x1.58f9a75ab1fddp-2_b64, -0x1.efdc0d58cf62p-62_b64, 0x1.e212104f686e5p-1_b64, -0x1.014c76c126527p-55_b64,
+  0x1.7088530fa459fp-2_b64, -0x1.44b19e0864c5dp-56_b64, 0x1.ddb13b6ccc23cp-1_b64, 0x1.83c37c6107db3p-55_b64,
+  0x1.87de2a6aea963p-2_b64, -0x1.72cedd3d5a61p-57_b64, 0x1.d906bcf328d46p-1_b64, 0x1.457e610231ac2p-56_b64,
+  0x1.9ef7943a8ed8ap-2_b64, 0x1.6da81290bdbabp-57_b64, 0x1.d4134d14dc93ap-1_b64, -0x1.4ef5295d25af2p-55_b64,
+  0x1.b5d1009e15ccp-2_b64, 0x1.5b362cb974183p-57_b64, 0x1.ced7af43cc773p-1_b64, -0x1.e7b6bb5ab58aep-58_b64,
+  0x1.cc66e9931c45ep-2_b64, 0x1.6850e59c37f8fp-58_b64, 0x1.c954b213411f5p-1_b64, -0x1.2fb761e946603p-58_b64,
+  0x1.e2b5d3806f63bp-2_b64, 0x1.e0d891d3c6841p-58_b64, 0x1.c38b2f180bdb1p-1_b64, -0x1.6e0b1757c8d07p-56_b64,
+  0x1.f8ba4dbf89abap-2_b64, -0x1.2ec1fc1b776b8p-60_b64, 0x1.bd7c0ac6f952ap-1_b64, -0x1.825a732ac700ap-55_b64,
+  0x1.073879922ffeep-1_b64, -0x1.a5a014347406cp-55_b64, 0x1.b728345196e3ep-1_b64, -0x1.bc69f324e6d61p-55_b64,
+  0x1.11eb3541b4b23p-1_b64, -0x1.ef23b69abe4f1p-55_b64, 0x1.b090a581502p-1_b64, -0x1.926da300ffccep-55_b64,
+  0x1.1c73b39ae68c8p-1_b64, 0x1.b25dd267f66p-55_b64, 0x1.a9b66290ea1a3p-1_b64, 0x1.9f630e8b6dac8p-60_b64,
+  0x1.26d054cdd12dfp-1_b64, -0x1.5da743ef3770cp-55_b64, 0x1.a29a7a0462782p-1_b64, -0x1.128bb015df175p-56_b64,
+  0x1.30ff7fce17035p-1_b64, -0x1.efcc626f74a6fp-57_b64, 0x1.9b3e047f38741p-1_b64, -0x1.30ee286712474p-55_b64,
+  0x1.3affa292050b9p-1_b64, 0x1.e3e25e3954964p-56_b64, 0x1.93a22499263fbp-1_b64, 0x1.3d419a920df0bp-55_b64,
+  0x1.44cf325091dd6p-1_b64, 0x1.8076a2cfdc6b3p-57_b64, 0x1.8bc806b151741p-1_b64, -0x1.2c5e12ed1336dp-55_b64,
+  0x1.4e6cabbe3e5e9p-1_b64, 0x1.3c293edceb327p-57_b64, 0x1.83b0e0bff976ep-1_b64, -0x1.6f420f8ea3475p-56_b64,
+  0x1.57d69348cecap-1_b64, -0x1.75720992bfbb2p-55_b64, 0x1.7b5df226aafafp-1_b64, -0x1.0f537acdf0ad7p-56_b64,
+  0x1.610b7551d2cdfp-1_b64, -0x1.251b352ff2a37p-56_b64, 0x1.72d0837efff96p-1_b64, 0x1.0d4ef0f1d915cp-55_b64,
+  0x1.6a09e667f3bcdp-1_b64, -0x1.bdd3413b26456p-55_b64, 0x1.6a09e667f3bcdp-1_b64, -0x1.bdd3413b26456p-55_b64,
+  0x1.72d0837efff96p-1_b64, 0x1.0d4ef0f1d915cp-55_b64, 0x1.610b7551d2cdfp-1_b64, -0x1.251b352ff2a37p-56_b64,
+  0x1.7b5df226aafafp-1_b64, -0x1.0f537acdf0ad7p-56_b64, 0x1.57d69348cecap-1_b64, -0x1.75720992bfbb2p-55_b64,
+  0x1.83b0e0bff976ep-1_b64, -0x1.6f420f8ea3475p-56_b64, 0x1.4e6cabbe3e5e9p-1_b64, 0x1.3c293edceb327p-57_b64,
+  0x1.8bc806b151741p-1_b64, -0x1.2c5e12ed1336dp-55_b64, 0x1.44cf325091dd6p-1_b64, 0x1.8076a2cfdc6b3p-57_b64,
+  0x1.93a22499263fbp-1_b64, 0x1.3d419a920df0bp-55_b64, 0x1.3affa292050b9p-1_b64, 0x1.e3e25e3954964p-56_b64,
+  0x1.9b3e047f38741p-1_b64, -0x1.30ee286712474p-55_b64, 0x1.30ff7fce17035p-1_b64, -0x1.efcc626f74a6fp-57_b64,
+  0x1.a29a7a0462782p-1_b64, -0x1.128bb015df175p-56_b64, 0x1.26d054cdd12dfp-1_b64, -0x1.5da743ef3770cp-55_b64,
+  0x1.a9b66290ea1a3p-1_b64, 0x1.9f630e8b6dac8p-60_b64, 0x1.1c73b39ae68c8p-1_b64, 0x1.b25dd267f66p-55_b64,
+  0x1.b090a581502p-1_b64, -0x1.926da300ffccep-55_b64, 0x1.11eb3541b4b23p-1_b64, -0x1.ef23b69abe4f1p-55_b64,
+  0x1.b728345196e3ep-1_b64, -0x1.bc69f324e6d61p-55_b64, 0x1.073879922ffeep-1_b64, -0x1.a5a014347406cp-55_b64,
+  0x1.bd7c0ac6f952ap-1_b64, -0x1.825a732ac700ap-55_b64, 0x1.f8ba4dbf89abap-2_b64, -0x1.2ec1fc1b776b8p-60_b64,
+  0x1.c38b2f180bdb1p-1_b64, -0x1.6e0b1757c8d07p-56_b64, 0x1.e2b5d3806f63bp-2_b64, 0x1.e0d891d3c6841p-58_b64,
+  0x1.c954b213411f5p-1_b64, -0x1.2fb761e946603p-58_b64, 0x1.cc66e9931c45ep-2_b64, 0x1.6850e59c37f8fp-58_b64,
+  0x1.ced7af43cc773p-1_b64, -0x1.e7b6bb5ab58aep-58_b64, 0x1.b5d1009e15ccp-2_b64, 0x1.5b362cb974183p-57_b64,
+  0x1.d4134d14dc93ap-1_b64, -0x1.4ef5295d25af2p-55_b64, 0x1.9ef7943a8ed8ap-2_b64, 0x1.6da81290bdbabp-57_b64,
+  0x1.d906bcf328d46p-1_b64, 0x1.457e610231ac2p-56_b64, 0x1.87de2a6aea963p-2_b64, -0x1.72cedd3d5a61p-57_b64,
+  0x1.ddb13b6ccc23cp-1_b64, 0x1.83c37c6107db3p-55_b64, 0x1.7088530fa459fp-2_b64, -0x1.44b19e0864c5dp-56_b64,
+  0x1.e212104f686e5p-1_b64, -0x1.014c76c126527p-55_b64, 0x1.58f9a75ab1fddp-2_b64, -0x1.efdc0d58cf62p-62_b64,
+  0x1.e6288ec48e112p-1_b64, -0x1.16b56f2847754p-57_b64, 0x1.4135c94176601p-2_b64, 0x1.0c97c4afa2518p-56_b64,
+  0x1.e9f4156c62ddap-1_b64, 0x1.760b1e2e3f81ep-55_b64, 0x1.294062ed59f06p-2_b64, -0x1.5d28da2c4612dp-56_b64,
+  0x1.ed740e7684963p-1_b64, 0x1.e82c791f59cc2p-56_b64, 0x1.111d262b1f677p-2_b64, 0x1.824c20ab7aa9ap-56_b64,
+  0x1.f0a7efb9230d7p-1_b64, 0x1.52c7adc6b4989p-56_b64, 0x1.f19f97b215f1bp-3_b64, -0x1.42deef11da2c4p-57_b64,
+  0x1.f38f3ac64e589p-1_b64, -0x1.d7bafb51f72e6p-56_b64, 0x1.c0b826a7e4f63p-3_b64, -0x1.af1439e521935p-62_b64,
+  0x1.f6297cff75cbp-1_b64, 0x1.562172a361fd3p-56_b64, 0x1.8f8b83c69a60bp-3_b64, -0x1.26d19b9ff8d82p-57_b64,
+  0x1.f8764fa714ba9p-1_b64, 0x1.ab256778ffcb6p-56_b64, 0x1.5e214448b3fc6p-3_b64, 0x1.531ff779ddac6p-57_b64,
+  0x1.fa7557f08a517p-1_b64, -0x1.7a0a8ca13571fp-55_b64, 0x1.2c8106e8e613ap-3_b64, 0x1.13000a89a11ep-58_b64,
+  0x1.fc26470e19fd3p-1_b64, 0x1.1ec8668ecaceep-55_b64, 0x1.f564e56a9730ep-4_b64, 0x1.a2704729ae56dp-59_b64,
+  0x1.fd88da3d12526p-1_b64, -0x1.87df6378811c7p-55_b64, 0x1.917a6bc29b42cp-4_b64, -0x1.e2718d26ed688p-60_b64,
+  0x1.fe9cdad01883ap-1_b64, 0x1.521ecd0c67e35p-57_b64, 0x1.2d52092ce19f6p-4_b64, -0x1.9a088a8bf6b2cp-59_b64,
+  0x1.ff621e3796d7ep-1_b64, -0x1.c57bc2e24aa15p-57_b64, 0x1.91f65f10dd814p-5_b64, -0x1.912bd0d569a9p-61_b64,
+  0x1.ffd886084cd0dp-1_b64, -0x1.1354d4556e4cbp-55_b64, 0x1.92155f7a3667ep-6_b64, -0x1.b1d63091a013p-64_b64,
+  0x1p+0_b64, 0x0p+0_b64, 0x0p+0_b64, 0x0p+0_b64,
+  0x1.ffd886084cd0dp-1_b64, -0x1.1354d4556e4cbp-55_b64, -0x1.92155f7a3667ep-6_b64, 0x1.b1d63091a013p-64_b64,
+  0x1.ff621e3796d7ep-1_b64, -0x1.c57bc2e24aa15p-57_b64, -0x1.91f65f10dd814p-5_b64, 0x1.912bd0d569a9p-61_b64,
+  0x1.fe9cdad01883ap-1_b64, 0x1.521ecd0c67e35p-57_b64, -0x1.2d52092ce19f6p-4_b64, 0x1.9a088a8bf6b2cp-59_b64,
+  0x1.fd88da3d12526p-1_b64, -0x1.87df6378811c7p-55_b64, -0x1.917a6bc29b42cp-4_b64, 0x1.e2718d26ed688p-60_b64,
+  0x1.fc26470e19fd3p-1_b64, 0x1.1ec8668ecaceep-55_b64, -0x1.f564e56a9730ep-4_b64, -0x1.a2704729ae56dp-59_b64,
+  0x1.fa7557f08a517p-1_b64, -0x1.7a0a8ca13571fp-55_b64, -0x1.2c8106e8e613ap-3_b64, -0x1.13000a89a11ep-58_b64,
+  0x1.f8764fa714ba9p-1_b64, 0x1.ab256778ffcb6p-56_b64, -0x1.5e214448b3fc6p-3_b64, -0x1.531ff779ddac6p-57_b64,
+  0x1.f6297cff75cbp-1_b64, 0x1.562172a361fd3p-56_b64, -0x1.8f8b83c69a60bp-3_b64, 0x1.26d19b9ff8d82p-57_b64,
+  0x1.f38f3ac64e589p-1_b64, -0x1.d7bafb51f72e6p-56_b64, -0x1.c0b826a7e4f63p-3_b64, 0x1.af1439e521935p-62_b64,
+  0x1.f0a7efb9230d7p-1_b64, 0x1.52c7adc6b4989p-56_b64, -0x1.f19f97b215f1bp-3_b64, 0x1.42deef11da2c4p-57_b64,
+  0x1.ed740e7684963p-1_b64, 0x1.e82c791f59cc2p-56_b64, -0x1.111d262b1f677p-2_b64, -0x1.824c20ab7aa9ap-56_b64,
+  0x1.e9f4156c62ddap-1_b64, 0x1.760b1e2e3f81ep-55_b64, -0x1.294062ed59f06p-2_b64, 0x1.5d28da2c4612dp-56_b64,
+  0x1.e6288ec48e112p-1_b64, -0x1.16b56f2847754p-57_b64, -0x1.4135c94176601p-2_b64, -0x1.0c97c4afa2518p-56_b64,
+  0x1.e212104f686e5p-1_b64, -0x1.014c76c126527p-55_b64, -0x1.58f9a75ab1fddp-2_b64, 0x1.efdc0d58cf62p-62_b64,
+  0x1.ddb13b6ccc23cp-1_b64, 0x1.83c37c6107db3p-55_b64, -0x1.7088530fa459fp-2_b64, 0x1.44b19e0864c5dp-56_b64,
+  0x1.d906bcf328d46p-1_b64, 0x1.457e610231ac2p-56_b64, -0x1.87de2a6aea963p-2_b64, 0x1.72cedd3d5a61p-57_b64,
+  0x1.d4134d14dc93ap-1_b64, -0x1.4ef5295d25af2p-55_b64, -0x1.9ef7943a8ed8ap-2_b64, -0x1.6da81290bdbabp-57_b64,
+  0x1.ced7af43cc773p-1_b64, -0x1.e7b6bb5ab58aep-58_b64, -0x1.b5d1009e15ccp-2_b64, -0x1.5b362cb974183p-57_b64,
+  0x1.c954b213411f5p-1_b64, -0x1.2fb761e946603p-58_b64, -0x1.cc66e9931c45ep-2_b64, -0x1.6850e59c37f8fp-58_b64,
+  0x1.c38b2f180bdb1p-1_b64, -0x1.6e0b1757c8d07p-56_b64, -0x1.e2b5d3806f63bp-2_b64, -0x1.e0d891d3c6841p-58_b64,
+  0x1.bd7c0ac6f952ap-1_b64, -0x1.825a732ac700ap-55_b64, -0x1.f8ba4dbf89abap-2_b64, 0x1.2ec1fc1b776b8p-60_b64,
+  0x1.b728345196e3ep-1_b64, -0x1.bc69f324e6d61p-55_b64, -0x1.073879922ffeep-1_b64, 0x1.a5a014347406cp-55_b64,
+  0x1.b090a581502p-1_b64, -0x1.926da300ffccep-55_b64, -0x1.11eb3541b4b23p-1_b64, 0x1.ef23b69abe4f1p-55_b64,
+  0x1.a9b66290ea1a3p-1_b64, 0x1.9f630e8b6dac8p-60_b64, -0x1.1c73b39ae68c8p-1_b64, -0x1.b25dd267f66p-55_b64,
+  0x1.a29a7a0462782p-1_b64, -0x1.128bb015df175p-56_b64, -0x1.26d054cdd12dfp-1_b64, 0x1.5da743ef3770cp-55_b64,
+  0x1.9b3e047f38741p-1_b64, -0x1.30ee286712474p-55_b64, -0x1.30ff7fce17035p-1_b64, 0x1.efcc626f74a6fp-57_b64,
+  0x1.93a22499263fbp-1_b64, 0x1.3d419a920df0bp-55_b64, -0x1.3affa292050b9p-1_b64, -0x1.e3e25e3954964p-56_b64,
+  0x1.8bc806b151741p-1_b64, -0x1.2c5e12ed1336dp-55_b64, -0x1.44cf325091dd6p-1_b64, -0x1.8076a2cfdc6b3p-57_b64,
+  0x1.83b0e0bff976ep-1_b64, -0x1.6f420f8ea3475p-56_b64, -0x1.4e6cabbe3e5e9p-1_b64, -0x1.3c293edceb327p-57_b64,
+  0x1.7b5df226aafafp-1_b64, -0x1.0f537acdf0ad7p-56_b64, -0x1.57d69348cecap-1_b64, 0x1.75720992bfbb2p-55_b64,
+  0x1.72d0837efff96p-1_b64, 0x1.0d4ef0f1d915cp-55_b64, -0x1.610b7551d2cdfp-1_b64, 0x1.251b352ff2a37p-56_b64,
+  0x1.6a09e667f3bcdp-1_b64, -0x1.bdd3413b26456p-55_b64, -0x1.6a09e667f3bcdp-1_b64, 0x1.bdd3413b26456p-55_b64,
+  0x1.610b7551d2cdfp-1_b64, -0x1.251b352ff2a37p-56_b64, -0x1.72d0837efff96p-1_b64, -0x1.0d4ef0f1d915cp-55_b64,
+  0x1.57d69348cecap-1_b64, -0x1.75720992bfbb2p-55_b64, -0x1.7b5df226aafafp-1_b64, 0x1.0f537acdf0ad7p-56_b64,
+  0x1.4e6cabbe3e5e9p-1_b64, 0x1.3c293edceb327p-57_b64, -0x1.83b0e0bff976ep-1_b64, 0x1.6f420f8ea3475p-56_b64,
+  0x1.44cf325091dd6p-1_b64, 0x1.8076a2cfdc6b3p-57_b64, -0x1.8bc806b151741p-1_b64, 0x1.2c5e12ed1336dp-55_b64,
+  0x1.3affa292050b9p-1_b64, 0x1.e3e25e3954964p-56_b64, -0x1.93a22499263fbp-1_b64, -0x1.3d419a920df0bp-55_b64,
+  0x1.30ff7fce17035p-1_b64, -0x1.efcc626f74a6fp-57_b64, -0x1.9b3e047f38741p-1_b64, 0x1.30ee286712474p-55_b64,
+  0x1.26d054cdd12dfp-1_b64, -0x1.5da743ef3770cp-55_b64, -0x1.a29a7a0462782p-1_b64, 0x1.128bb015df175p-56_b64,
+  0x1.1c73b39ae68c8p-1_b64, 0x1.b25dd267f66p-55_b64, -0x1.a9b66290ea1a3p-1_b64, -0x1.9f630e8b6dac8p-60_b64,
+  0x1.11eb3541b4b23p-1_b64, -0x1.ef23b69abe4f1p-55_b64, -0x1.b090a581502p-1_b64, 0x1.926da300ffccep-55_b64,
+  0x1.073879922ffeep-1_b64, -0x1.a5a014347406cp-55_b64, -0x1.b728345196e3ep-1_b64, 0x1.bc69f324e6d61p-55_b64,
+  0x1.f8ba4dbf89abap-2_b64, -0x1.2ec1fc1b776b8p-60_b64, -0x1.bd7c0ac6f952ap-1_b64, 0x1.825a732ac700ap-55_b64,
+  0x1.e2b5d3806f63bp-2_b64, 0x1.e0d891d3c6841p-58_b64, -0x1.c38b2f180bdb1p-1_b64, 0x1.6e0b1757c8d07p-56_b64,
+  0x1.cc66e9931c45ep-2_b64, 0x1.6850e59c37f8fp-58_b64, -0x1.c954b213411f5p-1_b64, 0x1.2fb761e946603p-58_b64,
+  0x1.b5d1009e15ccp-2_b64, 0x1.5b362cb974183p-57_b64, -0x1.ced7af43cc773p-1_b64, 0x1.e7b6bb5ab58aep-58_b64,
+  0x1.9ef7943a8ed8ap-2_b64, 0x1.6da81290bdbabp-57_b64, -0x1.d4134d14dc93ap-1_b64, 0x1.4ef5295d25af2p-55_b64,
+  0x1.87de2a6aea963p-2_b64, -0x1.72cedd3d5a61p-57_b64, -0x1.d906bcf328d46p-1_b64, -0x1.457e610231ac2p-56_b64,
+  0x1.7088530fa459fp-2_b64, -0x1.44b19e0864c5dp-56_b64, -0x1.ddb13b6ccc23cp-1_b64, -0x1.83c37c6107db3p-55_b64,
+  0x1.58f9a75ab1fddp-2_b64, -0x1.efdc0d58cf62p-62_b64, -0x1.e212104f686e5p-1_b64, 0x1.014c76c126527p-55_b64,
+  0x1.4135c94176601p-2_b64, 0x1.0c97c4afa2518p-56_b64, -0x1.e6288ec48e112p-1_b64, 0x1.16b56f2847754p-57_b64,
+  0x1.294062ed59f06p-2_b64, -0x1.5d28da2c4612dp-56_b64, -0x1.e9f4156c62ddap-1_b64, -0x1.760b1e2e3f81ep-55_b64,
+  0x1.111d262b1f677p-2_b64, 0x1.824c20ab7aa9ap-56_b64, -0x1.ed740e7684963p-1_b64, -0x1.e82c791f59cc2p-56_b64,
+  0x1.f19f97b215f1bp-3_b64, -0x1.42deef11da2c4p-57_b64, -0x1.f0a7efb9230d7p-1_b64, -0x1.52c7adc6b4989p-56_b64,
+  0x1.c0b826a7e4f63p-3_b64, -0x1.af1439e521935p-62_b64, -0x1.f38f3ac64e589p-1_b64, 0x1.d7bafb51f72e6p-56_b64,
+  0x1.8f8b83c69a60bp-3_b64, -0x1.26d19b9ff8d82p-57_b64, -0x1.f6297cff75cbp-1_b64, -0x1.562172a361fd3p-56_b64,
+  0x1.5e214448b3fc6p-3_b64, 0x1.531ff779ddac6p-57_b64, -0x1.f8764fa714ba9p-1_b64, -0x1.ab256778ffcb6p-56_b64,
+  0x1.2c8106e8e613ap-3_b64, 0x1.13000a89a11ep-58_b64, -0x1.fa7557f08a517p-1_b64, 0x1.7a0a8ca13571fp-55_b64,
+  0x1.f564e56a9730ep-4_b64, 0x1.a2704729ae56dp-59_b64, -0x1.fc26470e19fd3p-1_b64, -0x1.1ec8668ecaceep-55_b64,
+  0x1.917a6bc29b42cp-4_b64, -0x1.e2718d26ed688p-60_b64, -0x1.fd88da3d12526p-1_b64, 0x1.87df6378811c7p-55_b64,
+  0x1.2d52092ce19f6p-4_b64, -0x1.9a088a8bf6b2cp-59_b64, -0x1.fe9cdad01883ap-1_b64, -0x1.521ecd0c67e35p-57_b64,
+  0x1.91f65f10dd814p-5_b64, -0x1.912bd0d569a9p-61_b64, -0x1.ff621e3796d7ep-1_b64, 0x1.c57bc2e24aa15p-57_b64,
+  0x1.92155f7a3667ep-6_b64, -0x1.b1d63091a013p-64_b64, -0x1.ffd886084cd0dp-1_b64, 0x1.1354d4556e4cbp-55_b64]
+
+### For 0 <= j < 128, entries 4j..4j+3 are sh, sl, ch, cl: double-double sin(j pi/2^14) and cos(j pi/2^14).
+secret preset B64_SIN_U2: Array[B64, 512] = [0x0p+0_b64, 0x0p+0_b64, 0x1p+0_b64, 0x0p+0_b64,
+  0x1.921fb51aeb57cp-13_b64, -0x1.a6e1d4916c435p-67_b64, 0x1.ffffff621619cp-1_b64, -0x1.7507dbbbd8fe6p-55_b64,
+  0x1.921fb49ee4ea6p-12_b64, 0x1.e894d744a453ep-66_b64, 0x1.fffffd8858675p-1_b64, -0x1.79f0e54748eabp-55_b64,
+  0x1.2d97c6dc23a75p-11_b64, -0x1.1c27727253849p-66_b64, 0x1.fffffa72c6e9dp-1_b64, 0x1.ffa0e2a0e5c29p-56_b64,
+  0x1.921fb2aecb36p-11_b64, 0x1.876157e566b4cp-65_b64, 0x1.fffff62161a34p-1_b64, -0x1.136dcb1f9b9c4p-57_b64,
+  0x1.f6a79d8965ebap-11_b64, -0x1.a2a951670a396p-65_b64, 0x1.fffff09428963p-1_b64, 0x1.2f505fba9c0bp-55_b64,
+  0x1.2d97c396f8497p-10_b64, -0x1.45cb4cc3d0fb1p-66_b64, 0x1.ffffe9cb1bc62p-1_b64, 0x1.0fe9fa3478ec9p-56_b64,
+  0x1.5fdbb7af33fbbp-10_b64, 0x1.c0c37a5d5101dp-65_b64, 0x1.ffffe1c63b373p-1_b64, 0x1.a50f155e87e56p-55_b64,
+  0x1.921faaee6472ep-10_b64, -0x1.ee52e284a9df8p-64_b64, 0x1.ffffd88586ee6p-1_b64, 0x1.1af64f173ae5bp-55_b64,
+  0x1.c4639d358815ap-10_b64, 0x1.0ffa0e86b4dccp-69_b64, 0x1.ffffce08fef16p-1_b64, 0x1.92e420a03bf59p-58_b64,
+  0x1.f6a78e659d4b6p-10_b64, 0x1.cb8a9b355ac8p-64_b64, 0x1.ffffc250a346ap-1_b64, 0x1.d099c02280c58p-56_b64,
+  0x1.1475bf2fd13e2p-9_b64, -0x1.4ae6ded9797ccp-63_b64, 0x1.ffffb55c73f56p-1_b64, 0x1.ee2ae1596963ap-55_b64,
+  0x1.2d97b6824b087p-9_b64, -0x1.9dae69dd4f97fp-63_b64, 0x1.ffffa72c7105bp-1_b64, -0x1.564ec4a452371p-55_b64,
+  0x1.46b9ad1abb397p-9_b64, -0x1.ac1b1950e9dc6p-64_b64, 0x1.ffff97c09a803p-1_b64, -0x1.961ec991858f1p-56_b64,
+  0x1.5fdba2e9a1066p-9_b64, 0x1.f1ed8abaaa608p-64_b64, 0x1.ffff8718f06e7p-1_b64, 0x1.793938ee3fc9ap-57_b64,
+  0x1.78fd97df7ba51p-9_b64, -0x1.2f2580c9ba856p-63_b64, 0x1.ffff753572dacp-1_b64, -0x1.5df4d689b3227p-57_b64,
+  0x1.921f8becca4bap-9_b64, 0x1.2ba407bcab5b2p-63_b64, 0x1.ffff621621d02p-1_b64, -0x1.6acfcebc82813p-56_b64,
+  0x1.ab417f020c31p-9_b64, 0x1.7fb6c9ae3781ap-65_b64, 0x1.ffff4dbafd5a6p-1_b64, -0x1.d017de84ebc3fp-55_b64,
+  0x1.c463710fc08c9p-9_b64, -0x1.f621bbef801cfp-64_b64, 0x1.ffff38240586p-1_b64, -0x1.f949383d834ep-61_b64,
+  0x1.dd85620666965p-9_b64, 0x1.5a1a4ecd8345ap-65_b64, 0x1.ffff21513a606p-1_b64, 0x1.ee48b39cc31cfp-56_b64,
+  0x1.f6a751d67d871p-9_b64, -0x1.66bdef183ff59p-63_b64, 0x1.ffff09429bf7ap-1_b64, -0x1.cabd3ded13a63p-55_b64,
+  0x1.07e4a038424c1p-8_b64, 0x1.7e6886ed9bec7p-63_b64, 0x1.fffeeff82a5a7p-1_b64, 0x1.6efc1cf23e273p-55_b64,
+  0x1.147596e27d81fp-8_b64, -0x1.bbfe9edba714ap-62_b64, 0x1.fffed571e5989p-1_b64, 0x1.151c0e15503cfp-55_b64,
+  0x1.21068ce230028p-8_b64, 0x1.6ce44ca79798dp-63_b64, 0x1.fffeb9afcdc25p-1_b64, 0x1.32c5af9456b9fp-57_b64,
+  0x1.2d97822f996bcp-8_b64, 0x1.3e5a15ed6aa3ep-62_b64, 0x1.fffe9cb1e2e8dp-1_b64, -0x1.10f44663fd601p-55_b64,
+  0x1.3a2876c2f95cp-8_b64, 0x1.03f5805a36f7ep-63_b64, 0x1.fffe7e78251dep-1_b64, 0x1.89b8834c8800cp-55_b64,
+  0x1.46b96a948f72p-8_b64, -0x1.3fbff884c87dap-65_b64, 0x1.fffe5f0294744p-1_b64, 0x1.5e809bdc855fcp-55_b64,
+  0x1.534a5d9c9b4dp-8_b64, -0x1.8653d3b3f3bf5p-62_b64, 0x1.fffe3e5130ff5p-1_b64, 0x1.8d94f3d6ca2d6p-57_b64,
+  0x1.5fdb4fd35c8cbp-8_b64, -0x1.4b73d73e9b437p-62_b64, 0x1.fffe1c63fad33p-1_b64, 0x1.429d08eb02c47p-55_b64,
+  0x1.6c6c413112d15p-8_b64, -0x1.c66913985b2a8p-63_b64, 0x1.fffdf93af204ep-1_b64, -0x1.4ade22d9f9483p-56_b64,
+  0x1.78fd31adfdbbap-8_b64, -0x1.03bf7bee2893dp-64_b64, 0x1.fffdd4d616aap-1_b64, -0x1.422710e8c8595p-55_b64,
+  0x1.858e21425cecfp-8_b64, -0x1.5af2befb31c3cp-63_b64, 0x1.fffdaf3568d9p-1_b64, 0x1.99c62dc3a22acp-58_b64,
+  0x1.921f0fe670071p-8_b64, 0x1.ab967fe6b7a9bp-64_b64, 0x1.fffd8858e8a92p-1_b64, 0x1.359c71883bcf7p-55_b64,
+  0x1.9eaffd9276ac8p-8_b64, -0x1.558e4e5ccafc7p-62_b64, 0x1.fffd604096326p-1_b64, -0x1.7d6bdd1c1f436p-60_b64,
+  0x1.ab40ea3eb0803p-8_b64, -0x1.7fe2a8e15f257p-67_b64, 0x1.fffd36ec718d7p-1_b64, -0x1.5c59ffcfba7e4p-56_b64,
+  0x1.b7d1d5e35d25dp-8_b64, 0x1.9cfe67f192cd7p-62_b64, 0x1.fffd0c5c7ad3dp-1_b64, -0x1.19d99906d21e9p-55_b64,
+  0x1.c462c078bc41bp-8_b64, 0x1.9f6db9a6ada3cp-62_b64, 0x1.fffce090b21fcp-1_b64, -0x1.0389138f7e5efp-55_b64,
+  0x1.d0f3a9f70d78cp-8_b64, -0x1.a08e48b732df4p-65_b64, 0x1.fffcb389178c4p-1_b64, 0x1.2883b1fe7d578p-56_b64,
+  0x1.dd84925690709p-8_b64, -0x1.0441c939bd6dap-62_b64, 0x1.fffc8545ab352p-1_b64, 0x1.61157c68f984bp-55_b64,
+  0x1.ea15798f84cf7p-8_b64, -0x1.bd41d0fe0c595p-62_b64, 0x1.fffc55c66d36fp-1_b64, -0x1.ab98d6fcf9cd6p-58_b64,
+  0x1.f6a65f9a2a3c6p-8_b64, -0x1.de8c48783f3aep-62_b64, 0x1.fffc250b5daefp-1_b64, -0x1.13b48657081cdp-55_b64,
+  0x1.019ba237602f9p-7_b64, -0x1.2479c7145927dp-61_b64, 0x1.fffbf3147cbb3p-1_b64, -0x1.6a078c1216e21p-55_b64,
+  0x1.07e41402c3701p-7_b64, -0x1.93e58a2a04d27p-67_b64, 0x1.fffbbfe1ca7a8p-1_b64, -0x1.698b82e41cfaep-56_b64,
+  0x1.0e2c852b5eb46p-7_b64, -0x1.9b8495e4ec41dp-61_b64, 0x1.fffb8b73470c8p-1_b64, -0x1.bc4e4be396442p-55_b64,
+  0x1.1474f5ad51d17p-7_b64, -0x1.a0fb850f9330dp-62_b64, 0x1.fffb55c8f2917p-1_b64, 0x1.6af540576eb51p-55_b64,
+  0x1.1abd6584bc9cbp-7_b64, 0x1.21b927d9670ccp-61_b64, 0x1.fffb1ee2cd2a9p-1_b64, -0x1.3ee83959a5f1dp-56_b64,
+  0x1.2105d4adbeecp-7_b64, 0x1.4e6ed5742dcf7p-61_b64, 0x1.fffae6c0d6f9ap-1_b64, -0x1.102fd2cb5b72p-56_b64,
+  0x1.274e43247895ap-7_b64, -0x1.46ca3539434eap-63_b64, 0x1.fffaad6310214p-1_b64, 0x1.b8629443a759ap-55_b64,
+  0x1.2d96b0e509703p-7_b64, -0x1.1e9131ff52dc9p-63_b64, 0x1.fffa72c978c4fp-1_b64, -0x1.22cb000328f91p-55_b64,
+  0x1.33df1deb9152dp-7_b64, 0x1.f5fb935dbf892p-62_b64, 0x1.fffa36f41108bp-1_b64, 0x1.55d1c829905c6p-57_b64,
+  0x1.3a278a3430152p-7_b64, -0x1.2c26d82855518p-63_b64, 0x1.fff9f9e2d9118p-1_b64, 0x1.102f90f3495ep-57_b64,
+  0x1.406ff5bb058f1p-7_b64, 0x1.6e66ff4bcd327p-61_b64, 0x1.fff9bb95d105p-1_b64, 0x1.7fb680db05f83p-55_b64,
+  0x1.46b8607c31993p-7_b64, 0x1.91d1ac2a2ced6p-61_b64, 0x1.fff97c0cf909bp-1_b64, -0x1.b418b1f88cf02p-57_b64,
+  0x1.4d00ca73d40c8p-7_b64, -0x1.fae7469c8dbd1p-61_b64, 0x1.fff93b485146bp-1_b64, -0x1.43e02406fb373p-55_b64,
+  0x1.5349339e0cc25p-7_b64, -0x1.ec016ea8e8f27p-64_b64, 0x1.fff8f947d9e3fp-1_b64, -0x1.2cefd02ebe75cp-59_b64,
+  0x1.59919bf6fb94bp-7_b64, -0x1.1ca7261e51e18p-62_b64, 0x1.fff8b60b930a3p-1_b64, 0x1.97dbe1fdcab9p-56_b64,
+  0x1.5fda037ac05e1p-7_b64, -0x1.ff59bf4b574eep-61_b64, 0x1.fff871937ce2fp-1_b64, -0x1.38dae49f0be32p-57_b64,
+  0x1.66226a257af95p-7_b64, 0x1.3cd7a66dfafc8p-61_b64, 0x1.fff82bdf97986p-1_b64, -0x1.507b1e2913e3bp-57_b64,
+  0x1.6c6acff34b421p-7_b64, 0x1.b03798bbe7197p-63_b64, 0x1.fff7e4efe3558p-1_b64, 0x1.ebe425d873a16p-57_b64,
+  0x1.72b334e051144p-7_b64, 0x1.caf2df425ef35p-62_b64, 0x1.fff79cc460462p-1_b64, -0x1.6c8d94412b92ap-55_b64,
+  0x1.78fb98e8ac4c8p-7_b64, -0x1.555202816f3a5p-61_b64, 0x1.fff7535d0e96bp-1_b64, -0x1.c5727ff41299bp-56_b64,
+  0x1.7f43fc087cc7dp-7_b64, 0x1.00a2a3a85d253p-61_b64, 0x1.fff708b9ee748p-1_b64, -0x1.7ff8f5cefe85ap-60_b64,
+  0x1.858c5e3be264p-7_b64, -0x1.ee9c7105192d8p-62_b64, 0x1.fff6bcdb000dap-1_b64, -0x1.65348e4f5cd16p-57_b64,
+  0x1.8bd4bf7efcff3p-7_b64, 0x1.66640846e6109p-63_b64, 0x1.fff66fc04390dp-1_b64, 0x1.77f5704f2756cp-55_b64,
+  0x1.921d1fcdec784p-7_b64, 0x1.9878ebe836d9dp-61_b64, 0x1.fff62169b92dbp-1_b64, 0x1.5dda3c81fbd0dp-55_b64,
+  0x1.98657f24d0aeap-7_b64, 0x1.11d4d1d1806d2p-61_b64, 0x1.fff5d1d761149p-1_b64, 0x1.e7b86f31e2875p-63_b64,
+  0x1.9eaddd7fc9825p-7_b64, -0x1.5adb5adfd3669p-62_b64, 0x1.fff581093b768p-1_b64, -0x1.3eeee9513ae4cp-55_b64,
+  0x1.a4f63adaf6d3ep-7_b64, -0x1.f838d8dd726dcp-64_b64, 0x1.fff52eff48855p-1_b64, -0x1.514532e82de3fp-57_b64,
+  0x1.ab3e973278849p-7_b64, 0x1.35b145a18353cp-61_b64, 0x1.fff4dbb98873ap-1_b64, 0x1.857663dc92252p-55_b64,
+  0x1.b186f2826e765p-7_b64, -0x1.6b3b32921e88cp-61_b64, 0x1.fff48737fb74ep-1_b64, -0x1.d462b0c1681e7p-58_b64,
+  0x1.b7cf4cc6f88b8p-7_b64, -0x1.32c6a4623533p-62_b64, 0x1.fff4317aa1bd2p-1_b64, -0x1.6a0039355b637p-55_b64,
+  0x1.be17a5fc36a75p-7_b64, 0x1.c404548edfc51p-63_b64, 0x1.fff3da817b814p-1_b64, -0x1.2b464e14730cp-55_b64,
+  0x1.c45ffe1e48ad9p-7_b64, 0x1.4060e4bd32e79p-63_b64, 0x1.fff3824c88f6fp-1_b64, -0x1.ed820f3fe698p-55_b64,
+  0x1.caa855294e82bp-7_b64, 0x1.eca8fa79834dep-66_b64, 0x1.fff328dbca549p-1_b64, -0x1.6ca1af321dc1cp-55_b64,
+  0x1.d0f0ab19680bdp-7_b64, -0x1.e9c612f8a4102p-64_b64, 0x1.fff2ce2f3fd15p-1_b64, -0x1.62ccf8bdb122fp-56_b64,
+  0x1.d738ffeab52ecp-7_b64, -0x1.c110bc5257c8cp-62_b64, 0x1.fff27246e9a52p-1_b64, -0x1.16d6346f3f55fp-59_b64,
+  0x1.dd81539955d2p-7_b64, -0x1.eaf6d880c7f01p-61_b64, 0x1.fff21522c808bp-1_b64, 0x1.a190e2d2eaf6ep-56_b64,
+  0x1.e3c9a62169dcbp-7_b64, 0x1.6666333e35e32p-61_b64, 0x1.fff1b6c2db358p-1_b64, -0x1.f4664a9ad833cp-56_b64,
+  0x1.ea11f77f1136ep-7_b64, -0x1.7a617506aacb8p-62_b64, 0x1.fff157272365bp-1_b64, 0x1.44ef64386476p-57_b64,
+  0x1.f05a47ae6bc91p-7_b64, -0x1.0935bb936be66p-64_b64, 0x1.fff0f64fa0d45p-1_b64, -0x1.ac9acb9bb8d2dp-56_b64,
+  0x1.f6a296ab997cbp-7_b64, -0x1.f2943d8fe7033p-61_b64, 0x1.fff0943c53bd1p-1_b64, -0x1.47399f361d158p-55_b64,
+  0x1.fceae472ba3bcp-7_b64, -0x1.3a08b1804396p-64_b64, 0x1.fff030ed3c5c7p-1_b64, -0x1.2504b1dc047e8p-55_b64,
+  0x1.0199987ff6f89p-6_b64, 0x1.8daccef2e2556p-60_b64, 0x1.ffefcc625aefbp-1_b64, 0x1.fbb0dd6af1603p-59_b64,
+  0x1.04bdbe27aa444p-6_b64, 0x1.0c87a06c6956dp-60_b64, 0x1.ffef669bafb4ep-1_b64, -0x1.b5a4e5318177bp-58_b64,
+  0x1.07e1e32e86f72p-6_b64, -0x1.f40145dde0463p-60_b64, 0x1.ffeeff993aeacp-1_b64, -0x1.99db334be163bp-58_b64,
+  0x1.0b0607929d07ap-6_b64, 0x1.f989b780d54e7p-61_b64, 0x1.ffee975afcd0ep-1_b64, -0x1.2df82b9320ecdp-55_b64,
+  0x1.0e2a2b51fc6cep-6_b64, -0x1.2ca118aaa212fp-61_b64, 0x1.ffee2de0f5a78p-1_b64, 0x1.9daa217acc1bp-58_b64,
+  0x1.114e4e6ab51e2p-6_b64, 0x1.10d53d5e0ffc5p-62_b64, 0x1.ffedc32b25afcp-1_b64, -0x1.bb89d7b0d4487p-64_b64,
+  0x1.147270dad7133p-6_b64, 0x1.8769e00e018p-63_b64, 0x1.ffed57398d2b7p-1_b64, -0x1.0bb0db6384cf3p-55_b64,
+  0x1.179692a072443p-6_b64, 0x1.d40c977f2fe27p-60_b64, 0x1.ffecea0c2c5d2p-1_b64, -0x1.7a22a10e4cb4fp-55_b64,
+  0x1.1abab3b996a9dp-6_b64, -0x1.e21a2ef2391d3p-60_b64, 0x1.ffec7ba303882p-1_b64, 0x1.b209ec7100e1ap-56_b64,
+  0x1.1dded424543cep-6_b64, 0x1.2ecdb3d03a70bp-61_b64, 0x1.ffec0bfe12f0ap-1_b64, 0x1.8b1483b4090edp-56_b64,
+  0x1.2102f3debaf6fp-6_b64, -0x1.45a1ea37e10eap-62_b64, 0x1.ffeb9b1d5adb7p-1_b64, 0x1.d5b363c2f437p-55_b64,
+  0x1.242712e6dad1cp-6_b64, 0x1.0317d8ce1d1b9p-60_b64, 0x1.ffeb2900db8e4p-1_b64, 0x1.18f6a66301d6p-57_b64,
+  0x1.274b313ac3c7ap-6_b64, 0x1.b29e49acf7e7ep-60_b64, 0x1.ffeab5a8954f6p-1_b64, 0x1.0652cfe4cebfap-55_b64,
+  0x1.2a6f4ed885d35p-6_b64, -0x1.5a8a13d8f9966p-60_b64, 0x1.ffea41148866p-1_b64, 0x1.b77e2735c69f9p-55_b64,
+  0x1.2d936bbe30efdp-6_b64, 0x1.b5f91ee371d64p-61_b64, 0x1.ffe9cb44b51a1p-1_b64, 0x1.5b43366df667p-56_b64,
+  0x1.30b787e9d518dp-6_b64, 0x1.b620c940df42ap-60_b64, 0x1.ffe954391bb43p-1_b64, 0x1.ddd5377beef1ap-56_b64,
+  0x1.33dba359824a6p-6_b64, -0x1.6c4020b5f32a8p-61_b64, 0x1.ffe8dbf1bc7dep-1_b64, -0x1.cc391831cbcdp-55_b64,
+  0x1.36ffbe0b4880ep-6_b64, 0x1.4b88026f4e07bp-61_b64, 0x1.ffe8626e97c13p-1_b64, 0x1.cdb27525fcaf7p-56_b64,
+  0x1.3a23d7fd37b96p-6_b64, -0x1.dd9e849a0a5d5p-60_b64, 0x1.ffe7e7afadc94p-1_b64, -0x1.db1225b06b02cp-55_b64,
+  0x1.3d47f12d5ff12p-6_b64, 0x1.add51eab25dd4p-60_b64, 0x1.ffe76bb4fee1ap-1_b64, -0x1.0c43dae9e89c6p-57_b64,
+  0x1.406c0999d1263p-6_b64, -0x1.cf7cbeea1ddcfp-61_b64, 0x1.ffe6ee7e8b56ep-1_b64, 0x1.7ecac48a7b7bcp-58_b64,
+  0x1.439021409b56cp-6_b64, 0x1.81352c74c7ae2p-62_b64, 0x1.ffe6700c53764p-1_b64, -0x1.4f502302afd49p-55_b64,
+  0x1.46b4381fce81bp-6_b64, 0x1.ff9f89fb65be3p-60_b64, 0x1.ffe5f05e578dbp-1_b64, -0x1.b71f7469ecc13p-56_b64,
+  0x1.49d84e357aa66p-6_b64, -0x1.9143373e36698p-61_b64, 0x1.ffe56f7497ecp-1_b64, -0x1.ddf92a8d40b3p-55_b64,
+  0x1.4cfc637fafc48p-6_b64, -0x1.a3541bb15d5bap-60_b64, 0x1.ffe4ed4f14e0ap-1_b64, 0x1.e48478b2f0ba1p-56_b64,
+  0x1.502077fc7ddc5p-6_b64, 0x1.25236a8347d96p-60_b64, 0x1.ffe469edcebbfp-1_b64, 0x1.8fc7557d6bc53p-55_b64,
+  0x1.53448ba9f4eebp-6_b64, 0x1.e6adde30ec695p-61_b64, 0x1.ffe3e550c5cfp-1_b64, -0x1.58fb3ae72192ep-55_b64,
+  0x1.56689e8624fcep-6_b64, -0x1.b967a2d3ee5b3p-61_b64, 0x1.ffe35f77fa6b8p-1_b64, -0x1.a7661b121429ap-57_b64,
+  0x1.598cb08f1e089p-6_b64, 0x1.56f9c34c216b4p-60_b64, 0x1.ffe2d8636ce41p-1_b64, 0x1.b4243168ab5a4p-57_b64,
+  0x1.5cb0c1c2f0142p-6_b64, 0x1.c2c42ac4d436cp-60_b64, 0x1.ffe250131d8cp-1_b64, 0x1.ed2d09d5789d3p-55_b64,
+  0x1.5fd4d21fab226p-6_b64, -0x1.0c0a91c37851cp-61_b64, 0x1.ffe1c6870cb77p-1_b64, 0x1.89aa14768323ep-55_b64,
+  0x1.62f8e1a35f369p-6_b64, -0x1.44ab93e20133fp-60_b64, 0x1.ffe13bbf3abb3p-1_b64, 0x1.6721eee289b1dp-55_b64,
+  0x1.661cf04c1c548p-6_b64, 0x1.3d6cc7ce6ff57p-60_b64, 0x1.ffe0afbba7ecep-1_b64, 0x1.6ecd981464044p-57_b64,
+  0x1.6940fe17f280bp-6_b64, -0x1.84bf8988cc42p-60_b64, 0x1.ffe0227c54a2dp-1_b64, 0x1.eeed1d70e13e2p-55_b64,
+  0x1.6c650b04f1bfep-6_b64, 0x1.53e382471fa0cp-69_b64, 0x1.ffdf940141344p-1_b64, -0x1.a63fc248c2dacp-55_b64,
+  0x1.6f8917112a179p-6_b64, 0x1.b6de0ad6e9445p-60_b64, 0x1.ffdf044a6df8fp-1_b64, -0x1.798cfb498d8b1p-55_b64,
+  0x1.72ad223aab8ddp-6_b64, -0x1.cf17a0ad13b4ap-60_b64, 0x1.ffde7357db499p-1_b64, 0x1.09337deb3ff5ap-59_b64,
+  0x1.75d12c7f8629p-6_b64, -0x1.07d8473495aaep-60_b64, 0x1.ffdde129897f9p-1_b64, 0x1.44e8786dedb6bp-55_b64,
+  0x1.78f535ddc9f04p-6_b64, 0x1.b194ad9b1aa97p-61_b64, 0x1.ffdd4dbf78f52p-1_b64, 0x1.216679a26323dp-55_b64,
+  0x1.7c193e5386eb4p-6_b64, 0x1.725118c2860e7p-63_b64, 0x1.ffdcb919aa053p-1_b64, -0x1.55c1ce37ae6f6p-56_b64,
+  0x1.7f3d45decd222p-6_b64, 0x1.2fe8cfe80809dp-60_b64, 0x1.ffdc23381d0b6p-1_b64, 0x1.00d15f9603fedp-57_b64,
+  0x1.82614c7dac9dbp-6_b64, 0x1.e95f011ac18c6p-63_b64, 0x1.ffdb8c1ad2643p-1_b64, 0x1.e79471744a0cbp-56_b64,
+  0x1.8585522e35674p-6_b64, -0x1.d5a766c5894c1p-60_b64, 0x1.ffdaf3c1ca6cep-1_b64, -0x1.9c0f0834fa422p-56_b64,
+  0x1.88a956ee7788ap-6_b64, 0x1.19dfbd12ff726p-61_b64, 0x1.ffda5a2d05835p-1_b64, 0x1.6dbc405ff8e25p-55_b64,
+  0x1.8bcd5abc830c7p-6_b64, -0x1.f7d609f14a311p-60_b64, 0x1.ffd9bf5c84066p-1_b64, -0x1.35167a6ce828dp-55_b64,
+  0x1.8ef15d9667fdap-6_b64, -0x1.668dc9ba82a7p-60_b64, 0x1.ffd9235046557p-1_b64, -0x1.c3c6e16616fb2p-56_b64]
+
+### For 0 <= i <= 32, entries 2i (low) and 2i+1 (high) hold m with m/2^128 ~ sin(pi i/2^6), the last capped to 2^128-1.
+secret preset B64_SIN_S1U: Array[U64, 66] = [0x0_u64, 0x0_u64, 0x76a17954b2b7c517_u64, 0xc8fb2f886ec09f3_u64,
+  0xd8e72d912977ee71_u64, 0x1917a6bc29b42be1_u64, 0xc002a2684781f080_u64, 0x259020dd1cc27444_u64,
+  0x9732300393f33614_u64, 0x31f17078d34c156c_u64, 0x90887712e9dc9663_u64, 0x3e33f2f642be355e_u64,
+  0xd725d3b9ed35fbaa_u64, 0x4a5018bb567c16a2_u64, 0x408fca9cc277fc1f_u64, 0x563e69d6ac7f73f8_u64,
+  0x98916152cf7eee1c_u64, 0x61f78a9abaa58b46_u64, 0x9b165cba0c171818_u64, 0x6d744027857300ad_u64,
+  0x362474f1a105878f_u64, 0x78ad74e01bd8ec78_u64, 0xbfd79717f2880abf_u64, 0x839c3cc917ff6cb4_u64,
+  0xbba4cfecbff54867_u64, 0x8e39d9cd73464364_u64, 0x19cec845ac87a5c6_u64, 0x987fbfe70b81a708_u64,
+  0x3b5167ee359a234e_u64, 0xa267992848eeb0c0_u64, 0x1becda8089c1a94c_u64, 0xabeb49a46764fd15_u64,
+  0x597d89b3754abe9f_u64, 0xb504f333f9de6484_u64, 0xac85320f528d6d5d_u64, 0xbdaef913557d76f0_u64,
+  0x43da25d99267326b_u64, 0xc5e40358a8ba05a7_u64, 0x23af31db7179a4aa_u64, 0xcd9f023f9c3a059e_u64,
+  0xf630e8b6dac83e69_u64, 0xd4db3148750d1819_u64, 0x2c19b63253da43fc_u64, 0xdb941a28cb71ec87_u64,
+  0xf4e8a8372f8c5810_u64, 0xe1c5978c05ed8691_u64, 0x125129529d48a92f_u64, 0xe76bd7a1e63b9786_u64,
+  0x7e610231ac1d6181_u64, 0xec835e79946a3145_u64, 0x67127db35b287316_u64, 0xf1090827b43725fd_u64,
+  0x163c5c7f03b718c5_u64, 0xf4fa0ab6316ed2ec_u64, 0xc7adc6b4988891bb_u64, 0xf853f7dc9186b952_u64,
+  0x2172a361fd2a722f_u64, 0xfb14be7fbae58156_u64, 0xeae6bd951c1dabbe_u64, 0xfd3aabf84528b50b_u64,
+  0x41390efdc726e9ef_u64, 0xfec46d1e89292cf0_u64, 0x421e8edaaf59453e_u64, 0xffb10f1bcb6bef1d_u64,
+  0xffffffffffffffff_u64, 0xffffffffffffffff_u64]
+
+### For 0 <= i < 64, entries 2i (low) and 2i+1 (high) hold m with m/2^128 ~ sin(pi i/2^12).
+secret preset B64_SIN_S2U: Array[U64, 128] = [0x0_u64, 0x0_u64, 0xc3b0abf2b35a62f8_u64, 0x3243f655d966c0_u64,
+  0x11ad1d7b5620834a_u64, 0x6487eabb991cb6_u64, 0xc4a32c4560d01e70_u64, 0x96cbdb41258434_u64,
+  0x57480f7956b64707_u64, 0xc90fc5f66525d2_u64, 0x328421cf8014d698_u64, 0xfb53a8eb3ec385_u64,
+  0xf96857b5aa8f6208_u64, 0x12d97822f996bc4_u64, 0xd230a30592f25049_u64, 0x15fdb4fd35c8caa_u64,
+  0xab967fe6b7a9b037_u64, 0x1921f0fe6700711_u64, 0x7db6e69ab68f0d10_u64, 0x1c462c078bc41b6_u64,
+  0x85cede1f0314607b_u64, 0x1f6a65f9a2a3c58_u64, 0x7c11ebc1b33cafb5_u64, 0x228e9eb5aa3a2d9_u64,
+  0xc2dd9c015a46e767_u64, 0x25b2d61ca12e05d_u64, 0x8e8d6151676ae94d_u64, 0x28d70c0f863326c_u64,
+  0x53205a54588f0ab_u64, 0x2bfb406f580bc10_u64, 0x556febf4862da970_u64, 0x2f1f731d15898f5_u64,
+  0xc3c75f41b6ce7aa8_u64, 0x3243a3f9bd8f08c_u64, 0xad8a2d0c1a9e3a8c_u64, 0x3567d2e64f10929_u64,
+  0x80c1c97a65cf2291_u64, 0x388bffc3c915b22_u64, 0xa8493bf9c07f7765_u64, 0x3bb02a732aba3f0_u64,
+  0x6b5e1380c7e6bddb_u64, 0x3ed452d5732f950_u64, 0xbfeba221fb9d05be_u64, 0x41f878cba1bdc60_u64,
+  0xed3c01c030008bb_u64, 0x451c9c36b5c4cc3_u64, 0xe97857207bc589da_u64, 0x4840bcf7aebdbba_u64,
+  0xafc8f71b8eb233ee_u64, 0x4b64daef8c3bf4d_u64, 0x2617b65f5a2a8f5a_u64, 0x4e88f5ff4dee562_u64,
+  0xf9f89fb65be2a455_u64, 0x51ad0e07f3a06df_u64, 0x356ef187634a531d_u64, 0x54d122ea7d3bacf_u64,
+  0x9fab71e43d71e2b7_u64, 0x57f53487eac8977_u64, 0xa9f1c1238fd05d5_u64, 0x5b1942c13c6ff80_u64,
+  0x8ca56cd8d54b97f0_u64, 0x5e3d4d77727c10d_u64, 0xa58993a76b3f4ffe_u64, 0x6161548b8d59ce2_u64,
+  0x4e29cf6e5fed0679_u64, 0x648557de8d99f7e_u64, 0xf1fc3edb7a0f1757_u64, 0x67a9575173f263a_u64,
+  0x51b86c83422cbab4_u64, 0x6acd52c5413f26d_u64, 0x4e68e062eb177e2d_u64, 0x6df14a1af683c83_u64,
+  0x9c28010f1c93a252_u64, 0x71153d3394ec722_u64, 0x5bcb8fd41cb1096f_u64, 0x74392bf01dcf247_u64,
+  0x9ac20c033d7f5cc3_u64, 0x775d163192ace62_u64, 0xb8654aa824578975_u64, 0x7a80fbd8f532f78_u64,
+  0xb00590e675e4e556_u64, 0x7da4dcc7473c03f_u64, 0x46f0804dae5f13ba_u64, 0x80c8b8dd8ad153d_u64,
+  0x1db725856ff8c284_u64, 0x83ec8ffcc22bfe5_u64, 0xa3f67ad05a5be69e_u64, 0x87106205efb61b6_u64,
+  0xede5b1068d174bea_u64, 0x8a342eda160bf5a_u64, 0x6aed92d34c17df54_u64, 0x8d57f65a37fd3c2_u64,
+  0x7c8c5732d89e910b_u64, 0x907bb867588e342_u64, 0xecc93966728e412d_u64, 0x939f74e27af8eb2_u64,
+  0x437b2dd49d5fca3c_u64, 0x96c32baca2ae68b_u64, 0xf9a60c93317892c4_u64, 0x99e6dca6d357dff_u64,
+  0x8a318ba775fd7b04_u64, 0x9d0a87b210d7e1f_u64, 0x5f3d645e787b94f2_u64, 0xa02e2caf5f4b8ef_u64,
+  0x9b56007d16d4ad5a_u64, 0xa351cb7fc30bc88_u64, 0xbdcd0d6bb4b9cd3e_u64, 0xa675640440ae634_u64,
+  0x217954ed6093c44c_u64, 0xa998f61ddd0758a_u64, 0x55213c653bfb79b7_u64, 0xacbc81ad9d29f88_u64,
+  0x4cd34d2751c2e1da_u64, 0xafe00694866a1b4_u64, 0x6b7029d39efd7682_u64, 0xb30384b39e5d534_u64,
+  0x63a95642f565102f_u64, 0xb626fbebeadc1ec_u64, 0xefb8391d83d6da18_u64, 0xb94a6c1e7203198_u64,
+  0x5f10bfca3d646401_u64, 0xbc6dd52c3a342eb_u64, 0xf9530f050886d756_u64, 0xbf9136f64a17ca4_u64,
+  0x35bfac0f965612e2_u64, 0xc2b4915da89e0b2_u64, 0xc6718c1dfd2aa612_u64, 0xc5d7e4435cfff45_u64]
+
+### For 0 <= i < 64, entries 2i (low) and 2i+1 (high) hold m with m/2^128 ~ cos(pi i/2^12).
+secret preset B64_SIN_C2U: Array[U64, 128] = [0xffffffffffffffff_u64, 0xffffffffffffffff_u64, 0x491a703231e0a12e_u64, 0xfffffb10b0d19f76_u64,
+  0xec9e2e75cb525f2c_u64, 0xffffec42c3773235_u64, 0x6276b75b91de105e_u64, 0xffffd3963882d553_u64,
+  0x3031437d7eccb9df_u64, 0xffffb10b10e80e95_u64, 0x858425d8b397dee6_u64, 0xffff84a14dfbcc6a_u64,
+  0x177338053fd93920_u64, 0xffff4e58f17465de_u64, 0x3a11d60588d8b96e_u64, 0xffff0e31fd699a85_u64,
+  0x38e310779edfec68_u64, 0xfffec42c7454926b_u64, 0xedd8e1034213f22b_u64, 0xfffe7048590fddf8_u64,
+  0x96f351efc65556cf_u64, 0xfffe1285aed775d8_u64, 0xea80aedd6a19710f_u64, 0xfffdaae47948bad5_u64,
+  0x69fff9ae0dedb047_u64, 0xfffd3964bc6275ba_u64, 0xf3a703b987eca44a_u64, 0xfffcbe067c84d725_u64,
+  0x928db07a0e70ba36_u64, 0xfffc38c9be717763_u64, 0x8d800bed6653dcba_u64, 0xfffba9ae874b563a_u64,
+  0xb47903f7a19f8ee2_u64, 0xfffb10b4dc96dabb_u64, 0xecc7b9244a48eb19_u64, 0xfffa6ddcc439d30a_u64,
+  0xfbe18032d0016082_u64, 0xfff9c126447b7424_u64, 0x90e2d2eaf6da4d1e_u64, 0xfff90a91640459a1_u64,
+  0x8cc193c5d508e13f_u64, 0xfff84a1e29de8571_u64, 0x89332d07a713477e_u64, 0xfff77fcc9d755f99_u64,
+  0x9e4938f661aa140c_u64, 0xfff6ab9cc695b5e8_u64, 0x66c785e86dfbb75f_u64, 0xfff5cd8ead6dbbab_u64,
+  0x43366df666fd54ff_u64, 0xfff4e5a25a8d095b_u64, 0xdbb49f29fa872a83_u64, 0xfff3f3d7d6e49c49_u64,
+  0xe08b96133ecce0bd_u64, 0xfff2f82f2bc6d648_u64, 0x98a31bcda3def20_u64, 0xfff1f2a862e77d4e_u64,
+  0x5428ed0647c9e5d1_u64, 0xfff0e343865bbb13_u64, 0x807b6e7a4a723dae_u64, 0xffefca00a09a1cb3_u64,
+  0xccf344c647917821_u64, 0xffeea6dfbc7a9242_u64, 0xf0f7cb05bde024f1_u64, 0xffed79e0e5366e63_u64,
+  0x5657552366961732_u64, 0xffec4304266865d9_u64, 0x9195e99fbca2f10a_u64, 0xffeb02498c0c8f12_u64,
+  0x191df31aaa6f7f45_u64, 0xffe9b7b1228061b6_u64, 0x3b57790bf77b6b2d_u64, 0xffe8633af682b627_u64,
+  0x53aa9423bb0adc21_u64, 0xffe704e71533c508_u64, 0x3e71f7d99688082a_u64, 0xffe59cb58c1526b9_u64,
+  0xbe28fbec7cfb8a6_u64, 0xffe42aa66909d2d2_u64, 0xf1ed54343fe7be24_u64, 0xffe2aeb9ba561f99_u64,
+  0x7d209f32d42d864e_u64, 0xffe128ef8e9fc17a_u64, 0x8e6ee05573d420_u64, 0xffdf9947f4edca6f_u64,
+  0x44bd28b8d85b530a_u64, 0xffddffc2fca8a970_u64, 0x75a8951fc304b914_u64, 0xffdc5c60b59a29dc_u64,
+  0x4fd8f038449ec436_u64, 0xffdaaf212fed72db_u64, 0x8c9611f0b1d8f023_u64, 0xffd8f8047c2f06be_u64,
+  0x8d3cd437dc7fa9d2_u64, 0xffd7370aab4cc25e_u64, 0x45bd035edb0a65f5_u64, 0xffd56c33ce95dc73_u64,
+  0x664649b4d541b9c5_u64, 0xffd3977ff7bae4e9_u64, 0xc42aac754bedcfde_u64, 0xffd1b8ef38cdc433_u64,
+  0x1fd552bf146b4a6_u64, 0xffcfd081a441ba99_u64, 0x76f487bb853a6989_u64, 0xffcdde374ceb5f7d_u64,
+  0x5595ca3f421ae09c_u64, 0xffcbe2104600a0a9_u64, 0x11b369083a7a62e5_u64, 0xffc9dc0ca318c18b_u64,
+  0x5c2a6019679e41f_u64, 0xffc7cc2c782c5a76_u64, 0x579207cfe424dcb7_u64, 0xffc5b26fd99557dd_u64,
+  0x1c676208aa3be545_u64, 0xffc38ed6dc0ef98b_u64, 0xbc8d54e81d94f831_u64, 0xffc1616194b5d1d3_u64,
+  0x965827f33d906c7c_u64, 0xffbf2a101907c4c5_u64, 0xe0aa07fcb29eef39_u64, 0xffbce8e27ee40754_u64,
+  0xccfed60a91097c48_u64, 0xffba9dd8dc8b1e83_u64, 0xe907d9a298ab1feb_u64, 0xffb848f3489ede86_u64,
+  0xbfdfce09aea7ac02_u64, 0xffb5ea31da2269e5_u64, 0xbadfe70a1ef51116_u64, 0xffb38194a87a3097_u64]

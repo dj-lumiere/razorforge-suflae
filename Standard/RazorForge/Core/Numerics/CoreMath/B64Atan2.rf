@@ -1,0 +1,615 @@
+module Core
+
+# ============================================================================
+# Correctly rounded two-argument arc tangent of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/atan2/atan2.c and its 192-bit arithmetic header tint.h
+# (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov (atan2.c)
+# Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov (tint.h)
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno and exception-flag
+# handling are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+#
+# The accurate path works on "tint" values (-1)^sgn * (hm/2^128 + l/2^192) * 2^ex held in a tuple
+# (hm: U128, l: U64, ex: S64, sgn: U64), where hm packs the two upper 64-bit words of the significand and
+# its top bit is 1 unless the value is zero.
+
+### Two-argument arc tangent atan2(y, x), correctly rounded: the exact angle of the point (x, y) rounded to
+### the nearest `B64` (ties to even), identical on every platform. The result lies in [-pi, pi]; the signs
+### of zero and infinite coordinates select the quadrant as in IEEE 754, and a NaN coordinate gives NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle in radians.
+routine atan2(y: B64, x: B64) -> B64
+  var iy = y.to_bits()
+  var ix = x.to_bits()
+  var aiy = iy & 0x7FFFFFFFFFFFFFFF_u64
+  if aiy == 0 or aiy >= 0x7FF0000000000000_u64
+    return b64_atan2_special(y: y, x: x)
+  var aix = ix & 0x7FFFFFFFFFFFFFFF_u64
+  if aix == 0 or aix >= 0x7FF0000000000000_u64
+    return b64_atan2_special(y: y, x: x)
+  # xm = max(|x|, |y|), ym = min(|x|, |y|)
+  var xm = x.abs()
+  var ym = y.abs()
+  if ym > xm
+    xm = y.abs()
+    ym = x.abs()
+  var sy = iy >>> 63
+  var sx = ix >>> 63
+  var gt = 0_u64
+  if aix < aiy
+    gt = 1_u64
+  var dxy = (aix -% aiy) ^ (0_u64 -% gt)
+  if dxy >= 0x0350000000000000_u64
+    # the exponents differ by 53 or more
+    return b64_atan2_accurate(y: y, x: x)
+  var cs = 1.0
+  if (gt ^ sx ^ sy) != 0
+    cs = -1.0
+  var kw = (sx << 2) | (sy << 1) | gt
+  var jj = (ym /! xm) +! 2.0078125
+  var jt = (jj.to_bits() >>> 45) & 127_u64
+  var fh = B64.from_bits(bits: B64_ATAN2_F2H[jt]) *! cs
+  var fl = B64.from_bits(bits: B64_ATAN2_F2L[jt]) *! cs
+  fh = fh +! B64.from_bits(bits: B64_ATAN2_OH[kw])
+  fl = fl +! B64.from_bits(bits: B64_ATAN2_OL[kw])
+  if xm < 0x1p-920
+    xm = xm *! 0x1p920
+    ym = ym *! 0x1p920
+  if xm > 0x1p1022
+    if jt != 0
+      xm = xm *! 0.5
+      ym = ym *! 0.5
+  var t0 = B64.from_bits(bits: B64_ATAN2_T2[jt])
+  var zn = LLVM::fma[B64](a: -t0, b: xm, c: ym)
+  var zd = LLVM::fma[B64](a: t0, b: ym, c: xm)
+  var z = zn /! zd
+  var z2 = z *! z
+  z = z *! cs
+  var dz = (z *! z2) *! (-0x1.55555555554d2p-2 +! (z2 *! (0x1.999999860e1cap-3 +! (z2 *! -0x1.248ad469844a1p-3))))
+  var eps = (z.abs() *! 0x1.051p-51) +! 0x1p-90
+  var s = b64_atan2_fasttwosum(x: fh, y: z)
+  var rh = s.item0
+  z = s.item1
+  var rl = (fl +! dz) +! z
+  var lb = rh +! (rl -! eps)
+  var ub = rh +! (rl +! eps)
+  if lb != ub
+    var dh = ym *! t0
+    var dl = LLVM::fma[B64](a: ym, b: t0, c: -dh)
+    var s2 = b64_atan2_fasttwosum(x: xm, y: dh)
+    dh = s2.item0
+    var e = s2.item1
+    var rdh = 1.0 /! dh
+    dl = dl +! e
+    var nh = xm *! t0
+    var nl = LLVM::fma[B64](a: xm, b: t0, c: -nh)
+    var dt = ym -! nh
+    var y1 = dt +! nh
+    var s3 = b64_atan2_fasttwosum(x: dt, y: -nl)
+    if y1 != ym
+      s3 = b64_atan2_fasttwosum(x: dt, y: (ym -! y1) -! nl)
+    nh = s3.item0
+    nl = s3.item1
+    var zh = nh *! rdh
+    z2 = zh *! zh
+    var zl = rdh *! (LLVM::fma[B64](a: dh, b: -zh, c: nh) +! (nl -! ((nh *! rdh) *! dl)))
+    var pa = -0x1.5555555555555p-2 +! (z2 *! 0x1.999999999755ep-3)
+    var pb = -0x1.24924883596f8p-3 +! (z2 *! 0x1.c6f7d73531bc2p-4)
+    zl = zl +! ((zh *! z2) *! (pa +! ((z2 *! z2) *! pb)))
+    zh = zh *! cs
+    zl = zl *! cs
+    eps = 0x1.4p-50 *! ((zh.abs() *! z2) +! 0x1p-51)
+    var f = b64_atan2_fastsum(xh: fh, xl: fl, yh: zh, yl: zl)
+    fh = f.item0
+    fl = f.item1
+    lb = fh +! (fl -! eps)
+    ub = fh +! (fl +! eps)
+    if lb != ub
+      return b64_atan2_accurate(y: y, x: x)
+  return ub
+
+### Sum `x + y` as a double-double (s, e), assuming |x| >= |y| or x == 0.
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: The rounded sum and its error.
+secret routine b64_atan2_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### Double-double sum (xh + xl) + (yh + yl), assuming |xh| >= |yh| or xh == 0.
+### :param xh: The high part of the first operand.
+### :param xl: The low part of the first operand.
+### :param yh: The high part of the second operand.
+### :param yl: The low part of the second operand.
+### :returns: The high and low parts of the sum.
+secret routine b64_atan2_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
+  var s = b64_atan2_fasttwosum(x: xh, y: yh)
+  return (s.item0, (xl +! yl) +! s.item1)
+
+### atan2 when a coordinate is zero, infinite or NaN.
+### :param y: The y-coordinate.
+### :param x: The x-coordinate.
+### :returns: The correctly rounded angle.
+secret routine b64_atan2_special(y: B64, x: B64) -> B64
+  var iy = y.to_bits()
+  var ix = x.to_bits()
+  var aiy = iy << 1
+  var aix = ix << 1
+  var inf2 = 0xFFE0000000000000_u64
+  var pih: B64 = 0x1.921fb54442d18p+1
+  var pil: B64 = 0x1.1a62633145c07p-53
+  var pi2h: B64 = 0x1.921fb54442d18p+0
+  var pi2l: B64 = 0x1.1a62633145c07p-54
+  if aiy >= inf2 or aix >= inf2
+    if aiy > inf2 or aix > inf2
+      # a NaN operand: like the x86 sum y + x, the first NaN operand wins, quieted
+      if y.is_nan()
+        return y +! y
+      return x +! x
+    # neither is NaN, at least one is infinite
+    if aiy == inf2 and aix == inf2
+      if (ix >>> 63) != 0
+        # atan2(+/-Inf, -Inf) = +/-3pi/4
+        var h3: B64 = 0x1.2d97c7f3321d2p+1
+        var l3: B64 = 0x1p-54
+        return h3.copysign(sign: y) +! l3.copysign(sign: y)
+      # atan2(+/-Inf, +Inf) = +/-pi/4
+      var h1: B64 = 0x1.921fb54442d18p-1
+      var l1: B64 = 0x1p-55
+      return h1.copysign(sign: y) +! l1.copysign(sign: y)
+    if aix == inf2
+      if x < 0.0
+        return pih.copysign(sign: y) +! pil.copysign(sign: y)
+      var zero = 0.0
+      return zero.copysign(sign: y)
+    # y = +/-Inf with finite x
+    return pi2h.copysign(sign: y) +! pi2l.copysign(sign: y)
+  if aiy == 0 or aix == 0
+    if aiy == 0 and aix == 0
+      if ix == 0
+        return y
+      if iy == 0
+        return pih +! pil
+      return -pih -! pil
+    if aiy == 0
+      if x > 0.0
+        return y /! x
+      if (iy >>> 63) == 0
+        return pih +! pil
+      return -pih -! pil
+    if y > 0.0
+      return pi2h +! pi2l
+    return -pi2h -! pi2l
+  return 0.0
+
+### The accurate path: evaluates atan2(y, x) with a [29,29] rational approximation of atan in 192-bit
+### tint arithmetic.
+### :param y: The y-coordinate, finite and non-zero.
+### :param x: The x-coordinate, finite and non-zero.
+### :returns: The correctly rounded angle.
+secret routine b64_atan2_accurate(y: B64, x: B64) -> B64
+  var pih: B64 = 0x1.921fb54442d18p+1
+  var pil: B64 = 0x1.1a62633145c07p-53
+  var t = y /! x
+  if t == 0.0
+    if x > 0.0
+      return t
+    if y > 0.0
+      return pih +! pil
+    return -pih -! pil
+  var corr = LLVM::fma[B64](a: t, b: x, c: -y)
+  if corr == 0.0 and x > 0.0
+    # t is exact
+    if t.abs() <= 0x1.d12ed0af1a27fp-27
+      if y.abs() >= 0x1p-915
+        return LLVM::fma[B64](a: t, b: -0x1p-54, c: t)
+      corr = LLVM::fma[B64](a: t *! 0x1p105, b: x, c: -y *! 0x1p105)
+      if corr == 0.0
+        return LLVM::fma[B64](a: t, b: -0x1p-54, c: t)
+  var inv = y.abs() > x.abs()
+  var z = b64_atan2_div(b: b64_atan2_from_b64(x: y), a: b64_atan2_from_b64(x: x))
+  if inv
+    z = b64_atan2_div(b: b64_atan2_from_b64(x: x), a: b64_atan2_from_b64(x: y))
+  if not inv and x > 0.0 and z.item2 <= -96
+    # atan(y/x) rounds like y/x perturbed slightly toward zero
+    var zl = z.item1 -% 2
+    var zh = LLVM::int_truncate[U128, U64](z.item0 >>> 64)
+    var zm = LLVM::int_truncate[U128, U64](z.item0)
+    if zl < 2
+      zm = zm -% 1
+    if zm < 1
+      zh = zh -% 1
+    return b64_atan2_to_b64(a: (b64_atan2_u128(hi: zh, lo: zm), zl, z.item2, z.item3), err: 1)
+  # the rational approximation is only for z > 0
+  var sz = z.item3
+  z = (z.item0, z.item1, z.item2, 0_u64)
+  var p = b64_atan2_p_coeff(i: 29)
+  var q = b64_atan2_q_coeff(i: 29)
+  var i = 29_u64
+  while i > 0
+    i = i - 1
+    p = b64_atan2_mul(a: p, b: z)
+    q = b64_atan2_mul(a: q, b: z)
+    p = b64_atan2_add(a: p, b: b64_atan2_p_coeff(i: i))
+    q = b64_atan2_add(a: q, b: b64_atan2_q_coeff(i: i))
+  p = b64_atan2_mul(a: p, b: z)
+  z = b64_atan2_div(b: p, a: q)
+  var err = 662_u64
+  z = (z.item0, z.item1, z.item2, sz)
+  # z approximates atan(y/x) (or atan(x/y) when inv), with -pi/4 < z < pi/4
+  var pi2 = b64_atan2_pi(ex: 1)
+  if inv
+    if z.item3 == 0
+      # pi/2 - atan(x/y)
+      z = b64_atan2_add(a: pi2, b: (z.item0, z.item1, z.item2, 1_u64))
+    else
+      # -pi/2 - atan(x/y)
+      z = b64_atan2_add(a: z, b: pi2)
+      z = (z.item0, z.item1, z.item2, 1_u64)
+    err = 524
+  # now -pi/2 < z < pi/2, a negative x moves to the opposite quadrant
+  if x < 0.0
+    var pi = b64_atan2_pi(ex: 2)
+    if z.item3 == 0
+      z = b64_atan2_add(a: pi, b: (z.item0, z.item1, z.item2, 1_u64))
+      z = (z.item0, z.item1, z.item2, 1_u64)
+    else
+      z = b64_atan2_add(a: z, b: pi)
+    err = 266
+  return b64_atan2_to_b64(a: z, err: err)
+
+### Builds a 128-bit integer from its two 64-bit halves.
+### :param hi: The high 64 bits.
+### :param lo: The low 64 bits.
+### :returns: hi * 2^64 + lo.
+secret routine b64_atan2_u128(hi: U64, lo: U64) -> U128
+  return (LLVM::zero_extend[U64, U128](hi) << 64) | LLVM::zero_extend[U64, U128](lo)
+
+### The tint pi (ex = 2) or pi/2 (ex = 1), with error below 2^-196.
+### :param ex: The exponent, 2 for pi or 1 for pi/2.
+### :returns: The tint constant.
+secret routine b64_atan2_pi(ex: S64) -> (U128, U64, S64, U64)
+  return (b64_atan2_u128(hi: 0xC90FDAA22168C234_u64, lo: 0xC4C6628B80DC1CD1_u64), 0x29024E088A67CC74_u64, ex, 0_u64)
+
+### Coefficient i of the numerator polynomial P.
+### :param i: The coefficient index, 0 to 29.
+### :returns: The tint coefficient.
+secret routine b64_atan2_p_coeff(i: U64) -> (U128, U64, S64, U64)
+  return (b64_atan2_u128(hi: B64_ATAN2_PH[i], lo: B64_ATAN2_PM[i]), B64_ATAN2_PL[i], B64_ATAN2_PEX[i], B64_ATAN2_PSGN[i])
+
+### Coefficient i of the denominator polynomial Q.
+### :param i: The coefficient index, 0 to 29.
+### :returns: The tint coefficient.
+secret routine b64_atan2_q_coeff(i: U64) -> (U128, U64, S64, U64)
+  return (b64_atan2_u128(hi: B64_ATAN2_QH[i], lo: B64_ATAN2_QM[i]), B64_ATAN2_QL[i], B64_ATAN2_QEX[i], B64_ATAN2_QSGN[i])
+
+### Product of two tints, with error below 10 ulps.
+### :param a: The first factor.
+### :param b: The second factor.
+### :returns: The tint product.
+secret routine b64_atan2_mul(a: (U128, U64, S64, U64), b: (U128, U64, S64, U64)) -> (U128, U64, S64, U64)
+  var mask = 0xFFFFFFFFFFFFFFFF_u128
+  var ah = a.item0 >>> 64
+  var am = a.item0 & mask
+  var al = LLVM::zero_extend[U64, U128](a.item1)
+  var bh = b.item0 >>> 64
+  var bm = b.item0 & mask
+  var bl = LLVM::zero_extend[U64, U128](b.item1)
+  var rh = ah *% bh
+  var rm1 = ah *% bm
+  var rm2 = am *% bh
+  var rl1 = ah *% bl
+  var rl2 = am *% bm
+  var rl3 = al *% bh
+  var h = LLVM::int_truncate[U128, U64](rh >>> 64)
+  var m = LLVM::int_truncate[U128, U64](rh)
+  # accumulate rm1
+  var l = LLVM::int_truncate[U128, U64](rm1)
+  var t = LLVM::int_truncate[U128, U64](rm1 >>> 64)
+  m = m +% t
+  if m < t
+    h = h +% 1
+  # accumulate rm2
+  var l2 = LLVM::int_truncate[U128, U64](rm2)
+  t = LLVM::int_truncate[U128, U64](rm2 >>> 64)
+  l = l +% l2
+  var cm = 0_u64
+  if l < l2
+    cm = 1_u64
+  m = m +% t
+  if m < t
+    h = h +% 1
+  # accumulate rl1 + rl2 + rl3
+  var sl = ((rl1 >>> 64) +% (rl2 >>> 64)) +% (rl3 >>> 64)
+  var l3 = LLVM::int_truncate[U128, U64](sl)
+  cm = cm +% LLVM::int_truncate[U128, U64](sl >>> 64)
+  l = l +% l3
+  if l < l3
+    cm = cm +% 1
+  # accumulate cm
+  m = m +% cm
+  if m < cm
+    h = h +% 1
+  var ex = a.item2 + b.item2
+  if (h >>> 63) == 0
+    # normalize
+    h = (h << 1) | (m >>> 63)
+    m = (m << 1) | (l >>> 63)
+    l = l << 1
+    ex = ex - 1
+  return (b64_atan2_u128(hi: h, lo: m), l, ex, a.item3 ^ b.item3)
+
+### Compares the absolute values of two tints.
+### :param a: The first tint.
+### :param b: The second tint.
+### :returns: -1, 0 or +1 as |a| is below, equal to or above |b|.
+secret routine b64_atan2_cmp_abs(a: (U128, U64, S64, U64), b: (U128, U64, S64, U64)) -> S64
+  var az = (a.item0 >>> 64) == 0
+  var bz = (b.item0 >>> 64) == 0
+  if az
+    if bz
+      return 0
+    return -1
+  if bz
+    return 1
+  if a.item2 > b.item2
+    return 1
+  if a.item2 < b.item2
+    return -1
+  if a.item0 > b.item0
+    return 1
+  if a.item0 < b.item0
+    return -1
+  if a.item1 > b.item1
+    return 1
+  if a.item1 < b.item1
+    return -1
+  return 0
+
+### Shifts a 192-bit significand right by k bits.
+### :param h: The upper 128 bits.
+### :param l: The lower 64 bits.
+### :param k: The shift amount.
+### :returns: The shifted significand (upper 128 bits, lower 64 bits).
+secret routine b64_atan2_rshift(h: U128, l: U64, k: U64) -> (U128, U64)
+  if k == 0
+    return (h, l)
+  if k < 64
+    var s = LLVM::int_truncate[U64, U32](k)
+    var c = LLVM::int_truncate[U64, U32](64 - k)
+    return (h >>> s, LLVM::int_truncate[U128, U64](h << c) | (l >>> s))
+  if k == 64
+    return (h >>> 64, LLVM::int_truncate[U128, U64](h))
+  if k < 128
+    var s = LLVM::int_truncate[U64, U32](k)
+    var c = LLVM::int_truncate[U64, U32](k - 64)
+    return (h >>> s, LLVM::int_truncate[U128, U64](h >>> c))
+  if k < 192
+    var c = LLVM::int_truncate[U64, U32](k - 64)
+    return (0_u128, LLVM::int_truncate[U128, U64](h >>> c))
+  return (0_u128, 0_u64)
+
+### Shifts a 192-bit significand left by k bits.
+### :param h: The upper 128 bits.
+### :param l: The lower 64 bits.
+### :param k: The shift amount.
+### :returns: The shifted significand (upper 128 bits, lower 64 bits).
+secret routine b64_atan2_lshift(h: U128, l: U64, k: U64) -> (U128, U64)
+  if k == 0
+    return (h, l)
+  var wl = LLVM::zero_extend[U64, U128](l)
+  if k < 64
+    var s = LLVM::int_truncate[U64, U32](k)
+    var c = LLVM::int_truncate[U64, U32](64 - k)
+    return ((h << s) | LLVM::zero_extend[U64, U128](l >>> c), l << s)
+  if k == 64
+    return ((h << 64) | wl, 0_u64)
+  if k < 128
+    var s = LLVM::int_truncate[U64, U32](k)
+    var c = LLVM::int_truncate[U64, U32](k - 64)
+    return ((h << s) | (wl << c), 0_u64)
+  if k < 192
+    var c = LLVM::int_truncate[U64, U32](k - 64)
+    return (wl << c, 0_u64)
+  return (0_u128, 0_u64)
+
+### Leading zero count of a 192-bit significand.
+### :param h: The upper 128 bits.
+### :param l: The lower 64 bits.
+### :returns: The number of leading zero bits.
+secret routine b64_atan2_clz(h: U128, l: U64) -> U64
+  if h != 0
+    return LLVM::int_truncate[U128, U64](h.leading_zeros())
+  return 128 + l.leading_zeros()
+
+### Sum of two tints, with error below 2 ulps.
+### :param a: The first addend.
+### :param b: The second addend.
+### :returns: The tint sum.
+secret routine b64_atan2_add(a: (U128, U64, S64, U64), b: (U128, U64, S64, U64)) -> (U128, U64, S64, U64)
+  var c = b64_atan2_cmp_abs(a: a, b: b)
+  if c == 0
+    if (a.item3 ^ b.item3) != 0
+      return (0_u128, 0_u64, -1076, 0_u64)
+    return (a.item0, a.item1, a.item2 + 1, a.item3)
+  var u = a
+  var v = b
+  if c < 0
+    u = b
+    v = a
+  # from now on |u| > |v|, thus u.ex >= v.ex
+  var sh = LLVM::reinterpret_bits[S64, U64](u.item2) -% LLVM::reinterpret_bits[S64, U64](v.item2)
+  var t = b64_atan2_rshift(h: v.item0, l: v.item1, k: sh)
+  if (u.item3 ^ v.item3) != 0
+    # opposite signs, a subtraction
+    var tl = u.item1 -% t.item1
+    var th = u.item0 -% t.item0
+    if tl > u.item1
+      th = th -% 1
+    var ex = b64_atan2_clz(h: th, l: tl)
+    if ex <= 1 or sh == 0
+      var r = b64_atan2_lshift(h: th, l: tl, k: ex)
+      return (r.item0, r.item1, u.item2 - LLVM::reinterpret_bits[U64, S64](ex), u.item3)
+    # ex >= 2 and sh >= 1: redo the subtraction without neglecting the low part of v
+    var t2 = b64_atan2_lshift(h: v.item0, l: v.item1, k: ex -% sh)
+    var r0 = b64_atan2_lshift(h: u.item0, l: u.item1, k: ex)
+    var ul = r0.item1 -% t2.item1
+    var uh = r0.item0 -% t2.item0
+    if ul > r0.item1
+      uh = uh -% 1
+    var ex1 = b64_atan2_clz(h: uh, l: ul)
+    var r1 = b64_atan2_lshift(h: uh, l: ul, k: ex1)
+    return (r1.item0, r1.item1, u.item2 - LLVM::reinterpret_bits[U64, S64](ex + ex1), u.item3)
+  # same signs, an addition
+  var ah = u.item0
+  var al = u.item1
+  var rl = al +% t.item1
+  var cl = 0_u128
+  if rl < al
+    cl = 1_u128
+  var rh = ah +% t.item0
+  var ch = 0_u128
+  if rh < ah
+    ch = 1_u128
+  rh = rh +% cl
+  if rh < cl
+    ch = ch +% 1
+  if ch != 0
+    rl = LLVM::int_truncate[U128, U64](rh << 63) | (rl >>> 1)
+    rh = (ch << 127) | (rh >>> 1)
+    return (rh, rl, u.item2 + 1, u.item3)
+  return (rh, rl, u.item2, u.item3)
+
+### Converts a finite non-zero B64 to a tint (exact).
+### :param x: The value to convert.
+### :returns: The tint equal to x.
+secret routine b64_atan2_from_b64(x: B64) -> (U128, U64, S64, U64)
+  var u = x.to_bits()
+  var sgn = u >>> 63
+  var ax = u & 0x7FFFFFFFFFFFFFFF_u64
+  var e = ax >>> 52
+  if e != 0
+    # normal
+    var hn = 0x8000000000000000_u64 | (ax << 11)
+    return (LLVM::zero_extend[U64, U128](hn) << 64, 0_u64, LLVM::reinterpret_bits[U64, S64](e) - 0x3FE, sgn)
+  # subnormal
+  var lz = ax.leading_zeros()
+  var hs = ax << LLVM::int_truncate[U64, U32](lz)
+  return (LLVM::zero_extend[U64, U128](hs) << 64, 0_u64, -0x3F2 - LLVM::reinterpret_bits[U64, S64](lz), sgn)
+
+### Rounds a tint to the nearest B64.
+### :param a: The tint.
+### :param err: 0 to truncate an exact double value, otherwise a bound in ulps on the error of the low word.
+### :returns: The rounded value.
+secret routine b64_atan2_to_b64(a: (U128, U64, S64, U64), err: U64) -> B64
+  var sgn = a.item3
+  var ex = a.item2
+  if ex >= 1025
+    # overflow: |a| >= 2^1024
+    return B64.from_bits(bits: (sgn << 63) | 0x7FF0000000000000_u64)
+  var hh = LLVM::int_truncate[U128, U64](a.item0 >>> 64)
+  var mm = LLVM::int_truncate[U128, U64](a.item0)
+  var ll = a.item1
+  if ex <= -1074
+    # underflow: |a| < 2^-1074
+    if ex < -1074
+      return B64.from_bits(bits: sgn << 63)
+    # 2^-1075 <= |a| < 2^-1074: exactly 2^-1075 rounds to zero, anything above to 2^-1074
+    if hh == 0x8000000000000000_u64 and mm == 0 and ll == 0
+      return B64.from_bits(bits: sgn << 63)
+    return B64.from_bits(bits: (sgn << 63) | 1_u64)
+  var low = hh & 0x7FF_u64
+  if ex <= -1022
+    # subnormal result
+    var sh = -1021 - ex
+    var s = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](sh))
+    var c = LLVM::int_truncate[U64, U32](LLVM::reinterpret_bits[S64, U64](64 - sh))
+    var sticky = 0_u64
+    if ll > 0
+      sticky = 1_u64
+    ll = (mm << c) | (ll >>> s) | sticky
+    mm = (hh << c) | (mm >>> s)
+    hh = hh >>> s
+    low = hh & 0x7FF_u64
+    ex = ex + sh
+  var h = LLVM::unsigned_to_float[U64, B64](hh >>> 11)
+  var l = 0.0
+  if err == 0
+    l = 0.0
+  elseif low < 0x400_u64
+    # round toward zero
+    l = 0.25
+  elseif low > 0x400_u64
+    # round away
+    l = 0.75
+  elseif mm == 0 and ll == 0
+    # the middle case
+    l = 0.5
+  else
+    l = 0.75
+  var sg = 1.0
+  if sgn != 0
+    sg = -1.0
+  h = LLVM::fma[B64](a: l, b: sg, c: sg *! h)
+  h = h *! 0x1p-52
+  # now -1021 <= ex <= 1024, thus 2^(ex-1) is a normal number
+  var scale = B64.from_bits(bits: 0x3FF0000000000000_u64 +% (LLVM::reinterpret_bits[S64, U64](ex - 1) << 52))
+  return h *! scale
+
+### An approximation of 1/A, with absolute error below 2^-103.9 when 1 <= 1/A <= 2.
+### :param a: The non-zero tint A.
+### :returns: The tint approximating 1/A.
+secret routine b64_atan2_inv(a: (U128, U64, S64, U64)) -> (U128, U64, S64, U64)
+  var d = b64_atan2_to_b64(a: a, err: 0)
+  var subnormal = d.abs() < 0x1p-1022
+  if subnormal
+    d = d *! 0x1p53
+  var r = b64_atan2_from_b64(x: 1.0 /! d)
+  if subnormal
+    r = (r.item0, r.item1, r.item2 + 53, r.item3)
+  # one Newton step r + r*(1 - a*r)
+  var q = b64_atan2_mul(a: a, b: r)
+  q = (q.item0, q.item1, q.item2, 1_u64 -% q.item3)
+  q = b64_atan2_add(a: (0x80000000000000000000000000000000_u128, 0_u64, 1, 0_u64), b: q)
+  q = b64_atan2_mul(a: r, b: q)
+  return b64_atan2_add(a: r, b: q)
+
+### An approximation of b/a, with relative error below 2^-185.53.
+### :param b: The dividend.
+### :param a: The non-zero divisor.
+### :returns: The tint approximating b/a.
+secret routine b64_atan2_div(b: (U128, U64, S64, U64), a: (U128, U64, S64, U64)) -> (U128, U64, S64, U64)
+  var y = b64_atan2_inv(a: a)
+  var r = b64_atan2_mul(a: y, b: b)
+  # Karp-Markstein: r + y*(b - a*r)
+  var z = b64_atan2_mul(a: a, b: r)
+  z = (z.item0, z.item1, z.item2, 1_u64 -% z.item3)
+  z = b64_atan2_add(a: b, b: z)
+  z = b64_atan2_mul(a: y, b: z)
+  return b64_atan2_add(a: r, b: z)
+
+# The [29,29] rational approximation z*P(z)/Q(z) of atan(z) on [0,1], coefficients as tints (significand
+# words H, M, L, exponent EX, sign SGN)
+secret preset B64_ATAN2_PH: Array[U64, 30] = [0x82703F8B53112ECA_u64, 0xB3CF74B427D53E03_u64, 0xB08498B17B88C39A_u64, 0xFD4BAA7BB52B0D83_u64, 0x96541948B85FB386_u64, 0x96AAA5D4BAFFC590_u64, 0x83CD41B5FA862B11_u64, 0xCBBC7752197CC106_u64, 0x8CF8F7C585767042_u64, 0xAFDC36D6B36139BF_u64, 0xC6F8FB1463822519_u64, 0xCCE79F10F754E315_u64, 0xC090384DBD77132E_u64, 0xA556AC9EEE25E867_u64, 0x81BD2677DDFCBC38_u64, 0xB9ED12169D72E8D9_u64, 0xF2DF6DA875B666FA_u64, 0x902D34D4DB910ED8_u64, 0x9AEFA41961CE1207_u64, 0x95DB9977C5E6E263_u64, 0x817CB6D8236D5F4D_u64, 0xC5EEC4228C352098_u64, 0x840C38CCFCB5DC64_u64, 0x97074AF7B286B19E_u64, 0x9054011C32D4B7A5_u64, 0xDDDB4A2EAAB2BB15_u64, 0x80EF9A1B3E59ABE5_u64, 0xCA16DD49CD30854C_u64, 0xA0BA01B8742BA801_u64, 0x9C0440896CE6515C_u64]
+secret preset B64_ATAN2_PM: Array[U64, 30] = [0x71CE6279D467AA45_u64, 0xEE590B839E751890_u64, 0x11E37821D784D8FA_u64, 0xB25425BEB0A04DC3_u64, 0xE0B815ACE425A859_u64, 0xF23DB783B6E4CE55_u64, 0xAD8F9D6E3EB9D833_u64, 0xBC66CFB3EDEFA6E3_u64, 0xCD92A5B9AC13D8C8_u64, 0x11DF63474E3859D4_u64, 0x2F9F04CF55C10377_u64, 0x91CE47EDCBC8A4EE_u64, 0x1DFB4D9A1D595DE7_u64, 0xD84DAFA25141D203_u64, 0x1DF33F27DBB60939_u64, 0xC81D95DCEF13C227_u64, 0xC29DD3A69C274C65_u64, 0x6F3ECDDFD6AF0A9F_u64, 0xACD0317666753751_u64, 0x85367A63FAB8A720_u64, 0x70C7815F28909D9B_u64, 0x789E56BE1DEE9B67_u64, 0xB55A44095BF7F312_u64, 0xC20AAC21F3130F1D_u64, 0xC68D3C5D525F4AF4_u64, 0x753761A8F0E9AA8D_u64, 0x18E6AFE0651FDF49_u64, 0xBAD8CA379401027C_u64, 0xE6DC14A9516D7F04_u64, 0x0CF3470FA7F10AC3_u64]
+secret preset B64_ATAN2_PL: Array[U64, 30] = [0x019C9B28466B6FC0_u64, 0xF2570B12BCB2381A_u64, 0x2795B14B84B9D78C_u64, 0x92008D9FB34B68FF_u64, 0xBECA17C69BB4F7A0_u64, 0x2C54E054D3B69F7E_u64, 0x4EF470D801FA03CA_u64, 0x568B2F9E4FEB8910_u64, 0x043BD4A023DBE04D_u64, 0x42B30B2C089A2B6C_u64, 0x1C44675C6D483606_u64, 0xB2A6F721AC656B42_u64, 0xE506CA899A394F70_u64, 0xF1C7C2A5156B3EC3_u64, 0xCB4C2C73286A6C29_u64, 0x974B95796B93C332_u64, 0x83B9260976C8F0C5_u64, 0x8E950D7E70A8E9B2_u64, 0x3EAF42A53FCC6534_u64, 0xFC2B63BD115998D8_u64, 0x0C54E97155D12158_u64, 0xBA25BDA81292CCC1_u64, 0x6668B8792D4ECD08_u64, 0x369E9FDBDD48528A_u64, 0xEEB3C98615DEE188_u64, 0x3F20620CD3E075BB_u64, 0xD1C0329E6A702D9D_u64, 0x1FC7F47985486F16_u64, 0x1F5303D878905D2F_u64, 0xA9DC80682C111A9D_u64]
+secret preset B64_ATAN2_PEX: Array[S64, 30] = [-10_s64, -8_s64, -6_s64, -5_s64, -3_s64, -2_s64, -1_s64, -1_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, 0_s64, -1_s64, -2_s64, -2_s64, -3_s64, -4_s64, -5_s64, -7_s64, -8_s64, -10_s64, -12_s64, -15_s64, -17_s64, -21_s64, -25_s64, -59_s64]
+secret preset B64_ATAN2_PSGN: Array[U64, 30] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 1_u64]
+secret preset B64_ATAN2_QH: Array[U64, 30] = [0x82703F8B53112ECA_u64, 0xB3CF74B427D53E03_u64, 0xB33C44AF0D43C9E8_u64, 0x8264D256F0BF4D61_u64, 0x9D97C4947687B2EE_u64, 0xA0F888DC7AAB949E_u64, 0x8FD9C7172AB0828E_u64, 0xE38168B78A51EE15_u64, 0xA164CCDBB65EE133_u64, 0xCED0C0CBE44FAC2F_u64, 0xF0E6660438C90371_u64, 0x8000000000000000_u64, 0xF8EA68F9AD849103_u64, 0xDDC64EEEE3506234_u64, 0xB52DDFBA2D37C8E2_u64, 0x87AC113D26B683A1_u64, 0xBA065070B900F3D5_u64, 0xE902D2A4BFC22441_u64, 0x84E405C915F7769B_u64, 0x896DA46C7E6CEBB3_u64, 0x801A0C1A0DFEFC92_u64, 0xD59D088930DF07DB_u64, 0x9DB56A6984B77231_u64, 0xCB7450D9D62D2E68_u64, 0xE12A52E02B64B23E_u64, 0xD057B6D0900ED30D_u64, 0x9B1F1CA22FEF7AE5_u64, 0xAEBA710F053AAC3B_u64, 0x84B9ADA076CD007D_u64, 0xCCA4B9046786937D_u64]
+secret preset B64_ATAN2_QM: Array[U64, 30] = [0x71CE6279D467AA45_u64, 0xEE590B839E751890_u64, 0xF4426F84614701DB_u64, 0xEE21431CC0F29764_u64, 0xEF4087C49DDE5229_u64, 0xF623F19AC413DB23_u64, 0x1A9F72FADAFC3DFB_u64, 0x604A47815C8091EB_u64, 0xE623433C5E086402_u64, 0xD7C2ADFC7C5DDA9E_u64, 0x3DCA1A0F58F0D943_u64, 0x0000000000000000_u64, 0xB257E4BFC606967F_u64, 0x47A33EA40A2B22E4_u64, 0x24551A9B19FA064A_u64, 0x4E97756C38785B0B_u64, 0xE49D8F9F238F1EEB_u64, 0x945CFE6C83A5B828_u64, 0x0FAAF34C3C51DD39_u64, 0xE0AFC0B6DB3DBBF5_u64, 0xF8E0A97902E08D47_u64, 0xA8CB00021849FBAF_u64, 0xCF7C2074E0480959_u64, 0x9787B4265977D004_u64, 0x97C9139A8CED716C_u64, 0x5E04BB17EB879A5E_u64, 0x19A687F0A4073EEE_u64, 0x30EA5D6FB116F775_u64, 0x13E55006073F76B1_u64, 0x233C1E691C127C1F_u64]
+secret preset B64_ATAN2_QL: Array[U64, 30] = [0x019C9B28466B6FC0_u64, 0xF2570B12BCB238CF_u64, 0x979E49DC5B858442_u64, 0xCE0CC1B593AC9952_u64, 0x742BC6E02BFB6DF8_u64, 0x854744A164F70ECD_u64, 0xAF96A180EA297178_u64, 0x9FAAA42312E8EB30_u64, 0xCB228AFD335A245F_u64, 0xA22B4A311CF5A5B1_u64, 0x8A92B9DE68C4488C_u64, 0x0000000000000000_u64, 0x818FA2816928C4AA_u64, 0xA6A2C129ACE2470A_u64, 0x3D78C68B54BC3850_u64, 0xF75F0A4506931BA8_u64, 0x6805D48D67F1DCD9_u64, 0x519EBB457F8CCCA0_u64, 0xA97FA0AE99382C93_u64, 0x061CCFF6E78EFFF4_u64, 0x81898E0B7D8EF0BC_u64, 0xF80CC91AA0BDDF89_u64, 0x3316ECAA6AA4604E_u64, 0xBA615CEE00A841D7_u64, 0x70A176AD2B5F16D2_u64, 0x23ED135B60BEA070_u64, 0x05A9CCBC8C14578B_u64, 0x8A9BCFEF5698F8F1_u64, 0x4CF4259968228F3E_u64, 0xF493E0B7A3DE459A_u64]
+secret preset B64_ATAN2_QEX: Array[S64, 30] = [-10_s64, -8_s64, -6_s64, -4_s64, -3_s64, -2_s64, -1_s64, -1_s64, 0_s64, 0_s64, 0_s64, 1_s64, 0_s64, 0_s64, 0_s64, 0_s64, -1_s64, -2_s64, -2_s64, -3_s64, -4_s64, -6_s64, -7_s64, -9_s64, -11_s64, -13_s64, -15_s64, -18_s64, -21_s64, -26_s64]
+secret preset B64_ATAN2_QSGN: Array[U64, 30] = [0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64, 0_u64]
+# T2[j] = j/64: the reduction points of the fast path
+secret preset B64_ATAN2_T2: Array[U64, 65] = [0x0000000000000000_u64, 0x3F90000000000000_u64, 0x3FA0000000000000_u64, 0x3FA8000000000000_u64, 0x3FB0000000000000_u64, 0x3FB4000000000000_u64, 0x3FB8000000000000_u64, 0x3FBC000000000000_u64, 0x3FC0000000000000_u64, 0x3FC2000000000000_u64, 0x3FC4000000000000_u64, 0x3FC6000000000000_u64, 0x3FC8000000000000_u64, 0x3FCA000000000000_u64, 0x3FCC000000000000_u64, 0x3FCE000000000000_u64, 0x3FD0000000000000_u64, 0x3FD1000000000000_u64, 0x3FD2000000000000_u64, 0x3FD3000000000000_u64, 0x3FD4000000000000_u64, 0x3FD5000000000000_u64, 0x3FD6000000000000_u64, 0x3FD7000000000000_u64, 0x3FD8000000000000_u64, 0x3FD9000000000000_u64, 0x3FDA000000000000_u64, 0x3FDB000000000000_u64, 0x3FDC000000000000_u64, 0x3FDD000000000000_u64, 0x3FDE000000000000_u64, 0x3FDF000000000000_u64, 0x3FE0000000000000_u64, 0x3FE0800000000000_u64, 0x3FE1000000000000_u64, 0x3FE1800000000000_u64, 0x3FE2000000000000_u64, 0x3FE2800000000000_u64, 0x3FE3000000000000_u64, 0x3FE3800000000000_u64, 0x3FE4000000000000_u64, 0x3FE4800000000000_u64, 0x3FE5000000000000_u64, 0x3FE5800000000000_u64, 0x3FE6000000000000_u64, 0x3FE6800000000000_u64, 0x3FE7000000000000_u64, 0x3FE7800000000000_u64, 0x3FE8000000000000_u64, 0x3FE8800000000000_u64, 0x3FE9000000000000_u64, 0x3FE9800000000000_u64, 0x3FEA000000000000_u64, 0x3FEA800000000000_u64, 0x3FEB000000000000_u64, 0x3FEB800000000000_u64, 0x3FEC000000000000_u64, 0x3FEC800000000000_u64, 0x3FED000000000000_u64, 0x3FED800000000000_u64, 0x3FEE000000000000_u64, 0x3FEE800000000000_u64, 0x3FEF000000000000_u64, 0x3FEF800000000000_u64, 0x3FF0000000000000_u64]
+# atan(T2[j]) as a double-double F2H[j] + F2L[j]
+secret preset B64_ATAN2_F2L: Array[U64, 65] = [0x0000000000000000_u64, 0xBCA95220C39D4DFF_u64, 0x3CA2542779D776DE_u64, 0xBCA6061BBE3DE53C_u64, 0xBCA639269B0DA47E_u64, 0xBC84A7663AF440F7_u64, 0x3CAD1824D59F9E13_u64, 0x3C8BEF71E5340B31_u64, 0x3CAB8CB225E627D0_u64, 0x3CAB92DE9BAC94C2_u64, 0xBC9D3CB89E62DAFD_u64, 0xBCA882A55960087A_u64, 0x3C91347B0B4F881D_u64, 0x3CA873D8079ED0D2_u64, 0x3C9022F621A5C1CB_u64, 0x3CA9C648D1534598_u64, 0xBC94EA9238610A08_u64, 0x3CA2C5C8E721970D_u64, 0x3C630CA4748B1BF9_u64, 0xBCA20EF9BA6DBF90_u64, 0x3CAE69C5ABB498D2_u64, 0x3C9A8A86F0EA9311_u64, 0x3C9DB5336FEEF7F0_u64, 0x3C99636A3AA3B840_u64, 0x3C81CE2A8C848B74_u64, 0xBC84B1BBD1EA6DB3_u64, 0xBCA4925E8B916E0B_u64, 0x3C79E6C988FD0A77_u64, 0xBCAA49BD836A1700_u64, 0xBCACA3CF09C6B5F8_u64, 0xBC7CC1CE70934C34_u64, 0x3C82E982DDF3872A_u64, 0xBC82EA406EE84D0F_u64, 0xBCADE35847C81979_u64, 0xBC6A3992DC382A23_u64, 0xBC8B32C949C9D593_u64, 0xBC7D5B495F6349E6_u64, 0xBCAF34582F6255FE_u64, 0x3C9ED42511E3F11D_u64, 0xBC91CEF189FF9E7F_u64, 0xBC5928DF287A668F_u64, 0xBCAE3BDE360C7DDB_u64, 0x3C9BD86313CE4FDE_u64, 0xBCA8E8A85803CC1D_u64, 0xBC977EF7641C777F_u64, 0x3CAB73EF3389D02F_u64, 0x3C7ECF8B492644F0_u64, 0x3CAC1125FD3810C7_u64, 0x3CA2483350FE548B_u64, 0x3C84A33DBEB3796C_u64, 0xBCA46EDD2AF69483_u64, 0xBCA2BCB93B18B52A_u64, 0x3C60028E4BC5E7CA_u64, 0x3CAED487ACAF1174_u64, 0xBCA2DD4DFD7D1777_u64, 0x3C92BFE3CF3B9D79_u64, 0xBC78C34D25AADEF6_u64, 0xBC9F426ACF4D3BDB_u64, 0xBCAAFE57DD9FF230_u64, 0xBC954FBEF0E862AB_u64, 0x3C990227758B11BA_u64, 0x3CA16B66E7FC8B8C_u64, 0xBC855B9A5E177A1B_u64, 0x3CAC27CFAA9F7A14_u64, 0x3C81A62633145C07_u64]
+secret preset B64_ATAN2_F2H: Array[U64, 65] = [0x0000000000000000_u64, 0x3F8FFF555BBB7300_u64, 0x3F9FFD55BBA97600_u64, 0x3FA7FB818430DA40_u64, 0x3FAFF55BB72CFE00_u64, 0x3FB3F59F0E7C55A0_u64, 0x3FB7EE182602F100_u64, 0x3FBBE39EBE6F07C0_u64, 0x3FBFD5BA9AAC2F60_u64, 0x3FC1E1FAFB043720_u64, 0x3FC3D6EEE8C66270_u64, 0x3FC5C9811E3EC270_u64, 0x3FC7B97B4BCE5B00_u64, 0x3FC9A6A8E96C8620_u64, 0x3FCB90D7529260A0_u64, 0x3FCD77D5DF205730_u64, 0x3FCF5B75F92C80E0_u64, 0x3FD09DC597D86360_u64, 0x3FD18BF5A30BF178_u64, 0x3FD278372057EF48_u64, 0x3FD362773707EBC8_u64, 0x3FD44AA436C2AF08_u64, 0x3FD530AD9951CD48_u64, 0x3FD614840309CFE0_u64, 0x3FD6F61941E4DEF0_u64, 0x3FD7D5604B63B3F8_u64, 0x3FD8B24D394A1B28_u64, 0x3FD98CD5454D6B18_u64, 0x3FDA64EEC3CC2400_u64, 0x3FDB3A911DA65C70_u64, 0x3FDC0DB4C94EC9F0_u64, 0x3FDCDE53432C1350_u64, 0x3FDDAC670561BB50_u64, 0x3FDE77EB7F175A38_u64, 0x3FDF40DD0B541418_u64, 0x3FE0039C73C1A40C_u64, 0x3FE0657E94DB30D0_u64, 0x3FE0C6145B5B43DC_u64, 0x3FE1255D9BFBD2A8_u64, 0x3FE1835A88BE7C14_u64, 0x3FE1E00BABDEFEB4_u64, 0x3FE23B71E2CC9E6C_u64, 0x3FE2958E59308E30_u64, 0x3FE2EE628406CBCC_u64, 0x3FE345F01CCE37BC_u64, 0x3FE39C391CD41718_u64, 0x3FE3F13FB89E96F4_u64, 0x3FE445065B795B54_u64, 0x3FE4978FA3269EE0_u64, 0x3FE4E8DE5BB6EC04_u64, 0x3FE538F57B890620_u64, 0x3FE587D81F732FBC_u64, 0x3FE5D58987169B18_u64, 0x3FE6220D115D7B8C_u64, 0x3FE66D663923E088_u64, 0x3FE6B798920B3D98_u64, 0x3FE700A7C5784634_u64, 0x3FE748978FBA8E10_u64, 0x3FE78F6BBD5D3160_u64, 0x3FE7D528289FA094_u64, 0x3FE819D0B7158A4C_u64, 0x3FE85D69576CC2C4_u64, 0x3FE89FF5FF57F1F8_u64, 0x3FE8E17AA99CC05C_u64, 0x3FE921FB54442D18_u64]
+# the quadrant offsets 0, +/-pi/2, +/-pi as double-doubles OH[k] + OL[k]
+secret preset B64_ATAN2_OH: Array[U64, 8] = [0x0000000000000000_u64, 0x3FF921FB54442D18_u64, 0x0000000000000000_u64, 0xBFF921FB54442D18_u64, 0x400921FB54442D18_u64, 0x3FF921FB54442D18_u64, 0xC00921FB54442D18_u64, 0xBFF921FB54442D18_u64]
+secret preset B64_ATAN2_OL: Array[U64, 8] = [0x0000000000000000_u64, 0x3C91A62633145C07_u64, 0x0000000000000000_u64, 0xBC91A62633145C07_u64, 0x3CA1A62633145C07_u64, 0x3C91A62633145C07_u64, 0xBCA1A62633145C07_u64, 0xBC91A62633145C07_u64]

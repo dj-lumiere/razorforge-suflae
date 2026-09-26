@@ -324,16 +324,6 @@ routine B32.round() -> B32
 routine B32.int_truncate() -> B32
   return LLVM::float_truncate[B32](me)
 
-### Returns the sine of this value, interpreting it as radians.
-### :returns: The single-precision sine result.
-routine B32.sin() -> B32
-  return LLVM::sin[B32](me)
-
-### Returns the cosine of this value, interpreting it as radians.
-### :returns: The single-precision cosine result.
-routine B32.cos() -> B32
-  return LLVM::cos[B32](me)
-
 ### Returns `e` raised to this value.
 ### :returns: The single-precision exponential result.
 routine B32.exp!() -> B32
@@ -343,10 +333,6 @@ routine B32.exp!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps LLVM `exp`.
-routine B32.exp_unchecked() -> B32
-  return LLVM::exp[B32](me)
 
 ### Returns the natural logarithm of this value.
 ### :returns: The single-precision natural-log result.
@@ -358,10 +344,6 @@ routine B32.log!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over LLVM `log`.
-routine B32.log_unchecked() -> B32
-  return LLVM::log[B32](me)
-
 ### Returns the base-10 logarithm of this value.
 ### :returns: The single-precision common-log result.
 routine B32.log10!() -> B32
@@ -371,15 +353,6 @@ routine B32.log10!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over LLVM `log10`.
-routine B32.log10_unchecked() -> B32
-  return LLVM::log10[B32](me)
-
-### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps LLVM
-### `pow`.
-routine B32.pow_unchecked(exp: B32) -> B32
-  return LLVM::pow[B32](me, exp)
 
 ### Raises this value to `exp` (IEEE semantics: overflow/domain errors yield inf/NaN).
 ### :param exp: The exponent applied to `me`.
@@ -628,83 +601,20 @@ routine B32.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[B32, U32](me)), k0: k0, k1: k1)
 
 # ============================================================================
-# Full libm parity (rf_b32_* runtime, TLFloat/libm-backed). Basic ops above use
-# LLVM intrinsics; the extended surface binds the single-precision runtime.
+# Runtime externs (rf_b32_* in native/runtime/math_functions.c) for the exact
+# operations. The transcendental functions and hypot are CORE-MATH ports under
+# CoreMath/, and the basic ops use LLVM intrinsics.
 # ============================================================================
-### C libm extern: tangent (radians).
-routine C::rf_b32_tan(value: B32) -> B32
-### C libm extern: arc sine.
-routine C::rf_b32_asin(value: B32) -> B32
-### C libm extern: arc cosine.
-routine C::rf_b32_acos(value: B32) -> B32
-### C libm extern: arc tangent.
-routine C::rf_b32_atan(value: B32) -> B32
-### C libm extern: two-argument arc tangent atan2(y, x).
-routine C::rf_b32_atan2(y: B32, x: B32) -> B32
-### C libm extern: hyperbolic sine.
-routine C::rf_b32_sinh(value: B32) -> B32
-### C libm extern: hyperbolic cosine.
-routine C::rf_b32_cosh(value: B32) -> B32
-### C libm extern: hyperbolic tangent.
-routine C::rf_b32_tanh(value: B32) -> B32
-### C libm extern: inverse hyperbolic sine.
-routine C::rf_b32_asinh(value: B32) -> B32
-### C libm extern: inverse hyperbolic cosine.
-routine C::rf_b32_acosh(value: B32) -> B32
-### C libm extern: inverse hyperbolic tangent.
-routine C::rf_b32_atanh(value: B32) -> B32
-### C libm extern: cube root.
-routine C::rf_b32_cbrt(value: B32) -> B32
-### C libm extern: base-2 exponential 2^x.
-routine C::rf_b32_exp2(value: B32) -> B32
-### C libm extern: exp(x) - 1, accurate near zero.
-routine C::rf_b32_expm1(value: B32) -> B32
-### C libm extern: log(1 + x), accurate near zero.
-routine C::rf_b32_log1p(value: B32) -> B32
-### C libm extern: base-2 logarithm.
-routine C::rf_b32_log2(value: B32) -> B32
-### C libm extern: hypotenuse sqrt(x^2 + y^2) without overflow.
-routine C::rf_b32_hypot(x: B32, y: B32) -> B32
-### C libm extern: fused multiply-add x*y + z with a single rounding.
-routine C::rf_b32_fma(x: B32, y: B32, z: B32) -> B32
-### C libm extern: floating-point remainder (C fmod).
-routine C::rf_b32_fmod(x: B32, y: B32) -> B32
 ### C libm extern: IEEE remainder (C remainder).
 routine C::rf_b32_remainder(x: B32, y: B32) -> B32
 ### C libm extern: positive difference max(x - y, 0) (C fdim).
 routine C::rf_b32_fdim(x: B32, y: B32) -> B32
-### C libm extern: larger of x and y (C fmax).
-routine C::rf_b32_fmax(x: B32, y: B32) -> B32
-### C libm extern: smaller of x and y (C fmin).
-routine C::rf_b32_fmin(x: B32, y: B32) -> B32
-### C libm extern: base-10 exponential 10^x.
-routine C::rf_b32_exp10(value: B32) -> B32
-### C libm extern: sin(pi*x).
-routine C::rf_b32_sinpi(value: B32) -> B32
-### C libm extern: cos(pi*x).
-routine C::rf_b32_cospi(value: B32) -> B32
-### C libm extern: tan(pi*x).
-routine C::rf_b32_tanpi(value: B32) -> B32
 ### C libm extern: next representable value after x toward y.
 routine C::rf_b32_nextafter(x: B32, y: B32) -> B32
 ### C libm extern: x * 2^n (C scalbn).
 routine C::rf_b32_scalbn(value: B32, n: S64) -> B32
 ### C libm extern: unbiased radix-2 exponent as an integer (C ilogb).
 routine C::rf_b32_ilogb(value: B32) -> S64
-### C libm extern: round to nearest integer in the current rounding mode (C rint).
-routine C::rf_b32_rint(value: B32) -> B32
-### C libm extern: error function.
-routine C::rf_b32_erf(value: B32) -> B32
-### C libm extern: complementary error function.
-routine C::rf_b32_erfc(value: B32) -> B32
-### C libm extern: gamma function.
-routine C::rf_b32_tgamma(value: B32) -> B32
-### C libm extern: natural log of the absolute value of gamma.
-routine C::rf_b32_lgamma(value: B32) -> B32
-
-### Tangent (radians).
-routine B32.tan() -> B32
-  return LLVM::tan[B32](value: me)
 
 ### Arc sine.
 routine B32.asin!() -> B32
@@ -715,10 +625,6 @@ routine B32.asin!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_b32_asin`.
-routine B32.asin_unchecked() -> B32
-  return LLVM::asin[B32](value: me)
-
 ### Arc cosine.
 routine B32.acos!() -> B32
   var rr = me.acos_unchecked()
@@ -727,20 +633,6 @@ routine B32.acos!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over `rf_b32_acos`.
-routine B32.acos_unchecked() -> B32
-  return LLVM::acos[B32](value: me)
-
-### Arc tangent.
-routine B32.atan() -> B32
-  return LLVM::atan[B32](value: me)
-
-### Two-argument arc tangent atan2(y, x).
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-routine atan2(y: B32, x: B32) -> B32
-  return LLVM::atan2[B32](a: y, b: x)
 
 ### Hyperbolic sine.
 routine B32.sinh!() -> B32
@@ -751,10 +643,6 @@ routine B32.sinh!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps `rf_b32_sinh`.
-routine B32.sinh_unchecked() -> B32
-  return LLVM::sinh[B32](value: me)
-
 ### Hyperbolic cosine.
 routine B32.cosh!() -> B32
   var rr = me.cosh_unchecked()
@@ -763,18 +651,6 @@ routine B32.cosh!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_cosh`.
-routine B32.cosh_unchecked() -> B32
-  return LLVM::cosh[B32](value: me)
-
-### Hyperbolic tangent.
-routine B32.tanh() -> B32
-  return LLVM::tanh[B32](value: me)
-
-### Inverse hyperbolic sine.
-routine B32.asinh() -> B32
-  return C::rf_b32_asinh(value: me)
 
 ### Inverse hyperbolic cosine.
 routine B32.acosh!() -> B32
@@ -785,10 +661,6 @@ routine B32.acosh!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps `rf_b32_acosh`.
-routine B32.acosh_unchecked() -> B32
-  return C::rf_b32_acosh(value: me)
-
 ### Inverse hyperbolic tangent.
 routine B32.atanh!() -> B32
   var rr = me.atanh_unchecked()
@@ -797,14 +669,6 @@ routine B32.atanh!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps `rf_b32_atanh`.
-routine B32.atanh_unchecked() -> B32
-  return C::rf_b32_atanh(value: me)
-
-### Cube root.
-routine B32.cbrt() -> B32
-  return C::rf_b32_cbrt(value: me)
 
 ### Base-2 exponential.
 routine B32.exp2!() -> B32
@@ -815,10 +679,6 @@ routine B32.exp2!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_exp2`.
-routine B32.exp2_unchecked() -> B32
-  return LLVM::exp2[B32](value: me)
-
 ### exp(me) - 1, accurate near zero.
 routine B32.expm1!() -> B32
   var rr = me.expm1_unchecked()
@@ -827,10 +687,6 @@ routine B32.expm1!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over `rf_b32_expm1`.
-routine B32.expm1_unchecked() -> B32
-  return C::rf_b32_expm1(value: me)
 
 ### log(1 + me), accurate near zero.
 routine B32.log1p!() -> B32
@@ -841,10 +697,6 @@ routine B32.log1p!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over `rf_b32_log1p`.
-routine B32.log1p_unchecked() -> B32
-  return C::rf_b32_log1p(value: me)
-
 ### Base-2 logarithm.
 routine B32.log2!() -> B32
   var rr = me.log2_unchecked()
@@ -854,10 +706,6 @@ routine B32.log2!() -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over `rf_b32_log2`.
-routine B32.log2_unchecked() -> B32
-  return LLVM::log2[B32](value: me)
-
 ### Base-10 exponential 10**me.
 routine B32.exp10!() -> B32
   var rr = me.exp10_unchecked()
@@ -866,10 +714,6 @@ routine B32.exp10!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps `rf_b32_exp10`.
-routine B32.exp10_unchecked() -> B32
-  return C::rf_b32_exp10(value: me)
 
 ### Hypotenuse sqrt(x^2 + y^2) without overflow.
 ### :param x: One leg.
@@ -881,12 +725,6 @@ routine hypot!(x: B32, y: B32) -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over `rf_b32_hypot`.
-### :param x: One leg.
-### :param y: The other leg.
-routine hypot_unchecked(x: B32, y: B32) -> B32
-  return C::rf_b32_hypot(x: x, y: y)
 
 ### 3D hypotenuse sqrt(x^2 + y^2 + z^2) without overflow. Checked: crashes on overflow.
 ### :param x: First leg.
@@ -917,7 +755,7 @@ routine B32.fma!(b: B32, c: B32) -> B32
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over `rf_b32_fma`.
+### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over LLVM `fma` (single rounding).
 routine B32.fma_unchecked(b: B32, c: B32) -> B32
   return LLVM::fma[B32](a: me, b: b, c: c)
 
@@ -941,18 +779,6 @@ routine B32.fmax(you: B32) -> B32
 routine B32.fmin(you: B32) -> B32
   return LLVM::minnum[B32](a: me, b: you)
 
-### sin(pi*me).
-routine B32.sinpi() -> B32
-  return C::rf_b32_sinpi(value: me)
-
-### cos(pi*me).
-routine B32.cospi() -> B32
-  return C::rf_b32_cospi(value: me)
-
-### tan(pi*me).
-routine B32.tanpi() -> B32
-  return C::rf_b32_tanpi(value: me)
-
 ### Next representable value after me toward you.
 routine B32.nextafter(you: B32) -> B32
   return C::rf_b32_nextafter(x: me, y: you)
@@ -969,14 +795,6 @@ routine B32.ldexp(n: S64) -> B32
 routine B32.rint() -> B32
   return LLVM::rint[B32](value: me)
 
-### Error function.
-routine B32.erf() -> B32
-  return C::rf_b32_erf(value: me)
-
-### Complementary error function.
-routine B32.erfc() -> B32
-  return C::rf_b32_erfc(value: me)
-
 ### Gamma function.
 routine B32.tgamma!() -> B32
   var rr = me.tgamma_unchecked()
@@ -985,15 +803,6 @@ routine B32.tgamma!() -> B32
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
-### `rf_b32_tgamma`.
-routine B32.tgamma_unchecked() -> B32
-  return C::rf_b32_tgamma(value: me)
-
-### Natural log of |gamma(me)|.
-routine B32.lgamma() -> B32
-  return C::rf_b32_lgamma(value: me)
 
 ### Truncates toward zero (C trunc; alias of int_truncate).
 routine B32.trunc() -> B32

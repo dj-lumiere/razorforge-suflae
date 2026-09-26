@@ -1,0 +1,79 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc sine of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/asin/asinf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original is
+# kept (its errno handling is dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are
+# raw IEEE 754 on floats.
+# The accurate-path polynomial `b32_asin_poly12` is shared with `B32.acos_unchecked()` (B32Acos.rf).
+
+### The two degree-11 accurate-path polynomials, as B64 bit patterns: entries 0..11 approximate
+### (asin(x) - x)/x^3 in x^2, entries 12..23 approximate (pi/2 - asin(1 - z))/sqrt(z) in z.
+secret preset B32_ASIN_C: Array[U64, 24] = [0x3FC555555555529C_u64, 0x3FB333333337E0DD_u64, 0x3FA6DB6DB3B4465E_u64, 0x3F9F1C72E13AC306_u64, 0x3F96E89CEBE06BC4_u64, 0x3F91C6DCF5289094_u64, 0x3F8C6DBBCC7C6315_u64, 0x3F88F8DC2615E996_u64, 0x3F7A5833B7BF15E8_u64, 0x3F943F44ACE1665C_u64, 0xBF90FB17DF881C73_u64, 0x3FA07520C026B2D6_u64, 0x3FF6A09E667F3BCB_u64, 0x3FBE2B7DDDFF2DB9_u64, 0x3F9B27247AB42DBC_u64, 0x3F802995CC4E0744_u64, 0x3F65FFB0276EC8EA_u64, 0x3F5033885A928DEC_u64, 0x3F3911F2BE23F8C7_u64, 0x3F24C3C55D2437FD_u64, 0x3F0AF477E1D7B461_u64, 0x3F0ABD6BDFF67DCB_u64, 0xBEF1717E86D0FA28_u64, 0x3EF6FF526DE46023_u64]
+
+### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN), correctly rounded: the exact arc sine
+### rounded to the nearest `B32` (ties to even), identical on every platform. ±0 maps to itself.
+### :returns: The correctly rounded arc sine, in [-pi/2, pi/2].
+routine B32.asin_unchecked() -> B32
+  var xs = B64(from: me)
+  var t = me.to_bits()
+  var ax = t << 1
+  if ax > 0x7F000000_u32
+    # |x| > 1 or NaN
+    if ax > 0xFF000000_u32
+      return me +! me
+    return B32.from_bits(bits: 0xFFC00000_u32)
+  if ax < 0x7EC29000_u32
+    if ax < 0x73000000_u32
+      # |x| < 0x1p-12
+      return LLVM::fma[B32](a: me, b: 0x1p-25_b32, c: me)
+    var z = xs
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var z8 = z4 *! z4
+    var z16 = z8 *! z8
+    var p0 = ((0x1.0000000000005p+0 +! z2 *! 0x1.55557aeca105dp-3) +! z4 *! (0x1.3314ec3db7d12p-4 +! z2 *! 0x1.775738a5a6f92p-5)) +! z8 *! ((0x1.5d5f7ce1c8538p-8 +! z2 *! 0x1.605c6d58740fp-2) +! z4 *! (-0x1.5728b732d73c6p+1 +! z2 *! 0x1.f152170f151ebp+3))
+    var p1 = ((-0x1.f962ea3ca992ep+5 +! z2 *! 0x1.71971e17375ap+7) +! z4 *! (-0x1.860512b4ba23p+8 +! z2 *! 0x1.26a3b8d4bdb14p+9)) +! z8 *! ((-0x1.36f2ea5698b51p+9 +! z2 *! 0x1.b3d722aebfa2ep+8) +! z4 *! (-0x1.6cf89703b1289p+7 +! z2 *! 0x1.1518af6a65e2dp+5))
+    var rf = z *! (p0 +! z16 *! p1)
+    var ub = B32(from: rf)
+    var lb = B32(from: rf -! z *! 0x1.efa8ebp-31)
+    if ub == lb
+      return ub
+  var r = 0.0
+  if ax < 0x7E000000_u32
+    # |x| < 1/2
+    var z = xs
+    var z2 = z *! z
+    r = z +! (z *! z2) *! b32_asin_poly12(z: z2, base: 0_u64)
+  else
+    if ax == 0x7E55688A_u32
+      return 0x1.75b8a2p-1_b32.copysign(sign: me) +! 0x1p-26_b32.copysign(sign: me)
+    if ax == 0x7E107434_u32
+      return 0x1.1f4b64p-1_b32.copysign(sign: me) +! 0x1p-26_b32.copysign(sign: me)
+    var z = 1.0 -! xs.abs()
+    var s = LLVM::sqrt[B64](value: z)
+    r = 0x1.921fb54442d18p+0 -! s *! b32_asin_poly12(z: z, base: 12_u64)
+    r = r.copysign(sign: xs)
+  return B32(from: r)
+
+### Evaluates one of the two degree-11 polynomials of `B32_ASIN_C` at `z`.
+### :param z: The evaluation point.
+### :param base: 0 or 12, the index of the first coefficient.
+### :returns: The polynomial value.
+secret routine b32_asin_poly12(z: B64, base: U64) -> B64
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var c0 = B64.from_bits(bits: B32_ASIN_C[base]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 1_u64])
+  var c2 = B64.from_bits(bits: B32_ASIN_C[base + 2_u64]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 3_u64])
+  var c4 = B64.from_bits(bits: B32_ASIN_C[base + 4_u64]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 5_u64])
+  var c6 = B64.from_bits(bits: B32_ASIN_C[base + 6_u64]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 7_u64])
+  var c8 = B64.from_bits(bits: B32_ASIN_C[base + 8_u64]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 9_u64])
+  var c10 = B64.from_bits(bits: B32_ASIN_C[base + 10_u64]) +! z *! B64.from_bits(bits: B32_ASIN_C[base + 11_u64])
+  c0 = c0 +! c2 *! z2
+  c4 = c4 +! c6 *! z2
+  c8 = c8 +! z2 *! c10
+  c0 = c0 +! z4 *! (c4 +! z4 *! c8)
+  return c0

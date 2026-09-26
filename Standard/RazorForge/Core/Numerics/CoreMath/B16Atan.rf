@@ -1,0 +1,95 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc tangent of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/atan/atanf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Paul Zimmermann. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the
+# original is kept (its errno domain/underflow reports are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+#
+# The evaluation runs in B32 on t = |x|, reduced to [0, 1] by atan(t) = pi/2 - atan(1/t), with an odd
+# degree-7 minimax polynomial on [0, 0.25] and degree-4 ones on [0.25, 0.5], [0.5, 0.75] and
+# [0.75, 1]. The coefficients were tuned to leave only three exceptional inputs, handled explicitly.
+
+### Returns the arc tangent of this value (in radians), correctly rounded: the exact arc tangent
+### rounded to the nearest `B16` (ties to even), identical on every platform. ±infinity gives ±pi/2
+### rounded; a NaN comes back quieted (sign and payload kept).
+### :returns: The correctly rounded arc tangent.
+routine B16.atan() -> B16
+  var v = B32(from: me)
+  var u = v.to_bits()
+  var au = u & 0x7FFFFFFF_u32
+  # NaN or infinity
+  if au >= 0x7F800000_u32
+    if au == 0x7F800000_u32
+      var r = B16(from: 0x1.921fb6p+0_b32)
+      return if u == au then r else -r
+    return B16.from_bits(bits: me.to_bits() | 0x0200_u16)
+  # for x < 0, atan(-x) = -atan(x)
+  var neg = (u >>> 31) == 1_u32
+  var s = 1.0_b32
+  if neg
+    s = -1.0_b32
+  var t = v *! s
+  # for x > 1, atan(x) = pi/2 - atan(1/x)
+  var reduce = au > 0x3F800000_u32
+  if reduce
+    t = 1.0_b32 /! t
+  # now 0 <= t <= 1
+  var tt = t *! t
+  var y = t
+  if t <= 0.25_b32
+    if not reduce and t <= 0x1.d14p-6_b32
+      # for |x| < 0x1.d14p-6, atan(x) rounds to x
+      if au == 0_u32
+        return me
+      t = s *! t
+      return B16(from: LLVM::fma[B32](a: t, b: -0x1p-23_b32, c: t))
+    if au == 0x3E56A000_u32
+      # |x| = 0x1.ad4p-3
+      var r = B16(from: 0x1.a72002p-3_b32)
+      return if au == u then r else -r
+    if au == 0x4115C000_u32
+      # |x| = 0x1.2b8p+3
+      var r = B16(from: 0x1.76dffep+0_b32)
+      return if au == u then r else -r
+    if au == 0x42C32000_u32
+      # |x| = 0x1.864p+6
+      var r = B16(from: 0x1.8f7ffep+0_b32)
+      return if au == u then r else -r
+    var c5 = LLVM::fma[B32](a: -0x1.0c7c54p-3_b32, b: tt, c: 0x1.98d0ep-3_b32)
+    var c1 = LLVM::fma[B32](a: -0x1.55546cp-2_b32, b: tt, c: 0x1.fffffcp-1_b32)
+    c1 = LLVM::fma[B32](a: c5, b: tt *! tt, c: c1)
+    y = t *! c1
+  else
+    # the degree-4 polynomial p0 + p1*t + ... + p4*t^4 for the subinterval holding t
+    var p0 = -0x1.f75b16p-6_b32
+    var p1 = 0x1.2d3d1p+0_b32
+    var p2 = -0x1.882376p-2_b32
+    var p3 = 0x1.d18c96p-13_b32
+    var p4 = 0x1.6aa268p-6_b32
+    if t <= 0.5_b32
+      p0 = 0x1.411612p-14_b32
+      p1 = 0x1.ff076cp-1_b32
+      p2 = 0x1.1ee64cp-6_b32
+      p3 = -0x1.a6fc96p-2_b32
+      p4 = 0x1.81dd3ep-3_b32
+    else
+      if t <= 0.75_b32
+        p0 = -0x1.95964cp-8_b32
+        p1 = 0x1.0bad76p+0_b32
+        p2 = -0x1.e652e2p-4_b32
+        p3 = -0x1.e70ab4p-3_b32
+        p4 = 0x1.a5eb88p-4_b32
+    var c3 = LLVM::fma[B32](a: p4, b: t, c: p3)
+    var c2 = LLVM::fma[B32](a: c3, b: t, c: p2)
+    y = LLVM::fma[B32](a: p1, b: t, c: p0)
+    y = LLVM::fma[B32](a: c2, b: tt, c: y)
+  if reduce
+    # argument reconstruction
+    y = 0x1.921fb6p+0_b32 -! y
+  if neg
+    y = -y
+  return B16(from: y)

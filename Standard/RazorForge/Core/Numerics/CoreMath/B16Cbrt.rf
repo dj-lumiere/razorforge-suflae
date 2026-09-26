@@ -1,0 +1,46 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cube root of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/cbrt/cbrtf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Maxence Ponsardin. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept. The original falls back on the C library's binary32 cbrtf for the generic case. This port uses
+# the correctly rounded `B64.cbrt` narrowed to `B32` instead, which equals a correctly rounded cbrtf on
+# every binary16 input. Arithmetic uses the unchecked operators `+! -! *! /!`, raw IEEE 754 on floats.
+
+### Returns the cube root of this value, correctly rounded: the exact cube root rounded to the nearest
+### `B16` (ties to even), identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN
+### map to themselves.
+### :returns: The correctly rounded cube root.
+routine B16.cbrt() -> B16
+  var tu = LLVM::zero_extend[U16, U32](me.to_bits())
+  var xf = B32(from: me).to_bits()
+  var k = LLVM::zero_extend[U32, U64]((xf >>> 19) % 16)
+  # exact cube roots, which the binary32 fallback would not round correctly
+  if B16_CBRT_TM[k] == (xf >>> 13) % 64
+    var expo = (xf & 0x7FFFFFFF_u32) >>> 23
+    if B16_CBRT_TE[k] == (expo + 2) % 3
+      # expo - 127 - te is a multiple of 3, so its truncated and floored quotients agree
+      var q = LLVM::reinterpret_bits[U32, S32](expo) - 127 - LLVM::reinterpret_bits[U32, S32](B16_CBRT_TE[k])
+      var qu = LLVM::reinterpret_bits[S32, U32](q // 3)
+      var r = (tu & 0x8000_u32) +% (qu << 10) +% B16_CBRT_TF[k]
+      return B16.from_bits(bits: LLVM::int_truncate[U32, U16](r))
+  # the only input the binary32 fallback rounds wrongly is 0x1.544p(k) with k = 1 mod 3
+  if tu & 0x03FF_u32 == 0x0151_u32
+    var e = (tu & 0x7FFF_u32) >>> 10
+    if e % 3 == 1 and e < 31
+      var q = (LLVM::reinterpret_bits[U32, S32](e) - 16) // 3 + 15
+      var r = (LLVM::reinterpret_bits[S32, U32](q) << 10) +% 0x018B_u32 +% ((tu >>> 15) << 15)
+      var t = B32(from: B16.from_bits(bits: LLVM::int_truncate[U32, U16](r)))
+      var half = LLVM::unsigned_to_float[U32, B32](r >>> 15) -! 0.5_b32
+      return B16(from: t +! 0x1p-16_b32 *! half)
+  return B16(from: B32(from: B64(from: me).cbrt()))
+
+# The binary32 mantissa bits 13..18 of an exact-cube input, indexed by its bits 19..22 (0xff = none).
+secret preset B16_CBRT_TM: Array[U32, 16] = [0x00_u32, 0xFF_u32, 0xFF_u32, 0xFF_u32, 0x33_u32, 0x1C_u32, 0x32_u32, 0xFF_u32, 0xFF_u32, 0xFF_u32, 0xFF_u32, 0x00_u32, 0xFF_u32, 0xFF_u32, 0xFF_u32, 0x10_u32]
+# The exponent residue (mod 3) an exact-cube input must have, for the same index.
+secret preset B16_CBRT_TE: Array[U32, 16] = [0_u32, 0_u32, 0_u32, 0_u32, 1_u32, 2_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 1_u32, 0_u32, 0_u32, 0_u32, 0_u32]
+# The binary16 bits of the exact cube root's significand (with a unit exponent), for the same index.
+secret preset B16_CBRT_TF: Array[U32, 16] = [0x3C00_u32, 0_u32, 0_u32, 0_u32, 0x3D80_u32, 0x3F00_u32, 0x3C80_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0x3E00_u32, 0_u32, 0_u32, 0_u32, 0x3D00_u32]

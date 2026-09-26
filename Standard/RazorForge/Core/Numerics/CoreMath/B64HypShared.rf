@@ -1,0 +1,169 @@
+module Core
+
+# ============================================================================
+# Shared pieces of the correctly rounded B64 sinh and cosh
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/sinh/sinh.c and src/binary64/cosh/cosh.c
+# (https://core-math.gitlabpages.inria.fr/), which carry identical copies of these helpers and tables.
+# Copyright (c) 2023-2026 Alexei Sibidanov and Paul Zimmermann.
+# Copyright (c) 2023-2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept. Arithmetic uses the unchecked
+# operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+# 2^(i/64) for i in 0..63 as a double-double: the high parts, then the low parts (IEEE bit patterns).
+# B64_HYP_T1_* holds 2^(i/2^12) for i in 0..63 the same way. tanh uses these tables too.
+secret preset B64_HYP_T0_LO: Array[U64, 64] = [
+  0x0000000000000000_u64, 0xBC719083535B085E_u64, 0x3C8D73E2A475B466_u64, 0x3C6186BE4BB28500_u64,
+  0x3C98A62E4ADC610A_u64, 0x3C403A1727C57B52_u64, 0xBC96C51039449B3A_u64, 0xBC932FBF9AF1369E_u64,
+  0xBC819041B9D78A76_u64, 0x3C8E5B4C7B4968E4_u64, 0x3C9E016E00A2643C_u64, 0x3C8DC775814A8494_u64,
+  0x3C99B07EB6C70572_u64, 0x3C82BD339940E9DA_u64, 0x3C8612E8AFAD1256_u64, 0x3C90024754DB41D4_u64,
+  0x3C86F46AD23182E4_u64, 0x3C932721843659A6_u64, 0xBC963AEABF42EAE2_u64, 0xBC75E436D661F5E2_u64,
+  0x3C8ADA0911F09EBC_u64, 0xBC5EF3691C309278_u64, 0x3C489B7A04EF80D0_u64, 0x3C73C1A3B69062F0_u64,
+  0x3C7D4397AFEC42E2_u64, 0xBC94B309D25957E4_u64, 0xBC807ABE1DB13CAC_u64, 0x3C99BB2C011D93AC_u64,
+  0x3C96324C054647AC_u64, 0x3C9BA6F93080E65E_u64, 0xBC9383C17E40B496_u64, 0xBC9BB60987591C34_u64,
+  0xBC9BDD3413B26456_u64, 0xBC6BBE3A683C88AA_u64, 0xBC816E4786887A9A_u64, 0xBC90245957316DD4_u64,
+  0xBC841577EE049930_u64, 0x3C705D02BA15797E_u64, 0xBC9D4C1DD41532D8_u64, 0xBC9FC6F89BD4F6BA_u64,
+  0x3C96E9F156864B26_u64, 0x3C85CC13A2E3976C_u64, 0xBC675FC781B57EBC_u64, 0xBC9D185B7C1B85D0_u64,
+  0x3C7C7C46B071F2BE_u64, 0xBC9359495D1CD532_u64, 0xBC9D2F6EDB8D41E2_u64, 0x3C90FAC90EF7FD32_u64,
+  0x3C97A1CD345DCC82_u64, 0xBC62805E3084D708_u64, 0xBC75584F7E54AC3A_u64, 0x3C823DD07A2D9E84_u64,
+  0x3C811065895048DE_u64, 0x3C92884DFF483CAC_u64, 0x3C7503CBD1E949DC_u64, 0xBC9CBC3743797A9C_u64,
+  0x3C82ED02D75B3706_u64, 0x3C9C2300696DB532_u64, 0xBC91A5CD4F184B5C_u64, 0x3C839E8980A9CC90_u64,
+  0xBC9E9C23179C2894_u64, 0x3C9DC7F486A4B6B0_u64, 0x3C99D3E12DD8A18A_u64, 0x3C874853F3A5931E_u64]
+secret preset B64_HYP_T0_HI: Array[U64, 64] = [
+  0x3FF0000000000000_u64, 0x3FF02C9A3E778061_u64, 0x3FF059B0D3158574_u64, 0x3FF0874518759BC8_u64,
+  0x3FF0B5586CF9890F_u64, 0x3FF0E3EC32D3D1A2_u64, 0x3FF11301D0125B51_u64, 0x3FF1429AAEA92DE0_u64,
+  0x3FF172B83C7D517B_u64, 0x3FF1A35BEB6FCB75_u64, 0x3FF1D4873168B9AA_u64, 0x3FF2063B88628CD6_u64,
+  0x3FF2387A6E756238_u64, 0x3FF26B4565E27CDD_u64, 0x3FF29E9DF51FDEE1_u64, 0x3FF2D285A6E4030B_u64,
+  0x3FF306FE0A31B715_u64, 0x3FF33C08B26416FF_u64, 0x3FF371A7373AA9CB_u64, 0x3FF3A7DB34E59FF7_u64,
+  0x3FF3DEA64C123422_u64, 0x3FF4160A21F72E2A_u64, 0x3FF44E086061892D_u64, 0x3FF486A2B5C13CD0_u64,
+  0x3FF4BFDAD5362A27_u64, 0x3FF4F9B2769D2CA7_u64, 0x3FF5342B569D4F82_u64, 0x3FF56F4736B527DA_u64,
+  0x3FF5AB07DD485429_u64, 0x3FF5E76F15AD2148_u64, 0x3FF6247EB03A5585_u64, 0x3FF6623882552225_u64,
+  0x3FF6A09E667F3BCD_u64, 0x3FF6DFB23C651A2F_u64, 0x3FF71F75E8EC5F74_u64, 0x3FF75FEB564267C9_u64,
+  0x3FF7A11473EB0187_u64, 0x3FF7E2F336CF4E62_u64, 0x3FF82589994CCE13_u64, 0x3FF868D99B4492ED_u64,
+  0x3FF8ACE5422AA0DB_u64, 0x3FF8F1AE99157736_u64, 0x3FF93737B0CDC5E5_u64, 0x3FF97D829FDE4E50_u64,
+  0x3FF9C49182A3F090_u64, 0x3FFA0C667B5DE565_u64, 0x3FFA5503B23E255D_u64, 0x3FFA9E6B5579FDBF_u64,
+  0x3FFAE89F995AD3AD_u64, 0x3FFB33A2B84F15FB_u64, 0x3FFB7F76F2FB5E47_u64, 0x3FFBCC1E904BC1D2_u64,
+  0x3FFC199BDD85529C_u64, 0x3FFC67F12E57D14B_u64, 0x3FFCB720DCEF9069_u64, 0x3FFD072D4A07897C_u64,
+  0x3FFD5818DCFBA487_u64, 0x3FFDA9E603DB3285_u64, 0x3FFDFC97337B9B5F_u64, 0x3FFE502EE78B3FF6_u64,
+  0x3FFEA4AFA2A490DA_u64, 0x3FFEFA1BEE615A27_u64, 0x3FFF50765B6E4540_u64, 0x3FFFA7C1819E90D8_u64]
+secret preset B64_HYP_T1_LO: Array[U64, 64] = [
+  0x0000000000000000_u64, 0x3C9AE8E38C59C72A_u64, 0xBC57B5D0D58EA8F4_u64, 0x3C94115CB6B16A8E_u64,
+  0xBC8D7C96F201BB2E_u64, 0x3C984711D4C35EA0_u64, 0xBC80484245243778_u64, 0xBC94B237DA2025FA_u64,
+  0xBC75E00E62D6B30E_u64, 0x3C9A1D6CEDBB9480_u64, 0xBC94ACF197A00142_u64, 0xBC6EAF2EA42391A6_u64,
+  0x3C7DA93F90835F76_u64, 0xBC86A79084AB093C_u64, 0x3C986364F8FBE8F8_u64, 0xBC882E8E14E3110E_u64,
+  0xBC84F6B2A7609F72_u64, 0xBC7E1A258EA8F71A_u64, 0x3C74362CA5BC26F2_u64, 0x3C9095A56C919D02_u64,
+  0xBC6406AC4E81A646_u64, 0x3C9B5A6902767E08_u64, 0xBC991B2060859320_u64, 0x3C8427068AB22306_u64,
+  0x3C9C1D0660524E08_u64, 0xBC9E7BDFB3204BE8_u64, 0x3C8843AA8B9CBBC6_u64, 0xBC734104EE7EDAE8_u64,
+  0xBC72B6AEB6176892_u64, 0x3C7A8CD33B8A1BB2_u64, 0x3C72EDC08E5DA99A_u64, 0x3C857BA2DC7E0C72_u64,
+  0x3C9B61299AB8CDB8_u64, 0xBC990565902C5F44_u64, 0x3C870FC41C5C2D54_u64, 0x3C94B9A6E145D76C_u64,
+  0xBC7008EFF5142BFA_u64, 0xBC977669F033C7DE_u64, 0xBC909BB78EEEAD0A_u64, 0x3C9371231477ECE6_u64,
+  0x3C75E7626621EB5A_u64, 0xBC9BC72B100828A4_u64, 0xBC6CE39CBBAB8BBE_u64, 0x3C816996709DA2E2_u64,
+  0xBC8C11F5239BF536_u64, 0x3C8E1D4EB5EDC6B4_u64, 0xBC9AFB99946EE3F0_u64, 0xBC98F06D8A148A32_u64,
+  0xBC82BF310FC54EB6_u64, 0xBC9C95A035EB4176_u64, 0xBC9491793E46834C_u64, 0xBC73E8D0D9C49090_u64,
+  0xBC9314AA16278AA4_u64, 0x3C848DAF888E9650_u64, 0x3C856DC8046821F4_u64, 0x3C945B42356B9D46_u64,
+  0xBC7082EF51B61D7E_u64, 0x3C72106ED0920A34_u64, 0xBC9FD4CF26EA5D0E_u64, 0xBC909F8775E78084_u64,
+  0x3C564CBBA902CA28_u64, 0x3C94383EF231D206_u64, 0x3C94A47A505B3A46_u64, 0x3C9E471202234680_u64]
+secret preset B64_HYP_T1_HI: Array[U64, 64] = [
+  0x3FF0000000000000_u64, 0x3FF000B175EFFDC7_u64, 0x3FF00162F3904052_u64, 0x3FF0021478E11CE6_u64,
+  0x3FF002C605E2E8CF_u64, 0x3FF003779A95F959_u64, 0x3FF0042936FAA3D8_u64, 0x3FF004DADB113DA0_u64,
+  0x3FF0058C86DA1C0A_u64, 0x3FF0063E3A559473_u64, 0x3FF006EFF583FC3D_u64, 0x3FF007A1B865A8CA_u64,
+  0x3FF0085382FAEF83_u64, 0x3FF00905554425D4_u64, 0x3FF009B72F41A12B_u64, 0x3FF00A6910F3B6FD_u64,
+  0x3FF00B1AFA5ABCBF_u64, 0x3FF00BCCEB7707EC_u64, 0x3FF00C7EE448EE02_u64, 0x3FF00D30E4D0C483_u64,
+  0x3FF00DE2ED0EE0F5_u64, 0x3FF00E94FD0398E0_u64, 0x3FF00F4714AF41D3_u64, 0x3FF00FF93412315C_u64,
+  0x3FF010AB5B2CBD11_u64, 0x3FF0115D89FF3A8B_u64, 0x3FF0120FC089FF63_u64, 0x3FF012C1FECD613B_u64,
+  0x3FF0137444C9B5B5_u64, 0x3FF01426927F5278_u64, 0x3FF014D8E7EE8D2F_u64, 0x3FF0158B4517BB88_u64,
+  0x3FF0163DA9FB3335_u64, 0x3FF016F0169949ED_u64, 0x3FF017A28AF25567_u64, 0x3FF018550706AB62_u64,
+  0x3FF019078AD6A19F_u64, 0x3FF019BA16628DE2_u64, 0x3FF01A6CA9AAC5F3_u64, 0x3FF01B1F44AF9F9E_u64,
+  0x3FF01BD1E77170B4_u64, 0x3FF01C8491F08F08_u64, 0x3FF01D37442D5070_u64, 0x3FF01DE9FE280AC8_u64,
+  0x3FF01E9CBFE113EF_u64, 0x3FF01F4F8958C1C6_u64, 0x3FF020025A8F6A35_u64, 0x3FF020B533856324_u64,
+  0x3FF02168143B0281_u64, 0x3FF0221AFCB09E3E_u64, 0x3FF022CDECE68C4F_u64, 0x3FF02380E4DD22AD_u64,
+  0x3FF02433E494B755_u64, 0x3FF024E6EC0DA046_u64, 0x3FF02599FB483385_u64, 0x3FF0264D1244C719_u64,
+  0x3FF027003103B10E_u64, 0x3FF027B357854772_u64, 0x3FF0286685C9E059_u64, 0x3FF02919BBD1D1D8_u64,
+  0x3FF029CCF99D720A_u64, 0x3FF02A803F2D170D_u64, 0x3FF02B338C811703_u64, 0x3FF02BE6E199C811_u64]
+
+### Adds two B64 values exactly when `|x| >= |y|` (or `x == 0`): returns `(s, e)` with `s + e == x + y`.
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: The rounded sum and its rounding error.
+secret routine b64_hyp_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  var e = y -! z
+  return (s, e)
+
+### Multiplies the double-double `xh + xl` by `ch + cl`, returning the product as a double-double.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_hyp_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var h = xh *! ch
+  var l = (LLVM::fma[B64](a: xh, b: ch, c: -h) +! xh *! cl) +! xl *! ch
+  return (h, l)
+
+### Multiplies the double-double `xh + xl` by the double `ch`, returning a double-double.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_hyp_mulddd(xh: B64, xl: B64, ch: B64) -> (B64, B64)
+  var h = xh *! ch
+  var l = LLVM::fma[B64](a: xh, b: ch, c: -h) +! xl *! ch
+  return (h, l)
+
+### The first Horner step of a double-double polynomial: `(c_hi + c_lo) + l`.
+### :param l: The value of the higher-degree tail, evaluated in double precision.
+### :param c_hi: The high part of the top double-double coefficient.
+### :param c_lo: The low part of the top double-double coefficient.
+### :returns: The running value as a double-double.
+secret routine b64_hyp_polydd_init(l: B64, c_hi: B64, c_lo: B64) -> (B64, B64)
+  var s = b64_hyp_fasttwosum(x: c_hi, y: l)
+  var cl = s.item1 +! c_lo
+  return (s.item0, cl)
+
+### One Horner step of a double-double polynomial: `(ch + cl) * (xh + xl) + (c_hi + c_lo)`.
+### :param xh: The high part of the variable.
+### :param xl: The low part of the variable.
+### :param ch: The high part of the running value.
+### :param cl: The low part of the running value.
+### :param c_hi: The high part of the next coefficient.
+### :param c_lo: The low part of the next coefficient.
+### :returns: The new running value as a double-double.
+secret routine b64_hyp_polydd_step(xh: B64, xl: B64, ch: B64, cl: B64, c_hi: B64, c_lo: B64) -> (B64, B64)
+  var p = b64_hyp_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+  var s = b64_hyp_fasttwosum(x: c_hi, y: p.item0)
+  var l = (p.item1 +! c_lo) +! s.item1
+  return (s.item0, l)
+
+### Accurate `exp(x)` as a double-double, given the table value `th + tl` of `2^(t/2^12)`.
+### :param x: The argument.
+### :param t: The integer `round(x * 2^12 / log 2)` as a B64.
+### :param th: The high part of `2^(t/2^12)`, already scaled.
+### :param tl: The low part of `2^(t/2^12)`, already scaled.
+### :returns: The high and low parts of `exp(x)` scaled like `th`.
+secret routine b64_hyp_exp_accurate(x: B64, t: B64, th: B64, tl: B64) -> (B64, B64)
+  var l2h = 0x1.62e42ffp-13
+  var l2l = 0x1.718432a1b0e26p-47
+  var l2ll = 0x1.9ff0342542fc3p-102
+  var dx = x -! l2h *! t
+  var dxl = l2l *! t
+  var dxll = l2ll *! t +! LLVM::fma[B64](a: l2l, b: t, c: -dxl)
+  var dxh = dx +! dxl
+  dxl = ((dx -! dxh) +! dxl) +! dxll
+  var fl = dxh *! (0x1.5555555555555p-5 +! dxh *! (0x1.11111113e93e9p-7 +! dxh *! 0x1.6c16c169400a7p-10))
+  var p = b64_hyp_polydd_init(l: fl, c_hi: 0x1.5555555555555p-3, c_lo: 0x1.53e93e9f26e62p-57)
+  p = b64_hyp_polydd_step(xh: dxh, xl: dxl, ch: p.item0, cl: p.item1, c_hi: 0x1p-1, c_lo: -0x1.8259d904fd34fp-93)
+  p = b64_hyp_polydd_step(xh: dxh, xl: dxl, ch: p.item0, cl: p.item1, c_hi: 0x1p+0, c_lo: 0x1.6c16bd194535dp-94)
+  p = b64_hyp_muldd(xh: dxh, xl: dxl, ch: p.item0, cl: p.item1)
+  p = b64_hyp_muldd(xh: th, xl: tl, ch: p.item0, cl: p.item1)
+  var fh = p.item0
+  fl = p.item1
+  var zh = th +! fh
+  var zl = (th -! zh) +! fh
+  var uh = zh +! tl
+  var ul = ((zh -! uh) +! tl) +! zl
+  var vh = uh +! fl
+  var vl = ((uh -! vh) +! fl) +! ul
+  return (vh, vl)

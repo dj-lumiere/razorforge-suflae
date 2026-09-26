@@ -544,18 +544,6 @@ routine B16.hash(k0: U64, k1: U64) -> U64
 # directly, since a B32 step would narrow back to the same B16 value).
 # ============================================================================
 
-### Sine (radians).
-routine B16.sin() -> B16
-  return B16(from: B32(from: me).sin())
-
-### Cosine (radians).
-routine B16.cos() -> B16
-  return B16(from: B32(from: me).cos())
-
-### Tangent (radians).
-routine B16.tan() -> B16
-  return B16(from: B32(from: me).tan())
-
 ### Arc sine.
 routine B16.asin!() -> B16
   var rr = me.asin_unchecked()
@@ -564,10 +552,6 @@ routine B16.asin!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Arc sine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over the B32 path.
-routine B16.asin_unchecked() -> B16
-  return B16(from: B32(from: me).asin_unchecked())
 
 ### Arc cosine.
 routine B16.acos!() -> B16
@@ -578,20 +562,6 @@ routine B16.acos!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Arc cosine with raw IEEE 754 propagation (`|me| > 1` -> NaN). Thin wrapper over the B32 path.
-routine B16.acos_unchecked() -> B16
-  return B16(from: B32(from: me).acos_unchecked())
-
-### Arc tangent.
-routine B16.atan() -> B16
-  return B16(from: B32(from: me).atan())
-
-### Two-argument arc tangent atan2(y, x).
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-routine atan2(y: B16, x: B16) -> B16
-  return B16(from: atan2(y: B32(from: y), x: B32(from: x)))
-
 ### Hyperbolic sine.
 routine B16.sinh!() -> B16
   var rr = me.sinh_unchecked()
@@ -600,10 +570,6 @@ routine B16.sinh!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±inf). Wraps the B32 path.
-routine B16.sinh_unchecked() -> B16
-  return B16(from: B32(from: me).sinh_unchecked())
 
 ### Hyperbolic cosine.
 routine B16.cosh!() -> B16
@@ -614,18 +580,6 @@ routine B16.cosh!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +inf). Wraps the B32 path.
-routine B16.cosh_unchecked() -> B16
-  return B16(from: B32(from: me).cosh_unchecked())
-
-### Hyperbolic tangent.
-routine B16.tanh() -> B16
-  return B16(from: B32(from: me).tanh())
-
-### Inverse hyperbolic sine.
-routine B16.asinh() -> B16
-  return B16(from: B32(from: me).asinh())
-
 ### Inverse hyperbolic cosine.
 routine B16.acosh!() -> B16
   var rr = me.acosh_unchecked()
@@ -634,10 +588,6 @@ routine B16.acosh!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Inverse hyperbolic cosine, raw IEEE 754 propagation (`me < 1` -> NaN). Wraps the B32 path.
-routine B16.acosh_unchecked() -> B16
-  return B16(from: B32(from: me).acosh_unchecked())
 
 ### Inverse hyperbolic tangent.
 routine B16.atanh!() -> B16
@@ -648,10 +598,6 @@ routine B16.atanh!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Inverse hyperbolic tangent, raw IEEE (`±1` -> ±inf, `|me| > 1` -> NaN). Wraps the B32 path.
-routine B16.atanh_unchecked() -> B16
-  return B16(from: B32(from: me).atanh_unchecked())
-
 ### Natural exponential.
 routine B16.exp!() -> B16
   var rr = me.exp_unchecked()
@@ -660,10 +606,6 @@ routine B16.exp!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Natural exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps the B32 path.
-routine B16.exp_unchecked() -> B16
-  return B16(from: B32(from: me).exp_unchecked())
 
 ### Base-2 exponential.
 routine B16.exp2!() -> B16
@@ -674,10 +616,6 @@ routine B16.exp2!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-2 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps the B32 path.
-routine B16.exp2_unchecked() -> B16
-  return B16(from: B32(from: me).exp2_unchecked())
-
 ### exp(me) - 1, accurate near zero.
 routine B16.expm1!() -> B16
   var rr = me.expm1_unchecked()
@@ -686,10 +624,6 @@ routine B16.expm1!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### exp(me) - 1 with raw IEEE 754 propagation. Thin wrapper over the B32 path.
-routine B16.expm1_unchecked() -> B16
-  return B16(from: B32(from: me).expm1_unchecked())
 
 ### Base-10 exponential.
 routine B16.exp10!() -> B16
@@ -700,10 +634,6 @@ routine B16.exp10!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-10 exponential with raw IEEE 754 propagation (overflow -> +inf). Wraps the B32 path.
-routine B16.exp10_unchecked() -> B16
-  return B16(from: B32(from: me).exp10_unchecked())
-
 ### Natural logarithm.
 routine B16.log!() -> B16
   var rr = me.log_unchecked()
@@ -712,10 +642,6 @@ routine B16.log!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Natural log, raw IEEE (`log(0)` -> -inf, `log(<0)` -> NaN). Thin wrapper over the B32 path.
-routine B16.log_unchecked() -> B16
-  return B16(from: B32(from: me).log_unchecked())
 
 ### Base-2 logarithm.
 routine B16.log2!() -> B16
@@ -726,10 +652,6 @@ routine B16.log2!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-2 logarithm with raw IEEE 754 propagation. Thin wrapper over the B32 path.
-routine B16.log2_unchecked() -> B16
-  return B16(from: B32(from: me).log2_unchecked())
-
 ### Base-10 logarithm.
 routine B16.log10!() -> B16
   var rr = me.log10_unchecked()
@@ -739,10 +661,6 @@ routine B16.log10!() -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Base-10 logarithm with raw IEEE 754 propagation. Thin wrapper over the B32 path.
-routine B16.log10_unchecked() -> B16
-  return B16(from: B32(from: me).log10_unchecked())
-
 ### log(1 + me), accurate near zero.
 routine B16.log1p!() -> B16
   var rr = me.log1p_unchecked()
@@ -751,15 +669,6 @@ routine B16.log1p!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### log(1 + me) with raw IEEE 754 propagation. Thin wrapper over the B32 path.
-routine B16.log1p_unchecked() -> B16
-  return B16(from: B32(from: me).log1p_unchecked())
-
-### `me` raised to `exp` with raw IEEE 754 propagation (inf/NaN on overflow/domain). Wraps
-### the B32 path.
-routine B16.pow_unchecked(exp: B16) -> B16
-  return B16(from: B32(from: me).pow_unchecked(exp: B32(from: exp)))
 
 ### Raises this value to `exp`, checked: crashes on a non-finite result (overflow -> inf, domain ->
 ### NaN). Use `pow_unchecked` for raw IEEE 754 propagation.
@@ -773,10 +682,6 @@ routine B16.pow!(exp: B16) -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Cube root.
-routine B16.cbrt() -> B16
-  return B16(from: B32(from: me).cbrt())
-
 ### Hypotenuse without overflow.
 ### :param x: One leg.
 ### :param y: The other leg.
@@ -787,12 +692,6 @@ routine hypot!(x: B16, y: B16) -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Hypotenuse with raw IEEE 754 propagation (overflow -> +inf). Thin wrapper over the B32 path.
-### :param x: One leg.
-### :param y: The other leg.
-routine hypot_unchecked(x: B16, y: B16) -> B16
-  return B16(from: hypot_unchecked(x: B32(from: x), y: B32(from: y)))
 
 ### 3D hypotenuse sqrt(x^2 + y^2 + z^2) without overflow. Checked: crashes on overflow.
 ### :param x: First leg.
@@ -823,9 +722,28 @@ routine B16.fma!(b: B16, c: B16) -> B16
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
 
-### Fused multiply-add me*b + c with raw IEEE 754 propagation. Thin wrapper over the B32 path.
+### Fused multiply-add me*b + c with raw IEEE 754 propagation, correctly rounded (one rounding to
+### nearest, ties to even).
 routine B16.fma_unchecked(b: B16, c: B16) -> B16
-  return B16(from: B32(from: me).fma_unchecked(b: B32(from: b), c: B32(from: c)))
+  # me*b has at most 22 significant bits, so it is exact in binary64 and p + c is the only inexact step.
+  # TwoSum recovers that step's error exactly, which turns the binary64 sum into a round-to-odd result.
+  # Rounding it to nearest binary16 is then a single correct rounding (going through binary32 instead
+  # would round twice and miss ties).
+  var p = B64(from: me) *! B64(from: b)
+  var cd = B64(from: c)
+  var s = p +! cd
+  if s.is_finite()
+    var bv = s -! p
+    var err = (p -! (s -! bv)) +! (cd -! bv)
+    var sb = s.to_bits()
+    if err != 0.0 and sb & 1_u64 == 0
+      # step one ulp toward the exact sum, the truncated value, whose last bit is odd
+      if (err > 0.0) == (s > 0.0)
+        sb = sb +% 1
+      else
+        sb = sb -% 1
+      s = B64.from_bits(bits: sb)
+  return b16_narrow_b64(d: s)
 
 ### Floating-point remainder (C fmod).
 routine B16.fmod(you: B16) -> B16
@@ -846,18 +764,6 @@ routine B16.fmax(you: B16) -> B16
 ### Smaller of me and you (C fmin).
 routine B16.fmin(you: B16) -> B16
   return B16(from: B32(from: me).fmin(you: B32(from: you)))
-
-### sin(pi*me).
-routine B16.sinpi() -> B16
-  return B16(from: B32(from: me).sinpi())
-
-### cos(pi*me).
-routine B16.cospi() -> B16
-  return B16(from: B32(from: me).cospi())
-
-### tan(pi*me).
-routine B16.tanpi() -> B16
-  return B16(from: B32(from: me).tanpi())
 
 ### Next representable value after me toward you. Steps the 16-bit sign-magnitude
 ### pattern directly (a B32 step would narrow back to the same B16 value).
@@ -890,14 +796,6 @@ routine B16.ldexp(n: S64) -> B16
 routine B16.rint() -> B16
   return B16(from: B32(from: me).rint())
 
-### Error function.
-routine B16.erf() -> B16
-  return B16(from: B32(from: me).erf())
-
-### Complementary error function.
-routine B16.erfc() -> B16
-  return B16(from: B32(from: me).erfc())
-
 ### Gamma function.
 routine B16.tgamma!() -> B16
   var rr = me.tgamma_unchecked()
@@ -906,15 +804,6 @@ routine B16.tgamma!() -> B16
   if rr.is_nan()
     throw NumericDomainError(description: "domain error: no real result")
   throw NumericOverflowError(description: "overflow: out of range")
-
-### Gamma function with raw IEEE 754 propagation (overflow/pole -> ±inf or NaN). Wraps
-### the B32 path.
-routine B16.tgamma_unchecked() -> B16
-  return B16(from: B32(from: me).tgamma_unchecked())
-
-### Natural log of the absolute value of gamma(me).
-routine B16.lgamma() -> B16
-  return B16(from: B32(from: me).lgamma())
 
 ### Truncates toward zero (alias of int_truncate).
 routine B16.trunc() -> B16

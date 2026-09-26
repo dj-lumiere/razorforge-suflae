@@ -1,0 +1,206 @@
+module Core
+
+# ============================================================================
+# Correctly rounded Euclidean distance (hypot) of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/hypot/hypot.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its rounding-mode probes,
+# exception-flag save/restore, underflow trigger and errno handling are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. Integer
+# arithmetic that the original does modulo 2^64 uses the wrapping operators `+% -% *%`.
+
+### Euclidean distance sqrt(x^2 + y^2), correctly rounded: the exact distance rounded to the nearest `B64`
+### (ties to even), identical on every platform, with no intermediate overflow or underflow (overflow of
+### the result itself -> +infinity). An infinite leg gives +infinity even when the other leg is a quiet
+### NaN, otherwise a NaN leg gives NaN.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded distance.
+routine hypot_unchecked(x: B64, y: B64) -> B64
+  var xi = x.to_bits()
+  var yi = y.to_bits()
+  var emsk = 0x7FF0000000000000_u64
+  var ex = xi & emsk
+  var ey = yi & emsk
+  var ax = x.abs()
+  var ay = y.abs()
+  if ex == emsk or ey == emsk
+    # either x or y is NaN or infinity
+    var wx = xi << 1
+    var wy = yi << 1
+    var wm = emsk << 1
+    var xinf = wx == wm
+    var yinf = wy == wm
+    var xqnan = (wx >>> 52) == 0xFFF_u64
+    var yqnan = (wy >>> 52) == 0xFFF_u64
+    # IEEE 754: hypot(±infinity, qNaN) = hypot(qNaN, ±infinity) = +infinity
+    if (xinf != yinf) and (xqnan != yqnan)
+      return B64.from_bits(bits: 0x7FF0000000000000_u64)
+    return b64_hypot_nan_add(x: ax, y: ay)
+  # u = max(|x|, |y|), v = min(|x|, |y|)
+  var u = ax
+  var v = ay
+  if ay > ax
+    u = ay
+    v = ax
+  var xd = u.to_bits()
+  var yd = v.to_bits()
+  ey = yd
+  if (ey >>> 52) == 0
+    # y is subnormal
+    if ey == 0
+      return u
+    ex = xd
+    if (ex >>> 52) == 0
+      # x is subnormal too
+      return b64_hypot_denorm(a: ex, b: ey)
+    var nz = ey.leading_zeros()
+    ey = ey << LLVM::int_truncate[U64, U32](nz - 11)
+    ey = ey & 0x000FFFFFFFFFFFFF_u64
+    ey = ey -% ((nz - 12) << 52)
+    yd = ey
+  var de = xd -% yd
+  if de > 0x01B0000000000000_u64
+    return LLVM::fma[B64](a: 0x1p-27, b: v, c: u)
+  var off = 0x3FF0000000000000_u64 -% (xd & emsk)
+  xd = xd +% off
+  yd = yd +% off
+  var sx = B64.from_bits(bits: xd)
+  var sy = B64.from_bits(bits: yd)
+  var x2 = sx *! sx
+  var dx2 = LLVM::fma[B64](a: sx, b: sx, c: -x2)
+  var y2 = sy *! sy
+  var dy2 = LLVM::fma[B64](a: sy, b: sy, c: -y2)
+  var r2 = x2 +! y2
+  var ir2 = 0.5 /! r2
+  var dr2 = ((x2 -! r2) +! y2) +! (dx2 +! dy2)
+  var th = r2.sqrt_unchecked()
+  var rsqrt = th *! ir2
+  var dz = dr2 -! LLVM::fma[B64](a: th, b: th, c: -r2)
+  var tl = rsqrt *! dz
+  # fast two-sum of th and tl
+  var s = th +! tl
+  var z = s -! th
+  tl = tl -! z
+  th = s
+  var thu = th.to_bits()
+  ex = thu & emsk
+  ey = tl.abs().to_bits()
+  var aidr = ey +% 0x3FE0000000000000_u64 -% ex
+  var mid = (aidr -% 0x3C90000000000000_u64 +% 16) >>> 5
+  var midm = (aidr -% 0x3C80000000000000_u64 +% 16) >>> 5
+  if mid == 0 or midm == 0 or aidr < 0x39B0000000000000_u64 or aidr > 0x3C9FFFFFFFFFFF80_u64
+    thu = b64_hypot_hard(x: sx, y: sy).to_bits()
+  thu = thu -% off
+  if thu >= 0x7FF0000000000000_u64
+    # hypot(x, y) >= 2^1024
+    return B64.from_bits(bits: 0x7FF0000000000000_u64)
+  return B64.from_bits(bits: thu)
+
+### x + y for non-negative x and y where at least one is NaN or infinity, choosing the NaN operand the way
+### x86 SSE addition does (the first NaN operand, quieted), so the result does not depend on how the
+### addition is scheduled.
+secret routine b64_hypot_nan_add(x: B64, y: B64) -> B64
+  if x.is_nan()
+    return B64.from_bits(bits: x.to_bits() | 0x0008000000000000_u64)
+  if y.is_nan()
+    return B64.from_bits(bits: y.to_bits() | 0x0008000000000000_u64)
+  return x +! y
+
+### Both legs subnormal: a and b are their encodings (x = a * 2^-1074), with 2^52 > a >= b > 0. The integer
+### square root of a^2 + b^2 is refined exactly and rounded to nearest (a midpoint is impossible here).
+secret routine b64_hypot_denorm(a: U64, b: U64) -> B64
+  var af = LLVM::signed_to_float[S64, B64](LLVM::reinterpret_bits[U64, S64](a))
+  var bf = LLVM::signed_to_float[S64, B64](LLVM::reinterpret_bits[U64, S64](b))
+  var a2 = a << 1
+  var b2 = b << 1
+  var rm = LLVM::float_to_unsigned[B64, U64]((af *! af +! bf *! bf).sqrt_unchecked())
+  var tmu = rm << 1
+  var tm = LLVM::reinterpret_bits[U64, S64](tmu)
+  # D = a^2 + b^2 - tm^2, exact modulo 2^64 and small in magnitude
+  var d = LLVM::reinterpret_bits[U64, S64](a2 *% a2 +% b2 *% b2 -% tmu *% tmu)
+  while d > 2 * tm
+    # tm too small: (tm + 1)^2 = tm^2 + 2*tm + 1
+    d = d - (2 * tm + 1)
+    tm = tm + 1
+  while d < 0
+    # tm too large: (tm - 1)^2 = tm^2 - 2*tm + 1
+    d = d + (2 * tm - 1)
+    tm = tm - 1
+  # tm = floor(sqrt(a^2 + b^2)) and 0 <= D < 2*tm + 1
+  var tmb = LLVM::reinterpret_bits[S64, U64](tm)
+  rm = tmb >>> 1
+  if d != 0
+    # round to nearest with the round bit of rm
+    rm = rm + (tmb & 1)
+  return B64.from_bits(bits: rm)
+
+### Hard-to-round case: the square root is refined with exact integer arithmetic. x in [1, 2) and y <= x
+### are the scaled legs, and x^2 + y^2 is compared with the square of each candidate modulo 2^64 (the
+### differences are small, so the modular results are exact).
+secret routine b64_hypot_hard(x: B64, y: B64) -> B64
+  var xu = x.to_bits()
+  var yu = y.to_bits()
+  var bm = (xu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+  var lm = (yu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+  var be = LLVM::reinterpret_bits[U64, S64](xu >>> 52)
+  var le = LLVM::reinterpret_bits[U64, S64](yu >>> 52)
+  var ri = (x *! x +! y *! y).sqrt_unchecked().to_bits()
+  var bs = 2_s64
+  var rm = ri & 0x000FFFFFFFFFFFFF_u64
+  var re = LLVM::reinterpret_bits[U64, S64](ri >>> 52) - 0x3FF
+  rm = rm | 0x0010000000000000_u64
+  var i = 0
+  while i < 3
+    if rm == 0x0010000000000000_u64
+      rm = 0x001FFFFFFFFFFFFF_u64
+      re = re - 1
+    else
+      rm = rm - 1
+    i = i + 1
+  bm = bm << 2
+  var m2 = bm *% bm
+  var de = be - le
+  var ls = bs - de
+  if ls >= 0
+    lm = lm << LLVM::int_truncate[S64, U32](ls)
+    m2 = m2 +% lm *% lm
+  else
+    var lm128 = LLVM::zero_extend[U64, U128](lm)
+    var lm2 = lm128 *% lm128
+    ls = ls * 2
+    m2 = m2 +% LLVM::int_truncate[U128, U64](lm2 >>> LLVM::int_truncate[S64, U32](-ls))
+    if (lm2 << LLVM::int_truncate[S64, U32](128 + ls)) != 0
+      m2 = m2 | 1
+  var k = LLVM::int_truncate[S64, U32](bs + re)
+  var d = 0_s64
+  loop
+    if rm >= 0x0020000000000000_u64
+      rm = rm + 2
+    else
+      rm = rm + 1
+    var tm = rm << k
+    d = LLVM::reinterpret_bits[U64, S64](m2 -% tm *% tm)
+    if d <= 0
+      break
+  if d != 0
+    var sh = k
+    if rm <= 0x0020000000000000_u64
+      sh = k - 1
+    var tm = (rm << k) -% (1_u64 << sh)
+    d = LLVM::reinterpret_bits[U64, S64](m2 -% tm *% tm)
+    if d != 0
+      if d < 0
+        rm = rm - 1
+    else
+      var bit = 2_u64
+      if rm <= 0x0020000000000000_u64
+        bit = 1_u64
+      rm = rm - (rm & bit)
+  if rm >= 0x0020000000000000_u64
+    rm = rm >>> 1
+    re = re + 1
+  var e = be - 1 + re
+  return B64.from_bits(bits: (LLVM::reinterpret_bits[S64, U64](e) << 52) +% rm)

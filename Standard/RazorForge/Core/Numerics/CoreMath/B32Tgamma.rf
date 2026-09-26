@@ -1,0 +1,102 @@
+module Core
+
+# ============================================================================
+# Correctly rounded gamma function of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/tgamma/tgammaf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Gamma function, correctly rounded: the exact gamma rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, ±0 gives ±infinity,
+### and the negative integers, `-infinity` and NaN give NaN.
+### :returns: The correctly rounded gamma function.
+routine B32.tgamma_unchecked() -> B32
+  var tu = me.to_bits()
+  var ax = tu << 1
+  if ax >= 0xFF000000_u32
+    # NaN or ±infinity
+    if ax == 0xFF000000_u32
+      if (tu >>> 31) == 1
+        return B32.from_bits(bits: 0xFFC00000_u32)
+      return me
+    return me +! me
+  var z = B64(from: me)
+  if ax < 0x6D000000_u32
+    # |x| < 0x1p-18: gamma(x) = 1/x - euler_gamma + O(x)
+    var d = (0x1.fa658c23b1578p-1 -! 0x1.d0a118f324b63p-1 *! z) *! z -! 0x1.2788cfc6fb619p-1
+    var f = 1.0 /! z +! d
+    var r = B32(from: f)
+    if ((f.to_bits() +% 2) & 0xFFFFFFF_u64) < 4
+      return b32_tgamma_exception(xb: tu, fallback: r)
+    return r
+  var fx = me.floor()
+  if me >= 0x1.18522p+5_b32
+    return 0x1p127_b32 *! 0x1p127_b32
+  if fx == me
+    # an integer: a pole (NaN) for the negative ones, (k-1)! for the positive ones
+    if me == 0.0_b32
+      return 1.0_b32 /! me
+    if me < 0.0_b32
+      return B32.from_bits(bits: 0xFFC00000_u32)
+    var k = LLVM::float_to_signed[B32, S64](fx)
+    var t0 = 1.0
+    var x0 = 1.0
+    var i = 1_s64
+    while i < k
+      t0 = t0 *! x0
+      i = i + 1
+      x0 = x0 +! 1.0
+    return B32(from: t0)
+  if me < -42.0_b32
+    # for x < -42, x non-integer, |gamma(x)| < 2^-151: a signed zero
+    var k = LLVM::float_to_signed[B32, S64](fx)
+    if (k & 1) == 0
+      return 0x1p-127_b32 *! 0x1p-127_b32
+    return 0x1p-127_b32 *! -0x1p-127_b32
+  var m = z -! 0x1.7p+1
+  var i = LLVM::rint[B64](value: m)
+  var step = 1.0.copysign(sign: i)
+  var d = m -! i
+  var d2 = d *! d
+  var d4 = d2 *! d2
+  var d8 = d4 *! d4
+  var f = (((0x1.c9a76be577123p+0 +! d *! 0x1.8f2754ddcf90dp+0) +! d2 *! (0x1.0d1191949419bp+0 +! d *! 0x1.e1f42cf0ae4a1p-2)) +! d4 *! ((0x1.82b358a3ab638p-3 +! d *! 0x1.e1f2b30cd907bp-5) +! d2 *! (0x1.240f6d4071bd8p-6 +! d *! 0x1.1522c9f3cd012p-8))) +! d8 *! (((0x1.1fd0051a0525bp-10 +! d *! 0x1.9808a8b96c37ep-13) +! d2 *! (0x1.b3f78e01152b5p-15 +! d *! 0x1.49c85a7e1fd04p-18)) +! d4 *! ((0x1.471ca49184475p-19 +! d *! -0x1.368f0b7ed9e36p-23) +! d2 *! (0x1.882222f9049efp-23 +! d *! -0x1.a69ed2042842cp-25)))
+  var jm = LLVM::float_to_signed[B64, S64](i.abs())
+  var w = 1.0
+  if jm != 0
+    z = z -! (0.5 +! step *! 0.5)
+    w = z
+    var j = jm - 1
+    while j != 0
+      z = z -! step
+      w = w *! z
+      j = j - 1
+  if i <= -0.5
+    w = 1.0 /! w
+  f = f *! w
+  var r = B32(from: f)
+  if ((f.to_bits() +% 2) & 0xFFFFFFF_u64) < 8
+    return b32_tgamma_exception(xb: tu, fallback: r)
+  return r
+
+### Returns the tabulated correctly rounded gamma for a hard-to-round input, or `fallback`.
+### :param xb: The input's B32 bit pattern.
+### :param fallback: The result to return when the input is not in the table.
+### :returns: The correctly rounded gamma.
+secret routine b32_tgamma_exception(xb: U32, fallback: B32) -> B32
+  var k = 0_u64
+  while k < 10
+    if B32_TGAMMA_EXC_X[k] == xb
+      return B32.from_bits(bits: B32_TGAMMA_EXC_F[k]) +! B32.from_bits(bits: B32_TGAMMA_EXC_DF[k])
+    k = k + 1
+  return fallback
+
+### Inputs whose gamma is hard to round (B32 bit patterns).
+secret preset B32_TGAMMA_EXC_X: Array[U32, 10] = [0x27DE86A9_u32, 0x27E05475_u32, 0xB63BEFB3_u32, 0x3C7BB570_u32, 0x41E886D1_u32, 0xC067D177_u32, 0xBD99DA31_u32, 0xBF54C45A_u32, 0x41EE77FE_u32, 0x3F843A64_u32]
+
+### The correctly rounded results of those inputs, as `f + df` (B32 bit patterns).
+secret preset B32_TGAMMA_EXC_F: Array[U32, 10] = [0x57134133_u32, 0x57121211_u32, 0xC8AE5B72_u32, 0x42810EC8_u32, 0x709989B5_u32, 0x3E7B4286_u32, 0xC15F7F33_u32, 0xC0D35A76_u32, 0x7269B18E_u32, 0x3F7B631C_u32]
+secret preset B32_TGAMMA_EXC_DF: Array[U32, 10] = [0x4A800000_u32, 0x4A800000_u32, 0x3C000000_u32, 0x36000000_u32, 0x64000000_u32, 0x31800000_u32, 0xB4800000_u32, 0x34000000_u32, 0x99800000_u32, 0x32800000_u32]

@@ -1703,55 +1703,6 @@ routine B128.high_bits() -> U64
 # ============================================================================
 
 # ============================================================================
-# Clamping Arithmetic
-# ============================================================================
-
-### Returns `me + you`, clamped to `±B128_MAX` if the result overflows to infinity.
-### :param you: The addend.
-### :returns: The sum, or `B128_MAX` / `-B128_MAX` if the result would be infinite.
-routine B128.add_clamp(you: B128) -> B128
-  var result = me + you
-  if result.is_infinite()
-    return if result.is_positive() then B128_MAX else B128_MIN
-  return result
-
-### Returns `me - you`, clamped to `±B128_MAX` if the result overflows to infinity.
-### :param you: The value to subtract.
-### :returns: The difference, or `B128_MAX` / `-B128_MAX` if the result would be infinite.
-routine B128.sub_clamp(you: B128) -> B128
-  var result = me - you
-  if result.is_infinite()
-    return if result.is_positive() then B128_MAX else B128_MIN
-  return result
-
-### Returns `me * you`, clamped to `±B128_MAX` if the result overflows to infinity.
-### :param you: The multiplier.
-### :returns: The product, or `B128_MAX` / `-B128_MAX` if the result would be infinite.
-routine B128.mul_clamp(you: B128) -> B128
-  var result = me * you
-  if result.is_infinite()
-    return if result.is_positive() then B128_MAX else B128_MIN
-  return result
-
-### Returns `me / you`, clamped to `±B128_MAX` if the result overflows to infinity.
-### :param you: The divisor.
-### :returns: The quotient, or `B128_MAX` / `-B128_MAX` if the result would be infinite.
-routine B128.truediv_clamp(you: B128) -> B128
-  var result = me / you
-  if result.is_infinite()
-    return if result.is_positive() then B128_MAX else B128_MIN
-  return result
-
-### Returns `me ** exp`, clamped to `±B128_MAX` if the result overflows to infinity.
-### :param exp: The exponent applied to `me`.
-### :returns: The power, or `B128_MAX` / `-B128_MAX` if the result would be infinite.
-routine B128.pow_clamp(exp: B128) -> B128
-  var result = me ** exp
-  if result.is_infinite()
-    return if result.is_positive() then B128_MAX else B128_MIN
-  return result
-
-# ============================================================================
 # Integer Conversions
 # ============================================================================
 
@@ -1952,3 +1903,4 @@ routine B128.to_bytes_be() -> Array[Byte, 16]
 ### :returns: The resulting `U64` value.
 routine B128.hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u128(v: LLVM::reinterpret_bits[B128, U128](me), k0: k0, k1: k1)
+

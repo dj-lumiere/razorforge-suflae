@@ -1,0 +1,87 @@
+module Core
+
+# ============================================================================
+# Correctly rounded inverse hyperbolic cosine of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/acosh/acoshf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Paul Zimmermann. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept. Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Inverse hyperbolic cosine with raw IEEE 754 propagation, correctly rounded: the exact acosh rounded to
+### the nearest `B16` (ties to even), identical on every platform. `x < 1` and -infinity give NaN,
+### +infinity maps to itself.
+### :returns: The correctly rounded inverse hyperbolic cosine.
+routine B16.acosh_unchecked() -> B16
+  var v = B32(from: me)
+  var u = v.to_bits()
+  var au = u & 0x7FFFFFFF_u32
+  if au >= 0x7F800000_u32
+    # +infinity or NaN: x + x (quiets a signaling NaN), and -infinity has no real result
+    if u == 0x7F800000_u32 or au & 0x7FFFFF_u32 != 0
+      return me +! me
+    return B16.from_bits(bits: 0xFE00_u16)
+  if u >= 0x80000000_u32 or au <= 0x3F800000_u32
+    # x <= 1: acosh(1) = +0, and below 1 there is no real result (the default NaN of x86)
+    if u == 0x3F800000_u32
+      return 0.0_b16
+    return B16.from_bits(bits: 0xFE00_u16)
+  # 2^i <= x < 2^(i+1)
+  var i = LLVM::reinterpret_bits[U32, S32](au >>> 23) - 127
+  var t = v
+  var tt = t *! t
+  var c4 = LLVM::fma[B32](a: b16_acosh_p(i: i, k: 5), b: t, c: b16_acosh_p(i: i, k: 4))
+  var c2 = LLVM::fma[B32](a: b16_acosh_p(i: i, k: 3), b: t, c: b16_acosh_p(i: i, k: 2))
+  c2 = LLVM::fma[B32](a: c4, b: tt, c: c2)
+  var c0 = LLVM::fma[B32](a: b16_acosh_p(i: i, k: 1), b: t, c: b16_acosh_p(i: i, k: 0))
+  var y = LLVM::fma[B32](a: c2, b: tt, c: c0)
+  # for x < 32 the polynomial approximates acosh(x) / sqrt(x - 1)
+  if i < 5
+    y = LLVM::sqrt[B32](t -! 1.0_b32) *! y
+  # the inputs the polynomials round wrongly
+  if u == 0x40422000_u32
+    y = 0x1.c63ffcp+0_b32
+  if u == 0x411C0000_u32
+    y = 0x1.7be006p+1_b32
+  if u == 0x415F6000_u32
+    y = 0x1.aa0002p+1_b32
+  if u == 0x41BFE000_u32
+    y = 0x1.ef5fecp+1_b32
+  if u == 0x41C04000_u32
+    y = 0x1.ef9ff6p+1_b32
+  if u == 0x41DBC000_u32
+    y = 0x1.006016p+2_b32
+  if u == 0x41D3C000_u32
+    y = 0x1.fc002ap+1_b32
+  if u == 0x42374000_u32
+    y = 0x1.21201cp+2_b32
+  if u == 0x4245C000_u32
+    y = 0x1.260012p+2_b32
+  if u == 0x42890000_u32
+    y = 0x1.3ae018p+2_b32
+  if u == 0x429D6000_u32
+    y = 0x1.43bff4p+2_b32
+  if u == 0x433D2000_u32
+    y = 0x1.7be006p+2_b32
+  if u == 0x43884000_u32
+    y = 0x1.934004p+2_b32
+  if u == 0x43F9A000_u32
+    y = 0x1.ba000ep+2_b32
+  if u == 0x443B0000_u32
+    y = 0x1.d3e00cp+2_b32
+  if u == 0x45B78000_u32
+    y = 0x1.2be008p+3_b32
+  if u == 0x4673A000_u32
+    y = 0x1.4b2008p+3_b32
+  return B16(from: y)
+
+### Coefficient `k` of the acosh polynomial for the binade index `i` (0..15).
+### :param i: The polynomial index.
+### :param k: The coefficient degree (0..5).
+### :returns: The binary32 coefficient.
+secret routine b16_acosh_p(i: S32, k: U64) -> B32
+  var row = LLVM::zero_extend[U32, U64](LLVM::reinterpret_bits[S32, U32](i))
+  return B32.from_bits(bits: B16_ACOSH_P[row * 6 + k])
+
+# Row i (6 binary32 coefficients, bit patterns): a degree-5 polynomial on [2^i, 2^(i+1)) approximating acosh(x)/sqrt(x-1) for i < 5 and acosh(x) for 5 <= i < 16.
+secret preset B16_ACOSH_P: Array[U32, 96] = [0x3FC8CA05_u32, 0xBE50F729_u32, 0x3D86E325_u32, 0xBCA29884_u32, 0x3B820523_u32, 0xB9C018CC_u32, 0x3FC75AFD_u32, 0xBE362951_u32, 0x3D26EEE0_u32, 0xBBF4F4AE_u32, 0x3A5B4BD9_u32, 0xB82D96FA_u32, 0x3FC2A7AD_u32, 0xBE08F094_u32, 0x3C9B1303_u32, 0xBAFD91D8_u32, 0x38F16818_u32, 0xB64690F5_u32, 0x3FB8B991_u32, 0xBDB046BA_u32, 0x3BE1E759_u32, 0xB9C42CEA_u32, 0x37414704_u32, 0xB4227559_u32, 0x3FA958DA_u32, 0xBD473056_u32, 0x3B097281_u32, 0xB8774433_u32, 0x357886C9_u32, 0xB1D38F9F_u32, 0x400DA0BB_u32, 0x3DE2C7E8_u32, 0xBB1EA48E_u32, 0x3812272C_u32, 0xB495ACF3_u32, 0x30814B41_u32, 0x403A229B_u32, 0x3D626A01_u32, 0xBA1E3C3D_u32, 0x3691ADAC_u32, 0xB2951BAE_u32, 0x2E00BE75_u32, 0x40668B75_u32, 0x3CE24860_u32, 0xB91E13EF_u32, 0x35117B86_u32, 0xB094DC87_u32, 0x2B807E93_u32, 0x4089763A_u32, 0x3C623AF2_u32, 0xB81E02ED_u32, 0x33916596_u32, 0xAE94C025_u32, 0x2900614D_u32, 0x409FA63F_u32, 0x3BE22EED_u32, 0xB71DF280_u32, 0x32114F39_u32, 0xAC94A1F8_u32, 0x26804112_u32, 0x40B5D528_u32, 0x3B622ABB_u32, 0xB61DECC4_u32, 0x309147B7_u32, 0xAA949847_u32, 0x240036E8_u32, 0x40CC0441_u32, 0x3AE224D4_u32, 0xB51DE4A2_u32, 0x2F113C70_u32, 0xA89488DD_u32, 0x21802698_u32, 0x40E23332_u32, 0x3A622003_u32, 0xB41DDDE8_u32, 0x2D91332F_u32, 0xA6947C52_u32, 0x1F001930_u32, 0x40F8626B_u32, 0x39E21923_u32, 0xB31DD435_u32, 0x2C1125B1_u32, 0xA49469CF_u32, 0x1C800523_u32, 0x41074896_u32, 0x396215A7_u32, 0xB21DCF5A_u32, 0x2A911F08_u32, 0xA29460D0_u32, 0x19FFF71E_u32, 0x41125FE6_u32, 0x38E21318_u32, 0xB11DCBDC_u32, 0x29111A3D_u32, 0xA0945A62_u32, 0x177FE976_u32]

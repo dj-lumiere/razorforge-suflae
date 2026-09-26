@@ -1,0 +1,216 @@
+module Core
+
+# ============================================================================
+# Shared helpers of the correctly rounded B64 sinpi, cospi and tanpi
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/sinpi/sinpi.c and src/binary64/cospi/cospi.c
+# (https://core-math.gitlabpages.inria.fr/), where these helpers and tables appear identically in both files
+# (tanpi.c repeats the double-double helpers too).
+# Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept.
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+# sin(pi*i/64) for i in 0..32, then sin(pi*j/2048) and cos(pi*j/2048) for j in 0..31, as (high, low) pairs
+# whose high parts are short enough that their products are exact. Every table holds the IEEE 754 bit
+# patterns of the original's hex-float constants.
+secret preset B64_SINCOSPI_SN: Array[U64, 66] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FA91F6600000000_u64, 0xBE1DE44FD832257A_u64, 0x3FB917A6C0000000_u64, 0xBE0EB25EA0F138C7_u64, 0x3FC2C81060000000_u64, 0x3E3D1CC27444C003_u64, 0x3FC8F8B840000000_u64, 0xBE1CB2CFAA4DA337_u64, 0x3FCF19F980000000_u64, 0xBE237A839542DEEF_u64, 0x3FD2940630000000_u64, 0xBE12A60FA574A369_u64, 0x3FD58F9A70000000_u64, 0x3E36AC7F73F84090_u64, 0x3FD87DE2A0000000_u64, 0x3E3ABAA58B469891_u64, 0x3FDB5D1010000000_u64, 0xBE387A8CFF5264EA_u64, 0x3FDE2B5D40000000_u64, 0xBE3FE4271387C9DC_u64, 0x3FE0738798000000_u64, 0x3E222FFED9697FAF_u64, 0x3FE1C73B38000000_u64, 0x3E2AE68C86C9774A_u64, 0x3FE30FF800000000_u64, 0xBE38F47E58F7E631_u64, 0x3FE44CF328000000_u64, 0xBE37B7114F3FC4AF_u64, 0x3FE57D6938000000_u64, 0xBE3B989B02EAE413_u64, 0x3FE6A09E68000000_u64, 0xBE280C4336F74D05_u64, 0x3FE7B5DF20000000_u64, 0x3E33557D76F0AC85_u64, 0x3FE8BC8068000000_u64, 0x3E38A8BA05A743DA_u64, 0x3FE9B3E048000000_u64, 0xBDD8F17E98771434_u64, 0x3FEA9B6628000000_u64, 0x3E20EA1A3033EC62_u64, 0x3FEB728348000000_u64, 0xBE37348E1378D3E6_u64, 0x3FEC38B2F0000000_u64, 0x3E280BDB0D23E9D1_u64, 0x3FECED7AF8000000_u64, 0xBE3E19C46879EDAF_u64, 0x3FED906BD0000000_u64, 0xBE19AE573AEA067C_u64, 0x3FEE212108000000_u64, 0xBE384BC8DA0298EE_u64, 0x3FEE9F4158000000_u64, 0xBE239D225A27D387_u64, 0x3FEF0A7EF8000000_u64, 0x3E3C9186B952C7AE_u64, 0x3FEF6297D0000000_u64, 0xBDD1469FAA77A357_u64, 0x3FEFA75580000000_u64, 0xBE1EEB5D2BD05465_u64, 0x3FEFD88DA0000000_u64, 0x3E3E89292CF04139_u64, 0x3FEFF621E0000000_u64, 0x3E3BCB6BEF1D421F_u64, 0x3FF0000000000000_u64, 0x0000000000000000_u64]
+secret preset B64_SINCOSPI_SM: Array[U64, 64] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x3F59220000000000_u64, 0xBE354466E349EE53_u64, 0x3F6921F800000000_u64, 0x3E17D99497495D20_u64, 0x3F72D97800000000_u64, 0x3E017CCB5E27CB43_u64, 0x3F7921F000000000_u64, 0x3E2FCCE00E23572D_u64, 0x3F7F6A6400000000_u64, 0x3E3F9A2A3C5885CF_u64, 0x3F82D96C00000000_u64, 0xBE3E35ED1FA23D22_u64, 0x3F85FDA000000000_u64, 0x3E1BD602F04014C8_u64, 0x3F8921D200000000_u64, 0xBDD909C3DCCF0E28_u64, 0x3F8C460000000000_u64, 0xBE0E1B7526EBF9F2_u64, 0x3F8F6A2A00000000_u64, 0xBE32A8CD06AF94A2_u64, 0x3F91472700000000_u64, 0x3E0B5AE26618769E_u64, 0x3F92D93700000000_u64, 0xBE31073C40B25037_u64, 0x3F946B4400000000_u64, 0xBE3F80C5F9200607_u64, 0x3F95FD4D00000000_u64, 0x3E20FD5912EF3F57_u64, 0x3F978F5300000000_u64, 0x3E377727C10D8CA5_u64, 0x3F99215600000000_u64, 0xBE00B933040D8EB2_u64, 0x3F9AB35500000000_u64, 0xBE33ABEC0D92AE48_u64, 0x3F9C454F00000000_u64, 0x3E33394EC7229C28_u64, 0x3F9DD74600000000_u64, 0xBE3CE6D5319D653E_u64, 0x3F9F693700000000_u64, 0x3E28E8E7807F600B_u64, 0x3FA07D9200000000_u64, 0xBDC9EEA00D71246D_u64, 0x3FA1468600000000_u64, 0xBE325E9F40A5121A_u64, 0x3FA20F7700000000_u64, 0x3E19D6238D09F231_u64, 0x3FA2D86580000000_u64, 0xBE14D75465D2F213_u64, 0x3FA3A15100000000_u64, 0xBE137BCA0781D73A_u64, 0x3FA46A3980000000_u64, 0xBE20079E86EEC954_u64, 0x3FA5331F00000000_u64, 0xBE3E222F8A75DE87_u64, 0x3FA5FC0100000000_u64, 0xBE36B7995E4BB32D_u64, 0x3FA6C4DF80000000_u64, 0xBDF41523E139C56B_u64, 0x3FA78DBA80000000_u64, 0x3E32C3A342EB5F11_u64, 0x3FA8569200000000_u64, 0x3E35DA89E0B235C0_u64]
+secret preset B64_SINCOSPI_CM: Array[U64, 64] = [0x3FF0000000000000_u64, 0x0000000000000000_u64, 0x3FEFFFFD88000000_u64, 0x3E061BB991AF64F1_u64, 0x3FEFFFF620000000_u64, 0x3E2621D01D2A6063_u64, 0x3FEFFFE9C8000000_u64, 0x3E38F17465DE1773_u64, 0x3FEFFFD888000000_u64, 0xBE338BAB6D94C71D_u64, 0x3FEFFFC250000000_u64, 0x3E16BB5DD7625BCD_u64, 0x3FEFFFA730000000_u64, 0xBE3B439D8A459600_u64, 0x3FEFFF8718000000_u64, 0x3E237CE2EEC7251B_u64, 0x3FEFFF6218000000_u64, 0xBE2646D24A88970E_u64, 0x3FEFFF3828000000_u64, 0xBE39BB848BDB041E_u64, 0x3FEFFF0940000000_u64, 0x3E3E29DE85718CC2_u64, 0x3FEFFED570000000_u64, 0x3E3CC695B5E89E49_u64, 0x3FEFFE9CB8000000_u64, 0xBE3DA572F6A4BCCA_u64, 0x3FEFFE5F08000000_u64, 0xBE30D43929B71F74_u64, 0x3FEFFE1C68000000_u64, 0x3E0C32DDD89AA147_u64, 0x3FEFFDD4D8000000_u64, 0x3E3FBC7A9242CCF3_u64, 0x3FEFFD8860000000_u64, 0x3E1099A19765595D_u64, 0x3FEFFD36F8000000_u64, 0xBE2DBAFF3C93CDC4_u64, 0x3FEFFCE0A0000000_u64, 0xBE38EACC3AF7AC55_u64, 0x3FEFFC8558000000_u64, 0xBE3996F62D2DF41D_u64, 0x3FEFFC2520000000_u64, 0xBE3071603E8582DF_u64, 0x3FEFFBBFF8000000_u64, 0x3E07E5454B8225E9_u64, 0x3FEFFB55E8000000_u64, 0xBE3ED0128D24B027_u64, 0x3FEFFAE6E0000000_u64, 0x3E25569984BD1A7A_u64, 0x3FEFFA72F0000000_u64, 0xBDA08A362D33736D_u64, 0x3FEFF9FA10000000_u64, 0x3DFA441BA9901FD5_u64, 0x3FEFF97C40000000_u64, 0x3E304600A0A95596_u64, 0x3FEFF8F988000000_u64, 0xBE3387D3A589FA3D_u64, 0x3FEFF871D8000000_u64, 0x3E36DC0EF98B1C67_u64, 0x3FEFF7E540000000_u64, 0x3E301907C4C59658_u64, 0x3FEFF753B8000000_u64, 0x3E38DC8B1E83CCFF_u64, 0x3FEFF6BD48000000_u64, 0xBE2C4BBB2C348040_u64]
+# The same three tables to double-double accuracy, the last one holding 1 - cos(pi*j/2048).
+secret preset B64_SINCOSPI_SN2: Array[U64, 66] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FA91F65F10DD814_u64, 0xBC2912BD0D569A90_u64, 0x3FB917A6BC29B42C_u64, 0xBC3E2718D26ED688_u64, 0x3FC2C8106E8E613A_u64, 0x3C513000A89A11E0_u64, 0x3FC8F8B83C69A60B_u64, 0xBC626D19B9FF8D82_u64, 0x3FCF19F97B215F1B_u64, 0xBC642DEEF11DA2C4_u64, 0x3FD294062ED59F06_u64, 0xBC75D28DA2C4612D_u64, 0x3FD58F9A75AB1FDD_u64, 0xBC1EFDC0D58CF620_u64, 0x3FD87DE2A6AEA963_u64, 0xBC672CEDD3D5A610_u64, 0x3FDB5D1009E15CC0_u64, 0x3C65B362CB974183_u64, 0x3FDE2B5D3806F63B_u64, 0x3C5E0D891D3C6841_u64, 0x3FE073879922FFEE_u64, 0xBC8A5A014347406C_u64, 0x3FE1C73B39AE68C8_u64, 0x3C8B25DD267F6600_u64, 0x3FE30FF7FCE17035_u64, 0xBC6EFCC626F74A6F_u64, 0x3FE44CF325091DD6_u64, 0x3C68076A2CFDC6B3_u64, 0x3FE57D69348CECA0_u64, 0xBC875720992BFBB2_u64, 0x3FE6A09E667F3BCD_u64, 0xBC8BDD3413B26456_u64, 0x3FE7B5DF226AAFAF_u64, 0xBC70F537ACDF0AD7_u64, 0x3FE8BC806B151741_u64, 0xBC82C5E12ED1336D_u64, 0x3FE9B3E047F38741_u64, 0xBC830EE286712474_u64, 0x3FEA9B66290EA1A3_u64, 0x3C39F630E8B6DAC8_u64, 0x3FEB728345196E3E_u64, 0xBC8BC69F324E6D61_u64, 0x3FEC38B2F180BDB1_u64, 0xBC76E0B1757C8D07_u64, 0x3FECED7AF43CC773_u64, 0xBC5E7B6BB5AB58AE_u64, 0x3FED906BCF328D46_u64, 0x3C7457E610231AC2_u64, 0x3FEE212104F686E5_u64, 0xBC8014C76C126527_u64, 0x3FEE9F4156C62DDA_u64, 0x3C8760B1E2E3F81E_u64, 0x3FEF0A7EFB9230D7_u64, 0x3C752C7ADC6B4989_u64, 0x3FEF6297CFF75CB0_u64, 0x3C7562172A361FD3_u64, 0x3FEFA7557F08A517_u64, 0xBC87A0A8CA13571F_u64, 0x3FEFD88DA3D12526_u64, 0xBC887DF6378811C7_u64, 0x3FEFF621E3796D7E_u64, 0xBC6C57BC2E24AA15_u64, 0x3FF0000000000000_u64, 0x0000000000000000_u64]
+secret preset B64_SINCOSPI_SM2: Array[U64, 64] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x3F5921FAAEE6472E_u64, 0xBBFEE52E284A9DF8_u64, 0x3F6921F8BECCA4BA_u64, 0x3C02BA407BCAB5B2_u64, 0x3F72D97822F996BC_u64, 0x3C13E5A15ED6AA3E_u64, 0x3F7921F0FE670071_u64, 0x3BFAB967FE6B7A9B_u64, 0x3F7F6A65F9A2A3C6_u64, 0xBC1DE8C48783F3AE_u64, 0x3F82D96B0E509703_u64, 0xBC01E9131FF52DC9_u64, 0x3F85FDA037AC05E1_u64, 0xBC2FF59BF4B574EE_u64, 0x3F8921D1FCDEC784_u64, 0x3C29878EBE836D9D_u64, 0x3F8C45FFE1E48AD9_u64, 0x3C04060E4BD32E79_u64, 0x3F8F6A296AB997CB_u64, 0xBC2F2943D8FE7033_u64, 0x3F9147270DAD7133_u64, 0x3C08769E00E01800_u64, 0x3F92D936BBE30EFD_u64, 0x3C2B5F91EE371D64_u64, 0x3F946B4381FCE81B_u64, 0x3C3FF9F89FB65BE3_u64, 0x3F95FD4D21FAB226_u64, 0xBC20C0A91C37851C_u64, 0x3F978F535DDC9F04_u64, 0x3C2B194AD9B1AA97_u64, 0x3F992155F7A3667E_u64, 0xBBFB1D63091A0130_u64, 0x3F9AB354B1504FCA_u64, 0xBC32AE47937CBDD3_u64, 0x3F9C454F4CE53B1D_u64, 0xBC3D63D7FEF0E36C_u64, 0x3F9DD7458C64AB3A_u64, 0xBC3D653DF3FCC281_u64, 0x3F9F693731D1CF01_u64, 0xBBD3FE9BC66286C7_u64, 0x3FA07D91FF984580_u64, 0xBC3AE248DA7A9007_u64, 0x3FA14685DB42C17F_u64, 0xBC42890D277CB974_u64, 0x3FA20F770CEB11C7_u64, 0xBC4EC1B9D46693B1_u64, 0x3FA2D865759455CD_u64, 0x3C2686F65BA93AC0_u64, 0x3FA3A150F6421AFC_u64, 0x3C3F8A318BA775FD_u64, 0x3FA46A396FF86179_u64, 0x3C2136AC00FA2DA9_u64, 0x3FA5331EC3BBA0EB_u64, 0x3C2442F2A9DAC128_u64, 0x3FA5FC00D290CD43_u64, 0x3C4A2669A693A8E1_u64, 0x3FA6C4DF7D7D5B84_u64, 0xBC339C56A9BD0A9B_u64, 0x3FA78DBAA5874686_u64, 0xBC34A0EF4035C29C_u64, 0x3FA856922BB513C1_u64, 0x3C491ADFD607CB2B_u64]
+secret preset B64_SINCOSPI_CM2: Array[U64, 64] = [0x0000000000000000_u64, 0x0000000000000000_u64, 0x3EB3BD3C88CDCA13_u64, 0x3B5874628D2B6835_u64, 0x3ED3BD3BC5FC5AB4_u64, 0xBB48A1BEBF665CEF_u64, 0x3EE634E1D173443D_u64, 0x3B6198FF5804D8DC_u64, 0x3EF3BD38BAB6D94C_u64, 0x3B9C73BE2184804E_u64, 0x3EFED7A51288A277_u64, 0xBB9BCD47BF19555B_u64, 0x3F0634DA1CEC522D_u64, 0xBBA3FFF35C1BDB61_u64, 0x3F0E39B20C7444E3_u64, 0x3BAAE49F0BE31E8C_u64, 0x3F13BD2C8DA49511_u64, 0x3BA70DF810BCC0E2_u64, 0x3F18FB66EE122F6C_u64, 0x3B9079FF34BFFA7E_u64, 0x3F1ED7875885EA3A_u64, 0xBBA983278BAA11C2_u64, 0x3F22A8C672D4942F_u64, 0xBBBE4938F661AA14_u64, 0x3F2634BB4AE5ED49_u64, 0x3BCE64C904CC8156_u64, 0x3F2A0FA1A872536E_u64, 0x3BBF7469ECC1331F_u64, 0x3F2E3978F34889D9_u64, 0x3BC5EB897CDC1B0D_u64, 0x3F31592043856DBD_u64, 0x3BC9865D9CDC3744_u64, 0x3F33BCFBD9979A27_u64, 0xBBD595D548D9A586_u64, 0x3F36484EDD7F9E4A_u64, 0xBBB91DF31AAA6F7F_u64, 0x3F38FB18EACC3AF8_u64, 0xBBD4EAA508EEC2B7_u64, 0x3F3BD55996F62D2E_u64, 0xBBA7C51F7D8F9F71_u64, 0x3F3ED71071603E86_u64, 0xBBDF4827CCB50B62_u64, 0x3F41001E81ABAB48_u64, 0xBBD12F4A2E3616D5_u64, 0x3F42A86F68094692_u64, 0x3BE604E1F8F76C27_u64, 0x3F44647AAA599ED1_u64, 0xBBE1A79A86FB8FF5_u64, 0x3F46344004228D8B_u64, 0x3BE33736C96557C9_u64, 0x3F4817BF2DDF22B3_u64, 0x3BEFC0555A81D729_u64, 0x3F4A0EF7DCFFAFAB_u64, 0x3BE54D46B817BCA4_u64, 0x3F4C19E9C3E9D2C5_u64, 0xBB970A980659E790_u64, 0x3F4E389491F8833A_u64, 0x3BEC7313BEEAB883_u64, 0x3F50357BF9BE0ECF_u64, 0xBBF965827F33D907_u64, 0x3F515889C8DD385F_u64, 0x3BC98094FAB77B42_u64, 0x3F52857389776587_u64, 0xBBFBFDFCE09AEA7B_u64]
+
+### The exact sum `x + y` as a (sum, error) pair, for |x| >= |y| or x = 0.
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: The rounded sum and its rounding error.
+secret routine b64_trigpi_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### The double-double sum `(xh + xl) + (ch + cl)`, returned as (high, low).
+### :param xh: The high part of the first operand.
+### :param xl: The low part of the first operand.
+### :param ch: The high part of the second operand.
+### :param cl: The low part of the second operand.
+### :returns: The sum as a (high, low) pair.
+secret routine b64_trigpi_adddd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var s = xh +! ch
+  var d = s -! xh
+  var l = ((ch -! d) +! (xh +! (d -! s))) +! (xl +! cl)
+  return (s, l)
+
+### The double-double product `(xh + xl) * (ch + cl)`, returned as (high, low).
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The product as a (high, low) pair.
+secret routine b64_trigpi_muldd_acc(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahlh = ch *! xl
+  var alhh = cl *! xh
+  var ahhh = ch *! xh
+  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  ahhl = ahhl +! (alhh +! ahlh)
+  return b64_trigpi_fasttwosum(x: ahhh, y: ahhl)
+
+### The product of the double-double `xh + xl` and the double `c`, returned as (high, low).
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param c: The second factor.
+### :returns: The product as a (high, low) pair.
+secret routine b64_trigpi_mulddd(xh: B64, xl: B64, c: B64) -> (B64, B64)
+  var ahlh = c *! xl
+  var ahhh = c *! xh
+  var ahhl = LLVM::fma[B64](a: c, b: xh, c: -ahhh)
+  ahhl = ahhl +! ahlh
+  var h = ahhh +! ahhl
+  return (h, (ahhh -! h) +! ahhl)
+
+### The first step of a double-double Horner evaluation: the top coefficient `c0 + c1` plus the tail `l`
+### already evaluated in double precision.
+### :param c0: The high part of the top coefficient.
+### :param c1: The low part of the top coefficient.
+### :param l: The tail.
+### :returns: The running value as a (high, low) pair.
+secret routine b64_trigpi_poly_start(c0: B64, c1: B64, l: B64) -> (B64, B64)
+  var h = c0 +! l
+  return (h, ((c0 -! h) +! l) +! c1)
+
+### One double-double Horner step: `(h + l) * (xh + xl) + (c0 + c1)`.
+### :param xh: The high part of the variable.
+### :param xl: The low part of the variable.
+### :param h: The high part of the running value.
+### :param l: The low part of the running value.
+### :param c0: The high part of the next coefficient.
+### :param c1: The low part of the next coefficient.
+### :returns: The new running value as a (high, low) pair.
+secret routine b64_trigpi_poly_step(xh: B64, xl: B64, h: B64, l: B64, c0: B64, c1: B64) -> (B64, B64)
+  var p = b64_trigpi_muldd_acc(xh: xh, xl: xl, ch: h, cl: l)
+  var th = p.item0 +! c0
+  var tl = (c0 -! th) +! p.item0
+  return (th, p.item1 +! (tl +! c1))
+
+### sin(pi*s/2048) and cos(pi*s/2048) to about 2^-75, from the angle index `s` (only its low 12 bits
+### matter).
+### :param s: The angle index.
+### :returns: (sin high, sin low, cos high, cos low).
+secret routine b64_trigpi_sincosn(s: U64) -> (B64, B64, B64, B64)
+  var j = s & 0x3FF_u64
+  if ((s >>> 10) & 1_u64) == 1_u64
+    j = 1024_u64 - j
+  var ks = j >>> 5
+  var kc = 32_u64 - ks
+  var jm = j & 0x1F_u64
+  var ss = (s >>> 11) & 1_u64
+  var sc = ((s +% 1024_u64) >>> 11) & 1_u64
+  var sbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks])
+  var sbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * ks + 1_u64])
+  var cbh = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc])
+  var cbl = B64.from_bits(bits: B64_SINCOSPI_SN[2_u64 * kc + 1_u64])
+  var slh = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm])
+  var sll = B64.from_bits(bits: B64_SINCOSPI_SM[2_u64 * jm + 1_u64])
+  var clh = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm])
+  var cll = B64.from_bits(bits: B64_SINCOSPI_CM[2_u64 * jm + 1_u64])
+  var sb = sbh +! sbl
+  var cb = cbh +! cbl
+  var bch = (cbh *! clh) -! (sbh *! slh)
+  var bcl = (((clh *! cbl) -! (slh *! sbl)) +! (cb *! cll)) -! (sb *! sll)
+  var bsh = (sbh *! clh) +! (cbh *! slh)
+  var bsl = (((slh *! cbl) +! (clh *! sbl)) +! (cb *! sll)) +! (sb *! cll)
+  var tch = bch +! bcl
+  var tcl = (bch -! tch) +! bcl
+  var tsh = bsh +! bsl
+  var tsl = (bsh -! tsh) +! bsl
+  if sc == 1_u64
+    tch = -tch
+    tcl = -tcl
+  if ss == 1_u64
+    tsh = -tsh
+    tsl = -tsl
+  return (tsh, tsl, tch, tcl)
+
+### sin(pi*s/2048) and cos(pi*s/2048) to double-double accuracy, from the angle index `s` (only its low 12
+### bits matter).
+### :param s: The angle index.
+### :returns: (sin high, sin low, cos high, cos low).
+secret routine b64_trigpi_sincosn2(s: U64) -> (B64, B64, B64, B64)
+  var j = s & 0x3FF_u64
+  if ((s >>> 10) & 1_u64) == 1_u64
+    j = 1024_u64 - j
+  var ks = j >>> 5
+  var kc = 32_u64 - ks
+  var jm = j & 0x1F_u64
+  var ss = (s >>> 11) & 1_u64
+  var sc = ((s +% 1024_u64) >>> 11) & 1_u64
+  var sbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks])
+  var sbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * ks + 1_u64])
+  var cbh = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc])
+  var cbl = B64.from_bits(bits: B64_SINCOSPI_SN2[2_u64 * kc + 1_u64])
+  var slh = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm])
+  var sll = B64.from_bits(bits: B64_SINCOSPI_SM2[2_u64 * jm + 1_u64])
+  var clh = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm])
+  var cll = B64.from_bits(bits: B64_SINCOSPI_CM2[2_u64 * jm + 1_u64])
+  var cc = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: cbh, cl: cbl)
+  var sn = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: sbh, cl: sbl)
+  var cs = b64_trigpi_muldd_acc(xh: clh, xl: cll, ch: sbh, cl: sbl)
+  var scp = b64_trigpi_muldd_acc(xh: slh, xl: sll, ch: cbh, cl: cbl)
+  var tc = b64_trigpi_fasttwosum(x: sn.item0, y: cc.item0)
+  var tch = tc.item0
+  var tcl = tc.item1 +! (cc.item1 +! sn.item1)
+  var ts = b64_trigpi_fasttwosum(x: -scp.item0, y: cs.item0)
+  var tsh = ts.item0
+  var tsl = ts.item1 +! (cs.item1 -! scp.item1)
+  var tc2 = b64_trigpi_fasttwosum(x: cbh, y: -tch)
+  tch = tc2.item0
+  tcl = (cbl -! tcl) +! tc2.item1
+  var ts2 = b64_trigpi_fasttwosum(x: sbh, y: -tsh)
+  tsh = ts2.item0
+  tsl = (sbl -! tsl) +! ts2.item1
+  if sc == 1_u64
+    tch = -tch
+    tcl = -tcl
+  if ss == 1_u64
+    tsh = -tsh
+    tsl = -tsl
+  return (tsh, tsl, tch, tcl)
+
+### The accurate phase shared by sinpi and cospi: the sine of the angle `iq/2048 + z*2^-75` half turns, as
+### an unevaluated (high, low) sum.
+### :param iq: The angle index (0..4096).
+### :param z: The scaled residual angle.
+### :returns: The (high, low) pair.
+secret routine b64_trigpi_refine(iq: U64, z: B64) -> (B64, B64)
+  var x = z *! 0x1p-63
+  var x2 = x *! x
+  var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
+  var sll: B64 = -0x1.32d2cc920dcb4p-73 *! x2
+  var sp = b64_trigpi_poly_start(c0: 0x1.466bc6775aae1p-47, c1: -0x1.9c3c168d990ap-114, l: sll)
+  sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: -0x1.4abbce625be53p-22, c1: 0x1.05511cbc65743p-76)
+  sp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: sp.item0, l: sp.item1, c0: 0x1.921fb54442d18p+1, c1: 0x1.1a62633145c06p-53)
+  var sl = b64_trigpi_mulddd(xh: sp.item0, xl: sp.item1, c: x *! 0x1p-12)
+  var cll = x2 *! (-0x1.55d3c7e3cbff9p-72 +! 0x1.e1f50604fa0ffp-99 *! x2)
+  var cp = b64_trigpi_poly_start(c0: 0x1.03c1f081b5ac4p-46, c1: -0x1.32b33fda9113cp-100, l: cll)
+  cp = b64_trigpi_poly_step(xh: x2, xl: dx2, h: cp.item0, l: cp.item1, c0: -0x1.3bd3cc9be45dep-22, c1: -0x1.692b71366cc04p-76)
+  var cl = b64_trigpi_muldd_acc(xh: cp.item0, xl: cp.item1, ch: x2, cl: dx2)
+  var b = b64_trigpi_sincosn2(s: iq)
+  var cs = b64_trigpi_muldd_acc(xh: cl.item0, xl: cl.item1, ch: b.item0, cl: b.item1)
+  var sc = b64_trigpi_muldd_acc(xh: sl.item0, xl: sl.item1, ch: b.item2, cl: b.item3)
+  var ts = b64_trigpi_fasttwosum(x: sc.item0, y: cs.item0)
+  var tsl = ts.item1 +! (cs.item1 +! sc.item1)
+  var ts2 = b64_trigpi_fasttwosum(x: b.item0, y: ts.item0)
+  tsl = (b.item1 +! tsl) +! ts2.item1
+  return (ts2.item0, tsl)
+
+### Whether the low part of the accurate phase has a mantissa of all zeros or all ones: the only case where
+### `high + low` may round wrongly, so the table of exceptions must be consulted.
+### :param tsl: The low part.
+### :returns: True when the table of exceptions must be consulted.
+secret routine b64_trigpi_refine_suspect(tsl: B64) -> Bool
+  var t = tsl.to_bits()
+  if (t | 0xFFF0000000000000_u64) == 0xFFFFFFFFFFFFFFFF_u64
+    return true
+  return (t << 12) == 0_u64

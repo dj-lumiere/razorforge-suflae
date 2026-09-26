@@ -1,0 +1,76 @@
+module Core
+
+# ============================================================================
+# Correctly rounded arc cosine of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/acos/acosf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025 Paul Zimmermann. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the
+# original is kept (its errno domain report is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+#
+# The evaluation runs in B32 on t = |x|: degree-4 minimax polynomials for acos on [0, 0.25] and
+# [0.25, 0.5], and for acos(t)/sqrt(1-t) on [0.5, 1]; a negative x uses acos(x) = pi - acos(-x).
+# The coefficients were tuned to leave only three exceptional inputs, handled explicitly.
+
+### Returns the arc cosine of this value (in radians), correctly rounded: the exact arc cosine rounded
+### to the nearest `B16` (ties to even), identical on every platform. Raw IEEE 754 propagation:
+### `|me| > 1`, ±infinity and NaN give NaN (the default NaN 0xFE00, as the original's `0.0f / 0.0f`
+### on x86-64).
+### :returns: The correctly rounded arc cosine.
+routine B16.acos_unchecked() -> B16
+  var v = B32(from: me)
+  var u = v.to_bits()
+  var au = u & 0x7FFFFFFF_u32
+  var negative = (u >>> 31) == 1_u32
+  # NaN, infinity or |x| >= 1
+  if au >= 0x3F800000_u32
+    if au == 0x3F800000_u32
+      if negative
+        return B16(from: 0x1.921fb6p+1_b32)
+      return B16.from_bits(bits: 0_u16)
+    # the original's NaN test compares au >> 23 with 0x3ff, which never holds, so a NaN input also
+    # takes this path
+    return B16.from_bits(bits: 0xFE00_u16)
+  var t = v
+  var tt = t *! t
+  if negative
+    t = -t
+  var y = t
+  if au < 0x3E800000_u32
+    # |x| < 0.25
+    var c1 = LLVM::fma[B32](a: -0x1.25e6b8p-10_b32, b: t, c: -0x1.fffb44p-1_b32)
+    var c3 = LLVM::fma[B32](a: -0x1.a85b22p-5_b32, b: t, c: -0x1.3cc114p-3_b32)
+    y = LLVM::fma[B32](a: c3, b: tt, c: c1)
+    y = LLVM::fma[B32](a: y, b: t, c: 0x1.921fb4p0_b32)
+    if negative
+      y = 0x1.921fb4p+1_b32 -! y
+      # inputs the tuned coefficients could not fix
+      if 0x36960000_u32 <= au and au <= 0x369A0000_u32
+        # x = -0x1.2cp-18, -0x1.3p-18 or -0x1.34p-18
+        y = 0x1.922002p+0_b32
+      if u == 0xBCF80000_u32
+        # x = -0x1.fp-6
+        y = 0x1.99e002p+0_b32
+      if u == 0xBCFC0000_u32
+        # x = -0x1.f8p-6
+        y = 0x1.9a0006p+0_b32
+  else
+    if au < 0x3F000000_u32
+      # 0.25 <= |x| < 0.5
+      var c1 = LLVM::fma[B32](a: -0x1.bd043ap-4_b32, b: t, c: -0x1.f515cap-1_b32)
+      var c3 = LLVM::fma[B32](a: -0x1.190806p-2_b32, b: t, c: 0x1.7e2d5ap-4_b32)
+      y = LLVM::fma[B32](a: c3, b: tt, c: c1)
+      y = LLVM::fma[B32](a: y, b: t, c: 0x1.91b678p0_b32)
+      if negative
+        y = 0x1.921fb4p+1_b32 -! y
+    else
+      # 0.5 <= |x| < 1: acos(t) = sqrt(1-t) * p(t)
+      var c1 = LLVM::fma[B32](a: 0x1.31640cp-4_b32, b: t, c: -0x1.ae5c5ep-3_b32)
+      var c3 = LLVM::fma[B32](a: 0x1.251b5p-8_b32, b: t, c: -0x1.98038p-6_b32)
+      y = LLVM::fma[B32](a: c3, b: tt, c: c1)
+      y = LLVM::fma[B32](a: y, b: t, c: 0x1.91fa1cp0_b32)
+      y = LLVM::sqrt[B32](1.0_b32 -! t) *! y
+      if negative
+        y = 0x1.921fb4p+1_b32 -! y
+  return B16(from: y)

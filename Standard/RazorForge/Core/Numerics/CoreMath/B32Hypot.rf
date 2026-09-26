@@ -1,0 +1,78 @@
+module Core
+
+# ============================================================================
+# Correctly rounded Euclidean distance (hypot) of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/hypot/hypotf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original is
+# kept (its errno handling is dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw
+# IEEE 754 on floats.
+
+### Returns `x` as a quiet NaN if it is a NaN, else `y` as a quiet NaN, the way the x86 `x + y` picks
+### between NaN operands.
+### :param x: The first operand.
+### :param y: The second operand. It is a NaN whenever `x` is not.
+### :returns: The quieted NaN.
+secret routine b32_hypot_quiet_nan(x: B32, y: B32) -> B32
+  if x.is_nan()
+    return B32.from_bits(bits: x.to_bits() | 0x00400000_u32)
+  return B32.from_bits(bits: y.to_bits() | 0x00400000_u32)
+
+### Hypotenuse sqrt(x^2 + y^2), correctly rounded, with raw IEEE 754 propagation (overflow -> +inf, an
+### infinite leg -> +inf even when the other leg is NaN).
+### :param x: One leg.
+### :param y: The other leg.
+routine hypot_unchecked(x: B32, y: B32) -> B32
+  var ax = x.abs()
+  var ay = y.abs()
+  var tx = ax.to_bits()
+  var ty = ay.to_bits()
+  if tx >= 0x7F800000_u32 or ty >= 0x7F800000_u32
+    # Either x or y is infinite or NaN.
+    var snan_x = tx > 0x7F800000_u32 and (tx >>> 22) & 1_u32 == 0_u32
+    var snan_y = ty > 0x7F800000_u32 and (ty >>> 22) & 1_u32 == 0_u32
+    if snan_x or snan_y
+      return b32_hypot_quiet_nan(x: x, y: y)
+    if tx == 0x7F800000_u32
+      return ax
+    if ty == 0x7F800000_u32
+      return ay
+    return b32_hypot_quiet_nan(x: ax, y: ay)
+  # Both legs are finite and non-negative here, so a plain comparison is fmax/fmin.
+  var at = ax
+  if ay > ax
+    at = ay
+    ay = ax
+  var xd = B64(from: at)
+  var yd = B64(from: ay)
+  var x2 = xd *! xd
+  var y2 = yd *! yd
+  var r2 = x2 +! y2
+  if yd < xd *! 0x1.fffffep-13
+    return LLVM::fma[B32](a: 0x1p-13_b32, b: ay, c: at)
+  var r = LLVM::sqrt[B64](r2)
+  var tu = r.to_bits()
+  var c = B32(from: r)
+  if tu > 0x47EFFFFFE0000000_u64
+    # r > 0x1.fffffep+127: the rounding to B32 overflows (or rounds down to the largest finite).
+    return c
+  if (tu +% 1_u64) & 0xFFFFFFF_u64 > 2_u64
+    return c
+  var cd = B64(from: c)
+  if (cd *! cd -! x2) -! y2 == 0.0
+    return c
+  var ir2 = 0.5 /! r2
+  var dr2 = (x2 -! r2) +! y2
+  var rs = r *! ir2
+  var dz = dr2 -! LLVM::fma[B64](a: r, b: r, c: -r2)
+  var dr = rs *! dz
+  var rh = r +! dr
+  var rl = dr +! (r -! rh)
+  var hu = rh.to_bits()
+  if hu & 0xFFFFFFF_u64 == 0_u64
+    if rl > 0.0
+      hu = hu +% 1_u64
+    if rl < 0.0
+      hu = hu -% 1_u64
+  return B32(from: B64.from_bits(bits: hu))

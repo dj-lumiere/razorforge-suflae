@@ -28,7 +28,11 @@ When unsure, consult ground truth in the repo/package:
    named intermediate instead.
 4. **`//` is integer floor division; `/` is true division.**
 5. **Default arithmetic is checked** — `+ - *` throw on overflow. Wrapping
-   variants: `+% -% *%`. Clamping (saturating): `+^ -^ *^`.
+   variants: `+% -% *%`. Clamping (saturating): `+^ -^ *^`. Floating-point
+   types (B16/B32/B64/B128/D32/D64/D128) have two tiers only: checked `+ - * / **`
+   (a result that is not finite crashes) and unchecked `+! -! *! /! **!` = raw
+   IEEE 754 (±infinity and NaN pass through; no `danger` block needed, unlike
+   integers). Decimal, Real, Complex, C64/C128/C256 have only `+ - * / **`.
 6. **Entities have a single owner.** Assigning or passing an entity requires
    explicit transfer: `consume(r: steal b)`. Plain `var s = obj.field_entity`
    is rejected (RF-S413).
@@ -176,6 +180,7 @@ the declaration — entities get a real zeroed block, `create` not run — so th
 binding is immediately valid and borrowable; assign before reading.)
 
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
+  (floats: checked `+ - * / **` or raw IEEE `+! -! *! /! **!` with no `danger` needed)
 - Shifts: `<<` `>>` arithmetic, `<<<` `>>>` logical; shift amounts are `U32`
   (bare literal amounts fine)
 - `//` floor division, `/` true division, `%` remainder

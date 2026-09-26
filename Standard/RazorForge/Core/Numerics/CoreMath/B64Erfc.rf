@@ -1,0 +1,405 @@
+module Core
+
+# ============================================================================
+# Correctly rounded complementary error function of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/erfc/erfc.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht and
+# Claude-Pierre Jeannerod.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its exception-flag
+# handling, errno and directed-rounding remarks are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The erf kernels (`b64_erf_fast`, `b64_erf_accurate`) and the error-free transforms come from
+# B64Erf.rf: the original C file carries a copy of the same code and tables.
+
+### Returns the complementary error function `erfc(x) = 1 - erf(x)` of this value, correctly rounded: the
+### exact result rounded to the nearest `B64` (ties to even), identical on every platform. It keeps full
+### relative accuracy where `1 - erf(x)` would cancel (large positive `x`). `erfc(-infinity) == 2`,
+### `erfc(+infinity) == +0`, and NaN maps to NaN.
+### :returns: The correctly rounded complementary error function.
+routine B64.erfc() -> B64
+  var tu = me.to_bits()
+  var at = tu & 0x7FFFFFFFFFFFFFFF_u64
+  if tu >= 0x8000000000000000_u64
+    # x = -NaN or x <= 0 (excluding +0)
+    # for x <= -0x1.7744f8f74e94bp+2, erfc(x) rounds to 2
+    if tu >= 0xC017744F8F74E94B_u64
+      if tu >= 0xFFF0000000000000_u64
+        if tu == 0xFFF0000000000000_u64
+          return 2.0
+        return me +! me
+      return 2.0 -! 0x1p-54
+    # for -0x1.c5bf891b4ef6ap-54 <= x <= 0, erfc(x) rounds to 1
+    if -0x1.c5bf891b4ef6ap-54 <= me
+      return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
+  else
+    # x = +NaN or x >= 0 (excluding -0)
+    # for x >= 0x1.b39dc41e48bfdp+4, erfc(x) < 2^-1075 rounds to 0
+    if at >= 0x403B39DC41E48BFD_u64
+      if at >= 0x7FF0000000000000_u64
+        if at == 0x7FF0000000000000_u64
+          return 0.0
+        return me +! me
+      return 0x1p-1074 *! 0.25
+    # for 0 <= x <= 0x1.c5bf891b4ef6ap-55, erfc(x) rounds to 1
+    if me <= 0x1.c5bf891b4ef6ap-55
+      return LLVM::fma[B64](a: -me, b: 0x1p-54, c: 1.0)
+  # now -0x1.7744f8f74e94bp+2 < x < -0x1.c5bf891b4ef6ap-54 or 0x1.c5bf891b4ef6ap-55 < x < 0x1.b39dc41e48bfdp+4
+  var f = b64_erfc_fast(x: me)
+  var left = f.item0 +! (f.item1 -! f.item2)
+  var right = f.item0 +! (f.item1 +! f.item2)
+  if left == right
+    return left
+  return b64_erfc_accurate(x: me)
+
+# ---------------------------------------------------------------------------
+# Double-double helpers
+# ---------------------------------------------------------------------------
+
+### `a * (bh + bl)` as a double-double.
+### :param a: The double factor.
+### :param bh: The high part of the double-double factor.
+### :param bl: The low part of the double-double factor.
+### :returns: The product.
+secret routine b64_erfc_s_mul(a: B64, bh: B64, bl: B64) -> DD
+  var p = b64_erf_a_mul(a: a, b: bh)
+  return DD(hi: p.hi, lo: LLVM::fma[B64](a: a, b: bl, c: p.lo))
+
+### `(ah + al) * (bh + bl) - al * bl` as a double-double.
+### :param ah: The high part of the first factor.
+### :param al: The low part of the first factor.
+### :param bh: The high part of the second factor.
+### :param bl: The low part of the second factor.
+### :returns: The product.
+secret routine b64_erfc_d_mul(ah: B64, al: B64, bh: B64, bl: B64) -> DD
+  var p = b64_erf_a_mul(a: ah, b: bh)
+  var lo = LLVM::fma[B64](a: ah, b: bl, c: p.lo)
+  return DD(hi: p.hi, lo: LLVM::fma[B64](a: al, b: bh, c: lo))
+
+### `x * 2^n` with a single rounding (C `ldexp`), for -2044 <= n <= 2046.
+### :param x: The value to scale.
+### :param n: The power of two.
+### :returns: The correctly rounded `x * 2^n`.
+secret routine b64_erfc_ldexp(x: B64, n: S64) -> B64
+  var y = x
+  var k = n
+  if k > 1023
+    y = y *! 0x1p1023
+    k = k - 1023
+  if k < -1022
+    # scale into the normal range first (exact), so that the last multiplication is the only rounding
+    y = y *! b64_erfc_pow2(k: k + 1022)
+    k = -1022
+  return y *! b64_erfc_pow2(k: k)
+
+### `2^k` for a normal exponent -1022 <= k <= 1023.
+### :param k: The exponent.
+### :returns: `2^k`.
+secret routine b64_erfc_pow2(k: S64) -> B64
+  return B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](k + 1023) << 52)
+
+# ---------------------------------------------------------------------------
+# Fast path
+# ---------------------------------------------------------------------------
+
+### A double-double approximation of `erfc(x)` for -0x1.7744f8f74e94bp+2 < x < 0x1.b39dc41e48bfdp+4.
+### :param x: The argument.
+### :returns: `(h, l, err)`: `h + l` approximates erfc(x) with absolute error bounded by `err`.
+secret routine b64_erfc_fast(x: B64) -> (B64, B64, B64)
+  if x < 0.0
+    # erfc(x) = 1 + erf(-x)
+    var f = b64_erf_fast(z: -x)
+    # convert the relative error bound into an absolute one
+    var err = b64_erf_fast_err(z: -x) *! f.hi
+    var s = b64_erf_fast_two_sum(a: 1.0, b: f.hi)
+    return (s.hi, s.lo +! f.lo, err +! 0x1.4p-102)
+  if x <= 0x1.713786d9c7c09p+1
+    var f = b64_erf_fast(z: x)
+    var err = b64_erf_fast_err(z: x) *! f.hi
+    var s = b64_erf_fast_two_sum(a: 1.0, b: -f.hi)
+    var l = s.lo -! f.lo
+    # for x >= 0x1.e861fbb24c00ap-2, erf(x) >= 1/2, so 1 - h is exact
+    if x >= 0x1.e861fbb24c00ap-2
+      return (s.hi, l, err)
+    return (s.hi, l, err +! 0x1.4p-104)
+  # now 0x1.713786d9c7c09p+1 < x < 0x1.b39dc41e48bfdp+4, thus erfc(x) < 0.000046
+  return b64_erfc_asympt_fast(x: x)
+
+### The fast path for 0x1.713786d9c7c09p+1 < x < 0x1.b39dc41e48bfdp+4, using the asymptotic formula
+### erfc(x) = exp(-x^2) * p(1/x).
+### :param x: The argument.
+### :returns: `(h, l, err)`: `h + l` approximates erfc(x) with absolute error bounded by `err`.
+secret routine b64_erfc_asympt_fast(x: B64) -> (B64, B64, B64)
+  # for x >= 0x1.9db1bb14e15cap+4, erfc(x) < 2^-970: delegate to the accurate path
+  if x >= 0x1.9db1bb14e15cap+4
+    return (0.0, 0.0, 1.0)
+  # approximate exp(-x^2)
+  var u = b64_erf_a_mul(a: x, b: x)
+  var e = b64_erfc_exp_1(xh: -u.hi, xl: -u.lo)
+  # 1/x as a double-double (one Newton step)
+  var yh = 1.0 /! x
+  var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
+  # the interval of yh
+  var i = 0_u64
+  while yh > B64.from_bits(bits: B64_ERFC_ASYMPT_THRESHOLD[i])
+    i = i + 1
+  var p = i * 13
+  u = b64_erf_a_mul(a: yh, b: yh)
+  var uh = u.hi
+  var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
+  # evaluate p(uh + ul): degrees 23, 21, 19 in double
+  var zh = B64.from_bits(bits: B64_ERFC_T[p + 12])
+  zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 11]))
+  zh = LLVM::fma[B64](a: zh, b: uh, c: B64.from_bits(bits: B64_ERFC_T[p + 10]))
+  # degree 17: zh*(uh + ul) + T[p+9]
+  var m = b64_erfc_s_mul(a: zh, bh: uh, bl: ul)
+  var z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + 9]), b: m.hi)
+  zh = z.hi
+  var zl = z.lo +! m.lo
+  var j = 15_u64
+  while j >= 3
+    m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
+    z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p + (j + 1) // 2]), b: m.hi)
+    zh = z.hi
+    zl = z.lo +! m.lo
+    j = j - 2
+  # degree 1: (zh + zl)*(uh + ul) + T[p+0] + T[p+1]
+  m = b64_erfc_d_mul(ah: zh, al: zl, bh: uh, bl: ul)
+  z = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_T[p]), b: m.hi)
+  zh = z.hi
+  zl = z.lo +! (m.lo +! B64.from_bits(bits: B64_ERFC_T[p + 1]))
+  # multiply by yh + yl: p(1/x)
+  var q = b64_erfc_d_mul(ah: zh, al: zl, bh: yh, bl: yl)
+  # multiply by eh + el
+  var r = b64_erfc_d_mul(ah: q.hi, al: q.lo, bh: e.hi, bl: e.lo)
+  # the relative error bound is 2^-67.115 < 0x1.d9p-68, and 0x1.d9p-68 * h must not underflow
+  if r.hi >= 0x1.151b9a3fdd5c9p-955
+    return (r.hi, r.lo, 0x1.d9p-68 *! r.hi)
+  return (r.hi, r.lo, 0x1p-1022)
+
+### `exp(xh + xl)` as a double-double, with relative error below 2^-74.139, assuming |xl/xh| < 2^-23.89
+### and |xl| < 2^-14.3486 (the fast exponential of CORE-MATH's pow).
+### :param xh: The high part of the argument.
+### :param xl: The low part of the argument.
+### :returns: `hi + lo` approximating exp(xh + xl).
+secret routine b64_erfc_exp_1(xh: B64, xl: B64) -> DD
+  # INVLOG2 approximates 2^12/log(2)
+  var k = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+12)
+  # LOG2H + LOG2L approximates log(2)/2^12
+  var kk = b64_erfc_s_mul(a: k, bh: 0x1.62e42fefa39efp-13, bl: 0x1.abc9e3b39803fp-68)
+  var y = b64_erf_fast_two_sum(a: xh -! kk.hi, b: xl)
+  var yl = y.lo -! kk.lo
+  var bk = LLVM::float_to_signed[B64, S64](k)
+  var ku = LLVM::reinterpret_bits[S64, U64](bk)
+  var m = (bk >> 12) + 0x3FF
+  var i2 = (ku >>> 6) & 0x3F_u64
+  var i1 = ku & 0x3F_u64
+  var t = b64_erfc_d_mul(ah: B64.from_bits(bits: B64_ERFC_T2[2 * i1]), al: B64.from_bits(bits: B64_ERFC_T2[2 * i1 + 1]), bh: B64.from_bits(bits: B64_ERFC_T1[2 * i2]), bl: B64.from_bits(bits: B64_ERFC_T1[2 * i2 + 1]))
+  var q = b64_erfc_q_1(zh: y.hi, zl: yl)
+  var r = b64_erfc_d_mul(ah: t.hi, al: t.lo, bh: q.hi, bl: q.lo)
+  var scale = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](m) << 52)
+  return DD(hi: r.hi *! scale, lo: r.lo *! scale)
+
+### `exp(zh + zl)` as a double-double for |zh + zl| < 2^-12.88 and |zl| < 2^-42.6 (a degree-4 polynomial).
+### :param zh: The high part of the argument.
+### :param zl: The low part of the argument.
+### :returns: `hi + lo` approximating exp(zh + zl).
+secret routine b64_erfc_q_1(zh: B64, zl: B64) -> DD
+  var z = zh +! zl
+  var q = LLVM::fma[B64](a: 0x1.55555558489dcp-5, b: zh, c: 0x1.5555555995d37p-3)
+  q = LLVM::fma[B64](a: q, b: z, c: 0.5)
+  var s = b64_erf_fast_two_sum(a: 1.0, b: q *! z)
+  var d = b64_erfc_d_mul(ah: zh, al: zl, bh: s.hi, bl: s.lo)
+  var r = b64_erf_fast_two_sum(a: 1.0, b: d.hi)
+  return DD(hi: r.hi, lo: r.lo +! d.lo)
+
+# ---------------------------------------------------------------------------
+# Accurate path
+# ---------------------------------------------------------------------------
+
+### The accurate `erfc(x)`, rounded, for the inputs the fast path cannot round.
+### :param x: The argument, -0x1.7744f8f74e94bp+2 < x < 0x1.b39dc41e48bfdp+4.
+### :returns: The correctly rounded erfc(x).
+secret routine b64_erfc_accurate(x: B64) -> B64
+  if x < 0.0
+    var k = 0_u64
+    while k < 17
+      if x == B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k])
+        return B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_NEG_EXCEPTIONS[3 * k + 2])
+      k = k + 1
+    var a = b64_erf_accurate(z: -x)
+    var s = b64_erf_fast_two_sum(a: 1.0, b: a.hi)
+    return s.hi +! (s.lo +! a.lo)
+  if x <= 0x1.b59ffb450828cp+0
+    # erfc(x) >= 2^-6
+    var k = 0_u64
+    while k < 29
+      if x == B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k])
+        return B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_POS_EXCEPTIONS[3 * k + 2])
+      k = k + 1
+    var a = b64_erf_accurate(z: x)
+    var s = b64_erf_fast_two_sum(a: 1.0, b: -a.hi)
+    return s.hi +! (s.lo -! a.lo)
+  # now 0x1.b59ffb450828cp+0 < x < 0x1.b39dc41e48bfdp+4
+  return b64_erfc_asympt_accurate(x: x)
+
+### The accurate asymptotic path erfc(x) = exp(-x^2) * p(1/x), for 0x1.b59ffb450828cp+0 < x <
+### 0x1.b39dc41e48bfdp+4.
+### :param x: The argument.
+### :returns: The correctly rounded erfc(x).
+secret routine b64_erfc_asympt_accurate(x: B64) -> B64
+  var k = 0_u64
+  while k < 22
+    if x == B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k])
+      return B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 1]) +! B64.from_bits(bits: B64_ERFC_ASYMPT_EXCEPTIONS[3 * k + 2])
+    k = k + 1
+  # a hard case with a subnormal result that the table above cannot hold
+  if x == 0x1.a8f7bfbd15495p+4
+    return LLVM::fma[B64](a: 0x1p-1074, b: -0.25, c: 0x1.99ef5883f656cp-1024)
+  # approximate exp(-x^2) as 2^e * (eh + el)
+  var u = b64_erf_a_mul(a: x, b: x)
+  var ex = b64_erfc_exp_accurate(xh: -u.hi, xl: -u.lo)
+  # 1/x as a double-double (one Newton step)
+  var yh = 1.0 /! x
+  var yl = yh *! LLVM::fma[B64](a: -x, b: yh, c: 1.0)
+  var i = 0_u64
+  while yh > B64.from_bits(bits: B64_ERFC_ACC_THRESHOLD[i])
+    i = i + 1
+  # 0 <= i <= 9
+  var p = i * 30
+  u = b64_erf_a_mul(a: yh, b: yh)
+  var uh = u.hi
+  var ul = LLVM::fma[B64](a: 2.0 *! yh, b: yl, c: u.lo)
+  # the polynomial has degree 29+2i, its coefficient of largest degree is Tacc[p + 20 + i]
+  var zh = B64.from_bits(bits: B64_ERFC_TACC[p + 20 + i])
+  var zl: B64 = 0.0
+  var j = 27 + 2 * i
+  while j >= 13
+    # degree j: (zh + zl)*(uh + ul) + Tacc[p + (j-1)/2 + 6]
+    var m = b64_erf_a_mul(a: zh, b: uh)
+    var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
+    l = LLVM::fma[B64](a: zl, b: uh, c: l)
+    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + (j - 1) // 2 + 6]), b: m.hi)
+    zh = s.hi
+    zl = s.lo +! l
+    j = j - 2
+  # degrees 11 down to 1 have double-double coefficients Tacc[p+j-1] + Tacc[p+j]
+  loop
+    var m = b64_erf_a_mul(a: zh, b: uh)
+    var l = LLVM::fma[B64](a: zh, b: ul, c: m.lo)
+    l = LLVM::fma[B64](a: zl, b: uh, c: l)
+    var s = b64_erf_two_sum(a: B64.from_bits(bits: B64_ERFC_TACC[p + j - 1]), b: m.hi)
+    zh = s.hi
+    zl = s.lo +! (l +! B64.from_bits(bits: B64_ERFC_TACC[p + j]))
+    if j == 1
+      break
+    j = j - 2
+  # multiply by yh + yl: p(1/x), i.e. erfc(x)*exp(x^2)
+  var q = b64_erf_a_mul(a: zh, b: yh)
+  var ql = LLVM::fma[B64](a: zh, b: yl, c: q.lo)
+  ql = LLVM::fma[B64](a: zl, b: yh, c: ql)
+  # normalize, then multiply by eh + el
+  var n = b64_erf_fast_two_sum(a: q.hi, b: ql)
+  var r = b64_erf_a_mul(a: n.hi, b: ex.item0)
+  var l = LLVM::fma[B64](a: n.hi, b: ex.item1, c: r.lo)
+  l = LLVM::fma[B64](a: n.lo, b: ex.item0, c: l)
+  # multiply by 2^e
+  var e = ex.item2
+  var res = b64_erfc_ldexp(x: r.hi +! l, n: e)
+  if res < 0x1p-1022
+    # a subnormal erfc(x) needs a special rounding
+    var corr = r.hi -! b64_erfc_ldexp(x: res, n: -e)
+    corr = corr +! l
+    res = res +! b64_erfc_ldexp(x: corr, n: e)
+  return res
+
+### `exp(xh + xl)` as `2^e * (h + l)` with about 104 bits of accuracy, for -742 <= xh + xl <= -2.92.
+### :param xh: The high part of the argument.
+### :param xl: The low part of the argument.
+### :returns: `(h, l, e)`.
+secret routine b64_erfc_exp_accurate(xh: B64, xl: B64) -> (B64, B64, S64)
+  # reduce the argument: xh + xl ~ k*log(2) + yh + yl
+  var kd = LLVM::rint[B64](value: xh *! 0x1.71547652b82fep+0)
+  var k = LLVM::float_to_signed[B64, S64](kd)
+  # LOG2H + LOG2L + LOG2tiny approximates log(2), and k*LOG2L is exact; yh is exact by Sterbenz
+  var yh = LLVM::fma[B64](a: -kd, b: 0x1.62e42fefa39efp-1, c: xh)
+  var t = b64_erf_two_sum(a: -kd *! 0x1.abc9e3b398p-56, b: xl)
+  var y = b64_erf_fast_two_sum(a: yh, b: t.hi)
+  yh = y.hi
+  var yl = LLVM::fma[B64](a: -kd, b: 0x1.f97b57a079a19p-103, c: y.lo +! t.lo)
+  # degree 19 down to 16 in double (yl is negligible there)
+  var h = B64.from_bits(bits: B64_ERFC_E2[27])
+  var i = 18_u64
+  while i >= 16
+    h = LLVM::fma[B64](a: h, b: yh, c: B64.from_bits(bits: B64_ERFC_E2[i + 8]))
+    i = i - 1
+  # degree 15: h*(yh + yl) + E2[23]
+  var m = b64_erf_a_mul(a: h, b: yh)
+  var tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+  var s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[23]), b: m.hi)
+  h = s.hi
+  var l = s.lo +! tl
+  i = 14
+  while i >= 8
+    # degree i: (h + l)*(yh + yl) + E2[i+8]
+    m = b64_erf_a_mul(a: h, b: yh)
+    tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+    tl = LLVM::fma[B64](a: l, b: yh, c: tl)
+    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[i + 8]), b: m.hi)
+    h = s.hi
+    l = s.lo +! tl
+    i = i - 1
+  # degrees 7 down to 0 have double-double coefficients E2[2i] + E2[2i+1]
+  i = 8
+  while i > 0
+    i = i - 1
+    m = b64_erf_a_mul(a: h, b: yh)
+    tl = LLVM::fma[B64](a: h, b: yl, c: m.lo)
+    tl = LLVM::fma[B64](a: l, b: yh, c: tl)
+    s = b64_erf_fast_two_sum(a: B64.from_bits(bits: B64_ERFC_E2[2 * i]), b: m.hi)
+    h = s.hi
+    l = s.lo +! (tl +! B64.from_bits(bits: B64_ERFC_E2[2 * i + 1]))
+  return (h, l, k)
+
+# ---------------------------------------------------------------------------
+# Tables
+# ---------------------------------------------------------------------------
+# The tables hold the B64 bit patterns (read back with `B64.from_bits`): an `Array[B64, N]` preset is
+# not yet emitted as an LLVM constant.
+
+# for 0 <= i < 64, entries 2i and 2i+1 are the best double-double approximation of 2^(i/64)
+secret preset B64_ERFC_T1: Array[U64, 128] = [0x3FF0000000000000_u64, 0x0000000000000000_u64, 0x3FF02C9A3E778061_u64, 0xBC719083535B085D_u64, 0x3FF059B0D3158574_u64, 0x3C8D73E2A475B465_u64, 0x3FF0874518759BC8_u64, 0x3C6186BE4BB284FF_u64, 0x3FF0B5586CF9890F_u64, 0x3C98A62E4ADC610B_u64, 0x3FF0E3EC32D3D1A2_u64, 0x3C403A1727C57B53_u64, 0x3FF11301D0125B51_u64, 0xBC96C51039449B3A_u64, 0x3FF1429AAEA92DE0_u64, 0xBC932FBF9AF1369E_u64, 0x3FF172B83C7D517B_u64, 0xBC819041B9D78A76_u64, 0x3FF1A35BEB6FCB75_u64, 0x3C8E5B4C7B4968E4_u64, 0x3FF1D4873168B9AA_u64, 0x3C9E016E00A2643C_u64, 0x3FF2063B88628CD6_u64, 0x3C8DC775814A8495_u64, 0x3FF2387A6E756238_u64, 0x3C99B07EB6C70573_u64, 0x3FF26B4565E27CDD_u64, 0x3C82BD339940E9D9_u64, 0x3FF29E9DF51FDEE1_u64, 0x3C8612E8AFAD1255_u64, 0x3FF2D285A6E4030B_u64, 0x3C90024754DB41D5_u64, 0x3FF306FE0A31B715_u64, 0x3C86F46AD23182E4_u64, 0x3FF33C08B26416FF_u64, 0x3C932721843659A6_u64, 0x3FF371A7373AA9CB_u64, 0xBC963AEABF42EAE2_u64, 0x3FF3A7DB34E59FF7_u64, 0xBC75E436D661F5E3_u64, 0x3FF3DEA64C123422_u64, 0x3C8ADA0911F09EBC_u64, 0x3FF4160A21F72E2A_u64, 0xBC5EF3691C309278_u64, 0x3FF44E086061892D_u64, 0x3C489B7A04EF80D0_u64, 0x3FF486A2B5C13CD0_u64, 0x3C73C1A3B69062F0_u64, 0x3FF4BFDAD5362A27_u64, 0x3C7D4397AFEC42E2_u64, 0x3FF4F9B2769D2CA7_u64, 0xBC94B309D25957E3_u64, 0x3FF5342B569D4F82_u64, 0xBC807ABE1DB13CAD_u64, 0x3FF56F4736B527DA_u64, 0x3C99BB2C011D93AD_u64, 0x3FF5AB07DD485429_u64, 0x3C96324C054647AD_u64, 0x3FF5E76F15AD2148_u64, 0x3C9BA6F93080E65E_u64, 0x3FF6247EB03A5585_u64, 0xBC9383C17E40B497_u64, 0x3FF6623882552225_u64, 0xBC9BB60987591C34_u64, 0x3FF6A09E667F3BCD_u64, 0xBC9BDD3413B26456_u64, 0x3FF6DFB23C651A2F_u64, 0xBC6BBE3A683C88AB_u64, 0x3FF71F75E8EC5F74_u64, 0xBC816E4786887A99_u64, 0x3FF75FEB564267C9_u64, 0xBC90245957316DD3_u64, 0x3FF7A11473EB0187_u64, 0xBC841577EE04992F_u64, 0x3FF7E2F336CF4E62_u64, 0x3C705D02BA15797E_u64, 0x3FF82589994CCE13_u64, 0xBC9D4C1DD41532D8_u64, 0x3FF868D99B4492ED_u64, 0xBC9FC6F89BD4F6BA_u64, 0x3FF8ACE5422AA0DB_u64, 0x3C96E9F156864B27_u64, 0x3FF8F1AE99157736_u64, 0x3C85CC13A2E3976C_u64, 0x3FF93737B0CDC5E5_u64, 0xBC675FC781B57EBC_u64, 0x3FF97D829FDE4E50_u64, 0xBC9D185B7C1B85D1_u64, 0x3FF9C49182A3F090_u64, 0x3C7C7C46B071F2BE_u64, 0x3FFA0C667B5DE565_u64, 0xBC9359495D1CD533_u64, 0x3FFA5503B23E255D_u64, 0xBC9D2F6EDB8D41E1_u64, 0x3FFA9E6B5579FDBF_u64, 0x3C90FAC90EF7FD31_u64, 0x3FFAE89F995AD3AD_u64, 0x3C97A1CD345DCC81_u64, 0x3FFB33A2B84F15FB_u64, 0xBC62805E3084D708_u64, 0x3FFB7F76F2FB5E47_u64, 0xBC75584F7E54AC3B_u64, 0x3FFBCC1E904BC1D2_u64, 0x3C823DD07A2D9E84_u64, 0x3FFC199BDD85529C_u64, 0x3C811065895048DD_u64, 0x3FFC67F12E57D14B_u64, 0x3C92884DFF483CAD_u64, 0x3FFCB720DCEF9069_u64, 0x3C7503CBD1E949DB_u64, 0x3FFD072D4A07897C_u64, 0xBC9CBC3743797A9C_u64, 0x3FFD5818DCFBA487_u64, 0x3C82ED02D75B3707_u64, 0x3FFDA9E603DB3285_u64, 0x3C9C2300696DB532_u64, 0x3FFDFC97337B9B5F_u64, 0xBC91A5CD4F184B5C_u64, 0x3FFE502EE78B3FF6_u64, 0x3C839E8980A9CC8F_u64, 0x3FFEA4AFA2A490DA_u64, 0xBC9E9C23179C2893_u64, 0x3FFEFA1BEE615A27_u64, 0x3C9DC7F486A4B6B0_u64, 0x3FFF50765B6E4540_u64, 0x3C99D3E12DD8A18B_u64, 0x3FFFA7C1819E90D8_u64, 0x3C874853F3A5931E_u64]
+
+# for 0 <= i < 64, entries 2i and 2i+1 are the best double-double approximation of 2^(i/2^12)
+secret preset B64_ERFC_T2: Array[U64, 128] = [0x3FF0000000000000_u64, 0x0000000000000000_u64, 0x3FF000B175EFFDC7_u64, 0x3C9AE8E38C59C72A_u64, 0x3FF00162F3904052_u64, 0xBC57B5D0D58EA8F4_u64, 0x3FF0021478E11CE6_u64, 0x3C94115CB6B16A8E_u64, 0x3FF002C605E2E8CF_u64, 0xBC8D7C96F201BB2F_u64, 0x3FF003779A95F959_u64, 0x3C984711D4C35E9F_u64, 0x3FF0042936FAA3D8_u64, 0xBC80484245243777_u64, 0x3FF004DADB113DA0_u64, 0xBC94B237DA2025F9_u64, 0x3FF0058C86DA1C0A_u64, 0xBC75E00E62D6B30D_u64, 0x3FF0063E3A559473_u64, 0x3C9A1D6CEDBB9481_u64, 0x3FF006EFF583FC3D_u64, 0xBC94ACF197A00142_u64, 0x3FF007A1B865A8CA_u64, 0xBC6EAF2EA42391A5_u64, 0x3FF0085382FAEF83_u64, 0x3C7DA93F90835F75_u64, 0x3FF00905554425D4_u64, 0xBC86A79084AB093C_u64, 0x3FF009B72F41A12B_u64, 0x3C986364F8FBE8F8_u64, 0x3FF00A6910F3B6FD_u64, 0xBC882E8E14E3110E_u64, 0x3FF00B1AFA5ABCBF_u64, 0xBC84F6B2A7609F71_u64, 0x3FF00BCCEB7707EC_u64, 0xBC7E1A258EA8F71B_u64, 0x3FF00C7EE448EE02_u64, 0x3C74362CA5BC26F1_u64, 0x3FF00D30E4D0C483_u64, 0x3C9095A56C919D02_u64, 0x3FF00DE2ED0EE0F5_u64, 0xBC6406AC4E81A645_u64, 0x3FF00E94FD0398E0_u64, 0x3C9B5A6902767E09_u64, 0x3FF00F4714AF41D3_u64, 0xBC991B2060859321_u64, 0x3FF00FF93412315C_u64, 0x3C8427068AB22306_u64, 0x3FF010AB5B2CBD11_u64, 0x3C9C1D0660524E08_u64, 0x3FF0115D89FF3A8B_u64, 0xBC9E7BDFB3204BE8_u64, 0x3FF0120FC089FF63_u64, 0x3C8843AA8B9CBBC6_u64, 0x3FF012C1FECD613B_u64, 0xBC734104EE7EDAE9_u64, 0x3FF0137444C9B5B5_u64, 0xBC72B6AEB6176892_u64, 0x3FF01426927F5278_u64, 0x3C7A8CD33B8A1BB3_u64, 0x3FF014D8E7EE8D2F_u64, 0x3C72EDC08E5DA99A_u64, 0x3FF0158B4517BB88_u64, 0x3C857BA2DC7E0C73_u64, 0x3FF0163DA9FB3335_u64, 0x3C9B61299AB8CDB7_u64, 0x3FF016F0169949ED_u64, 0xBC990565902C5F44_u64, 0x3FF017A28AF25567_u64, 0x3C870FC41C5C2D53_u64, 0x3FF018550706AB62_u64, 0x3C94B9A6E145D76C_u64, 0x3FF019078AD6A19F_u64, 0xBC7008EFF5142BF9_u64, 0x3FF019BA16628DE2_u64, 0xBC977669F033C7DE_u64, 0x3FF01A6CA9AAC5F3_u64, 0xBC909BB78EEEAD0A_u64, 0x3FF01B1F44AF9F9E_u64, 0x3C9371231477ECE5_u64, 0x3FF01BD1E77170B4_u64, 0x3C75E7626621EB5B_u64, 0x3FF01C8491F08F08_u64, 0xBC9BC72B100828A5_u64, 0x3FF01D37442D5070_u64, 0xBC6CE39CBBAB8BBE_u64, 0x3FF01DE9FE280AC8_u64, 0x3C816996709DA2E2_u64, 0x3FF01E9CBFE113EF_u64, 0xBC8C11F5239BF535_u64, 0x3FF01F4F8958C1C6_u64, 0x3C8E1D4EB5EDC6B3_u64, 0x3FF020025A8F6A35_u64, 0xBC9AFB99946EE3F0_u64, 0x3FF020B533856324_u64, 0xBC98F06D8A148A32_u64, 0x3FF02168143B0281_u64, 0xBC82BF310FC54EB6_u64, 0x3FF0221AFCB09E3E_u64, 0xBC9C95A035EB4175_u64, 0x3FF022CDECE68C4F_u64, 0xBC9491793E46834D_u64, 0x3FF02380E4DD22AD_u64, 0xBC73E8D0D9C49091_u64, 0x3FF02433E494B755_u64, 0xBC9314AA16278AA3_u64, 0x3FF024E6EC0DA046_u64, 0x3C848DAF888E9651_u64, 0x3FF02599FB483385_u64, 0x3C856DC8046821F4_u64, 0x3FF0264D1244C719_u64, 0x3C945B42356B9D47_u64, 0x3FF027003103B10E_u64, 0xBC7082EF51B61D7E_u64, 0x3FF027B357854772_u64, 0x3C72106ED0920A34_u64, 0x3FF0286685C9E059_u64, 0xBC9FD4CF26EA5D0F_u64, 0x3FF02919BBD1D1D8_u64, 0xBC909F8775E78084_u64, 0x3FF029CCF99D720A_u64, 0x3C564CBBA902CA27_u64, 0x3FF02A803F2D170D_u64, 0x3C94383EF231D207_u64, 0x3FF02B338C811703_u64, 0x3C94A47A505B3A47_u64, 0x3FF02BE6E199C811_u64, 0x3C9E47120223467F_u64]
+
+# polynomials approximating erfc(1/x)*exp(1/x^2) over the ranges split by B64_ERFC_ASYMPT_THRESHOLD: odd
+# degree-23 polynomials, row i (13 entries) holds the double-double degree-1 coefficient (entries 0 and 1)
+# then the degree-3 to degree-23 coefficients
+secret preset B64_ERFC_T: Array[U64, 78] = [0x3FE20DD750429B6D_u64, 0x3C61A1FEB75A48A8_u64, 0xBFD20DD750429B6C_u64, 0x3FDB14C2F863E403_u64, 0xBFF0ECF9DB3AF35D_u64, 0x400D9EB53CA6EEED_u64, 0xC030A945830D95C8_u64, 0x4056E8A963E2F1F5_u64, 0xC0829B7CCC8F396F_u64, 0x40B15E716E83C27E_u64, 0xC0E1CFDCFBCAF22A_u64, 0x4111986CC7A7E8FE_u64, 0xC1371F7540590A91_u64, 0x3FE20DD750429AE7_u64, 0x3C863DA89E801FD4_u64, 0xBFD20DD750400795_u64, 0x3FDB14C2F57C490C_u64, 0xBFF0ECF95C8C9014_u64, 0x400D9E981F2321EF_u64, 0xC030A81482DE1506_u64, 0x4056D662420A604B_u64, 0xC08233C96FFF7772_u64, 0x40AF5D62018D3E37_u64, 0xC0D9AE55E9554450_u64, 0x410052901E10D139_u64, 0xC1166465DF1385F0_u64, 0x3FE20DD75041E3FC_u64, 0xBC7C9B491C4920FC_u64, 0xBFD20DD74E5F1526_u64, 0x3FDB14C1D35A40E0_u64, 0xBFF0ECDECD30E86B_u64, 0x400D9B4E7F725263_u64, 0xC030958B5CA8FB39_u64, 0x40563E3179BF609C_u64, 0xC0806BBD1CD2D0FD_u64, 0x40A7B66EB6D1D2F2_u64, 0xC0CCE5A4B1AFAB75_u64, 0x40E8B5C6AE6F773C_u64, 0xC0F5475860326F86_u64, 0x3FE20DD75025CFE9_u64, 0x3C55A92EEF32FB20_u64, 0xBFD20DD71EB9D4E7_u64, 0x3FDB14AF4C25DB28_u64, 0xBFF0EBC78A22B3D8_u64, 0x400D85287A0B3399_u64, 0xC03045F751E5CA1D_u64, 0x4054A0D87DDEA589_u64, 0xC07AC6A0981D1EEE_u64, 0x409F44822F567956_u64, 0xC0BCBA372DE71349_u64, 0x40D1A4A19F550CA4_u64, 0xC0D52A580455ED79_u64, 0x3FE20DD74EB31D84_u64, 0xBC439C4054B7C090_u64, 0xBFD20DD561AF98C4_u64, 0x3FDB1435165D9DF1_u64, 0xBFF0E6B60308E940_u64, 0x400D3CE30C140882_u64, 0xC02F2083E404C299_u64, 0x40520F113D89B42A_u64, 0xC0741433EBD89F19_u64, 0x4092F35B6A3154F6_u64, 0xC0AB020A4313CF3B_u64, 0x40B90F07E92DA7EE_u64, 0xC0B6565E1D7665C3_u64, 0x3FE20DD744B3517B_u64, 0xBC6F77AB25E01AB4_u64, 0xBFD20DCC62EC4024_u64, 0x3FDB125BFA4F66C1_u64, 0xBFF0D80E65381970_u64, 0x400CA11FBCFA65B2_u64, 0xC02CD9EAFFB88315_u64, 0x404E010DB42E0DA7_u64, 0xC06C5C85250EF6A3_u64, 0x4085E118D9C1EEAF_u64, 0xC098D74BE13D3D30_u64, 0x40A211B1B2B5AC83_u64, 0xC09900BE759FC663_u64]
+
+# the interval bounds on 1/x for B64_ERFC_T
+secret preset B64_ERFC_ASYMPT_THRESHOLD: Array[U64, 6] = [0x3FBD500000000000_u64, 0x3FC59DA6CA291BA6_u64, 0x3FCBC00000000000_u64, 0x3FD0C00000000000_u64, 0x3FD3800000000000_u64, 0x3FD6300000000000_u64]
+
+# a degree-19 polynomial approximating exp(x) for 1/sqrt(2) <= x <= sqrt(2) with relative error below
+# 2^-104.311: degrees 0 to 7 double-double (entries 2k and 2k+1), then degrees 8 to 19
+secret preset B64_ERFC_E2: Array[U64, 28] = [0x3FF0000000000000_u64, 0xB960000000000000_u64, 0x3FF0000000000000_u64, 0xB9BE200000000000_u64, 0x3FE0000000000000_u64, 0x3A03C00000000000_u64, 0x3FC5555555555555_u64, 0x3C655555555C78D9_u64, 0x3FA5555555555555_u64, 0x3C455555545616E2_u64, 0x3F81111111111111_u64, 0x3C011110121FC314_u64, 0x3F56C16C16C16C17_u64, 0xBBEF49E06EE3A56E_u64, 0x3F2A01A01A01A01A_u64, 0x3B6B053E1EEAB9C0_u64, 0x3EFA01A01A01A01A_u64, 0x3EC71DE3A556C733_u64, 0x3E927E4FB7789F66_u64, 0x3E5AE64567F54ABE_u64, 0x3E21EED8EFF8958B_u64, 0x3DE6124613837216_u64, 0x3DA93974AAF26A57_u64, 0x3D6AE7F4FD6D0BD9_u64, 0x3D2AE7E982620B25_u64, 0x3CE94E4CA59460D8_u64, 0x3CA69A2A4B7EF36D_u64, 0x3C6ABFE1602308C9_u64]
+
+# polynomials approximating erfc(1/x)*exp(1/x^2) over the ranges split by B64_ERFC_ACC_THRESHOLD: row i
+# (30 entries, zero padded) is odd of degree 29+2i, with double-double coefficients of degree 1 to 11
+# (entries 0 to 11) then the degree-13 and higher coefficients
+secret preset B64_ERFC_TACC: Array[U64, 300] = [0x3FE20DD750429B6D_u64, 0x3C61AE3A912B08F0_u64, 0xBFD20DD750429B6D_u64, 0xBC51AE34C0606D68_u64, 0x3FDB14C2F863E924_u64, 0xBC796C0F4C848FC8_u64, 0xBFF0ECF9DB3E71B6_u64, 0x3C645D756BD288B0_u64, 0x400D9EB53FAD4672_u64, 0xBCAC61629DE9ADF2_u64, 0xC030A945F3D147EA_u64, 0x3CB8FEC5AD7ECE20_u64, 0x4056E8C02F27CA6D_u64, 0xC0829D1C21C363E0_u64, 0x40B17349B70BE627_u64, 0xC0E28A6BB4686182_u64, 0x411602D1662523CA_u64, 0xC14CCAE7625C4111_u64, 0x4184237D064F6E0D_u64, 0xC1BB1E5466CA3A2F_u64, 0x41E90AE06A0F6CC1_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD750429B6D_u64, 0x3C61ADAA62435C10_u64, 0xBFD20DD750429B6D_u64, 0xBC441516126827C8_u64, 0x3FDB14C2F863E90B_u64, 0x3C7A535780BA5ED4_u64, 0xBFF0ECF9DB3E65D6_u64, 0xBC9089EDDE27AD07_u64, 0x400D9EB53FA52F20_u64, 0xBCABC9737E9464AC_u64, 0xC030A945F2CD7621_u64, 0xBCC589F28B700332_u64, 0x4056E8BFFD7E194E_u64, 0xC0829D18716876E2_u64, 0x40B17312ABE18250_u64, 0xC0E287E73592805C_u64, 0x4115EBF7394A39C1_u64, 0xC14C2F14D46D0CF9_u64, 0x4182AF3D256F955E_u64, 0xC1B7041659EBD7AA_u64, 0x41E6039C232E2F71_u64, 0xC2070CA15C5A07CB_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD750429B6D_u64, 0x3C5D3C35B5D37410_u64, 0xBFD20DD750429B56_u64, 0xBC7C028415F6F81B_u64, 0x3FDB14C2F863C1CF_u64, 0x3C51BB0DE6470DBC_u64, 0xBFF0ECF9DB33C363_u64, 0x3C80F8068459EB16_u64, 0x400D9EB53B9CE57B_u64, 0x3CA20CCE33E7D84A_u64, 0xC030A945AA2EC4FA_u64, 0xBCDF6E0FCD7C6030_u64, 0x4056E8B824D2BFAA_u64, 0xC0829CC372A6D0B0_u64, 0x40B1703A99DDD429_u64, 0xC0E2749F9A267CC6_u64, 0x4115856A17271849_u64, 0xC14A8BCB4BA9753F_u64, 0x418035DCCE882940_u64, 0xC1B1E5D8C5E6E043_u64, 0x41DFE3B4F365386E_u64, 0xC20398FDEF2B98FE_u64, 0x42184234D4F4EA12_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD750429B6A_u64, 0x3C8AE622B765E9FD_u64, 0xBFD20DD750428F0E_u64, 0x3C703C6C67D69513_u64, 0x3FDB14C2F8563E8E_u64, 0x3C6766A6BD7AA89C_u64, 0xBFF0ECF9D8DEDD48_u64, 0x3C90AF52E90336E3_u64, 0x400D9EB4AAD086FE_u64, 0x3CA640D371D54A19_u64, 0xC030A93F1D01CFE0_u64, 0xBCC68DBD8D9C522C_u64, 0x4056E842E9FD5898_u64, 0xC08299886EF1FB80_u64, 0x40B15E0F0162C9A0_u64, 0xC0E222DBC6B04CD8_u64, 0x411460268DB1EBDF_u64, 0xC1474F53CE065FB3_u64, 0x417961CA8553F870_u64, 0xC1A8788395D13798_u64, 0x41D35E37B25D0E81_u64, 0xC1F707B7457C8F5E_u64, 0x4211FF852DF1C023_u64, 0xC21B75D0EC56E2CD_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD750429A8F_u64, 0xBC766D8DDA59BCEA_u64, 0xBFD20DD7503FDBAB_u64, 0x3C6707BDFFC2B3FE_u64, 0x3FDB14C2F6526025_u64, 0xBC27FA4BB9541140_u64, 0xBFF0ECF99C417D45_u64, 0xBC9748645EF7AF94_u64, 0x400D9EAA9C712A7D_u64, 0x3CA79E478994EBB4_u64, 0xC030A8EF11FBF141_u64, 0x3CBB5C72D69F8954_u64, 0x4056E4653E0455B1_u64, 0xC08286909448E6CF_u64, 0x40B113424CE76821_u64, 0xC0E1346D859E76DE_u64, 0x4111F9F6CF2293BF_u64, 0xC14258E6E3B337DB_u64, 0x41714029ECD465FB_u64, 0xC19C530DF5337A6F_u64, 0x41C34BC4BBCCD336_u64, 0xC1E4A37C52641688_u64, 0x420019707CEC2974_u64, 0xC21031FE736EA169_u64, 0x420F6B3003DE3DDF_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD75042756B_u64, 0x3C84AD9178B56910_u64, 0xBFD20DD74FEDA9E8_u64, 0xBC78141C70BBC8D6_u64, 0x3FDB14C2CB128467_u64, 0xBC709AEBAA106821_u64, 0xBFF0ECF603921A0B_u64, 0x3C97D3CB5BCEAF0B_u64, 0x400D9E3E1751CA59_u64, 0x3C76622AE5642670_u64, 0xC030A686AF57F547_u64, 0x3CC083B320AFF6B6_u64, 0x4056CF0B6C027326_u64, 0xC0823AFCB69443D3_u64, 0x40B03AB450D9F1B9_u64, 0xC0DE74CDB76BCAB4_u64, 0x410C671B60E607F1_u64, 0xC138F1376D324CE4_u64, 0x4163B64276234676_u64, 0xC18AFF0CE13C5A8E_u64, 0x41AEF20247251E87_u64, 0xC1CC9F5662F721F6_u64, 0x41E4687858E185E1_u64, 0xC1F4FA507BE073C2_u64, 0x41FB99AC35EE4ACC_u64, 0xC1F16CB585EE3FA9_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD7503E730D_u64, 0x3C84E524A098A467_u64, 0xBFD20DD7498FA6B2_u64, 0x3C260A4E27751C80_u64, 0x3FDB14C061BD2A0C_u64, 0x3C695A8F847D2FC2_u64, 0xBFF0ECD0F11B8C7D_u64, 0xBC94126DEEA76061_u64, 0x400D9B1344463548_u64, 0x3CAFE09A4ECA9B0E_u64, 0xC030996EA52A87ED_u64, 0xBCA924F920DB26C0_u64, 0x40567A2264B556B0_u64, 0xC0815DFC2C86B6B5_u64, 0x40ACCC291B62EFE4_u64, 0xC0D81375A78E746A_u64, 0x41033A6F15546329_u64, 0xC12C1E9DC1216010_u64, 0x4152397EA3D43FDA_u64, 0xC174661E5B2EA512_u64, 0x4193412367CA5D45_u64, 0xC1ADE56B9D7F37C4_u64, 0x41C2851D9722146D_u64, 0xC1D19027BAF0C3FE_u64, 0x41D7E7B8B6AB58AC_u64, 0xC1D4C446D56AAF22_u64, 0x41C1492190400505_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD74FF10852_u64, 0x3C8A32F26DEFF875_u64, 0xBFD20DD6F06C491C_u64, 0x3C770C16E1793358_u64, 0x3FDB14A7D5E7FD4A_u64, 0x3C7479998B54DB5B_u64, 0xBFF0EBBDB3889C5F_u64, 0xBC759B853E11369C_u64, 0x400D89DD249D7EF8_u64, 0xBC84B5EDF0C8C314_u64, 0xC0306526FB386114_u64, 0xBC840D04EED7C7E0_u64, 0x40557FF657E429CE_u64, 0xC07EF63E90D38630_u64, 0x40A6D4F34C4EA3DA_u64, 0xC0D04542B9E36A54_u64, 0x40F577BF19097738_u64, 0xC119702FE47C736D_u64, 0x413A7AE12B54FDC6_u64, 0xC157CA3F0F7C4FA9_u64, 0x417225D983963CBF_u64, 0xC1871A6EAC612F9E_u64, 0x4198086324225E1E_u64, 0xC1A3DE68670A7716_u64, 0x41A91674DE4DCBE9_u64, 0xC1A6B44CC15B76C2_u64, 0x419A36DAE0F30D80_u64, 0xC17CFFC1747EA3DC_u64, 0x0000000000000000_u64, 0x0000000000000000_u64, 0x3FE20DD74BA8F300_u64, 0xBC59DD256871D210_u64, 0xBFD20DD3593675BC_u64, 0x3C7EC0E7FFA91AD9_u64, 0x3FDB13EEF86A077A_u64, 0xBC74FB5D78D411B8_u64, 0xBFF0E5CF52A11F3A_u64, 0xBC851F36C779DC8C_u64, 0x400D4417A08B39D5_u64, 0x3C91BE9FB5956638_u64, 0xC02F91B9F6CE80C3_u64, 0xBCCC9C99DD42829C_u64, 0x405356439F45BB43_u64, 0xC078C0CA12819B48_u64, 0x409EFCAD2ECD6671_u64, 0xC0C21B0AF6FC1039_u64, 0x40E327D215EE30C9_u64, 0xC101FABDA96167B0_u64, 0x411D82E4373B315D_u64, 0xC134ED9E2FF591E9_u64, 0x41495C85DCD8EAB5_u64, 0xC159F016F0A3D62A_u64, 0x41660E89D918B96F_u64, 0xC16E97BE202CBA64_u64, 0x4170D8A081619793_u64, 0xC16C5422B4FCFC65_u64, 0x4161131A9DC6AED1_u64, 0xC14A457D9DCED257_u64, 0x4123605E980E8B86_u64, 0x0000000000000000_u64, 0x3FE20DD7319D4D25_u64, 0x3C82B02992C3B7AB_u64, 0xBFD20DC29C13AB1B_u64, 0xBC7D78D79B4AD767_u64, 0x3FDB115A57B5AB13_u64, 0xBC6AA8C45BE0AA2E_u64, 0xBFF0D58EC437EFD7_u64, 0xBC5994F00A15E850_u64, 0x400CB1742E229F23_u64, 0xBCA8000471D54399_u64, 0xC02D99A5EDF7B946_u64, 0xBCBAF76ED7E35CDE_u64, 0x4050A8B71058EB28_u64, 0xC072D88289DA5BFC_u64, 0x40943DDF24168EDB_u64, 0xC0B3E9DFC38B6D1A_u64, 0x40D18D4DF97AB3DF_u64, 0xC0EB550FC62DCAB5_u64, 0x41029CB71F116ED1_u64, 0xC115FC9CC4E854E3_u64, 0x41265915FD0567B1_u64, 0xC1335EB5FCA0E46D_u64, 0x413C5261ECC0D789_u64, 0xC14138932DC4EAFC_u64, 0x414117D4EB18FACD_u64, 0xC13AF96163E35ECA_u64, 0x4130454A3A63C766_u64, 0xC11C2EBC1D39B44A_u64, 0x40FF3327698E0E6B_u64, 0xC0D094FEBC3DFF35_u64]
+
+# the interval bounds on 1/x for B64_ERFC_TACC
+secret preset B64_ERFC_ACC_THRESHOLD: Array[U64, 10] = [0x3FB4500000000000_u64, 0x3FBE000000000000_u64, 0x3FC3F00000000000_u64, 0x3FC9500000000000_u64, 0x3FCF500000000000_u64, 0x3FD3100000000000_u64, 0x3FD7100000000000_u64, 0x3FDBC00000000000_u64, 0x3FE0B00000000000_u64, 0x3FE3000000000000_u64]
+
+# hard-to-round cases of the accurate asymptotic path, sorted by argument: triples (x, h, l) with
+# h + l rounding to erfc(x)
+secret preset B64_ERFC_ASYMPT_EXCEPTIONS: Array[U64, 66] = [0x3FFB8940788B825D_u64, 0x3F8E97EAF1080BFF_u64, 0x39438836346525EA_u64, 0x3FFBB1EF58EDA440_u64, 0x3F8D6D259CB81801_u64, 0x38D387CBDB500A5E_u64, 0x3FFD1E19AF184C6E_u64, 0x3F849BF1937979ED_u64, 0x38FC1B55587C1381_u64, 0x4000CA37CE17AFA6_u64, 0x3F688CC1284157F5_u64, 0x3876FD53D489A2C1_u64, 0x4001CB6B0F91A4CC_u64, 0x3F5B2639C7A46899_u64, 0x38DF8111F4B0AB0F_u64, 0x40037994C710A4D2_u64, 0x3F42DF150139D8EA_u64, 0x38DD46AFCC145630_u64, 0x40076957728F1F31_u64, 0x3F0251DEA1AFE1AD_u64, 0xB88155995AA5BAE6_u64, 0x4007FA5439251A75_u64, 0x3EF7923EC231992D_u64, 0xB8674F633EA13FEC_u64, 0x4008966F65D9A1A1_u64, 0x3EED01A8497B522D_u64, 0x386C935C97D5BFE4_u64, 0x40116FFD71E2D8C6_u64, 0x3E0834E2899C5506_u64, 0xB78B7516E4549528_u64, 0x401651C78CEC84F6_u64, 0x3CEAF9D1DF8B5E80_u64, 0xB66FE39E86292256_u64, 0x4019F4A466C51BB5_u64, 0x3BEA3D059F3770B9_u64, 0x3583F16DDE099B74_u64, 0x401A8FB2B7EF1F80_u64, 0x3BBC1B9F4CDA246B_u64, 0x3546FCE2E1CAE1A5_u64, 0x401EF72633933D36_u64, 0x3A4AEE3861D8657E_u64, 0xB3D00CA47F3CED2A_u64, 0x402164F857D1749C_u64, 0x38DE35102E39E989_u64, 0x32432B4C82BBB9E3_u64, 0x4024A42B163F7A7D_u64, 0x361183D60A1F7E3C_u64, 0xB2BFFFFFFFFFFFFF_u64, 0x40277D0F07E113DC_u64, 0x3338B93F18B3CDC6_u64, 0x2CC6FFD370FBA52A_u64, 0x402A631D4BC7F56B_u64, 0x2FF3F07281BB43AE_u64, 0xACA0000000000000_u64, 0x4031B2588F5D972E_u64, 0x2362923609150FF0_u64, 0xA00FFFFFFFFFFFFD_u64, 0x4031D41CB671CAD3_u64, 0x22F5C4D8D179BE8C_u64, 0x9F9FFFFFFFFFFFFF_u64, 0x403391F434B53D18_u64, 0x1D144E8C50FA25E9_u64, 0x96915AA7B49BC597_u64, 0x40348DE452FB1A15_u64, 0x1983C2A1264045AD_u64, 0x162FFFFFFFFFFFFF_u64]
+
+# hard-to-round cases of the accurate path for x < 0: triples (x, h, l)
+secret preset B64_ERFC_NEG_EXCEPTIONS: Array[U64, 51] = [0xBC9C5BF891B4EF6B_u64, 0x3FF0000000000001_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCCFE777A3EB8D58_u64, 0x3FF0000000000005_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCED3ED8564296E6_u64, 0x3FF0000000000011_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCE29C5B1F9EBD1E_u64, 0x3FF000000000000B_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCFE9327FD17121F_u64, 0x3FF0000000000023_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCF941E961C5253B_u64, 0x3FF000000000001D_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBCF3F0AAC6733857_u64, 0x3FF0000000000017_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBDADC87CB831C792_u64, 0x3FF0000000010CDB_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBDAB71F3A10691D9_u64, 0x3FF000000000F7BF_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBDFCEA935BA73F4C_u64, 0x3FF000000020A0E9_u64, 0x3C9FFFFFFFFFFFFF_u64, 0xBE6ABAF3B436049E_u64, 0x3FF000000F14B8E3_u64, 0x3C9FFFFFFFFFFFFF_u64, 0xBECD4C18D3599CBE_u64, 0x3FF0000421DE806F_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBF0607B67E03B83B_u64, 0x3FF00031B7780FE5_u64, 0xBC9FFFFFFFFFFFFF_u64, 0xBF34A943C917ED26_u64, 0x3FF0017504BC67C1_u64, 0x3C9FFFFFFFFFFFFF_u64, 0xBF6106C2CD5EA6C3_u64, 0x3FF0099B29FAB8CF_u64, 0x3C9FFFFFFFFFFFFF_u64, 0xBFBD4AF8ADB90116_u64, 0x3FF20E8E5D1E73FF_u64, 0x3C9FFFFFFFFFFFFE_u64, 0xBFFF9A4A209CA0E4_u64, 0x3FFFEAA166E384C9_u64, 0x3C9FFFFFFFFFFFFE_u64]
+
+# hard-to-round cases of the accurate path for 0 < x <= 0x1.b59ffb450828cp+0: triples (x, h, l)
+secret preset B64_ERFC_POS_EXCEPTIONS: Array[U64, 87] = [0x3C8C5BF891B4EF6B_u64, 0x3FEFFFFFFFFFFFFF_u64, 0x3C8FFFFFFFFFFFFE_u64, 0x3CBFE777A3EB8D58_u64, 0x3FEFFFFFFFFFFFFB_u64, 0x3C8FFFFFFFFFFFFE_u64, 0x3CD29C5B1F9EBD1E_u64, 0x3FEFFFFFFFFFFFF5_u64, 0x3C8FFFFFFFFFFFFE_u64, 0x3CDD3ED8564296E6_u64, 0x3FEFFFFFFFFFFFEF_u64, 0x3C8FFFFFFFFFFFFE_u64, 0x3CE3F0AAC6733857_u64, 0x3FEFFFFFFFFFFFE9_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3CE941E961C5253B_u64, 0x3FEFFFFFFFFFFFE3_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3CEE9327FD17121F_u64, 0x3FEFFFFFFFFFFFDD_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3D9B71F3A10691D9_u64, 0x3FEFFFFFFFFF0841_u64, 0xBC8FFFFFFFFFFFFE_u64, 0x3D9DC87CB831C792_u64, 0x3FEFFFFFFFFEF325_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3DB52B18FE8FBAD1_u64, 0x3FEFFFFFFFFD03A7_u64, 0xBC8FFFFFFFFFFFFE_u64, 0x3E3CF0ED5959B276_u64, 0x3FEFFFFFFBEAFD79_u64, 0xBC8FFFFFFFFFFFFF_u64, 0x3E46AF79A30BBF3C_u64, 0x3FEFFFFFF999BDD3_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3E5DD48360DD7824_u64, 0x3FEFFFFFEF2B8F0D_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3E740757FBA82477_u64, 0x3FEFFFFFD2CCD30D_u64, 0xBC8FFFFFFFFFFFFF_u64, 0x3F68BC46E0D85524_u64, 0x3FEFE416CFFA803D_u64, 0xBC8FFFFFFFFFFFFF_u64, 0x3FBD4AF8ADB90116_u64, 0x3FEBE2E345C31801_u64, 0x395EA7FA18173AB8_u64, 0x3FD3229110BF9D66_u64, 0x3FE5847806AEF94B_u64, 0x3C8FFFFFFFFFFFFF_u64, 0x3FEA93059AABE4BC_u64, 0x3FCEBFA1229D0DCE_u64, 0x39499B4B80FD9415_u64, 0x3FEBC466342A2296_u64, 0x3FCC2153A8529156_u64, 0xB94088FB70829F71_u64, 0x3FEEEF77C6CAAE18_u64, 0x3FC5F61E96F60783_u64, 0xBC6FFFFFFFFFFFFD_u64, 0x3FEFD5D9D8C9EF66_u64, 0x3FC468BA052C2FE0_u64, 0xB9603FA708A553B3_u64, 0x3FF23C67FF8B8A0A_u64, 0x3FBB640BE5EFA2E3_u64, 0xB94B9A66B42D9160_u64, 0x3FF3A013A3C71E92_u64, 0x3FB5329743C2C15C_u64, 0x3927766EB5263404_u64, 0x3FF589BBD3AE5489_u64, 0x3FAD2847B1409248_u64, 0x39457B4A906BC605_u64, 0x3FF757FE152A87C9_u64, 0x3FA402ACCE35D833_u64, 0x393D38CCFA0C1D6B_u64, 0x3FF7749479E598D3_u64, 0x3FA3891521AFE3E3_u64, 0x3938B8423C82AD72_u64, 0x3FF9A3A5F5F28F30_u64, 0x3F980040C25BAB90_u64, 0xB93A8686704BDB14_u64, 0x3FFA44869B34EA46_u64, 0x3F94BB609C105C2D_u64, 0xB929182DAE766FC4_u64, 0x3FFAF08AE30C9364_u64, 0x3F91AC47852096CB_u64, 0xBC3FFFFFFFFFFFDA_u64]

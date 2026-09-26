@@ -1,0 +1,49 @@
+module Core
+
+# ============================================================================
+# Correctly rounded Euclidean distance (hypot) of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/hypot/hypotf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2025-2026 Maxence Ponsardin and Paul Zimmermann. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno range reports are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+#
+# The binary16 legs widen exactly to binary64, where both squares are exact and the sum and square root
+# keep enough bits that the single final rounding from binary64 to binary16 is correct. An infinite leg
+# wins over a quiet NaN in the other leg (hypot(+-inf, qnan) = +inf).
+
+### Tells whether the binary16 bit pattern `u` is a quiet NaN (either sign).
+### :param u: The binary16 bits.
+### :returns: True for a quiet NaN.
+secret routine b16_hypot_is_qnan(u: U16) -> Bool
+  return 0x7E00_u16 <= u & 0x7FFF_u16
+
+### Tells whether the binary16 bit pattern `u` is an infinity (either sign).
+### :param u: The binary16 bits.
+### :returns: True for +inf or -inf.
+secret routine b16_hypot_is_inf(u: U16) -> Bool
+  return u == 0x7C00_u16 or u == 0xFC00_u16
+
+### Hypotenuse sqrt(x^2 + y^2) with raw IEEE 754 propagation (overflow -> +inf), correctly rounded (one
+### rounding to nearest, ties to even). An infinite leg gives +inf even when the other leg is a quiet NaN.
+### :param x: One leg.
+### :param y: The other leg.
+### :returns: The correctly rounded hypotenuse.
+routine hypot_unchecked(x: B16, y: B16) -> B16
+  var sx = x.to_bits()
+  var sy = y.to_bits()
+  var tx = B64(from: x)
+  var ty = B64(from: y)
+  if b16_hypot_is_inf(u: sx) and b16_hypot_is_qnan(u: sy)
+    return b16_narrow_b64(d: tx *! tx)
+  if b16_hypot_is_inf(u: sy) and b16_hypot_is_qnan(u: sx)
+    return b16_narrow_b64(d: ty *! ty)
+  # a NaN leg comes back quieted, x's before y's, like the x86 addition the original relies on (left to
+  # `+!`, the optimizer may swap the operands and return the other NaN)
+  if x.is_nan()
+    return B16.from_bits(bits: sx | 0x0200_u16)
+  if y.is_nan()
+    return B16.from_bits(bits: sy | 0x0200_u16)
+  var ret = LLVM::sqrt[B64](tx *! tx +! ty *! ty)
+  return b16_narrow_b64(d: ret)

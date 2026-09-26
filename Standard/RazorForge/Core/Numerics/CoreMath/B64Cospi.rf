@@ -1,0 +1,135 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cos(pi*x) of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/cospi/cospi.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno and exception-flag
+# handling are dropped). The helpers and tables shared with sinpi live in B64TrigPi.rf.
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+# Inputs whose accurate phase is still too close to a rounding boundary: the angle index, then the reduced
+# argument, the correctly rounded result and a tiny correction that fixes the rounding direction (as IEEE 754
+# bit patterns).
+secret preset B64_COSPI_DB_IQ: Array[U64, 8] = [903_u64, 1029_u64, 1078_u64, 1217_u64, 1025_u64, 1026_u64, 1033_u64, 1235_u64]
+secret preset B64_COSPI_DB: Array[U64, 24] = [0xBFDBDD02D1AD6000_u64, 0x3FEF72C906962631_u64, 0x3C80000000000000_u64, 0xBFCA4AD070549D00_u64, 0x3FEFFFC4D2C6CA51_u64, 0x3C80000000000000_u64, 0x3FCFBDB79CA3DA00_u64, 0x3FEFE3C8219054C3_u64, 0x3C80000000000000_u64, 0x3FEC0CCEE4ADA200_u64, 0x3FEE99FD53791BCF_u64, 0xBC80000000000000_u64, 0x3FDB536647B1FE98_u64, 0x3FEFFFFC5DDD0738_u64, 0x3C80000000000000_u64, 0xBFDDC93EAAD12A18_u64, 0x3FEFFFF84B21C731_u64, 0x3C80000000000000_u64, 0x3FEE78F0E592B360_u64, 0x3FEFFF2270422604_u64, 0xBC80000000000000_u64, 0x3FDF13412A48D800_u64, 0x3FEE55A7FA9A24C4_u64, 0xBC80000000000000_u64]
+
+### Returns cos(pi * me), correctly rounded: the exact value rounded to the nearest `B64` (ties to even),
+### identical on every platform. It is exact at integers (±1) and half-integers (+0),
+### `cospi(-x) == cospi(x)`, and ±infinity and NaN give NaN.
+### :returns: The correctly rounded cosine of pi times this value.
+routine B64.cospi() -> B64
+  var x = me
+  var ixu = x.to_bits()
+  var ax = ixu & 0x7FFFFFFFFFFFFFFF_u64
+  if ax == 0_u64
+    return 1.0
+  # 2^(e-1023) <= |x| < 2^(e-1022)
+  var e = LLVM::reinterpret_bits[U64, S64](ax >>> 52)
+  var m = (ixu & 0x000FFFFFFFFFFFFF_u64) | 0x0010000000000000_u64
+  # 2^(40-s) <= |x| < 2^(41-s)
+  var s = 1063 - e
+  if s < 0
+    # |x| >= 2^41
+    if e == 0x7FF
+      if (ixu << 12) == 0_u64
+        return B64.from_bits(bits: 0x7FF8000000000000_u64)
+      return x +! x
+    # now 2^(41+s) <= |x| < 2^(42+s)
+    s = -s - 1
+    if s > 11
+      # |x| >= 2^53: an even integer
+      return 1.0
+    var iq = (m << LLVM::int_truncate[S64, U32](s)) +% 1024_u64
+    if (iq & 2047_u64) == 0_u64
+      return 0.0
+    var big = b64_trigpi_sincosn(s: iq)
+    return big.item0 +! big.item1
+  if ax <= 0x3F30000000000000_u64
+    # |x| <= 2^-12
+    if ax <= 0x3E2CCF6429BE6621_u64
+      return 1.0 -! 0x1p-55
+    var x2 = x *! x
+    var x4 = x2 *! x2
+    var eps = x2 *! 0x1.ap-48
+    var c01 = -0x1.3bd3cc9be45dcp+2 +! x2 *! 0x1.03c1f081b0833p+2
+    var c23 = -0x1.55d3c6fc9af15p+0 +! x2 *! 0x1.e1d3ff2ae3f9ap-3
+    var p = x2 *! (c01 +! x4 *! c23)
+    var lb0 = (p -! eps) +! 1.0
+    var ub0 = (p +! eps) +! 1.0
+    if lb0 == ub0
+      return lb0
+    return b64_cospi_zero(x: x)
+  var si = e - 1011
+  if si >= 0
+    if (m << LLVM::int_truncate[S64, U32](si + 1)) == 0_u64
+      # x is an integer or a half-integer
+      if (m << LLVM::int_truncate[S64, U32](si)) == 0_u64
+        # x is an integer: t = 1 when it is odd
+        var t = (m << LLVM::int_truncate[S64, U32](si - 1)) >>> 63
+        if t == 1_u64
+          return -1.0
+        return 1.0
+      return 0.0
+  var iq = ((m >>> LLVM::int_truncate[S64, U32](s)) +% 2048_u64) & 8191_u64
+  iq = (iq + 1_u64) >>> 1
+  var k = LLVM::reinterpret_bits[U64, S64](m << LLVM::int_truncate[S64, U32](e - 1000))
+  var z = LLVM::signed_to_float[S64, B64](k)
+  var z2 = z *! z
+  var fs = 0x1.921fb54442d18p-74 +! z2 *! (-0x1.4abbce625be51p-223 +! z2 *! 0x1.466bc6044ba16p-374)
+  var fc = -0x1.3bd3cc9be45dbp-148 +! z2 *! 0x1.03c1f00186416p-298
+  var b = b64_trigpi_sincosn(s: iq)
+  var er = z.abs() *! 0x1p-123 +! 0x1p-78
+  var r = (b.item1 +! b.item0 *! (z2 *! fc)) +! b.item2 *! (z *! fs)
+  var lb = (r -! er) +! b.item0
+  var ub = (r +! er) +! b.item0
+  if lb == ub
+    return lb
+  return b64_cospi_refine(iq: iq, z: z)
+
+### cos(pi*x) for 2^-12 >= |x| > 0x1.ccf6429be6621p-29, evaluated in double-double arithmetic: the accurate
+### phase of the small-argument path.
+### :param x: The argument.
+### :returns: The correctly rounded result.
+secret routine b64_cospi_zero(x: B64) -> B64
+  var x2 = x *! x
+  var dx2 = LLVM::fma[B64](a: x, b: x, c: -x2)
+  var fl = x2 *! (-0x1.55d3c7e3cbff9p+0 +! x2 *! 0x1.e1f50604fa0ffp-3)
+  var f = b64_trigpi_poly_start(c0: 0x1.03c1f081b5ac4p+2, c1: -0x1.32b33fda9113cp-52, l: fl)
+  f = b64_trigpi_poly_step(xh: x2, xl: dx2, h: f.item0, l: f.item1, c0: -0x1.3bd3cc9be45dep+2, c1: -0x1.692b71366cc04p-52)
+  f = b64_trigpi_muldd_acc(xh: x2, xl: dx2, ch: f.item0, cl: f.item1)
+  var s0 = b64_trigpi_fasttwosum(x: 1.0, y: f.item0)
+  var s1 = b64_trigpi_fasttwosum(x: s0.item1, y: f.item1)
+  var y1 = s1.item0
+  var tu = y1.to_bits()
+  if (tu & 0x000FFFFFFFFFFFFF_u64) == 0_u64
+    # y1 is a power of two: nudge it toward the tail so that y0 + y1 rounds correctly
+    if ((s1.item1.to_bits() ^ tu) >>> 63) == 1_u64
+      tu = tu -% 1_u64
+    else
+      tu = tu +% 1_u64
+    y1 = B64.from_bits(bits: tu)
+  return s0.item0 +! y1
+
+### The accurate phase of cospi's main path, with the table of exceptions.
+### :param iq: The angle index (0..4096).
+### :param z: The scaled residual angle.
+### :returns: The correctly rounded result.
+secret routine b64_cospi_refine(iq: U64, z: B64) -> B64
+  var t = b64_trigpi_refine(iq: iq, z: z)
+  if b64_trigpi_refine_suspect(tsl: t.item1)
+    var x = z *! 0x1p-63
+    var sgn: B64 = 1.0
+    if iq > 2048_u64
+      sgn = -1.0
+    var iqm = iq & 0x7FF_u64
+    var i = 0_u64
+    while i < 8_u64
+      var dq = B64_COSPI_DB_IQ[i]
+      var dx = B64.from_bits(bits: B64_COSPI_DB[3_u64 * i])
+      if (x == dx and iqm == dq) or (x == -dx and iqm == 2048_u64 - dq)
+        return sgn *! B64.from_bits(bits: B64_COSPI_DB[3_u64 * i + 1_u64]) +! sgn *! B64.from_bits(bits: B64_COSPI_DB[3_u64 * i + 2_u64])
+      i = i + 1_u64
+  return t.item0 +! t.item1

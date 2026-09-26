@@ -1,0 +1,61 @@
+module Core
+
+# ============================================================================
+# Correctly rounded tan(pi*x) of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/tanpi/tanpif.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling, exception raising and directed-rounding exceptions are dropped). Arithmetic
+# uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Returns `tan(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Integers give a signed zero, `x = 1/2 mod 2` gives +infinity and
+### `x = -1/2 mod 2` gives -infinity, ±infinity gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded `tan(pi * me)`.
+routine B32.tanpi() -> B32
+  var ix = me.to_bits()
+  var e = ix & 0x7F800000_u32
+  if e > 0x4B000000_u32
+    # |x| > 2^23
+    if e == 0x7F800000_u32
+      if ix << 9 == 0_u32
+        return B32.from_bits(bits: 0x7FC00000_u32)
+      return me +! me
+    # x is an even integer
+    return 0.0_b32.copysign(sign: me)
+  var x4 = 4.0_b32 *! me
+  var nx4 = LLVM::rint[B32](value: x4)
+  var dx4 = x4 -! nx4
+  var ni = LLVM::rint[B32](value: me)
+  var zf = me -! ni
+  if dx4 == 0.0_b32
+    # 4*x is an integer
+    var k = LLVM::float_to_signed[B32, S32](x4)
+    if k & 1_s32 == 1_s32
+      # x = 1/4 mod 1/2
+      return 1.0_b32.copysign(sign: zf)
+    k = k & 6_s32
+    if k == 0_s32
+      # x = 0 mod 2
+      return 0.0_b32.copysign(sign: me)
+    if k == 4_s32
+      # x = 1 mod 2
+      var zero = 0.0_b32.copysign(sign: me)
+      return -zero
+    if k == 2_s32
+      # x = 1/2 mod 2
+      return B32.from_bits(bits: 0x7F800000_u32)
+    # x = -1/2 mod 2
+    return B32.from_bits(bits: 0xFF800000_u32)
+  var a = zf.to_bits() & 0x7FFFFFFF_u32
+  if a == 0x3E933802_u32
+    return 0x1.44cfbap+0_b32.copysign(sign: zf) +! 0x1p-25_b32.copysign(sign: zf)
+  if a == 0x38F26685_u32
+    return 0x1.7cc304p-12_b32.copysign(sign: zf) +! 0x1p-37_b32.copysign(sign: zf)
+  var z = B64(from: zf)
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var num = (z -! z *! z2) *! ((0x1.921fb54442d19p-1 +! z2 *! -0x1.1f458b3e1f8d6p-2) +! z4 *! (0x1.68a34bd0b8f6ap-6 +! z2 *! -0x1.e4866f7a25f99p-13))
+  var den = ((0x1p+0 +! z2 *! -0x1.4b4b98d2df3a7p-1) +! z4 *! (0x1.8e9926d2bb901p-4 +! z2 *! -0x1.a6f77fd847eep-9)) *! (0.25 -! z2)
+  return B32(from: num /! den)

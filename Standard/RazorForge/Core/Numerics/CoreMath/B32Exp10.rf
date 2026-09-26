@@ -1,0 +1,72 @@
+module Core
+
+# ============================================================================
+# Correctly rounded base-10 exponential of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/exp10/exp10f.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are
+# raw IEEE 754 on floats.
+
+### `2^(i/32)` for i in 0..31, as B64 bit patterns.
+secret preset B32_EXP10_TB: Array[U64, 32] = [0x3FF0000000000000_u64, 0x3FF059B0D3158574_u64, 0x3FF0B5586CF9890F_u64, 0x3FF11301D0125B51_u64, 0x3FF172B83C7D517B_u64, 0x3FF1D4873168B9AA_u64, 0x3FF2387A6E756238_u64, 0x3FF29E9DF51FDEE1_u64, 0x3FF306FE0A31B715_u64, 0x3FF371A7373AA9CB_u64, 0x3FF3DEA64C123422_u64, 0x3FF44E086061892D_u64, 0x3FF4BFDAD5362A27_u64, 0x3FF5342B569D4F82_u64, 0x3FF5AB07DD485429_u64, 0x3FF6247EB03A5585_u64, 0x3FF6A09E667F3BCD_u64, 0x3FF71F75E8EC5F74_u64, 0x3FF7A11473EB0187_u64, 0x3FF82589994CCE13_u64, 0x3FF8ACE5422AA0DB_u64, 0x3FF93737B0CDC5E5_u64, 0x3FF9C49182A3F090_u64, 0x3FFA5503B23E255D_u64, 0x3FFAE89F995AD3AD_u64, 0x3FFB7F76F2FB5E47_u64, 0x3FFC199BDD85529C_u64, 0x3FFCB720DCEF9069_u64, 0x3FFD5818DCFBA487_u64, 0x3FFDFC97337B9B5F_u64, 0x3FFEA4AFA2A490DA_u64, 0x3FFF50765B6E4540_u64]
+
+### The powers `10^n` for n in 1..10 as B32 bit patterns (exact, except the last one rounded to `B32`).
+secret preset B32_EXP10_EX: Array[U32, 10] = [0x41200000_u32, 0x42C80000_u32, 0x447A0000_u32, 0x461C4000_u32, 0x47C35000_u32, 0x49742400_u32, 0x4B189680_u32, 0x4CBEBC20_u32, 0x4E6E6B28_u32, 0x501502F9_u32]
+
+### Base-10 exponential `10^me`, correctly rounded: the exact value rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, underflow
+### rounds to a subnormal or zero, `exp10(-infinity) == 0` and NaN maps to NaN.
+### :returns: The correctly rounded base-10 exponential.
+routine B32.exp10_unchecked() -> B32
+  var tu = me.to_bits()
+  var z = B64(from: me)
+  var ux = tu << 1
+  if ux > 0x84344134_u32 or ux < 0x72ADF1C6_u32
+    # |x| > 0x1.344134p+5, x = NaN or |x| < 0x1.adf1c6p-13
+    if ux < 0x72ADF1C6_u32
+      return B32(from: 1.0 +! z *! (0x1.26bb1bbb55516p+1 +! z *! (0x1.53524c73cea69p+1 +! z *! 0x1.0470591de2ca4p+1)))
+    if ux >= 0xFF000000_u32
+      # x is infinity or NaN
+      if ux > 0xFF000000_u32
+        return me +! me
+      return if tu >>> 31 == 0 then B32.from_bits(bits: 0x7F800000_u32) else 0.0_b32
+    if tu > 0xC23369F4_u32
+      # x < -0x1.66d3e8p+5: the result underflows to a tiny subnormal or zero
+      var y = 0x1p-149 +! (z +! 0x1.66d3e7bd9a403p+5) *! 0x1.a934f0979a37p-149
+      y = y.fmax(you: 0x1p-151)
+      return B32(from: y)
+    if tu < 0x80000000_u32
+      # x > 0x1.344134p+5: overflow
+      return 0x1p+127_b32 *! 0x1p+127_b32
+  if (tu << 12) == 0
+    # exact powers of ten: x = n for n in 1..10
+    var k = (tu >>> 20) -% 1016_u32
+    if k <= 26
+      var bt = 1_u32 << k
+      var msk = 0x7551101_u32
+      if (bt & msk) != 0
+        return B32.from_bits(bits: B32_EXP10_EX[LLVM::zero_extend[U32, U64]((msk & (bt -% 1_u32)).count_ones())])
+  var a = 0x1.a934f0979a371p+6 *! z
+  var ia = a.rint()
+  var h = a -! ia
+  var ja = LLVM::float_to_signed[B64, S64](ia)
+  var jb = LLVM::reinterpret_bits[S64, U64](ja)
+  var sv = B64.from_bits(bits: B32_EXP10_TB[jb & 0x1F_u64] +% (LLVM::reinterpret_bits[S64, U64](ja >> 5) << 52))
+  var h2 = h *! h
+  var r = ((1.0 +! h *! 0x1.62e42fef4c4e7p-6) +! h2 *! (0x1.ebfd1b232f475p-13 +! h *! 0x1.c6b19384ecd93p-20)) *! sv
+  var ub = B32(from: r)
+  var lb = B32(from: r -! r *! 0x1.3edbbe4560327p-33)
+  if ub != lb
+    # the fast path cannot decide the rounding: redo it with a longer reduction and polynomial
+    h = (0x1.a934f09p+1 *! z -! ia *! 0.03125) +! 0x1.e68dc57f2496p-29 *! z
+    var s = sv
+    h2 = h *! h
+    var w = s *! h
+    var c01 = 0x1.62e42fefa39efp-1 +! h *! 0x1.ebfbdff82c58fp-3
+    var c23 = 0x1.c6b08d702e0edp-5 +! h *! 0x1.3b2ab6fb92e5ep-7
+    var c45 = 0x1.5d886e6d54203p-10 +! h *! 0x1.430976b8ce6efp-13
+    r = s +! w *! (c01 +! h2 *! (c23 +! h2 *! c45))
+    ub = B32(from: r)
+  return ub

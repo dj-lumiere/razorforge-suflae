@@ -1,0 +1,283 @@
+module Core
+
+# ============================================================================
+# Correctly rounded hyperbolic sine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/sinh/sinh.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2026 Alexei Sibidanov and Paul Zimmermann.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno reporting is
+# dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The
+# exp tables and double-double helpers shared with cosh live in B64HypShared.rf.
+
+### Hyperbolic sine with raw IEEE 754 propagation (overflow -> ±infinity), correctly rounded: the exact
+### `sinh(me)` rounded to the nearest `B64` (ties to even), identical on every platform. ±0, ±infinity
+### and NaN map to themselves.
+### :returns: The correctly rounded hyperbolic sine.
+routine B64.sinh_unchecked() -> B64
+  var x = me
+  var ax = x.abs()
+  var v0 = LLVM::fma[B64](a: ax, b: 0x1.71547652b82fep+12, c: 0x1.8000002p+26)
+  var jt = v0.to_bits()
+  var t = B64.from_bits(bits: jt & 0xFFFFFFFFFC000000_u64) -! 0x1.8p26
+  var aix = ax.to_bits()
+  if aix < 0x3FD0000000000000_u64
+    # |x| < 2^-2
+    if aix < 0x3E57137449123EF7_u64
+      # |x| < 0x1.7137449123ef7p-26
+      return LLVM::fma[B64](a: x, b: 0x1p-55, c: x)
+    # q = x + p is a minimax approximation of sinh(x) on [x0, 1/4] with |q - sinh(x)|/x^3 < 2^-56.584
+    var x2 = x *! x
+    var x3 = x2 *! x
+    var x4 = x2 *! x2
+    var p = x3 *! ((0x1.5555555555555p-3 +! x2 *! 0x1.111111111151ep-7) +! x4 *! ((0x1.a01a019d0c767p-13 +! x2 *! 0x1.71de444a96e11p-19) +! x4 *! 0x1.ae8465375242p-26))
+    var e = x3 *! 0x1.cp-53
+    var lb = x +! (p -! e)
+    var ub = x +! (p +! e)
+    if lb == ub
+      return lb
+    return b64_sinh_zero(x: x)
+  if aix > 0x408633CE8FB9F87D_u64
+    # |x| >~ 710.47586
+    if aix >= 0x7FF0000000000000_u64
+      return x +! x
+    var big: B64 = 0x1p1023
+    return big.copysign(sign: x) *! 2.0
+  # now 0.25 <= |x| < 710.47586
+  var sgn: B64 = 1.0
+  sgn = sgn.copysign(sign: x)
+  var il = LLVM::reinterpret_bits[U64, S64]((jt << 14) >>> 40)
+  var jl = -il
+  var i1 = LLVM::reinterpret_bits[S64, U64](il & 0x3F)
+  var i0 = LLVM::reinterpret_bits[S64, U64]((il >> 6) & 0x3F)
+  var ie = il >> 12
+  var j1 = LLVM::reinterpret_bits[S64, U64](jl & 0x3F)
+  var j0 = LLVM::reinterpret_bits[S64, U64]((jl >> 6) & 0x3F)
+  var je = jl >> 12
+  var sp = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + ie) << 52)
+  var t0h = B64.from_bits(bits: B64_HYP_T0_HI[i0])
+  var t0l = B64.from_bits(bits: B64_HYP_T0_LO[i0])
+  var t1h = B64.from_bits(bits: B64_HYP_T1_HI[i1])
+  var t1l = B64.from_bits(bits: B64_HYP_T1_LO[i1])
+  var th = t0h *! t1h
+  var tl = (t0h *! t1l +! t1h *! t0l) +! LLVM::fma[B64](a: t0h, b: t1h, c: -th)
+  var l2h = 0x1.62e42ffp-13
+  var l2l = 0x1.718432a1b0e26p-47
+  var dx = (ax -! l2h *! t) +! l2l *! t
+  var dx2 = dx *! dx
+  var mx = -dx
+  var ch0 = 0x1p+0
+  var ch1 = 0x1p-1
+  var ch2 = 0x1.5555555aaaaaep-3
+  var ch3 = 0x1.55555551c98cp-5
+  var pp = dx *! ((ch0 +! dx *! ch1) +! dx2 *! (ch2 +! dx *! ch3))
+  var rh = 0.0
+  var rl = 0.0
+  if aix > 0x4014000000000000_u64
+    # |x| > 5
+    if aix > 0x40425E4F7B2737FA_u64
+      # |x| >~ 36.736801: exp(-|x|) is negligible
+      sp = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1021 + ie) << 52)
+      rh = th
+      rl = tl +! th *! pp
+      rh = rh *! sgn
+      rl = rl *! sgn
+      var e = 0x1.1b6p-63 *! th
+      var lb = rh +! (rl -! e)
+      var ub = rh +! (rl +! e)
+      if lb == ub
+        return (lb *! sp) *! 2.0
+      var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+      acc = b64_hyp_fasttwosum(x: acc.item0, y: acc.item1)
+      var bh = acc.item0 *! sgn
+      var bl = acc.item1 *! sgn
+      var eh = (bh.to_bits() >>> 52) & 0x7FF_u64
+      var el = (bl.to_bits() >>> 52) & 0x7FF_u64
+      var ml = (bl.to_bits() +% 8) & 0x000FFFFFFFFFFFFF_u64
+      bh = bh +! bl
+      bh = bh *! 2.0
+      bh = bh *! sp
+      if ml <= 16 or eh > el + 103
+        return b64_sinh_database(x: x, f: bh)
+      return bh
+    # now 5 < |x| < 36.736801
+    var sm = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + je) << 52)
+    var q0h = B64.from_bits(bits: B64_HYP_T0_HI[j0])
+    var q1h = B64.from_bits(bits: B64_HYP_T1_HI[j1])
+    var qh = q0h *! q1h
+    th = th *! sp
+    tl = tl *! sp
+    qh = qh *! sm
+    var pm = mx *! ((ch0 +! mx *! ch1) +! dx2 *! (ch2 +! mx *! ch3))
+    var em = qh +! qh *! pm
+    rh = th
+    rl = (tl -! em) +! th *! pp
+    rh = rh *! sgn
+    rl = rl *! sgn
+    var e = 0x1.202p-63 *! rh
+    var lb = rh +! (rl -! e)
+    var ub = rh +! (rl +! e)
+    if lb == ub
+      return lb
+    var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+    th = acc.item0
+    tl = acc.item1
+    if aix > 0x403F666666666666_u64
+      # |x| > 31.4
+      rh = th -! qh
+      rl = ((th -! rh) -! qh) +! tl
+    else
+      # 5 < |x| <= 31.4
+      qh = q0h *! q1h
+      var q0l = B64.from_bits(bits: B64_HYP_T0_LO[j0])
+      var q1l = B64.from_bits(bits: B64_HYP_T1_LO[j1])
+      var ql = (q0h *! q1l +! q1h *! q0l) +! LLVM::fma[B64](a: q0h, b: q1h, c: -qh)
+      qh = qh *! sm
+      ql = ql *! sm
+      var accm = b64_hyp_exp_accurate(x: -ax, t: -t, th: qh, tl: ql)
+      qh = accm.item0
+      ql = accm.item1
+      rh = th -! qh
+      rl = (((th -! rh) -! qh) -! ql) +! tl
+  else
+    # 0.25 <= |x| <= 5
+    var sm = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + je) << 52)
+    var q0h = B64.from_bits(bits: B64_HYP_T0_HI[j0])
+    var q0l = B64.from_bits(bits: B64_HYP_T0_LO[j0])
+    var q1h = B64.from_bits(bits: B64_HYP_T1_HI[j1])
+    var q1l = B64.from_bits(bits: B64_HYP_T1_LO[j1])
+    var qh = q0h *! q1h
+    var ql = (q0h *! q1l +! q1h *! q0l) +! LLVM::fma[B64](a: q0h, b: q1h, c: -qh)
+    th = th *! sp
+    tl = tl *! sp
+    qh = qh *! sm
+    ql = ql *! sm
+    var pm = mx *! ((ch0 +! mx *! ch1) +! dx2 *! (ch2 +! mx *! ch3))
+    var fph = th
+    var fpl = tl +! th *! pp
+    var fmh = qh
+    var fml = ql +! qh *! pm
+    rh = fph -! fmh
+    rl = (((fph -! rh) -! fmh) -! fml) +! fpl
+    rh = rh *! sgn
+    rl = rl *! sgn
+    var e = 0x1.c0ap-62 *! rh
+    var lb = rh +! (rl -! e)
+    var ub = rh +! (rl +! e)
+    if lb == ub
+      return lb
+    var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+    th = acc.item0
+    tl = acc.item1
+    var accm = b64_hyp_exp_accurate(x: -ax, t: -t, th: qh, tl: ql)
+    qh = accm.item0
+    ql = accm.item1
+    rh = th -! qh
+    rl = (((th -! rh) -! qh) -! ql) +! tl
+  var s = b64_hyp_fasttwosum(x: rh, y: rl)
+  rh = s.item0
+  rl = s.item1
+  var eh = (rh.to_bits() >>> 52) & 0x7FF_u64
+  var el = (rl.to_bits() >>> 52) & 0x7FF_u64
+  var ml = (rl.to_bits() +% 8) & 0x000FFFFFFFFFFFFF_u64
+  rh = rh *! sgn
+  rl = rl *! sgn
+  rh = rh +! rl
+  if ml <= 16 or eh > el + 103
+    return b64_sinh_database(x: x, f: rh)
+  return rh
+
+### The accurate path of sinh for 0x1.7137449123ef7p-26 <= |x| < 1/4, using a double-double polynomial.
+### :param x: The argument.
+### :returns: The correctly rounded sinh(x).
+secret routine b64_sinh_zero(x: B64) -> B64
+  var x2 = x *! x
+  var x2l = LLVM::fma[B64](a: x, b: x, c: -x2)
+  var y2 = x2 *! (0x1.6124613aef206p-33 +! x2 *! (0x1.ae7f36beea815p-41 +! x2 *! 0x1.95785063cd974p-49))
+  var p = b64_hyp_polydd_init(l: y2, c_hi: 0x1.ae64567f54482p-26, c_lo: -0x1.defcf17a6ab79p-81)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.71de3a556c734p-19, c_lo: -0x1.b4e2835532bcdp-73)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.a01a01a01a01ap-13, c_lo: 0x1.a0011c925b85cp-73)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.1111111111111p-7, c_lo: 0x1.11111115cf00dp-63)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.5555555555555p-3, c_lo: 0x1.555555555552fp-57)
+  p = b64_hyp_mulddd(xh: p.item0, xl: p.item1, ch: x)
+  p = b64_hyp_muldd(xh: p.item0, xl: p.item1, ch: x2, cl: x2l)
+  var s0 = b64_hyp_fasttwosum(x: x, y: p.item0)
+  var y0 = s0.item0
+  var s1 = b64_hyp_fasttwosum(x: s0.item1, y: p.item1)
+  var y1 = s1.item0
+  y2 = s1.item1
+  var tu = y1.to_bits()
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0
+    # y1 is a power of two: nudge it by one ulp toward y2 so the final rounding sees the sticky bits
+    if (y2.to_bits() ^ tu) >>> 63 == 1
+      tu = tu -% 1
+    else
+      tu = tu +% 1
+    y1 = B64.from_bits(bits: tu)
+  return y0 +! y1
+
+### Exact sinh values for the arguments whose rounding the fast paths cannot decide.
+### :param x: The argument.
+### :param f: The value to return when `|x|` is not in the table.
+### :returns: The correctly rounded sinh(x), or `f`.
+secret routine b64_sinh_database(x: B64, f: B64) -> B64
+  var ax = x.abs()
+  var a = 0_s64
+  var b = 50_s64
+  var sgn: B64 = 1.0
+  sgn = sgn.copysign(sign: x)
+  while a <= b
+    var m = (a + b) // 2
+    var mu = LLVM::reinterpret_bits[S64, U64](m)
+    var key = B64.from_bits(bits: B64_SINH_DB_X[mu])
+    if key < ax
+      a = m + 1
+    elseif key == ax
+      return sgn *! B64.from_bits(bits: B64_SINH_DB_H[mu]) +! sgn *! B64.from_bits(bits: B64_SINH_DB_L[mu])
+    else
+      b = m - 1
+  return f
+
+# The database: arguments |x| (sorted), then the high and low parts of sinh(|x|), as IEEE bit patterns.
+secret preset B64_SINH_DB_X: Array[U64, 51] = [
+  0x3FD364303E1AD8F6_u64, 0x3FD4169F234F23B9_u64, 0x3FD616CC75D49226_u64, 0x3FDAE3773250E7D2_u64,
+  0x3FDB7EFA91915C95_u64, 0x3FDD68039861AB53_u64, 0x3FDE90F16EB88C09_u64, 0x3FEA3FC7E4DD47D1_u64,
+  0x3FEAA3B649A96091_u64, 0x3FEC13876341B62E_u64, 0x3FF2F5D3B178914A_u64, 0x3FF3FFC12B81CBC2_u64,
+  0x3FF44F65DFF00782_u64, 0x3FF7346E3C591A14_u64, 0x3FFB6E2C73F41415_u64, 0x3FFDC5059D4E507D_u64,
+  0x3FFF737F1E8378C7_u64, 0x4003359640329982_u64, 0x40058A4FF5ADAC35_u64, 0x4008C0A26D055288_u64,
+  0x400BC3C2D0C95F52_u64, 0x4020A19AEBB51E90_u64, 0x4023EB8F61734227_u64, 0x40243A81752EABE7_u64,
+  0x40316369CD53BB69_u64, 0x40320E29EA8B51E2_u64, 0x40392A5C27AFBE82_u64, 0x403A1E4F11B513D7_u64,
+  0x403C089FCF166171_u64, 0x403E42A98B3A0BE5_u64, 0x40404DB52248CBB8_u64, 0x40421BC021EEB97E_u64,
+  0x40439FC4D3BB7110_u64, 0x4043C895D86E96C9_u64, 0x404E07E71BFCF06F_u64, 0x404F7216C4B435C9_u64,
+  0x4056474C604CC0D7_u64, 0x4057A60EE15E3E9D_u64, 0x4061F0DA93354198_u64, 0x40654CD1FEA7663A_u64,
+  0x406556C678D5E976_u64, 0x4067945E34B18A9A_u64, 0x4072DA9E5E6AF0B0_u64, 0x40754CEBA01331D5_u64,
+  0x4079E7B643238A14_u64, 0x407C7206C1B753E4_u64, 0x407D6479EBA7C971_u64, 0x407EB9914D4AC1C8_u64,
+  0x4080BC04AF1B09F5_u64, 0x40826EE1A46D8C8B_u64, 0x4084A869881F72AC_u64]
+secret preset B64_SINH_DB_H: Array[U64, 51] = [
+  0x3FD3B07E0C779DDA_u64, 0x3FD46B7B3B358F99_u64, 0x3FD687BD068C1C1E_u64, 0x3FDBAFC3479FC9CC_u64,
+  0x3FDC59869F17B483_u64, 0x3FDE73B46ABB01E1_u64, 0x3FDFBDD4A37760B7_u64, 0x3FED4B21EBF542F0_u64,
+  0x3FEDD32C5ED1E930_u64, 0x3FEFD1D7F1C8170C_u64, 0x3FF7B8516FFD2406_u64, 0x3FF9A0FF413A1AF3_u64,
+  0x3FFA38A3C3227609_u64, 0x40001E9CFA77B855_u64, 0x40057E377B3F0B4B_u64, 0x4009168C60ED5256_u64,
+  0x400BFFD3F94F40FB_u64, 0x4015E40DF3F985BE_u64, 0x401D671928665BDD_u64, 0x4026056B06A21918_u64,
+  0x40300FEF7383A978_u64, 0x409FEE8F69C4CD25_u64, 0x40C4AB1CF45E4E26_u64, 0x40C81D364845ECFA_u64,
+  0x4170FBC6C02B1C90_u64, 0x41808B8ABBA28ABC_u64, 0x4223C81F9A247253_u64, 0x4239A65B6C2E2185_u64,
+  0x4265C452E0E37569_u64, 0x429938768CA4F8AA_u64, 0x42D0794072349523_u64, 0x4323065064A170FB_u64,
+  0x4368A4E90733B95E_u64, 0x4370F33837882A60_u64, 0x45491EC4412C344F_u64, 0x458A97E7BE23E65A_u64,
+  0x47E7A8F65AD009BD_u64, 0x48662E4DC3BBF53F_u64, 0x4CD0BD73B73FC74C_u64, 0x4F3C90810D354618_u64,
+  0x4F437E7AC4E7F9B3_u64, 0x50E1B0E4936A8C9B_u64, 0x5B127D6FE867D6F6_u64, 0x5E99A86785B5EF3E_u64,
+  0x653F5DA7FE652978_u64, 0x68E8670DE0B68CAD_u64, 0x6A462A88613629B6_u64, 0x6C32B67EFF65DCE8_u64,
+  0x7027B1D97C902985_u64, 0x750FBE20477DF4A7_u64, 0x7B79EA7540A3D1F9_u64]
+secret preset B64_SINH_DB_L: Array[U64, 51] = [
+  0xB95BC00000000000_u64, 0xBC70000000000000_u64, 0x390A000000000000_u64, 0xB960000000000000_u64,
+  0xB970000000000000_u64, 0xB922000000000000_u64, 0xB93F800000000000_u64, 0x394E000000000000_u64,
+  0x3958A00000000000_u64, 0x3967200000000000_u64, 0xB972800000000000_u64, 0x394C000000000000_u64,
+  0xB980000000000000_u64, 0x3990000000000000_u64, 0xB990000000000000_u64, 0x397C600000000000_u64,
+  0x397A400000000000_u64, 0x3999700000000000_u64, 0x3990000000000000_u64, 0xB99BE00000000000_u64,
+  0x39B6100000000000_u64, 0x3A04800000000000_u64, 0x3A50000000000000_u64, 0xBA50000000000000_u64,
+  0xBAE9000000000000_u64, 0x3B09B00000000000_u64, 0x3BC0000000000000_u64, 0xBB9BC00000000000_u64,
+  0x3BA4000000000000_u64, 0x3C16D00000000000_u64, 0x3C60E80000000000_u64, 0x3CB0880000000000_u64,
+  0x3CD6E00000000000_u64, 0xBCE2800000000000_u64, 0x3E70000000000000_u64, 0xBF00000000000000_u64,
+  0xC130800000000000_u64, 0x41CB000000000000_u64, 0x4655900000000000_u64, 0x4862000000000000_u64,
+  0x48C0200000000000_u64, 0xCA5FA00000000000_u64, 0x5480A00000000000_u64, 0xD812200000000000_u64,
+  0x5EC0000000000000_u64, 0xE237800000000000_u64, 0xE374000000000000_u64, 0xE5A0200000000000_u64,
+  0x6995600000000000_u64, 0xEE85500000000000_u64, 0xF4F2D00000000000_u64]

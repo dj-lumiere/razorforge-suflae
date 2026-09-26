@@ -1,0 +1,74 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cube root of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/cbrt/cbrtf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its exception-flag save/restore is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Cube root, correctly rounded: the exact cube root rounded to the nearest `B32` (ties to even),
+### identical on every platform. `cbrt(-x) == -cbrt(x)`, and ±0, ±infinity and NaN map to themselves.
+### :returns: The correctly rounded cube root.
+routine B32.cbrt() -> B32
+  var u = me.to_bits()
+  var au = u << 1
+  var sgn = LLVM::zero_extend[U32, U64](u >>> 31)
+  var e = LLVM::zero_extend[U32, S64](au >>> 24)
+  if au < 0x01000000_u32 or au >= 0xFF000000_u32
+    # ±infinity, NaN: x + x also quiets a signaling NaN
+    if au >= 0xFF000000_u32
+      return me +! me
+    if au == 0
+      return me
+    # subnormal: normalize the mantissa
+    var nz = au.leading_zeros() - 7
+    au = au << nz
+    e = e - (LLVM::zero_extend[U32, S64](nz) - 1)
+  var mant = LLVM::zero_extend[U32, U64](au & 0x00FFFFFF_u32)
+  var z = B64.from_bits(bits: (mant << 28) | (0x3FF_u64 << 52))
+  e = e + 899
+  var et = e // 3
+  var it = e % 3
+  var isc = b32_cbrt_escale(it: it).to_bits()
+  isc = isc +% (LLVM::reinterpret_bits[S64, U64](et - 342) << 52)
+  isc = isc | (sgn << 63)
+  var scale = B64.from_bits(bits: isc)
+  # scale = ±2^(it/3) * 2^(et-342), and cbrt(x) = cbrt(z) * scale with 1 <= z < 2
+  var r0 = -0x1.9931c6c2d19d1p-6 /! z
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var p0 = 0x1.2319d352ea5d5p-1 +! z *! 0x1.67ad8ee258d1ap-1
+  var p1 = -0x1.9342edf9cbad9p-2 +! z *! 0x1.b6388fc510a75p-3
+  var p2 = -0x1.6002455599e2fp-4 +! z *! 0x1.7b096936192c4p-6
+  var p3 = -0x1.e5577187e8bf8p-9 +! z *! 0x1.169ef81d6c34ep-12
+  var f = ((p0 +! z2 *! p1) +! z4 *! (p2 +! z2 *! p3)) +! r0
+  var r = f *! scale
+  var ub = B32(from: r)
+  var lb = B32(from: r -! scale *! 0x1.85d4f3f7556ecp-30)
+  if ub == lb
+    return ub
+  # one Newton step when the first approximation is too close to a rounding boundary
+  var h = f *! f *! f -! z
+  f = f -! (f *! r0 *! -0x1.ab16ec65d138fp+3) *! h
+  r = f *! scale
+  var bits = r.to_bits()
+  ub = B32(from: r)
+  var m0 = LLVM::reinterpret_bits[U64, S64](bits << 19)
+  var m1 = m0 >> 63
+  if (m0 ^ m1) < (1_s64 << 31)
+    # an exact cube root: clear the rounding noise below the B32 precision
+    ub = B32(from: B64.from_bits(bits: (bits +% (1_u64 << 31)) & 0xFFFFFFFF00000000_u64))
+  return ub
+
+### The scale `2^(it/3)` of the cube root reduction, for `it` in 0..2.
+### :param it: The exponent residue modulo 3.
+### :returns: 1, 2^(1/3) or 2^(2/3).
+secret routine b32_cbrt_escale(it: S64) -> B64
+  if it == 0
+    return 1.0
+  if it == 1
+    return 0x1.428a2f98d728bp+0
+  return 0x1.965fea53d6e3dp+0

@@ -1,0 +1,189 @@
+module Core
+
+# ============================================================================
+# Correctly rounded base-2 exponential 2^x of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/exp2/exp2.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest
+# path of the original is kept (its exception-flag and errno handling are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The double-double helpers and the 2^(i/2^12) table come from the exp port (B64Exp.rf).
+
+### Returns 2 raised to this value, correctly rounded: the exact power rounded to the nearest `B64`
+### (ties to even), identical on every platform, with raw IEEE 754 propagation (overflow -> +infinity,
+### `exp2(-infinity) == 0`, NaN -> NaN). Integer arguments give exact powers of two.
+### :returns: The correctly rounded power of two, possibly +infinity.
+routine B64.exp2_unchecked() -> B64
+  var x = me
+  var ux = x.to_bits()
+  var ax = ux << 1
+  if ax == 0_u64
+    return 1.0
+  # |x| >= 1024
+  if ax >= 0x8120000000000000_u64
+    # NaN
+    if ax > 0xFFE0000000000000_u64
+      return x +! x
+    # ±infinity
+    if ax == 0xFFE0000000000000_u64
+      if ux >>> 63 == 1
+        return 0.0
+      return x
+    if ux >>> 63 == 1
+      # x <= -1075: underflow to 0
+      if ux >= 0xC090CC0000000000_u64
+        return 0x1p-1022 *! 0x1p-1022
+    else
+      # x >= 1024: overflow
+      return 0x1p1023 *! x
+  # for |x| <= 0x1.71547652b82fep-54, 2^x rounds to 1
+  if ax <= 0x792E2A8ECA5705FC_u64
+    var tiny: B64 = 0x1p-54
+    return 1.0 +! tiny.copysign(sign: x)
+  # frac is nonzero exactly when x is not an integer
+  var m = ux << 12
+  var ex = (ax >>> 53) -% 0x3FF_u64
+  var frac = (ex >>> 63) | (m << LLVM::int_truncate[U64, U32](ex & 63_u64))
+  var sx = 4096.0 *! x
+  var fx = LLVM::rint[B64](value: sx)
+  var z = sx -! fx
+  var z2 = z *! z
+  var k = LLVM::float_to_signed[B64, S64](fx)
+  var ie = k >> 12
+  var tt = b64_exp_table_2pow(j: LLVM::reinterpret_bits[S64, U64](k))
+  var th = tt.item0
+  var tl = tt.item1
+  var tz = th *! z
+  var fh = th
+  var fl = tz *! ((0x1.62e42fefa39efp-13 +! z *! 0x1.ebfbdff82c58fp-27) +! z2 *! (0x1.c6b08d73b3e01p-41 +! z *! 0x1.3b2ab6fdda001p-55)) +! tl
+  var eps = 0x1.fdp-63
+  if ux <= 0xC08FF00000000000_u64
+    # x >= -1022: normal result
+    if frac != 0_u64
+      var ub = fh +! (fl +! eps)
+      fh = fh +! (fl -! eps)
+      if ub != fh
+        return b64_exp2_accurate(x: x)
+    return b64_exp_ldexp(x: fh, e: ie)
+  # subnormal result
+  var bias = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1_s64 - ie) << 52)
+  var s = b64_exp_fasttwosum(x: bias, y: fh)
+  fh = s.item0
+  fl = fl +! s.item1
+  if frac != 0_u64
+    var sub_ub = fh +! (fl +! eps)
+    fh = fh +! (fl -! eps)
+    if sub_ub != fh
+      return b64_exp2_accurate(x: x)
+  return B64.from_bits(bits: fh.to_bits() & 0x000FFFFFFFFFFFFF_u64)
+
+### The slow accurate path of `exp2`, taken when the fast path cannot decide the rounding.
+### :param x: The argument, finite and not an integer, with 2^x neither overflowing nor below 2^-1075.
+### :returns: The correctly rounded power of two.
+secret routine b64_exp2_accurate(x: B64) -> B64
+  var ux = x.to_bits()
+  var sx = 4096.0 *! x
+  var fx = LLVM::rint[B64](value: sx)
+  var z = sx -! fx
+  var k = LLVM::float_to_signed[B64, S64](fx)
+  var uk = LLVM::reinterpret_bits[S64, U64](k)
+  var ie = k >> 12
+  var tt = b64_exp_table_2pow(j: uk)
+  var th = tt.item0
+  var tl = tt.item1
+  # Horner evaluation of the degree-6 double-double polynomial in z (constant term 0)
+  var i = 5_u64
+  var ch = B64.from_bits(bits: B64_EXP2_ACC_CD[2_u64 * i])
+  var cl = B64.from_bits(bits: B64_EXP2_ACC_CD[2_u64 * i + 1_u64])
+  while i > 0_u64
+    i = i - 1_u64
+    var r = b64_exp2_mulddd(xh: z, ch: ch, cl: cl)
+    var ci = B64.from_bits(bits: B64_EXP2_ACC_CD[2_u64 * i])
+    var sh = r.item0 +! ci
+    var sl = (ci -! sh) +! r.item0
+    ch = sh
+    cl = r.item1 +! (sl +! B64.from_bits(bits: B64_EXP2_ACC_CD[2_u64 * i + 1_u64]))
+  var f = b64_exp2_mulddd(xh: z, ch: ch, cl: cl)
+  var fh = f.item0
+  var fl = f.item1
+  if ux <= 0xC08FF00000000000_u64
+    # x >= -1022
+    if -0x1.71547652b82fep-54 <= x and x <= 0x1.71547652b82fdp-53
+      return LLVM::fma[B64](a: x, b: 0.5, c: 1.0)
+    if (uk & 0xFFF_u64) == 0_u64
+      # 4096*x rounds to 4096 times an integer
+      var s = b64_exp_fasttwosum(x: th, y: fh)
+      fh = s.item0
+      var s2 = b64_exp_fasttwosum(x: s.item1, y: fl)
+      fl = s2.item0
+      var ul = fl.to_bits()
+      if (ul & 0x000FFFFFFFFFFFFF_u64) == 0_u64 and ((ul >>> 52) & 0x7FF_u64) != 0_u64
+        # fl is a nonzero power of 2: nudge it one ulp toward the sign of the tail
+        if (ul >>> 63) == (s2.item1.to_bits() >>> 63)
+          ul = ul +% 1_u64
+        else
+          ul = ul -% 1_u64
+        fl = B64.from_bits(bits: ul)
+    else
+      f = b64_exp_muldd(xh: fh, xl: fl, ch: th, cl: tl)
+      f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+      fh = f.item0
+      fl = f.item1
+    var s3 = b64_exp_fasttwosum(x: fh, y: fl)
+    fh = s3.item0
+    var d = (s3.item1.to_bits() +% 2_u64) & 0x000FFFFFFFFFFFFF_u64
+    if d <= 2_u64
+      fh = b64_exp2_database(x: x, f: fh)
+    return b64_exp_ldexp(x: fh, e: ie)
+  # subnormal result
+  var bias = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1_s64 - ie) << 52)
+  f = b64_exp_muldd(xh: fh, xl: fl, ch: th, cl: tl)
+  f = b64_exp_fastsum(xh: th, xl: tl, yh: f.item0, yl: f.item1)
+  fl = f.item1
+  var s4 = b64_exp_fasttwosum(x: bias, y: f.item0)
+  fl = fl +! s4.item1
+  return B64.from_bits(bits: (s4.item0 +! fl).to_bits() & 0x000FFFFFFFFFFFFF_u64)
+
+### Double-double times double `(ch + cl) * xh`.
+### :param xh: The double factor.
+### :param ch: The high part of the double-double factor.
+### :param cl: The low part of the double-double factor.
+### :returns: `(high, low)` of the product.
+secret routine b64_exp2_mulddd(xh: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = ch *! xh
+  return (ahhh, cl *! xh +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
+
+### Looks `x` up among the arguments whose power of two lies too close to a rounding boundary for the
+### accurate path, and returns the correctly rounded result for them, or `f` unchanged otherwise.
+### :param x: The argument.
+### :param f: The accurate path's result, before scaling by 2^ie.
+### :returns: The corrected (unscaled) result.
+secret routine b64_exp2_database(x: B64, f: B64) -> B64
+  var ux = x.to_bits()
+  var a = 0_s64
+  var b = 42_s64
+  var m = (a + b) >> 1
+  while a <= b
+    var um = LLVM::reinterpret_bits[S64, U64](m)
+    var cm = B64_EXP2_DB[um]
+    if cm < ux
+      a = m + 1
+    elseif cm == ux
+      var dr = B64.from_bits(bits: ((8677191773140_u64 >>> LLVM::int_truncate[U64, U32](um)) << 63) | 0x3C90000000000000_u64)
+      var s2 = 0x3B216FBD5FD7665F_u64
+      if (um >>> 5) == 1_u64
+        s2 = 0x34C797_u64
+      var t = (s2 >>> LLVM::int_truncate[U64, U32]((um << 1) & 63_u64)) & 3_u64
+      return b64_exp_pick(f: f, t: t, dr: dr)
+    else
+      b = m - 1
+    m = (a + b) >> 1
+  return f
+
+# Double-double coefficients (high, low) of the degree-6 polynomial of the accurate path, as bit patterns.
+secret preset B64_EXP2_ACC_CD: Array[U64, 12] = [0x3F262E42FEFA39EF_u64, 0x3BBABC9E3B39873E_u64, 0x3E4EBFBDFF82C58F_u64, 0xBAE5E43A53E44950_u64, 0x3D6C6B08D704A0C0_u64, 0xBA0D3A15710D3D83_u64, 0x3C83B2AB6FBA4E77_u64, 0x3914DD5D2A5E025A_u64, 0x3B95D87FE7A66459_u64, 0xB83DC47E47BEB9DD_u64, 0x3AA430912F9FB79D_u64, 0xB744FCD51FCB7640_u64]
+
+# The arguments (bit patterns, sorted) whose power of two is too close to a rounding boundary for the
+# accurate path.
+secret preset B64_EXP2_DB: Array[U64, 43] = [0x3F5E4596526BF94D_u64, 0x3F5E76049073067F_u64, 0x3F6755AA6FA428CD_u64, 0x3F679015CE2843D7_u64, 0x3F7F99AFEFA30D65_u64, 0x3F98D040898B73F5_u64, 0x3FB673A7779D5293_u64, 0x3FB8859F5E252908_u64, 0x3FBFA18DFAD6E466_u64, 0x3FC6C4175EA0C6E1_u64, 0x3FC926961243BABA_u64, 0x3FE3E34FA6AB969E_u64, 0x3FEB32A6C92D1185_u64, 0x3FF9F1A7D355CB4F_u64, 0xBF243C1CEA9BD4D9_u64, 0xBF277970470A37ED_u64, 0xBF27D44C7C8229A6_u64, 0xBF395A914543EAB7_u64, 0xBF399BE01D01064A_u64, 0xBF413F898B1E4F28_u64, 0xBF468E7A49000B1C_u64, 0xBF486D2A6E5E8368_u64, 0xBF5120D3BDFB6ED8_u64, 0xBF53EC814D260D02_u64, 0xBF647B667916C4B2_u64, 0xBF6899E0474BA2D5_u64, 0xBF6BA84C6EBFB038_u64, 0xBF7111BC29CCDBB1_u64, 0xBF71FB57E1996E26_u64, 0xBF772E40977492C3_u64, 0xBF7EBF8CF367FCB8_u64, 0xBF807F812303F10A_u64, 0xBF9234ADA2403885_u64, 0xBF935DD739305031_u64, 0xBFA526CE079B05A5_u64, 0xBFB3EA95A5C16E4A_u64, 0xBFC33564DB4BB9EC_u64, 0xBFCD4854D9F87FCA_u64, 0xBFCFE89353E31CBF_u64, 0xBFD83960B2A8D2C4_u64, 0xBFDE242801B45D0D_u64, 0xBFECEF4C143B5ADF_u64, 0xBFF60E582CAA34B1_u64]

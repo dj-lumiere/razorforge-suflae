@@ -1,0 +1,254 @@
+module Core
+
+# ============================================================================
+# Correctly rounded hyperbolic cosine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/cosh/cosh.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov <sibid@uvic.ca>
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno reporting is
+# dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The
+# exp tables and double-double helpers shared with sinh live in B64HypShared.rf.
+
+### Hyperbolic cosine with raw IEEE 754 propagation (overflow -> +infinity), correctly rounded: the exact
+### `cosh(me)` rounded to the nearest `B64` (ties to even), identical on every platform. ±infinity maps to
+### +infinity and NaN to NaN.
+### :returns: The correctly rounded hyperbolic cosine.
+routine B64.cosh_unchecked() -> B64
+  var x = me
+  var ax = x.abs()
+  var v0 = LLVM::fma[B64](a: ax, b: 0x1.71547652b82fep+12, c: 0x1.8000002p+26)
+  var jt = v0.to_bits()
+  var t = B64.from_bits(bits: jt & 0xFFFFFFFFFC000000_u64) -! 0x1.8p26
+  var aix = ax.to_bits()
+  if aix < 0x3FC0000000000000_u64
+    # |x| < 0.125
+    if aix < 0x3E50000000000000_u64
+      # |x| < 2^-26
+      return LLVM::fma[B64](a: ax, b: 0x1p-55, c: 1.0)
+    # q(x) = 1 + c0*x^2 + ... + c4*x^10 approximates cosh(x) on [2^-26, 0.125] with
+    # |q(x) - cosh(x)| < 2^-67.518 * x^2
+    var x2 = x *! x
+    var x4 = x2 *! x2
+    var p = x2 *! ((0x1p-1 +! x2 *! 0x1.5555555555554p-5) +! x4 *! ((0x1.6c16c16c1d0cp-10 +! x2 *! 0x1.a01a0075066b4p-16) +! x4 *! 0x1.27faff8dcc1c8p-22))
+    var e = x2 *! 0x1.84p-51
+    var lb = 1.0 +! (p -! e)
+    var ub = 1.0 +! (p +! e)
+    if lb == ub
+      return lb
+    return b64_cosh_zero(x: x)
+  if aix > 0x408633CE8FB9F87D_u64
+    # |x| > 0x1.633ce8fb9f87dp+9
+    if aix > 0x7FF0000000000000_u64
+      return x +! x
+    if aix == 0x7FF0000000000000_u64
+      return ax
+    var big: B64 = 0x1p1023
+    return big *! 2.0
+  # now 0.125 <= |x| <= 0x1.633ce8fb9f87dp+9
+  var il = LLVM::reinterpret_bits[U64, S64]((jt << 14) >>> 40)
+  var jl = -il
+  var i1 = LLVM::reinterpret_bits[S64, U64](il & 0x3F)
+  var i0 = LLVM::reinterpret_bits[S64, U64]((il >> 6) & 0x3F)
+  var ie = il >> 12
+  var j1 = LLVM::reinterpret_bits[S64, U64](jl & 0x3F)
+  var j0 = LLVM::reinterpret_bits[S64, U64]((jl >> 6) & 0x3F)
+  var je = jl >> 12
+  var sp = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + ie) << 52)
+  var t0h = B64.from_bits(bits: B64_HYP_T0_HI[i0])
+  var t0l = B64.from_bits(bits: B64_HYP_T0_LO[i0])
+  var t1h = B64.from_bits(bits: B64_HYP_T1_HI[i1])
+  var t1l = B64.from_bits(bits: B64_HYP_T1_LO[i1])
+  var th = t0h *! t1h
+  var tl = (t0h *! t1l +! t1h *! t0l) +! LLVM::fma[B64](a: t0h, b: t1h, c: -th)
+  var l2h = 0x1.62e42ffp-13
+  var l2l = 0x1.718432a1b0e26p-47
+  var dx = (ax -! l2h *! t) +! l2l *! t
+  var dx2 = dx *! dx
+  var mx = -dx
+  var ch0 = 0x1p+0
+  var ch1 = 0x1p-1
+  var ch2 = 0x1.5555555aaaaaep-3
+  var ch3 = 0x1.55555551c98cp-5
+  var pp = dx *! ((ch0 +! dx *! ch1) +! dx2 *! (ch2 +! dx *! ch3))
+  var rh = 0.0
+  var rl = 0.0
+  if aix > 0x4014000000000000_u64
+    # |x| > 5
+    if aix > 0x40425E4F7B2737FA_u64
+      # |x| >~ 36.736801: exp(-|x|) is negligible
+      sp = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1021 + ie) << 52)
+      rh = th
+      rl = tl +! th *! pp
+      # 0.12e-18 in the original
+      var e = 0x1.1b578c96db19bp-63 *! th
+      var lb = rh +! (rl -! e)
+      var ub = rh +! (rl +! e)
+      if lb == ub
+        return (lb *! sp) *! 2.0
+      var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+      acc = b64_hyp_fasttwosum(x: acc.item0, y: acc.item1)
+      var bh = acc.item0
+      var bl = acc.item1
+      var eh = (bh.to_bits() >>> 52) & 0x7FF_u64
+      var el = (bl.to_bits() >>> 52) & 0x7FF_u64
+      var ml = (bl.to_bits() +% 8) & 0x000FFFFFFFFFFFFF_u64
+      bh = bh +! bl
+      bh = bh *! 2.0
+      bh = bh *! sp
+      # the exponent gap is above 103 or the last bits of the low part are within 8 of zero: look the
+      # argument up
+      if ml <= 16 or eh > el + 103
+        return b64_cosh_database(x: x, f: bh)
+      return bh
+    # now 5 < |x| < 36.736801
+    var sm = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + je) << 52)
+    var q0h = B64.from_bits(bits: B64_HYP_T0_HI[j0])
+    var q1h = B64.from_bits(bits: B64_HYP_T1_HI[j1])
+    var qh = q0h *! q1h
+    th = th *! sp
+    tl = tl *! sp
+    qh = qh *! sm
+    var pm = mx *! ((ch0 +! mx *! ch1) +! dx2 *! (ch2 +! mx *! ch3))
+    var em = qh +! qh *! pm
+    rh = th
+    rl = (tl +! em) +! th *! pp
+    var e = 0x1.202p-63 *! rh
+    var lb = rh +! (rl -! e)
+    var ub = rh +! (rl +! e)
+    if lb == ub
+      return lb
+    var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+    th = acc.item0
+    tl = acc.item1
+    if aix > 0x403F666666666666_u64
+      # |x| > 0x1.f666666666666p+4
+      rh = th +! qh
+      rl = ((th -! rh) +! qh) +! tl
+    else
+      qh = q0h *! q1h
+      var q0l = B64.from_bits(bits: B64_HYP_T0_LO[j0])
+      var q1l = B64.from_bits(bits: B64_HYP_T1_LO[j1])
+      var ql = (q0h *! q1l +! q1h *! q0l) +! LLVM::fma[B64](a: q0h, b: q1h, c: -qh)
+      qh = qh *! sm
+      ql = ql *! sm
+      var accm = b64_hyp_exp_accurate(x: -ax, t: -t, th: qh, tl: ql)
+      qh = accm.item0
+      ql = accm.item1
+      rh = th +! qh
+      rl = (((th -! rh) +! qh) +! ql) +! tl
+  else
+    # |x| <= 5
+    var sm = B64.from_bits(bits: LLVM::reinterpret_bits[S64, U64](1022 + je) << 52)
+    var q0h = B64.from_bits(bits: B64_HYP_T0_HI[j0])
+    var q0l = B64.from_bits(bits: B64_HYP_T0_LO[j0])
+    var q1h = B64.from_bits(bits: B64_HYP_T1_HI[j1])
+    var q1l = B64.from_bits(bits: B64_HYP_T1_LO[j1])
+    var qh = q0h *! q1h
+    var ql = (q0h *! q1l +! q1h *! q0l) +! LLVM::fma[B64](a: q0h, b: q1h, c: -qh)
+    th = th *! sp
+    tl = tl *! sp
+    qh = qh *! sm
+    ql = ql *! sm
+    var pm = mx *! ((ch0 +! mx *! ch1) +! dx2 *! (ch2 +! mx *! ch3))
+    var fph = th
+    var fpl = tl +! th *! pp
+    var fmh = qh
+    var fml = ql +! qh *! pm
+    rh = fph +! fmh
+    rl = (((fph -! rh) +! fmh) +! fml) +! fpl
+    var e = 0x1.c0ap-62 *! rh
+    var lb = rh +! (rl -! e)
+    var ub = rh +! (rl +! e)
+    if lb == ub
+      return lb
+    var acc = b64_hyp_exp_accurate(x: ax, t: t, th: th, tl: tl)
+    th = acc.item0
+    tl = acc.item1
+    var accm = b64_hyp_exp_accurate(x: -ax, t: -t, th: qh, tl: ql)
+    qh = accm.item0
+    ql = accm.item1
+    rh = th +! qh
+    rl = (((th -! rh) +! qh) +! ql) +! tl
+  var s = b64_hyp_fasttwosum(x: rh, y: rl)
+  rh = s.item0
+  rl = s.item1
+  var eh = (rh.to_bits() >>> 52) & 0x7FF_u64
+  var el = (rl.to_bits() >>> 52) & 0x7FF_u64
+  var ml = (rl.to_bits() +% 8) & 0x000FFFFFFFFFFFFF_u64
+  rh = rh +! rl
+  if ml <= 16 or eh > el + 103
+    return b64_cosh_database(x: x, f: rh)
+  return rh
+
+### The accurate path of cosh for 2^-26 <= |x| < 0.125, using a double-double polynomial.
+### :param x: The argument.
+### :returns: The correctly rounded cosh(x).
+secret routine b64_cosh_zero(x: B64) -> B64
+  var x2 = x *! x
+  var x2l = LLVM::fma[B64](a: x, b: x, c: -x2)
+  var y2 = x2 *! (0x1.27e4fb7789f5cp-22 +! x2 *! (0x1.1eed8eff9089cp-29 +! x2 *! (0x1.939749ce13dadp-37 +! x2 *! 0x1.ae9891efb6691p-45)))
+  var p = b64_hyp_polydd_init(l: y2, c_hi: 0x1.a01a01a01a01ap-16, c_lo: 0x1.a4ffbe15316aap-76)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.6c16c16c16c17p-10, c_lo: -0x1.f49f4a6e838f2p-65)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1.5555555555555p-5, c_lo: 0x1.5555555556135p-59)
+  p = b64_hyp_polydd_step(xh: x2, xl: x2l, ch: p.item0, cl: p.item1, c_hi: 0x1p-1, c_lo: -0x1.c7e8db669f624p-111)
+  p = b64_hyp_muldd(xh: p.item0, xl: p.item1, ch: x2, cl: x2l)
+  var s0 = b64_hyp_fasttwosum(x: 1.0, y: p.item0)
+  var y0 = s0.item0
+  var s1 = b64_hyp_fasttwosum(x: s0.item1, y: p.item1)
+  var y1 = s1.item0
+  y2 = s1.item1
+  var tu = y1.to_bits()
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0
+    # y1 is a power of two: nudge it by one ulp toward y2 so the final rounding sees the sticky bits
+    if (y2.to_bits() ^ tu) >>> 63 == 1
+      tu = tu -% 1
+    else
+      tu = tu +% 1
+    y1 = B64.from_bits(bits: tu)
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0x000FFFFFFFFFFFFF_u64
+    return b64_cosh_database(x: x, f: y0 +! y1)
+  return y0 +! y1
+
+### Exact cosh values for the arguments whose rounding the fast paths cannot decide.
+### :param x: The argument.
+### :param f: The value to return when `|x|` is not in the table.
+### :returns: The correctly rounded cosh(x), or `f`.
+secret routine b64_cosh_database(x: B64, f: B64) -> B64
+  var ax = x.abs()
+  var a = 0_s64
+  var b = 20_s64
+  while a <= b
+    var m = (a + b) // 2
+    var mu = LLVM::reinterpret_bits[S64, U64](m)
+    var key = B64.from_bits(bits: B64_COSH_DB_X[mu])
+    if key < ax
+      a = m + 1
+    elseif key == ax
+      return B64.from_bits(bits: B64_COSH_DB_H[mu]) +! B64.from_bits(bits: B64_COSH_DB_L[mu])
+    else
+      b = m - 1
+  return f
+
+# The database: arguments |x| (sorted), then the high and low parts of cosh(|x|), as IEEE bit patterns.
+secret preset B64_COSH_DB_X: Array[U64, 21] = [
+  0x3FB9A5E3CBE1985E_u64, 0x3FC52A11832E847D_u64, 0x3FCBF0305E2C6C37_u64, 0x3FD17326FFC09F68_u64,
+  0x3FD3D27BF16D8BDB_u64, 0x3FE03923F2B47C07_u64, 0x3FEA6031CD5F93BA_u64, 0x3FF104B648F113A1_u64,
+  0x3FF1585720F35CD9_u64, 0x3FFE9CC7ED2E1A7E_u64, 0x40043180EA854696_u64, 0x401725811DCF6782_u64,
+  0x4025AFD56F7D565B_u64, 0x402759A2AD4C4D56_u64, 0x4027FCE95EA5C653_u64, 0x403743D5609348AC_u64,
+  0x404E07E71BFCF06F_u64, 0x4056474C604CC0D7_u64, 0x40654CD1FEA7663A_u64, 0x4072DA9E5E6AF0B0_u64,
+  0x407D6479EBA7C971_u64]
+secret preset B64_COSH_DB_H: Array[U64, 21] = [
+  0x3FF01492F72F984B_u64, 0x3FF0381E68CAC923_u64, 0x3FF061F4C39E16F2_u64, 0x3FF099318A43AC80_u64,
+  0x3FF0C6091056E06A_u64, 0x3FF219C1989E3373_u64, 0x3FF5BFF041B260FE_u64, 0x3FF9EFDCA62B700A_u64,
+  0x3FFA5BF3ACFDE4B2_u64, 0x400BB0FF220D8EB5_u64, 0x40191F1122B6B63A_u64, 0x40645EA160DDC71F_u64,
+  0x40D8FF8E0CCEA7C0_u64, 0x40ECB62EEC26BD78_u64, 0x40F3BF8009648DC0_u64, 0x41F7A87A8BB7FA28_u64,
+  0x45491EC4412C344F_u64, 0x47E7A8F65AD009BD_u64, 0x4F3C90810D354618_u64, 0x5B127D6FE867D6F6_u64,
+  0x6A462A88613629B6_u64]
+secret preset B64_COSH_DB_L: Array[U64, 21] = [
+  0xB940000000000000_u64, 0x3970000000000000_u64, 0x3940000000000000_u64, 0x3970000000000000_u64,
+  0xB940000000000000_u64, 0xBC90000000000000_u64, 0xB940000000000000_u64, 0xB920000000000000_u64,
+  0x3960000000000000_u64, 0xBCA0000000000000_u64, 0x3990000000000000_u64, 0xB9B0000000000000_u64,
+  0x3A50000000000000_u64, 0xBA30000000000000_u64, 0x3A70000000000000_u64, 0xBE90000000000000_u64,
+  0x3E70000000000000_u64, 0xC130000000000000_u64, 0x4860000000000000_u64, 0x5480000000000000_u64,
+  0xE370000000000000_u64]

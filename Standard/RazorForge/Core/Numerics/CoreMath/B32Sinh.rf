@@ -1,0 +1,80 @@
+module Core
+
+# ============================================================================
+# Correctly rounded hyperbolic sine of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/sinh/sinhf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### Hyperbolic sine, correctly rounded: the exact sinh rounded to the nearest `B32` (ties to even),
+### identical on every platform. Raw IEEE 754 propagation: overflow gives ±infinity, NaN stays NaN.
+### :returns: The correctly rounded hyperbolic sine.
+routine B32.sinh_unchecked() -> B32
+  var ux = me.to_bits() << 1
+  if ux > 0x8565A9F8_u32
+    # |x| > 0x1.65a9f8p+6: NaN, ±infinity, or overflow
+    if ux >= 0xFF000000_u32
+      if (ux << 8) != 0
+        return me +! me
+      return me
+    return 2.0_b32.copysign(sign: me) *! 0x1.fffffep127_b32
+  if ux < 0x7C000000_u32
+    # |x| < 0.125
+    if ux <= 0x74250BFE_u32
+      # |x| <= 0x1.250bfep-11
+      if ux < 0x66000000_u32
+        return LLVM::fma[B32](a: me, b: me.abs(), c: me)
+      if ux == 0x74250BFE_u32
+        var sgn = 1.0_b32.copysign(sign: me)
+        return sgn *! 0x1.250bfep-11_b32 +! sgn *! 0x1p-36_b32
+      return (me *! 0x1.555556p-3_b32) *! (me *! me) +! me
+    var z = B64(from: me)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var p = (0x1.5555555555555p-3 +! z2 *! 0x1.11111111146e1p-7) +! z4 *! (0x1.a01a00930dda6p-13 +! z2 *! 0x1.71f92198aa6e9p-19)
+    return B32(from: z +! (z2 *! z) *! p)
+  return b32_sinh_main(z: B64(from: me))
+
+### Table of 2^(i/32)/2 for i in 0..31, as B64 bit patterns.
+secret preset B32_SINH_TB: Array[U64, 32] = [0x3fe0000000000000_u64, 0x3fe059b0d3158574_u64, 0x3fe0b5586cf9890f_u64, 0x3fe11301d0125b51_u64, 0x3fe172b83c7d517b_u64, 0x3fe1d4873168b9aa_u64, 0x3fe2387a6e756238_u64, 0x3fe29e9df51fdee1_u64, 0x3fe306fe0a31b715_u64, 0x3fe371a7373aa9cb_u64, 0x3fe3dea64c123422_u64, 0x3fe44e086061892d_u64, 0x3fe4bfdad5362a27_u64, 0x3fe5342b569d4f82_u64, 0x3fe5ab07dd485429_u64, 0x3fe6247eb03a5585_u64, 0x3fe6a09e667f3bcd_u64, 0x3fe71f75e8ec5f74_u64, 0x3fe7a11473eb0187_u64, 0x3fe82589994cce13_u64, 0x3fe8ace5422aa0db_u64, 0x3fe93737b0cdc5e5_u64, 0x3fe9c49182a3f090_u64, 0x3fea5503b23e255d_u64, 0x3feae89f995ad3ad_u64, 0x3feb7f76f2fb5e47_u64, 0x3fec199bdd85529c_u64, 0x3fecb720dcef9069_u64, 0x3fed5818dcfba487_u64, 0x3fedfc97337b9b5f_u64, 0x3feea4afa2a490da_u64, 0x3fef50765b6e4540_u64]
+
+### Returns 2^(k/32)/2 for k = ±ia, where ia is an integer held in a B64.
+### :param ia: The integer nearest to 32*x/ln(2), as a B64.
+### :param minus: When true, uses k = -ia instead of ia.
+### :returns: 2^(k/32)/2.
+secret routine b32_sinh_scale(ia: B64, minus: Bool) -> B64
+  var jp = LLVM::reinterpret_bits[U64, S64]((ia +! 0x1.8p52).to_bits())
+  if minus
+    jp = -jp
+  var index = LLVM::reinterpret_bits[S64, U64](jp & 31)
+  return B64.from_bits(bits: B32_SINH_TB[index] +% (LLVM::reinterpret_bits[S64, U64](jp >> 5) << 52))
+
+### The main path, for 0.125 <= |x| and no overflow: combines e^x and e^-x from a 2^(k/32) table.
+### :param z: The input, widened to B64.
+### :returns: The correctly rounded result.
+secret routine b32_sinh_main(z: B64) -> B32
+  var a = 0x1.71547652b82fep+5 *! z
+  var ia = LLVM::rint[B64](value: a)
+  var h = a -! ia
+  var h2 = h *! h
+  var sp = b32_sinh_scale(ia: ia, minus: false)
+  var sm = b32_sinh_scale(ia: ia, minus: true)
+  var tev = 1.0 +! h2 *! 0x1.ebfd1b232f475p-13
+  var tod = 0x1.62e42fef4c4e7p-6 +! h2 *! 0x1.c6b19384ecd93p-20
+  var rp = sp *! (tev +! h *! tod)
+  var rm = sm *! (tev -! h *! tod)
+  var r = rp -! rm
+  var ub = B32(from: r)
+  var lb = B32(from: r -! 0x1.4e406496685f4p-33 *! r)
+  if ub != lb
+    # too close to a rounding boundary: redo with a split 32/ln(2) and a longer polynomial
+    h = (0x1.7154765p+5 *! z -! ia) +! 0x1.5c17f0bbbe88p-26 *! z
+    h2 = h *! h
+    tev = (1.0 +! h2 *! 0x1.ebfbdff82c58fp-13) +! (h2 *! h2) *! (0x1.3b2ab6fb92e5ep-27 +! h2 *! 0x1.430976b8ce6efp-43)
+    tod = 0x1.62e42fefa39efp-6 +! h2 *! (0x1.c6b08d702e0edp-20 +! h2 *! 0x1.5d886e6d54203p-35)
+    r = sp *! (tev +! h *! tod) -! sm *! (tev -! h *! tod)
+    ub = B32(from: r)
+  return ub

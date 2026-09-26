@@ -1,0 +1,66 @@
+module Core
+
+# ============================================================================
+# Correctly rounded base-2 logarithm of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/log2/log2f.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling and exception raising are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### `1/(1 + i/64)` for i in 0..64, rounded to 29 bits, as B64 bit patterns.
+secret preset B32_LOG2_IX: Array[U64, 65] = [0x3FF0000000000000_u64, 0x3FEF81F820000000_u64, 0x3FEF07C1F0000000_u64, 0x3FEE9131AC000000_u64, 0x3FEE1E1E1E000000_u64, 0x3FEDAE6077000000_u64, 0x3FED41D41D000000_u64, 0x3FECD85689000000_u64, 0x3FEC71C71C000000_u64, 0x3FEC0E0704000000_u64, 0x3FEBACF915000000_u64, 0x3FEB4E81B5000000_u64, 0x3FEAF286BD000000_u64, 0x3FEA98EF60000000_u64, 0x3FEA41A41A000000_u64, 0x3FE9EC8E95000000_u64, 0x3FE999999A000000_u64, 0x3FE948B0FD000000_u64, 0x3FE8F9C190000000_u64, 0x3FE8ACB90F000000_u64, 0x3FE8618618000000_u64, 0x3FE8181818000000_u64, 0x3FE7D05F41000000_u64, 0x3FE78A4C81000000_u64, 0x3FE745D174000000_u64, 0x3FE702E05C000000_u64, 0x3FE6C16C17000000_u64, 0x3FE6816817000000_u64, 0x3FE642C859000000_u64, 0x3FE6058160000000_u64, 0x3FE5C9882C000000_u64, 0x3FE58ED231000000_u64, 0x3FE5555555000000_u64, 0x3FE51D07EB000000_u64, 0x3FE4E5E0A7000000_u64, 0x3FE4AFD6A0000000_u64, 0x3FE47AE148000000_u64, 0x3FE446F865000000_u64, 0x3FE4141414000000_u64, 0x3FE3E22CBD000000_u64, 0x3FE3B13B14000000_u64, 0x3FE3813814000000_u64, 0x3FE3521CFB000000_u64, 0x3FE323E34A000000_u64, 0x3FE2F684BE000000_u64, 0x3FE2C9FB4E000000_u64, 0x3FE29E412A000000_u64, 0x3FE27350B9000000_u64, 0x3FE2492492000000_u64, 0x3FE21FB781000000_u64, 0x3FE1F7047E000000_u64, 0x3FE1CF06AE000000_u64, 0x3FE1A7B961000000_u64, 0x3FE1811812000000_u64, 0x3FE15B1E5F000000_u64, 0x3FE135C811000000_u64, 0x3FE1111111000000_u64, 0x3FE0ECF56C000000_u64, 0x3FE0C97150000000_u64, 0x3FE0A6810A000000_u64, 0x3FE0842108000000_u64, 0x3FE0624DD3000000_u64, 0x3FE0410410000000_u64, 0x3FE0204081000000_u64, 0x3FE0000000000000_u64]
+
+### `log2(B32_LOG2_IX[i])` for i in 0..64, as B64 bit patterns.
+secret preset B32_LOG2_LIX: Array[U64, 65] = [0x0000000000000000_u64, 0xBF96E7966EAD8AC5_u64, 0xBFA6BAD38119A13A_u64, 0xBFB0EB389EE9F560_u64, 0xBFB663F6FC3A678D_u64, 0xBFBBC8423D408321_u64, 0xBFC08C588E79F8E9_u64, 0xBFC32AE9E28FC362_u64, 0xBFC5C01A3CDE7F74_u64, 0xBFC84C2BCCF005A9_u64, 0xBFCACF5E2C156D8F_u64, 0xBFCD49EE4B90C47C_u64, 0xBFCFBC16B67C143B_u64, 0xBFD11307DC445FEC_u64, 0xBFD24407ABF4DC03_u64, 0xBFD37124CEDE831F_u64, 0xBFD49A784A5BC715_u64, 0xBFD5C01A3965CC38_u64, 0xBFD6E221CC2BB868_u64, 0xBFD800A564AA10B6_u64, 0xBFD91BBA8A906B7F_u64, 0xBFDA33760ADBB56E_u64, 0xBFDB47EBF91D417C_u64, 0xBFDC592FAF028F8E_u64, 0xBFDD6753E1A43E85_u64, 0xBFDE726AA2157F61_u64, 0xBFDF7A8567CD1CBD_u64, 0xBFE03FDA8A93EA1C_u64, 0xBFE0C10500ED4FEE_u64, 0xBFE140C9FB5A8F7F_u64, 0xBFE1BF311DAEFB44_u64, 0xBFE23C41D317EDC1_u64, 0xBFE2B80347F8250C_u64, 0xBFE3327C6A752222_u64, 0xBFE3ABB3FB080128_u64, 0xBFE423B07F5114E5_u64, 0xBFE49A784B147150_u64, 0xBFE5101187E9B871_u64, 0xBFE5848226C6C7C3_u64, 0xBFE5F7CFF3DE8F2A_u64, 0xBFE66A008D8EDE91_u64, 0xBFE6DB19694A04AA_u64, 0xBFE74B1FD6B5E715_u64, 0xBFE7BA18F99CE2A5_u64, 0xBFE82809D4D79BA9_u64, 0xBFE894F749CF5047_u64, 0xBFE900E615BAC2F7_u64, 0xBFE96BDAD16F5160_u64, 0xBFE9D5D9FE08BAEF_u64, 0xBFEA3EE7F3E4A7EB_u64, 0xBFEAA708F4DE7FE0_u64, 0xBFEB0E4125CA68FE_u64, 0xBFEB74948F9A72B0_u64, 0xBFEBDA071B77C9E2_u64, 0xBFEC3E9CA4193F99_u64, 0xBFECA258DD397814_u64, 0xBFED053F6D543325_u64, 0xBFED6753DFEDAA39_u64, 0xBFEDC899AA874B31_u64, 0xBFEE29142F2E8B3D_u64, 0xBFEE88C6B41B14AE_u64, 0xBFEEE7B4718B4414_u64, 0xBFEF45E08C87B090_u64, 0xBFEFA34E117D8785_u64, 0xBFF0000000000000_u64]
+
+### Base-2 logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Exact powers of two give exact integers. Raw IEEE 754 propagation:
+### `log2(±0) == -infinity`, `log2(+infinity) == +infinity`, a negative input gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded base-2 logarithm.
+routine B32.log2_unchecked() -> B32
+  var ux = me.to_bits()
+  if ux >= 0x7F800000_u32
+    # <= -0, NaN, infinity
+    return b32_log2_special(x: me)
+  if ux < 0x00800000_u32
+    if ux == 0
+      return b32_log2_special(x: me)
+    # subnormal: normalize
+    var n = ux.leading_zeros() - 8
+    ux = ux << n
+    ux = ux -% (n << 23)
+  var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
+  var m = ux & 0x7FFFFF_u32
+  if m == 0
+    return B32(from: e)
+  var j = LLVM::zero_extend[U32, U64]((m + 0x10000_u32) >>> 17)
+  var xd = B64.from_bits(bits: (LLVM::zero_extend[U32, U64](m) << 29) | 0x3FF0000000000000_u64)
+  var z = xd *! B64.from_bits(bits: B32_LOG2_IX[j]) -! 1.0
+  var z2 = z *! z
+  var el = B64(from: e) -! B64.from_bits(bits: B32_LOG2_LIX[j])
+  var f = (el +! z *! 0x1.7154765bab2b5p+0) +! z2 *! (-0x1.71574d6939f6cp-1 +! z *! 0x1.ec60b584ca47fp-2)
+  var lb = B32(from: f)
+  var ub = B32(from: f +! 0x1.661p-32)
+  if lb == ub
+    return lb
+  # the fast path cannot decide the rounding: a longer polynomial
+  var c0 = 0x1.71547652b8314p+0 -! z *! 0x1.71547652b7f67p-1
+  var c2 = 0x1.ec709db872c63p-2 -! z *! 0x1.715476b064cdfp-2
+  var c4 = 0x1.277c72c15441fp-2 -! z *! 0x1.ec4ff35b64c31p-3
+  c0 = c0 +! z2 *! (c2 +! z2 *! c4)
+  return B32(from: el +! z *! c0)
+
+### log2 of ±0 (-infinity), +infinity (itself), NaN (itself) or a negative input (NaN).
+### :param x: The special input.
+### :returns: The special result.
+secret routine b32_log2_special(x: B32) -> B32
+  var ux = x.to_bits()
+  if (ux << 1) == 0
+    return B32.from_bits(bits: 0xFF800000_u32)
+  if ux == 0x7F800000_u32
+    return x
+  if (ux << 1) > 0xFF000000_u32
+    return x +! x
+  return B32.from_bits(bits: 0xFFC00000_u32)

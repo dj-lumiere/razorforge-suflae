@@ -1,0 +1,60 @@
+module Core
+
+# ============================================================================
+# Correctly rounded natural exponential of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/exp/expf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling is dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are
+# raw IEEE 754 on floats.
+
+### `2^(i/64)` for i in 0..63, as B64 bit patterns.
+secret preset B32_EXP_TB: Array[U64, 64] = [0x3FF0000000000000_u64, 0x3FF02C9A3E778061_u64, 0x3FF059B0D3158574_u64, 0x3FF0874518759BC8_u64, 0x3FF0B5586CF9890F_u64, 0x3FF0E3EC32D3D1A2_u64, 0x3FF11301D0125B51_u64, 0x3FF1429AAEA92DE0_u64, 0x3FF172B83C7D517B_u64, 0x3FF1A35BEB6FCB75_u64, 0x3FF1D4873168B9AA_u64, 0x3FF2063B88628CD6_u64, 0x3FF2387A6E756238_u64, 0x3FF26B4565E27CDD_u64, 0x3FF29E9DF51FDEE1_u64, 0x3FF2D285A6E4030B_u64, 0x3FF306FE0A31B715_u64, 0x3FF33C08B26416FF_u64, 0x3FF371A7373AA9CB_u64, 0x3FF3A7DB34E59FF7_u64, 0x3FF3DEA64C123422_u64, 0x3FF4160A21F72E2A_u64, 0x3FF44E086061892D_u64, 0x3FF486A2B5C13CD0_u64, 0x3FF4BFDAD5362A27_u64, 0x3FF4F9B2769D2CA7_u64, 0x3FF5342B569D4F82_u64, 0x3FF56F4736B527DA_u64, 0x3FF5AB07DD485429_u64, 0x3FF5E76F15AD2148_u64, 0x3FF6247EB03A5585_u64, 0x3FF6623882552225_u64, 0x3FF6A09E667F3BCD_u64, 0x3FF6DFB23C651A2F_u64, 0x3FF71F75E8EC5F74_u64, 0x3FF75FEB564267C9_u64, 0x3FF7A11473EB0187_u64, 0x3FF7E2F336CF4E62_u64, 0x3FF82589994CCE13_u64, 0x3FF868D99B4492ED_u64, 0x3FF8ACE5422AA0DB_u64, 0x3FF8F1AE99157736_u64, 0x3FF93737B0CDC5E5_u64, 0x3FF97D829FDE4E50_u64, 0x3FF9C49182A3F090_u64, 0x3FFA0C667B5DE565_u64, 0x3FFA5503B23E255D_u64, 0x3FFA9E6B5579FDBF_u64, 0x3FFAE89F995AD3AD_u64, 0x3FFB33A2B84F15FB_u64, 0x3FFB7F76F2FB5E47_u64, 0x3FFBCC1E904BC1D2_u64, 0x3FFC199BDD85529C_u64, 0x3FFC67F12E57D14B_u64, 0x3FFCB720DCEF9069_u64, 0x3FFD072D4A07897C_u64, 0x3FFD5818DCFBA487_u64, 0x3FFDA9E603DB3285_u64, 0x3FFDFC97337B9B5F_u64, 0x3FFE502EE78B3FF6_u64, 0x3FFEA4AFA2A490DA_u64, 0x3FFEFA1BEE615A27_u64, 0x3FFF50765B6E4540_u64, 0x3FFFA7C1819E90D8_u64]
+
+### Natural exponential `e^me`, correctly rounded: the exact value rounded to the nearest `B32` (ties to
+### even), identical on every platform. Raw IEEE 754 propagation: overflow gives +infinity, underflow
+### rounds to a subnormal or zero, `exp(-infinity) == 0` and NaN maps to NaN.
+### :returns: The correctly rounded natural exponential.
+routine B32.exp_unchecked() -> B32
+  var tu = me.to_bits()
+  var z = B64(from: me)
+  var a = 0x1.71547652b82fep+0 *! z
+  var ua = (a +! 0x1.8p+46).to_bits()
+  var ux = tu << 1
+  if ux > 0x8562E42E_u32 or ux < 0x6F93813E_u32
+    # |x| > 0x1.62e42ep+6, x = NaN or |x| < 0x1.93813ep-16
+    if ux < 0x6F93813E_u32
+      return B32(from: 1.0 +! z *! (1.0 +! z *! 0.5))
+    if ux >= 0xFF000000_u32
+      # x is infinity or NaN
+      if ux > 0xFF000000_u32
+        return me +! me
+      return if tu >>> 31 == 0 then B32.from_bits(bits: 0x7F800000_u32) else 0.0_b32
+    if tu > 0xC2CE8EC0_u32
+      # x < -0x1.9d1d8p+6: the result underflows to a tiny subnormal or zero
+      var y = 0x1p-149 +! (z +! 0x1.9d1d9fccf477p+6) *! 0x1.71547652b82edp-150
+      y = y.fmax(you: 0x1p-151)
+      return B32(from: y)
+    if tu >>> 31 == 0 and tu > 0x42B17217_u32
+      # x > 0x1.62e42ep+6: overflow
+      return 0x1p+127_b32 *! 0x1p+127_b32
+  var ia = 0x1.8p+46 -! B64.from_bits(bits: ua)
+  var h = a +! ia
+  var sv = B64.from_bits(bits: B32_EXP_TB[ua & 0x3F_u64] +% ((ua >>> 6) << 52))
+  var h2 = h *! h
+  var r = ((1.0 +! h *! 0x1.62e42fef4c4e7p-1) +! h2 *! (0x1.ebfd1b232f475p-3 +! h *! 0x1.c6b19384ecd93p-5)) *! sv
+  var ub = B32(from: r)
+  var lb = B32(from: r -! r *! 0x1.3edbbe4560327p-33)
+  if ub != lb
+    # the fast path cannot decide the rounding: redo it with a longer reduction and polynomial
+    h = (0x1.7154765p+0 *! z +! ia) +! 0x1.5c17f0bbbe88p-31 *! z
+    var s = sv
+    h2 = h *! h
+    var w = s *! h
+    var c01 = 0x1.62e42fefa39efp-1 +! h *! 0x1.ebfbdff82c58fp-3
+    var c23 = 0x1.c6b08d702e0edp-5 +! h *! 0x1.3b2ab6fb92e5ep-7
+    var c45 = 0x1.5d886e6d54203p-10 +! h *! 0x1.430976b8ce6efp-13
+    r = s +! w *! (c01 +! h2 *! (c23 +! h2 *! c45))
+    ub = B32(from: r)
+  return ub

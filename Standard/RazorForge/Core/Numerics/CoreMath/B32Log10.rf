@@ -1,0 +1,83 @@
+module Core
+
+# ============================================================================
+# Correctly rounded base-10 logarithm of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/log10/log10f.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling and exception raising are dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### `1/(1 + i/64)` for i in 0..64, rounded to 29 bits, as B64 bit patterns.
+secret preset B32_LOG10_TR: Array[U64, 65] = [0x3FF0000000000000_u64, 0x3FEF81F820000000_u64, 0x3FEF07C1F0000000_u64, 0x3FEE9131AC000000_u64, 0x3FEE1E1E1E000000_u64, 0x3FEDAE6077000000_u64, 0x3FED41D41D000000_u64, 0x3FECD85689000000_u64, 0x3FEC71C71C000000_u64, 0x3FEC0E0704000000_u64, 0x3FEBACF915000000_u64, 0x3FEB4E81B5000000_u64, 0x3FEAF286BD000000_u64, 0x3FEA98EF60000000_u64, 0x3FEA41A41A000000_u64, 0x3FE9EC8E95000000_u64, 0x3FE999999A000000_u64, 0x3FE948B0FD000000_u64, 0x3FE8F9C190000000_u64, 0x3FE8ACB90F000000_u64, 0x3FE8618618000000_u64, 0x3FE8181818000000_u64, 0x3FE7D05F41000000_u64, 0x3FE78A4C81000000_u64, 0x3FE745D174000000_u64, 0x3FE702E05C000000_u64, 0x3FE6C16C17000000_u64, 0x3FE6816817000000_u64, 0x3FE642C859000000_u64, 0x3FE6058160000000_u64, 0x3FE5C9882C000000_u64, 0x3FE58ED231000000_u64, 0x3FE5555555000000_u64, 0x3FE51D07EB000000_u64, 0x3FE4E5E0A7000000_u64, 0x3FE4AFD6A0000000_u64, 0x3FE47AE148000000_u64, 0x3FE446F865000000_u64, 0x3FE4141414000000_u64, 0x3FE3E22CBD000000_u64, 0x3FE3B13B14000000_u64, 0x3FE3813814000000_u64, 0x3FE3521CFB000000_u64, 0x3FE323E34A000000_u64, 0x3FE2F684BE000000_u64, 0x3FE2C9FB4E000000_u64, 0x3FE29E412A000000_u64, 0x3FE27350B9000000_u64, 0x3FE2492492000000_u64, 0x3FE21FB781000000_u64, 0x3FE1F7047E000000_u64, 0x3FE1CF06AE000000_u64, 0x3FE1A7B961000000_u64, 0x3FE1811812000000_u64, 0x3FE15B1E5F000000_u64, 0x3FE135C811000000_u64, 0x3FE1111111000000_u64, 0x3FE0ECF56C000000_u64, 0x3FE0C97150000000_u64, 0x3FE0A6810A000000_u64, 0x3FE0842108000000_u64, 0x3FE0624DD3000000_u64, 0x3FE0410410000000_u64, 0x3FE0204081000000_u64, 0x3FE0000000000000_u64]
+
+### `-log10(B32_LOG10_TR[i])` for i in 0..64 with a small offset, as B64 bit patterns.
+secret preset B32_LOG10_TL: Array[U64, 65] = [0xBD12000000000000_u64, 0x3F7B947689310DFA_u64, 0x3F8B5E909C96D11B_u64, 0x3F945F4F59ED1E08_u64, 0x3F9AF5F92CBD8BC1_u64, 0x3FA0BA01A606DCDE_u64, 0x3FA3ED119B9A29CD_u64, 0x3FA714834298ED14_u64, 0x3FAA30A9D983564C_u64, 0x3FAD41D512670665_u64, 0x3FB02428C0F65442_u64, 0x3FB1A23444EECB67_u64, 0x3FB31B30543F4BDD_u64, 0x3FB48F3ED39BFC2D_u64, 0x3FB5FE8049A0E34B_u64, 0x3FB769140A6A9F30_u64, 0x3FB8CF1836C98BDB_u64, 0x3FBA30A9D55540CA_u64, 0x3FBB8DE4D1EE8167_u64, 0x3FBCE6E4202CA20F_u64, 0x3FBE3BC1ACCACD30_u64, 0x3FBF8C9683B5AAFD_u64, 0x3FC06CBD68CA9A03_u64, 0x3FC11142F19DF6C5_u64, 0x3FC1B3E71FA7A913_u64, 0x3FC254B4D37A4677_u64, 0x3FC2F3B6912CBE9C_u64, 0x3FC390F68311581A_u64, 0x3FC42C7E7FFFC53D_u64, 0x3FC4C65808C78CD1_u64, 0x3FC55E8C50751BEA_u64, 0x3FC5F52445DEC36C_u64, 0x3FC68A288C3F1195_u64, 0x3FC71DA17BDF0CAD_u64, 0x3FC7AF973608AF6E_u64, 0x3FC84011952A250E_u64, 0x3FC8CF1837A7E9F4_u64, 0x3FC95CB2891E436A_u64, 0x3FC9E8E7B0F86974_u64, 0x3FCA73BEAA5DB121_u64, 0x3FCAFD3E39455867_u64, 0x3FCB856CF060D985_u64, 0x3FCC0C5134DE1F90_u64, 0x3FCC91F1371BC934_u64, 0x3FCD1652FFCD3EE8_u64, 0x3FCD997C6F635E09_u64, 0x3FCE1B733AB90ED0_u64, 0x3FCE9C3CEADAC7EB_u64, 0x3FCF1BDEEC43A29A_u64, 0x3FCF9A5E7A5FA392_u64, 0x3FD00BE05AC02EF5_u64, 0x3FD04A054D81A29E_u64, 0x3FD087A0835957C5_u64, 0x3FD0C4B4570994E1_u64, 0x3FD101431AA1FE1B_u64, 0x3FD13D4F08B98DA2_u64, 0x3FD178DA53EDB85C_u64, 0x3FD1B3E71E9F9D22_u64, 0x3FD1EE777DEFDEB7_u64, 0x3FD2288D7B48E205_u64, 0x3FD2622B0F52E469_u64, 0x3FD29B522A4C62DE_u64, 0x3FD2D404B0E30F4A_u64, 0x3FD30C4478F3FBAF_u64, 0x3FD34413509F78DF_u64]
+
+### The B32 bit patterns of `10^n` (n in 0..10), indexed by bits 24..27 of the pattern (0 = no power).
+secret preset B32_LOG10_ST: Array[U32, 16] = [0x501502F9_u32, 0x41200000_u32, 0x42C80000_u32, 0x0_u32, 0x447A0000_u32, 0x0_u32, 0x461C4000_u32, 0x47C35000_u32, 0x0_u32, 0x49742400_u32, 0x0_u32, 0x4B189680_u32, 0x4CBEBC20_u32, 0x0_u32, 0x4E6E6B28_u32, 0x3F800000_u32]
+
+### Base-10 logarithm, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Exact powers of ten give exact integers. Raw IEEE 754 propagation:
+### `log10(±0) == -infinity`, `log10(+infinity) == +infinity`, a negative input gives NaN and NaN maps
+### to NaN.
+### :returns: The correctly rounded base-10 logarithm.
+routine B32.log10_unchecked() -> B32
+  var ux = me.to_bits()
+  if ux >= 0x7F800000_u32
+    # <= -0, NaN, infinity
+    return b32_log10_special(x: me)
+  if ux == B32_LOG10_ST[LLVM::zero_extend[U32, U64]((ux >>> 24) & 0xF_u32)]
+    # x = 10^n: n = floor((e + 1) * log10(2)) for the biased exponent e
+    var je = (ux >>> 23) -% 126_u32
+    je = (je *% 0x4D104D4_u32) >>> 28
+    return B32(from: je)
+  if ux < 0x00800000_u32
+    if ux == 0
+      return b32_log10_special(x: me)
+    # subnormal: normalize
+    var n = ux.leading_zeros() - 8
+    ux = ux << n
+    ux = ux -% (n << 23)
+  var e = LLVM::sign_extend[S32, S64](LLVM::reinterpret_bits[U32, S32](ux) >> 23) - 127
+  var ed = B64(from: e)
+  var m = LLVM::zero_extend[U32, U64](ux & 0x7FFFFF_u32)
+  var j = (m + 0x10000_u64) >>> 17
+  var tz = B64.from_bits(bits: (m << 29) | 0x3FF0000000000000_u64)
+  var tlj = B64.from_bits(bits: B32_LOG10_TL[j])
+  var z = tz *! B64.from_bits(bits: B32_LOG10_TR[j]) -! 1.0
+  var z2 = z *! z
+  var r = ((ed *! 0x1.34413509f79ffp-2 +! tlj) +! z *! 0x1.bcb7b15d35067p-2) +! z2 *! (-0x1.bcbb1cd29cbafp-3 +! z *! 0x1.2870e2624ce4ep-3)
+  var ub = B32(from: r)
+  var lb = B32(from: r +! 0x1.af23fp-34)
+  if ub != lb
+    # the fast path cannot decide the rounding: a longer polynomial and a two-part log10(2)
+    var c01 = 0x1.bcb7b1526e50ep-2 -! z *! 0x1.bcb7b1526e53dp-3
+    var c23 = 0x1.287a7636f3fa2p-3 -! z *! 0x1.bcb7b146a14b3p-4
+    var c46 = (0x1.63c627d5219cbp-4 -! z *! 0x1.2880736c8762dp-4) +! z2 *! 0x1.fc1ecf913961ap-5
+    var f = z *! (c01 +! z2 *! (c23 +! z2 *! c46))
+    f = f -! 0x1.0cee0ed4ca7e9p-54 *! ed
+    f = f +! (tlj -! B64.from_bits(bits: B32_LOG10_TL[0]))
+    var el = ed *! 0x1.34413509f7ap-2
+    r = el +! f
+    ub = B32(from: r)
+    if (r.to_bits() & 0x0FFFFFFF_u64) == 0
+      # r lies on a B32 rounding boundary: nudge it by the rounding error of el + f
+      var dr = (el -! r) +! f
+      r = r +! dr *! 32.0
+      ub = B32(from: r)
+  return ub
+
+### log10 of ±0 (-infinity), +infinity (itself), NaN (itself) or a negative input (NaN).
+### :param x: The special input.
+### :returns: The special result.
+secret routine b32_log10_special(x: B32) -> B32
+  var ux = x.to_bits()
+  if (ux << 1) == 0
+    return B32.from_bits(bits: 0xFF800000_u32)
+  if ux == 0x7F800000_u32
+    return x
+  if (ux << 1) > 0xFF000000_u32
+    return x +! x
+  return B32.from_bits(bits: 0xFFC00000_u32)

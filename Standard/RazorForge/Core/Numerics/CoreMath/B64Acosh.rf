@@ -1,0 +1,325 @@
+module Core
+
+# ============================================================================
+# Correctly rounded inverse hyperbolic cosine of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/acosh/acosh.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023 Alexei Sibidanov.
+# Distributed under the MIT license: see LICENSE-CORE-MATH next to this file. RazorForge has no dynamic
+# rounding modes, so only the round-to-nearest path of the original is kept (its errno reporting is
+# dropped). Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats. The
+# log tables shared with asinh and atanh live in B64ArcHypShared.rf.
+
+### Inverse hyperbolic cosine with raw IEEE 754 propagation (`me < 1` -> NaN), correctly rounded: the
+### exact `acosh(me)` rounded to the nearest `B64` (ties to even), identical on every platform.
+### `acosh(1) == 0`, +infinity maps to +infinity, and NaN, -infinity and every `me < 1` give NaN.
+### :returns: The correctly rounded inverse hyperbolic cosine.
+routine B64.acosh_unchecked() -> B64
+  var x = me
+  var ix = x.to_bits()
+  if ix >= 0x7FF0000000000000_u64
+    # x < 0, NaN or +infinity
+    var aix = ix << 1
+    if ix == 0x7FF0000000000000_u64 or aix > 0xFFE0000000000000_u64
+      return x +! x
+    # the default NaN of x86 (C's 0.0 / 0.0)
+    return B64.from_bits(bits: 0xFFF8000000000000_u64)
+  if ix <= 0x3FF0000000000000_u64
+    # 0 <= x <= 1
+    if ix == 0x3FF0000000000000_u64
+      return 0.0
+    return B64.from_bits(bits: 0xFFF8000000000000_u64)
+  # now x > 1
+  var g = 0.0
+  var eps = 0.0
+  var off = 0x3FE_s64
+  var t = ix
+  if ix < 0x3FF1E83E425AEE63_u64
+    # 1 < x < 0x1.1e83e425aee63p+0
+    var z = x -! 1.0
+    var iz = -0.25 /! z
+    var zt = 2.0 *! z
+    var sh = LLVM::sqrt[B64](zt)
+    var sl = LLVM::fma[B64](a: sh, b: sh, c: -zt) *! (sh *! iz)
+    var z2 = z *! z
+    var z4 = z2 *! z2
+    var poly = -0x1.5555555555555p-4 +! z *! (((0x1.3333333332f95p-6 +! z *! -0x1.6db6db6d5534cp-8) +! z2 *! (0x1.f1c71c1e04356p-10 +! z *! -0x1.6e8b8e3e40d58p-11)) +! z4 *! ((0x1.1c4ba825ac4fep-12 +! z *! -0x1.c9045534e6d9ep-14) +! z2 *! (0x1.71fedae26a76bp-15 +! z *! -0x1.f1f4f8cc65342p-17)))
+    var ds = LLVM::fma[B64](a: sh *! z, b: poly, c: sl)
+    eps = ds *! 0x1.00p-50 -! 0x1p-104 *! sh
+    var lb = sh +! (ds -! eps)
+    var ub = sh +! (ds +! eps)
+    if lb == ub
+      return lb
+    return b64_acosh_one(x: z, sh: sh, sl: sl)
+  elseif ix < 0x405BF00000000000_u64
+    # 0x1.1e83e425aee63p+0 <= x < 111.75
+    off = 0x3FF
+    var x2h = x *! x
+    var wh = x2h -! 1.0
+    var wl = LLVM::fma[B64](a: x, b: x, c: -x2h)
+    var sh = LLVM::sqrt[B64](wh)
+    var ish = 0.5 /! wh
+    var sl = (wl -! LLVM::fma[B64](a: sh, b: sh, c: -wh)) *! (sh *! ish)
+    var s = b64_hyp_fasttwosum(x: x, y: sh)
+    var th = s.item0
+    var tl = s.item1 +! sl
+    t = th.to_bits()
+    g = tl /! th
+    eps = 0x1.81p-63
+  elseif ix < 0x4087100000000000_u64
+    # 111.75 <= x < 738
+    var z = 1.0 /! (x *! x)
+    g = 0x1.5c4b6148816e2p-66 +! z *! (-0x1.000000000005cp-2 +! z *! (-0x1.7fffffebf3e6cp-4 +! z *! -0x1.aab6691f2bae7p-5))
+    eps = 0x1.c3p-63
+  elseif ix < 0x40E0100000000000_u64
+    # 738 <= x < 32896
+    var z = 1.0 /! (x *! x)
+    g = -0x1.7f77c8429c6c6p-67 +! z *! (-0x1.ffffffffff214p-3 +! z *! -0x1.8000268641bfep-4)
+    eps = 0x1.9ap-63
+  elseif ix < 0x41EA000000000000_u64
+    # 32896 <= x < 0x1.ap+31
+    var z = 1.0 /! (x *! x)
+    g = 0x1.7a0ed2effdd1p-67 +! z *! -0x1.000000017d048p-2
+    eps = 0x1.99p-63
+  else
+    # 0x1.ap+31 <= x
+    g = 0.0
+    eps = 0x1.b2p-63
+  var e = LLVM::reinterpret_bits[U64, S64](t >>> 52) - off
+  t = t & 0x000FFFFFFFFFFFFF_u64
+  # 2x = (1 + t/2^52) * 2^ed
+  var ed = LLVM::signed_to_float[S64, B64](e)
+  var i = t >>> 47
+  var d = LLVM::reinterpret_bits[U64, S64](t & 0x00007FFFFFFFFFFF_u64)
+  var bc0 = LLVM::reinterpret_bits[S64, U64](B64_AHYP_B_C0[i])
+  var bc1 = B64_AHYP_B_C1[i] * (d >> 16)
+  var j = (t +% (bc0 << 33) +% LLVM::reinterpret_bits[S64, U64](bc1)) >>> 42
+  t = t | 0x3FF0000000000000_u64
+  var i1 = j >>> 5
+  var i2 = j & 0x1F_u64
+  var r = B64.from_bits(bits: B64_AHYP_R1[i1]) *! B64.from_bits(bits: B64_AHYP_R2[i2])
+  var dx = LLVM::fma[B64](a: r, b: B64.from_bits(bits: t), c: -1.0)
+  var dx2 = dx *! dx
+  var f = dx2 *! ((-0x1p-1 +! dx *! 0x1.555555555553p-2) +! dx2 *! ((-0x1.fffffffffffap-3 +! dx *! 0x1.99999e33a6366p-3) +! dx2 *! -0x1.555559ef9525fp-3))
+  # l2h + l2l approximates log(2) with l2h on 42 bits, so l2h*ed is exact
+  var l2h = 0x1.62e42fefa38p-1
+  var l2l = 0x1.ef35793c7673p-45
+  var lh = (B64.from_bits(bits: B64_AHYP_L1_HI[i1]) +! B64.from_bits(bits: B64_AHYP_L2_HI[i2])) +! l2h *! ed
+  var t1 = l2l *! ed +! (B64.from_bits(bits: B64_AHYP_L1_LO[i1]) +! B64.from_bits(bits: B64_AHYP_L2_LO[i2]))
+  var t2 = f +! t1
+  var t3 = g +! t2
+  var ll = dx +! t3
+  var lb = lh +! (ll -! eps)
+  var ub = lh +! (ll +! eps)
+  if lb == ub
+    return lb
+  # 0x1.71547652b82fep+0 approximates 1/log(2)
+  return b64_acosh_refine(x: x, a: 0x1.71547652b82fep+0 *! lb)
+
+### Adds the double-doubles `xh + xl` and `ch + cl`: an exact two-sum of the high parts plus the low
+### parts.
+### :param xh: The high part of the first addend.
+### :param xl: The low part of the first addend.
+### :param ch: The high part of the second addend.
+### :param cl: The low part of the second addend.
+### :returns: The high and low parts of the sum.
+secret routine b64_acosh_adddd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var s = xh +! ch
+  var a_prime = s -! ch
+  var b_prime = s -! a_prime
+  var delta_a = xh -! a_prime
+  var delta_b = ch -! b_prime
+  var l = (delta_a +! delta_b) +! (xl +! cl)
+  return (s, l)
+
+### Multiplies the double-double `xh + xl` by `ch + cl`, returning a renormalized double-double.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_acosh_muldd_acc(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahlh = ch *! xl
+  var alhh = cl *! xh
+  var ahhh = ch *! xh
+  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  ahhl = ahhl +! (alhh +! ahlh)
+  return b64_hyp_fasttwosum(x: ahhh, y: ahhl)
+
+### Multiplies the double-double `xh + xl` by the double `ch`, returning a renormalized double-double.
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The second factor.
+### :returns: The high and low parts of the product.
+secret routine b64_acosh_mulddd(xh: B64, xl: B64, ch: B64) -> (B64, B64)
+  var ahlh = ch *! xl
+  var ahhh = ch *! xh
+  var ahhl = LLVM::fma[B64](a: ch, b: xh, c: -ahhh)
+  ahhl = ahhl +! ahlh
+  var h = ahhh +! ahhl
+  var l = (ahhh -! h) +! ahhl
+  return (h, l)
+
+### One Horner step of a double-double polynomial: `(ch + cl) * (xh + xl) + (c_hi + c_lo)`.
+### :param xh: The high part of the variable.
+### :param xl: The low part of the variable.
+### :param ch: The high part of the running value.
+### :param cl: The low part of the running value.
+### :param c_hi: The high part of the next coefficient.
+### :param c_lo: The low part of the next coefficient.
+### :returns: The new running value as a double-double.
+secret routine b64_acosh_polydd_step(xh: B64, xl: B64, ch: B64, cl: B64, c_hi: B64, c_lo: B64) -> (B64, B64)
+  var p = b64_acosh_muldd_acc(xh: xh, xl: xl, ch: ch, cl: cl)
+  var s = b64_hyp_fasttwosum(x: c_hi, y: p.item0)
+  var l = p.item1 +! (s.item1 +! c_lo)
+  return (s.item0, l)
+
+### The accurate path of acosh near 1: `acosh(1 + x) = sqrt(2x) * (1 + x*P(x))`.
+### :param x: The argument minus 1.
+### :param sh: The high part of `sqrt(2x)`.
+### :param sl: The low part of `sqrt(2x)`.
+### :returns: The correctly rounded acosh(1 + x).
+secret routine b64_acosh_one(x: B64, sh: B64, sl: B64) -> B64
+  var y2 = x *! (-0x1.df3b9d1296ea9p-19 +! x *! (0x1.a681d7d2298ebp-20 +! x *! (-0x1.77ead7b1ca449p-21 +! x *! (0x1.4edd2ddb3721fp-22 +! x *! (-0x1.1bf173531ee23p-23 +! x *! 0x1.613229230e255p-25)))))
+  var p = b64_hyp_polydd_init(l: y2, c_hi: 0x1.12ef3bf8a0a74p-17, c_lo: 0x1.f9c6b51787043p-80)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: -0x1.3fde50d0cb4b9p-16, c_lo: 0x1.0335101403d9dp-72)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: 0x1.7a878787648e2p-15, c_lo: -0x1.1cea281e08012p-69)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: -0x1.c99999999914fp-14, c_lo: 0x1.ee0d9408a2e2ap-68)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: 0x1.1c4ec4ec4ec43p-12, c_lo: 0x1.c6791d1cf399ap-66)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: -0x1.6e8ba2e8ba2e9p-11, c_lo: 0x1.6d50ce7188d3dp-65)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: 0x1.f1c71c71c71c7p-10, c_lo: 0x1.c56d45e265e2cp-66)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: -0x1.6db6db6db6db7p-8, c_lo: 0x1.24929b16ec6b7p-63)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: 0x1.3333333333333p-6, c_lo: 0x1.9999998933f0ep-61)
+  p = b64_acosh_polydd_step(xh: x, xl: 0.0, ch: p.item0, cl: p.item1, c_hi: -0x1.5555555555555p-4, c_lo: -0x1.5555555554af1p-58)
+  p = b64_acosh_mulddd(xh: p.item0, xl: p.item1, ch: x)
+  var s = b64_hyp_fasttwosum(x: 1.0, y: p.item0)
+  var y1 = s.item1 +! p.item1
+  var q = b64_acosh_muldd_acc(xh: s.item0, xl: y1, ch: sh, cl: sl)
+  return q.item0 +! q.item1
+
+### The accurate path of acosh: log(x + sqrt(x^2 - 1)) to about 150 bits.
+### :param x: The argument, x > 1.
+### :param a: An approximation of `acosh(x) / log(2)`.
+### :returns: The correctly rounded acosh(x).
+secret routine b64_acosh_refine(x: B64, a: B64) -> B64
+  var ix = x.to_bits()
+  var zh = 0.0
+  var zl = 0.0
+  var huge = 0_s64
+  if ix < 0x4190000000000000_u64
+    # x < 2^26
+    var x2h = x *! x
+    var x2l = LLVM::fma[B64](a: x, b: x, c: -x2h)
+    var w = b64_hyp_fasttwosum(x: x2h -! 1.0, y: x2l)
+    var wh = w.item0
+    var sh = LLVM::sqrt[B64](wh)
+    var sl = (w.item1 -! LLVM::fma[B64](a: sh, b: sh, c: -wh)) /! (2.0 *! sh)
+    var z = b64_hyp_fasttwosum(x: x, y: sh)
+    z = b64_hyp_fasttwosum(x: z.item0, y: z.item1 +! sl)
+    zh = z.item0
+    zl = z.item1
+  elseif ix < 0x4330000000000000_u64
+    # x < 2^52
+    zh = 2.0 *! x
+    zl = -0.5 /! x
+  else
+    # x >= 2^52: 2x could overflow, so zh = x and the exponent gets one more below
+    zh = x
+    zl = 0.0
+    huge = 1
+  # zh + zl approximates x + sqrt(x^2 - 1), or half of it for x >= 2^52
+  var t = zh.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](t >>> 52) - 0x3FF + huge
+  t = (t & 0x000FFFFFFFFFFFFF_u64) | 0x3FF0000000000000_u64
+  var ed = LLVM::signed_to_float[S64, B64](e)
+  var v = ((a -! ed) +! 0x1.00008p+0).to_bits()
+  var i = (v -% 0x3FF0000000000000_u64) >>> 36
+  var i1 = (i >>> 12) & 0x1F_u64
+  var i2 = (i >>> 8) & 0xF_u64
+  var i3 = (i >>> 4) & 0xF_u64
+  var i4 = i & 0xF_u64
+  var k1 = i2 + 17
+  var k2 = i3 + 34
+  var k3 = i4 + 51
+  var el2 = -0x1.9ff0342542fc3p-91 *! ed
+  var el1 = 0x1.ef35793c768p-46 *! ed
+  var el0 = 0x1.62e42fefa38p-2 *! ed
+  var big0 = (B64.from_bits(bits: B64_AHYP_LL0[i1]) +! B64.from_bits(bits: B64_AHYP_LL0[k1])) +! (B64.from_bits(bits: B64_AHYP_LL0[k2]) +! B64.from_bits(bits: B64_AHYP_LL0[k3]))
+  var big1 = (B64.from_bits(bits: B64_AHYP_LL1[i1]) +! B64.from_bits(bits: B64_AHYP_LL1[k1])) +! (B64.from_bits(bits: B64_AHYP_LL1[k2]) +! B64.from_bits(bits: B64_AHYP_LL1[k3]))
+  var big2 = (B64.from_bits(bits: B64_AHYP_LL2[i1]) +! B64.from_bits(bits: B64_AHYP_LL2[k1])) +! (B64.from_bits(bits: B64_AHYP_LL2[k2]) +! B64.from_bits(bits: B64_AHYP_LL2[k3]))
+  big0 = big0 +! el0
+  var t12 = B64.from_bits(bits: B64_AHYP_RT1[i1]) *! B64.from_bits(bits: B64_AHYP_RT2[i2])
+  var t34 = B64.from_bits(bits: B64_AHYP_RT3[i3]) *! B64.from_bits(bits: B64_AHYP_RT4[i4])
+  var th = t12 *! t34
+  var tl = LLVM::fma[B64](a: t12, b: t34, c: -th)
+  var tf = B64.from_bits(bits: t)
+  var dh = th *! tf
+  var dl = LLVM::fma[B64](a: th, b: tf, c: -dh)
+  var sh = tl *! tf
+  var sl = LLVM::fma[B64](a: tl, b: tf, c: -sh)
+  var q = b64_hyp_fasttwosum(x: dh -! 1.0, y: dl)
+  var xh = q.item0
+  var xl = q.item1
+  if zl != 0.0
+    # zl / 2^e, scaled like t = zh / 2^e
+    var zs = zl.to_bits() -% (LLVM::reinterpret_bits[S64, U64](e) << 52)
+    xl = xl +! th *! B64.from_bits(bits: zs)
+  q = b64_acosh_adddd(xh: xh, xl: xl, ch: sh, cl: sl)
+  xh = q.item0
+  xl = q.item1
+  sl = xh *! (-0x1p-3 +! xh *! (0x1.9999999a0754fp-4 +! xh *! -0x1.55555555c3157p-4))
+  q = b64_hyp_polydd_init(l: sl, c_hi: 0x1.5555555555555p-3, c_lo: 0x1.55540c15cf91fp-57)
+  q = b64_acosh_polydd_step(xh: xh, xl: xl, ch: q.item0, cl: q.item1, c_hi: -0x1p-2, c_lo: -0x1.932ce43199a8dp-110)
+  q = b64_acosh_polydd_step(xh: xh, xl: xl, ch: q.item0, cl: q.item1, c_hi: 0x1p-1, c_lo: 0x1.24b67ee516e3bp-111)
+  q = b64_acosh_muldd_acc(xh: xh, xl: xl, ch: q.item0, cl: q.item1)
+  q = b64_acosh_adddd(xh: q.item0, xl: q.item1, ch: el1, cl: el2)
+  q = b64_acosh_adddd(xh: q.item0, xl: q.item1, ch: big1, cl: big2)
+  var w0 = b64_hyp_fasttwosum(x: big0, y: q.item0)
+  var w1 = b64_hyp_fasttwosum(x: w0.item1, y: q.item1)
+  var v0 = w0.item0 *! 2.0
+  var v1 = w1.item0 *! 2.0
+  var v2 = w1.item1 *! 2.0
+  var tu = v1.to_bits()
+  if tu & 0x000FFFFFFFFFFFFF_u64 == 0
+    # v1 is a power of two: nudge it by one ulp toward v2 so the final rounding sees the sticky bits
+    if (v2.to_bits() ^ tu) >>> 63 == 1
+      tu = tu -% 1
+    else
+      tu = tu +% 1
+    v1 = B64.from_bits(bits: tu)
+  var er = (tu +% 7) & 0x000FFFFFFFFFFFFF_u64
+  var de = ((v0.to_bits() >>> 52) & 0x7FF_u64) -% ((tu >>> 52) & 0x7FF_u64)
+  var res = v0 +! v1
+  if de > 102 or er < 15
+    return b64_acosh_database(x: x, f: res)
+  return res
+
+### Exact acosh values for the arguments whose rounding the fast paths cannot decide.
+### :param x: The argument.
+### :param f: The value to return when `x` is not in the table.
+### :returns: The correctly rounded acosh(x), or `f`.
+secret routine b64_acosh_database(x: B64, f: B64) -> B64
+  var a = 0_s64
+  var b = 6_s64
+  while a <= b
+    var m = (a + b) // 2
+    var mu = LLVM::reinterpret_bits[S64, U64](m)
+    var key = B64.from_bits(bits: B64_ACOSH_DB_X[mu])
+    if key < x
+      a = m + 1
+    elseif key == x
+      return B64.from_bits(bits: B64_ACOSH_DB_H[mu]) +! B64.from_bits(bits: B64_ACOSH_DB_L[mu])
+    else
+      b = m - 1
+  return f
+
+# The database: arguments x (sorted), then the high and low parts of acosh(x), as IEEE bit patterns.
+secret preset B64_ACOSH_DB_X: Array[U64, 7] = [
+  0x3FF5BFF041B260FE_u64, 0x3FF9EFDCA62B700A_u64, 0x3FFA5BF3ACFDE4B2_u64, 0x40645EA160DDC71F_u64,
+  0x4092A686E4B567CE_u64, 0x40ECB62EEC26BD78_u64, 0x40F3BF8009648DC0_u64]
+secret preset B64_ACOSH_DB_H: Array[U64, 7] = [
+  0x3FEA6031CD5F93BA_u64, 0x3FF104B648F113A1_u64, 0x3FF1585720F35CD9_u64, 0x401725811DCF6782_u64,
+  0x401F1C928E7F1E65_u64, 0x402759A2AD4C4D56_u64, 0x4027FCE95EA5C653_u64]
+secret preset B64_ACOSH_DB_L: Array[U64, 7] = [
+  0x3C80000000000000_u64, 0x3C90000000000000_u64, 0xBC90000000000000_u64, 0x3CB0000000000000_u64,
+  0x3CB0000000000000_u64, 0x3CC0000000000000_u64, 0xBCA0000000000000_u64]

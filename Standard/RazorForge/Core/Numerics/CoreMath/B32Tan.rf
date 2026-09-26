@@ -1,0 +1,96 @@
+module Core
+
+# ============================================================================
+# Correctly rounded tangent of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/tan/tanf.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022-2025 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next
+# to this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original
+# is kept (its errno handling and exception raising are dropped). Arithmetic uses the unchecked operators
+# `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The large-argument reduction `b32_trig_reduce_big` comes from B32Sin.rf.
+
+### Returns the tangent of this value, interpreting it as radians, correctly rounded: the exact tangent
+### rounded to the nearest `B32` (ties to even), identical on every platform. ±infinity gives NaN, NaN maps
+### to NaN and ±0 maps to itself.
+### :returns: The correctly rounded tangent.
+routine B32.tan() -> B32
+  var t = me.to_bits()
+  var e = (t >>> 23) & 0xFF_u32
+  var red = (0.0, 0_u64)
+  if e < 155_u32
+    # |x| < 2^28
+    if e < 115_u32
+      # |x| < 2^-13
+      if e < 102_u32
+        # |x| < 2^-26
+        return LLVM::fma[B32](a: me, b: me.abs(), c: me)
+      var x2 = me *! me
+      return LLVM::fma[B32](a: me, b: 0x1.555556p-2_b32 *! x2, c: me)
+    red = b32_tan_reduce(x: B64(from: me))
+  else
+    if e < 0xFF_u32
+      red = b32_trig_reduce_big(u: t, bias: 150_u64)
+    else
+      if t << 9 != 0_u32
+        return me +! me
+      return B32.from_bits(bits: 0x7FC00000_u32)
+  var z = red.item0
+  var i = red.item1
+  var z2 = z *! z
+  var z4 = z2 *! z2
+  var n = 0x1.921fb54442d18p+0 +! z2 *! -0x1.fd226e573289fp-2
+  var n2 = 0x1.b7a60c8dac9f6p-6 +! z2 *! -0x1.725beb40f33e5p-13
+  n = n +! z4 *! n2
+  var d = 0x1p+0 +! z2 *! -0x1.2395347fb829dp+0
+  var d2 = 0x1.2313660f29c36p-3 +! z2 *! -0x1.9a707ab98d1c1p-9
+  d = d +! z4 *! d2
+  n = n *! z
+  # an even quotient gives tan(z*pi/2) = n/d, an odd one -d/n
+  var s0 = 0.0
+  var s1 = 1.0
+  if i & 1_u64 == 1_u64
+    s0 = 1.0
+    s1 = 0.0
+  var r1 = (n *! s1 -! d *! s0) /! (n *! s0 +! d *! s1)
+  var tail = (r1.to_bits() +% 7_u64) & 0x1FFFFFFF_u64
+  if tail <= 14_u64
+    var exact = b32_tan_database(ax: t & 0x7FFFFFFF_u32)
+    if exact.item0
+      if t >>> 31 == 1_u32
+        return -exact.item1 -! exact.item2
+      return exact.item1 +! exact.item2
+  return B32(from: r1)
+
+### Reduces `x` (|x| < 2^28) modulo pi/2 with a two-part 2/pi: `2/pi * x = q + z`.
+### :param x: The argument, exactly converted from B32.
+### :returns: `(z, q)` with |z| <= 1/2; only the low bit of `q` is meaningful.
+secret routine b32_tan_reduce(x: B64) -> (B64, U64)
+  var idl = -0x1.b1bbead603d8bp-32 *! x
+  var idh = 0x1.45f306ep-1 *! x
+  # adding 1.5*2^52 rounds idh to an integer (ties to even) and leaves it in the low mantissa bits
+  var q = 0x1.8p52 +! idh
+  var id = q -! 0x1.8p52
+  return ((idh -! id) +! idl, q.to_bits())
+
+### The arguments whose fast-path tangent is not correctly rounded, with their exact result `rh + rl`.
+### :param ax: The absolute argument's bit pattern.
+### :returns: `(found, rh, rl)` for a positive argument.
+secret routine b32_tan_database(ax: U32) -> (Bool, B32, B32)
+  if ax == 0x3F8A1F62_u32
+    return (true, 0x1.ddf9f6p+0_b32, -0x1.891d24p-52_b32)
+  if ax == 0x4D56D355_u32
+    return (true, 0x1.e80304p-3_b32, 0x1.419f46p-58_b32)
+  if ax == 0x57D7B0ED_u32
+    return (true, 0x1.60d1c8p-2_b32, -0x1.2d6c3ap-55_b32)
+  if ax == 0x5980445E_u32
+    return (true, 0x1.ca1edp+0_b32, 0x1.f6053p-53_b32)
+  if ax == 0x63FC86FE_u32
+    return (true, 0x1.597f9cp-1_b32, 0x1.925978p-53_b32)
+  if ax == 0x6A662711_u32
+    return (true, -0x1.f33584p+1_b32, 0x1.d7254ap-51_b32)
+  if ax == 0x6AD36709_u32
+    return (true, -0x1.c5612ep-1_b32, -0x1.26c33ep-53_b32)
+  if ax == 0x72B505BB_u32
+    return (true, -0x1.e42a1ep+0_b32, -0x1.1dc906p-52_b32)
+  return (false, 0.0_b32, 0.0_b32)

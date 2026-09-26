@@ -1,0 +1,82 @@
+module Core
+
+# ============================================================================
+# Correctly rounded gamma function of B16
+# ============================================================================
+# Ported from CORE-MATH, src/binary16/tgamma/tgammaf16.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2023-2025 Alexei Sibidanov and Paul Zimmermann. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept. Arithmetic uses the unchecked operators `+! -! *! /!`,
+# which are raw IEEE 754 on floats.
+
+### Gamma function with raw IEEE 754 propagation, correctly rounded: the exact gamma(x) rounded to the
+### nearest `B16` (ties to even), identical on every platform. Overflow and the pole at ±0 give
+### ±infinity, the negative integers and -infinity give NaN.
+### :returns: The correctly rounded gamma function.
+routine B16.tgamma_unchecked() -> B16
+  var x = B32(from: me)
+  var tu = x.to_bits()
+  var ax = tu << 1
+  if ax >= 0xFF000000_u32
+    # ±infinity or NaN: gamma(+inf) = +inf, gamma(-inf) has no real result (the negative quiet NaN that
+    # the original's x / x yields on x86), and a NaN is quieted by x + x
+    if ax == 0xFF000000_u32
+      if tu >>> 31 == 1
+        return B16.from_bits(bits: 0xFE00_u16)
+      return me
+    return B16(from: x +! x)
+  var z = B64(from: x)
+  if ax <= 0x6F000000_u32
+    # |x| <= 2^-16: gamma(x) = 1/x - euler_gamma + O(x)
+    var d = (0x1.fa658c23b1578p-1 -! 0x1.d0a118f324b63p-1 *! z) *! z -! 0x1.2788cfc6fb619p-1
+    return b16_narrow_b64(d: 1.0 /! z +! d)
+  var fx = LLVM::floor[B32](x)
+  if x >= 0x1.274p+3_b32
+    # overflow
+    return B16.from_bits(bits: 0x7C00_u16)
+  var k = LLVM::float_to_signed[B32, S32](fx)
+  if fx == x
+    # an integer: a pole at zero, no real result at the negative integers (the positive quiet NaN of the
+    # original's constant 0.0f / 0.0f), else (k - 1)!
+    if x == 0.0_b32
+      return B16(from: 1.0_b32 /! x)
+    if x < 0.0_b32
+      return B16.from_bits(bits: 0x7E00_u16)
+    var t0 = 1.0
+    var x0 = 1.0
+    var i = 1_s32
+    while i < k
+      t0 = t0 *! x0
+      i = i + 1
+      x0 = x0 +! 1.0
+    return b16_narrow_b64(d: t0)
+  if x < -16.0_b32
+    # for x < -16, x non-integer, |gamma(x)| < 2^-25 rounds to a zero of the sign of gamma(x)
+    if k & 1_s32 == 0
+      return B16.from_bits(bits: 0x0000_u16)
+    return B16.from_bits(bits: 0x8000_u16)
+  # gamma(m + 23/8) on m in [-1/2, 1/2] by a degree-15 polynomial, then shifted by the recurrence
+  var m = z -! 0x1.7p+1
+  var i = LLVM::rint[B64](value: m)
+  var one = 1.0
+  var step = one.copysign(sign: i)
+  var d = m -! i
+  var d2 = d *! d
+  var d4 = d2 *! d2
+  var d8 = d4 *! d4
+  var f = (0x1.c9a76be577123p+0 +! d *! 0x1.8f2754ddcf90dp+0) +! d2 *! (0x1.0d1191949419bp+0 +! d *! 0x1.e1f42cf0ae4a1p-2) +! d4 *! ((0x1.82b358a3ab638p-3 +! d *! 0x1.e1f2b30cd907bp-5) +! d2 *! (0x1.240f6d4071bd8p-6 +! d *! 0x1.1522c9f3cd012p-8)) +! d8 *! ((0x1.1fd0051a0525bp-10 +! d *! 0x1.9808a8b96c37ep-13) +! d2 *! (0x1.b3f78e01152b5p-15 +! d *! 0x1.49c85a7e1fd04p-18) +! d4 *! ((0x1.471ca49184475p-19 +! d *! -0x1.368f0b7ed9e36p-23) +! d2 *! (0x1.882222f9049efp-23 +! d *! -0x1.a69ed2042842cp-25)))
+  var jm = LLVM::float_to_signed[B64, S32](i.abs())
+  var w = 1.0
+  if jm != 0
+    z = z -! (0.5 +! step *! 0.5)
+    w = z
+    var j = jm - 1
+    while j != 0
+      z = z -! step
+      w = w *! z
+      j = j - 1
+  if i <= -0.5
+    w = 1.0 /! w
+  f = f *! w
+  return b16_narrow_b64(d: f)
+

@@ -1,0 +1,314 @@
+module Core
+
+# ============================================================================
+# Correctly rounded log(1 + x) of B64
+# ============================================================================
+# Ported from CORE-MATH, src/binary64/log1p/log1p.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2024-2026 Alexei Sibidanov <sibid@uvic.ca>. Distributed under the MIT license: see
+# LICENSE-CORE-MATH next to this file. RazorForge has no dynamic rounding modes, so only the
+# round-to-nearest path of the original is kept (its errno handling is dropped).
+# Arithmetic uses the unchecked operators `+! -! *! /!`, which are raw IEEE 754 on floats.
+
+### log(1 + me) with raw IEEE 754 propagation, correctly rounded: the exact value of log(1 + x) rounded to
+### the nearest `B64` (ties to even), identical on every platform, and accurate near 0 where
+### `log(1.0 + x)` loses digits. `log1p(±0)` is ±0, `log1p(-1)` is -infinity, `log1p(+infinity)` is
+### +infinity, and an argument below -1 or NaN gives NaN.
+### :returns: The correctly rounded log(1 + x).
+routine B64.log1p_unchecked() -> B64
+  var x = me
+  var ixu = x.to_bits()
+  var ax = ixu << 1
+  var ln1 = 0.0
+  var ln0 = 0.0
+  var eps = 0.0
+  # |x| < 0.0625
+  if ax < 0x7F60000000000000_u64
+    # |x| < 2^-53: log1p(x) rounds to x - |x|*2^-54 (and x itself for ±0)
+    if ax < 0x7940000000000000_u64
+      if ax == 0
+        return x
+      return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
+    var x2 = x *! x
+    # |x| < 2^-12
+    if ax < 0x7E60000000000000_u64
+      ln1 = x
+      eps = 0x1.ap-64 *! x
+      # |x| < 0x1.19bp-21
+      if ax < 0x7D43360000000000_u64
+        ln0 = x2 *! (-0x1.00000000001d1p-1 +! x *! 0x1.55555555558f7p-2)
+      else
+        ln0 = x2 *! ((-0x1.ffffffffffffdp-2 +! x *! 0x1.5555555555551p-2) +! x2 *! (-0x1.000000d5555e1p-2 +! x *! 0x1.99999b442f73fp-3))
+    else
+      var x3 = x2 *! x
+      var x4 = x2 *! x2
+      var hx = -0.5 *! x
+      ln1 = LLVM::fma[B64](a: hx, b: x, c: x)
+      ln0 = LLVM::fma[B64](a: hx, b: x, c: x -! ln1)
+      var f0 = (0x1.5555555555555p-2 +! x *! -0x1p-2) +! x2 *! (0x1.9999999999b41p-3 +! x *! -0x1.555555555583bp-3)
+      var f1 = (0x1.24924923f39ep-3 +! x *! -0x1.fffffffe42e43p-4) +! x2 *! (0x1.c71c75511d70bp-4 +! x *! -0x1.99999de10510fp-4)
+      var f2 = (0x1.7457e81b175f6p-4 +! x *! -0x1.554fb43e54e0fp-4) +! x2 *! (0x1.3ed68744f3d18p-4 +! x *! -0x1.28558ad5a7ac4p-4)
+      var f = f0 +! x4 *! (f1 +! x4 *! f2)
+      ln0 = ln0 +! x3 *! f
+      eps = x3 *! 0x1.b6p-52
+  else
+    # |x| >= 0.0625: 1 + x = t + dt
+    var tf = x
+    var dtf = 0.0
+    if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4340000000000000 and ixu < 0xBFF0000000000000_u64
+      # 0.0625 < x < 2^53 or -1 < x < -0.0625
+      var s = b64_log1p_fasttwosum(x: 1.0, y: x)
+      tf = s.item0
+      dtf = s.item1
+    elseif ixu < 0x4690000000000000_u64
+      # 2^53 <= x < 2^106
+      dtf = 1.0
+    elseif ixu >= 0x7FF0000000000000_u64
+      # NaN
+      if ax > 0xFFE0000000000000_u64
+        return x +! x
+      # +infinity
+      if ixu == 0x7FF0000000000000_u64
+        return x
+      # -1: pole
+      if ixu == 0xBFF0000000000000_u64
+        return B64.from_bits(bits: 0xFFF0000000000000_u64)
+      # x < -1: the default NaN of 0/0
+      return B64.from_bits(bits: 0xFFF8000000000000_u64)
+    var j = LLVM::reinterpret_bits[U64, S64](tf.to_bits() -% 0x3FE6A00000000000_u64)
+    var j1 = LLVM::reinterpret_bits[S64, U64]((j >> 46) & 0x3F)
+    var je = j >> 52
+    var rsu = B64_LOG1P_RF[j1].to_bits()
+    if je < 1022
+      rsu = rsu -% (LLVM::reinterpret_bits[S64, U64](je) << 52)
+    else
+      # scale t and dt instead of rs, which would become subnormal
+      rsu = rsu -% (1021_u64 << 52)
+      var sc = 0.125
+      if je == 1022
+        sc = 0.5
+      elseif je == 1023
+        sc = 0.25
+      tf = tf *! sc
+      dtf = dtf *! sc
+    var rs = B64.from_bits(bits: rsu)
+    var dh = rs *! tf
+    var dl = LLVM::fma[B64](a: rs, b: tf, c: -dh) +! rs *! dtf
+    var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
+    var xh = xs.item0
+    var xl = xs.item1
+    var x2 = xh *! xh
+    xl = xl +! x2 *! ((-0x1.000000000003dp-1 +! xh *! 0x1.5555555554cf5p-2) +! x2 *! ((-0x1.ffffffeca2939p-3 +! xh *! 0x1.99999a3661724p-3) +! x2 *! (-0x1.555d345bfe6fdp-3 +! xh *! 0x1.247b887a6e5edp-3)))
+    var jed = B64(from: je)
+    var l1 = 0x1.62e42fefa4p-1 *! jed
+    var l0 = -0x1.8432a1b0e2634p-43 *! jed
+    var s = b64_log1p_fastsum(xh: B64_LOG1P_LF[2_u64 * j1 + 1_u64] +! l1, xl: B64_LOG1P_LF[2_u64 * j1] +! l0, yh: xh, yl: xl)
+    ln1 = s.item0
+    ln0 = s.item1
+    eps = 0x1.ap-65
+  var lb = ln1 +! (ln0 -! eps)
+  var ub = ln1 +! (ln0 +! eps)
+  if lb != ub
+    return b64_log1p_refine(x: x, a: lb)
+  return lb
+
+### The accurate path of `log1p`, taken when the fast path cannot decide the rounding.
+### :param x: The argument, finite and above -1.
+### :param a: The fast path's approximation of log1p(x).
+### :returns: The correctly rounded log(1 + x).
+secret routine b64_log1p_refine(x: B64, a: B64) -> B64
+  var ixu = x.to_bits()
+  var ax = ixu << 1
+  var ln22 = 0.0
+  var ln21 = 0.0
+  var ln20 = 0.0
+  if ax < 0x7EA0000000000000_u64
+    if ax < 0x7940000000000000_u64
+      if ax == 0
+        return x
+      return LLVM::fma[B64](a: x.abs(), b: -0x1p-54, c: x)
+    var x2h = x *! x
+    var x2l = LLVM::fma[B64](a: x, b: x, c: -x2h)
+    var x3 = b64_log1p_mulddd(x: x, ch: x2h, cl: x2l)
+    var sl = x *! ((-0x1.fffffffffc555p-4 +! x *! 0x1.c71c71c7185aap-4) +! x2h *! (-0x1.9999d44449a31p-4 +! x *! 0x1.745d51f1817c7p-4))
+    # Horner evaluation of the double-double coefficients cz, in the double x
+    var i = 4_u64
+    var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CZ[2_u64 * i], y: sl)
+    var ch = h0.item0
+    var cl = B64_LOG1P_CZ[2_u64 * i + 1_u64] +! h0.item1
+    while i > 0_u64
+      i = i - 1_u64
+      var m = b64_log1p_mulddd(x: x, ch: ch, cl: cl)
+      var t = b64_log1p_fastsum(xh: B64_LOG1P_CZ[2_u64 * i], xl: B64_LOG1P_CZ[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
+      ch = t.item0
+      cl = t.item1
+    var p = b64_log1p_muldd(xh: ch, xl: cl, ch: x3.item0, cl: x3.item1)
+    x2h = x2h *! -0.5
+    x2l = x2l *! -0.5
+    ln22 = x
+    var q = b64_log1p_fastsum(xh: x2h, xl: x2l, yh: p.item0, yl: p.item1)
+    ln21 = q.item0
+    ln20 = q.item1
+  else
+    var j = LLVM::float_to_signed[B64, S64](LLVM::rint[B64](value: a *! 0x1.71547652b82fep+16))
+    var ii = j + 34952
+    var j1 = LLVM::reinterpret_bits[S64, U64]((ii >> 12) & 0xF)
+    var j2 = LLVM::reinterpret_bits[S64, U64]((ii >> 8) & 0xF)
+    var j3 = LLVM::reinterpret_bits[S64, U64]((ii >> 4) & 0xF)
+    var j4 = LLVM::reinterpret_bits[S64, U64](ii & 0xF)
+    var je = ii >> 16
+    var k1 = 3_u64 * j1
+    var k2 = 3_u64 * (16_u64 + j2)
+    var k3 = 3_u64 * (32_u64 + j3)
+    var k4 = 3_u64 * (48_u64 + j4)
+    var ll0 = (B64_LOG1P_LN[k1] +! B64_LOG1P_LN[k2]) +! (B64_LOG1P_LN[k3] +! B64_LOG1P_LN[k4])
+    var ll1 = (B64_LOG1P_LN[k1 + 1_u64] +! B64_LOG1P_LN[k2 + 1_u64]) +! (B64_LOG1P_LN[k3 + 1_u64] +! B64_LOG1P_LN[k4 + 1_u64])
+    var ll2 = (B64_LOG1P_LN[k1 + 2_u64] +! B64_LOG1P_LN[k2 + 2_u64]) +! (B64_LOG1P_LN[k3 + 2_u64] +! B64_LOG1P_LN[k4 + 2_u64])
+    # 1 + x = t + dt
+    var tf = x
+    var dtu = 0_u64
+    if LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000 and ixu < 0xBFE0000000000000_u64
+      var s = b64_log1p_twosum(xh: 1.0, ch: x)
+      tf = s.item0
+      dtu = s.item1.to_bits()
+      # a zero dt of either sign counts as +0
+      if dtu << 1 == 0
+        dtu = 0
+    elseif LLVM::reinterpret_bits[U64, S64](ixu) < 0x4690000000000000
+      tf = 1.0 +! x
+    var escale = LLVM::reinterpret_bits[S64, U64](je) << 52
+    var t = B64.from_bits(bits: tf.to_bits() -% escale)
+    var t12 = B64_LOG1P_RT[j1] *! B64_LOG1P_RT[16_u64 + j2]
+    var t34 = B64_LOG1P_RT[32_u64 + j3] *! B64_LOG1P_RT[48_u64 + j4]
+    var th = t12 *! t34
+    var tl = LLVM::fma[B64](a: t12, b: t34, c: -th)
+    var dh = th *! t
+    var dl = LLVM::fma[B64](a: th, b: t, c: -dh)
+    var sh = tl *! t
+    var sl = LLVM::fma[B64](a: tl, b: t, c: -sh)
+    var xs = b64_log1p_fasttwosum(x: dh -! 1.0, y: dl)
+    xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: sh, yl: sl)
+    if dtu != 0
+      var dt = B64.from_bits(bits: dtu -% escale)
+      var ddh = th *! dt
+      var ddl = LLVM::fma[B64](a: th, b: dt, c: -ddh) +! tl *! dt
+      xs = b64_log1p_fastsum(xh: xs.item0, xl: xs.item1, yh: ddh, yl: ddl)
+    var xh = xs.item0
+    var xl = xs.item1
+    sl = xh *! ((-0x1.5555555555555p-3 +! xh *! 0x1.2492492492492p-3) +! (xh *! xh) *! (-0x1.0000000073334p-3 +! xh *! 0x1.c71c71c802f68p-4))
+    # Horner evaluation of the double-double coefficients cy, in the double-double (xh, xl)
+    var i = 4_u64
+    var h0 = b64_log1p_fasttwosum(x: B64_LOG1P_CY[2_u64 * i], y: sl)
+    var ch = h0.item0
+    var cl = B64_LOG1P_CY[2_u64 * i + 1_u64] +! h0.item1
+    while i > 0_u64
+      i = i - 1_u64
+      var m = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+      var u = b64_log1p_fastsum(xh: B64_LOG1P_CY[2_u64 * i], xl: B64_LOG1P_CY[2_u64 * i + 1_u64], yh: m.item0, yl: m.item1)
+      ch = u.item0
+      cl = u.item1
+    var p = b64_log1p_muldd(xh: xh, xl: xl, ch: ch, cl: cl)
+    if je != 0
+      var jed = B64(from: je)
+      ln22 = 0x1.62e42fefa4p-1 *! jed
+      ln21 = -0x1.8432a1b0e28p-43 *! jed
+      ln20 = 0x1.cc01f97b57a08p-87 *! jed
+      ln22 = ln22 +! ll2
+      var q = b64_log1p_fastsum(xh: ln21, xl: ln20, yh: ll1, yl: ll0)
+      ln21 = q.item0
+      ln20 = q.item1
+    else
+      ln22 = ll2
+      ln21 = ll1
+      ln20 = ll0
+    var r = b64_log1p_sum(xh: ln21, xl: ln20, ch: p.item0, cl: p.item1)
+    ln21 = r.item0
+    ln20 = r.item1
+  var w = b64_log1p_fasttwosum(x: ln22, y: ln21)
+  ln22 = w.item0
+  w = b64_log1p_fasttwosum(x: w.item1, y: ln20)
+  ln21 = w.item0
+  ln20 = w.item1
+  var tb = ln21.to_bits()
+  # ln21 has an all-zero mantissa: nudge it one ulp toward ln20 so that ln22 + ln21 rounds correctly
+  if tb & 0x000FFFFFFFFFFFFF_u64 == 0
+    if (ln20.to_bits() ^ tb) >>> 63 == 1
+      tb = tb -% 1
+    else
+      tb = tb +% 1
+    ln21 = B64.from_bits(bits: tb)
+  return ln22 +! ln21
+
+### Error-free sum of `x` and `y` when |x| >= |y|.
+### :param x: The larger addend.
+### :param y: The smaller addend.
+### :returns: (s, e) with s = x + y rounded and s + e = x + y exactly.
+secret routine b64_log1p_fasttwosum(x: B64, y: B64) -> (B64, B64)
+  var s = x +! y
+  var z = s -! x
+  return (s, y -! z)
+
+### Error-free sum of `xh` and `ch` in any order of magnitude.
+### :param xh: The first addend.
+### :param ch: The second addend.
+### :returns: (s, e) with s = xh + ch rounded and s + e = xh + ch exactly.
+secret routine b64_log1p_twosum(xh: B64, ch: B64) -> (B64, B64)
+  var s = xh +! ch
+  var d = s -! xh
+  return (s, (ch -! d) +! (xh +! (d -! s)))
+
+### Sum of the double-doubles (xh, xl) and (yh, yl) when |xh| >= |yh|.
+### :param xh: The high part of the first addend.
+### :param xl: The low part of the first addend.
+### :param yh: The high part of the second addend.
+### :param yl: The low part of the second addend.
+### :returns: The double-double sum (high, low).
+secret routine b64_log1p_fastsum(xh: B64, xl: B64, yh: B64, yl: B64) -> (B64, B64)
+  var s = b64_log1p_fasttwosum(x: xh, y: yh)
+  return (s.item0, (xl +! yl) +! s.item1)
+
+### Sum of the double-doubles (xh, xl) and (ch, cl) in any order of magnitude.
+### :param xh: The high part of the first addend.
+### :param xl: The low part of the first addend.
+### :param ch: The high part of the second addend.
+### :param cl: The low part of the second addend.
+### :returns: The double-double sum (high, low).
+secret routine b64_log1p_sum(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var s = b64_log1p_twosum(xh: xh, ch: ch)
+  return (s.item0, (xl +! cl) +! s.item1)
+
+### Product of the double-doubles (xh, xl) and (ch, cl).
+### :param xh: The high part of the first factor.
+### :param xl: The low part of the first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The double-double product (high, low).
+secret routine b64_log1p_muldd(xh: B64, xl: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = ch *! xh
+  return (ahhh, (cl *! xh +! ch *! xl) +! LLVM::fma[B64](a: ch, b: xh, c: -ahhh))
+
+### Product of the double `x` and the double-double (ch, cl).
+### :param x: The first factor.
+### :param ch: The high part of the second factor.
+### :param cl: The low part of the second factor.
+### :returns: The double-double product (high, low).
+secret routine b64_log1p_mulddd(x: B64, ch: B64, cl: B64) -> (B64, B64)
+  var ahhh = ch *! x
+  return (ahhh, cl *! x +! LLVM::fma[B64](a: ch, b: x, c: -ahhh))
+
+# Reciprocals rf[j] of the fast path, from about sqrt(2) down to 1/sqrt(2).
+secret preset B64_LOG1P_RF: Array[B64, 64] = [0x1.6816818p+0_b64, 0x1.642c858p+0_b64, 0x1.605816p+0_b64, 0x1.5c98828p+0_b64, 0x1.58ed23p+0_b64, 0x1.5555558p+0_b64, 0x1.51d07e8p+0_b64, 0x1.4e5e0a8p+0_b64, 0x1.4afd6ap+0_b64, 0x1.47ae148p+0_b64, 0x1.446f868p+0_b64, 0x1.4141418p+0_b64, 0x1.3e22ccp+0_b64, 0x1.3b13b1p+0_b64, 0x1.381381p+0_b64, 0x1.3521cf8p+0_b64, 0x1.323e348p+0_b64, 0x1.2f684cp+0_b64, 0x1.2c9fb5p+0_b64, 0x1.29e4128p+0_b64, 0x1.27350b8p+0_b64, 0x1.249249p+0_b64, 0x1.21fb78p+0_b64, 0x1.1f7048p+0_b64, 0x1.1cf06bp+0_b64, 0x1.1a7b96p+0_b64, 0x1.181181p+0_b64, 0x1.15b1e6p+0_b64, 0x1.135c81p+0_b64, 0x1.111111p+0_b64, 0x1.0ecf568p+0_b64, 0x1.0c9715p+0_b64, 0x1.0a68108p+0_b64, 0x1.0842108p+0_b64, 0x1.0624ddp+0_b64, 0x1.041041p+0_b64, 0x1.020408p+0_b64, 0x1p+0_b64, 0x1.f81f82p-1_b64, 0x1.f07c1fp-1_b64, 0x1.e9131a8p-1_b64, 0x1.e1e1e2p-1_b64, 0x1.dae6078p-1_b64, 0x1.d41d42p-1_b64, 0x1.cd85688p-1_b64, 0x1.c71c72p-1_b64, 0x1.c0e07p-1_b64, 0x1.bacf918p-1_b64, 0x1.b4e81b8p-1_b64, 0x1.af286cp-1_b64, 0x1.a98ef6p-1_b64, 0x1.a41a418p-1_b64, 0x1.9ec8e98p-1_b64, 0x1.9999998p-1_b64, 0x1.948b1p-1_b64, 0x1.8f9c19p-1_b64, 0x1.8acb91p-1_b64, 0x1.8618618p-1_b64, 0x1.8181818p-1_b64, 0x1.7d05f4p-1_b64, 0x1.78a4c8p-1_b64, 0x1.745d178p-1_b64, 0x1.702e06p-1_b64, 0x1.6c16c18p-1_b64]
+
+# Double-double -log(rf[j]) as (low, high) pairs.
+secret preset B64_LOG1P_LF: Array[B64, 128] = [-0x1.f2f8281bade6ap-42_b64, -0x1.5d5bde3994p-2_b64, 0x1.c2843fdd367a4p-42_b64, -0x1.522ae0438cp-2_b64, -0x1.06c10c34c14bp-44_b64, -0x1.4718dc171cp-2_b64, 0x1.cfa4e853f589p-43_b64, -0x1.3c2526cb34p-2_b64, -0x1.ce3ac179bd856p-42_b64, -0x1.314f1e0534p-2_b64, -0x1.b91f82deb8122p-42_b64, -0x1.269621934cp-2_b64, 0x1.46bbb83d7163ep-42_b64, -0x1.1bf995a9a8p-2_b64, 0x1.b842e5a74bdbp-42_b64, -0x1.1178e84a8p-2_b64, -0x1.862715e5bb534p-42_b64, -0x1.071385f4d4p-2_b64, -0x1.9bcbcbea0cdf8p-42_b64, -0x1.f991c6eb38p-3_b64, -0x1.01101cb605958p-43_b64, -0x1.e530f1067p-3_b64, 0x1.0c38c81ad8f06p-42_b64, -0x1.d10380b658p-3_b64, 0x1.3aa40992a6d82p-42_b64, -0x1.bd0874c3cp-3_b64, 0x1.30f68780ae82ep-42_b64, -0x1.a93ed248bp-3_b64, -0x1.7d116989d098p-47_b64, -0x1.95a5ac5f7p-3_b64, -0x1.1e0012ba619cap-42_b64, -0x1.823c150518p-3_b64, 0x1.54535d5671858p-43_b64, -0x1.6f0127cf58p-3_b64, -0x1.ed87db3498128p-42_b64, -0x1.5bf407b54p-3_b64, -0x1.aafde9c9fc39ap-42_b64, -0x1.4913d94338p-3_b64, -0x1.015868c234p-43_b64, -0x1.365fca3158p-3_b64, 0x1.eff33f502c226p-42_b64, -0x1.23d7126cap-3_b64, 0x1.b8521e874d358p-43_b64, -0x1.1178e7228p-3_b64, 0x1.54d75afe84568p-43_b64, -0x1.fe89129dcp-4_b64, -0x1.1a813f3fa7c1ep-42_b64, -0x1.da7278384p-4_b64, -0x1.6c6676f40963ep-42_b64, -0x1.b6ac8afadp-4_b64, -0x1.2620b7957a7a6p-42_b64, -0x1.9335e4d59p-4_b64, 0x1.f8ffee5598f38p-43_b64, -0x1.700d2f4ebp-4_b64, -0x1.fab0f5bf42ca2p-42_b64, -0x1.4d311652p-4_b64, -0x1.7a3e970b1c3a8p-44_b64, -0x1.2aa049247p-4_b64, -0x1.d030435fecb5p-43_b64, -0x1.08598a59ep-4_b64, 0x1.35084a4fb8ab8p-43_b64, -0x1.ccb7357dep-5_b64, 0x1.32f36d60b44c4p-43_b64, -0x1.894aa1cap-5_b64, 0x1.c1bcce5be811p-45_b64, -0x1.466ae8a2ep-5_b64, 0x1.777740b18714ap-42_b64, -0x1.0415d81e8p-5_b64, -0x1.955c057693d94p-43_b64, -0x1.8492470c8p-6_b64, 0x1.4f71addb8bep-43_b64, -0x1.020564894p-6_b64, -0x1.bcda4e198afbp-44_b64, -0x1.01014f588p-7_b64, 0x1.cp-67_b64, 0x0p+0_b64, -0x1.fe0df75092c5ep-42_b64, 0x1.fc0a891p-7_b64, 0x1.98036ec7e0a1p-45_b64, 0x1.f829b1e78p-6_b64, 0x1.ba010f49e5ffp-42_b64, 0x1.774593832p-5_b64, -0x1.3ab13c266d328p-42_b64, 0x1.f0a30a012p-5_b64, -0x1.71798573e45d4p-43_b64, 0x1.341d78b1cp-4_b64, 0x1.ad32f072669fcp-42_b64, 0x1.6f0d272e5p-4_b64, -0x1.54e391e16ea38p-43_b64, 0x1.a926d434bp-4_b64, -0x1.a302bbaf0559p-45_b64, 0x1.e27074e2bp-4_b64, 0x1.cb4cd66e31f3p-44_b64, 0x1.0d77e8cd08p-3_b64, -0x1.5b7a5bc474128p-44_b64, 0x1.29552e92p-3_b64, -0x1.7062e8135f74p-46_b64, 0x1.44d2b5e4b8p-3_b64, 0x1.3d4c88fe1f4bp-43_b64, 0x1.5ff3060a78p-3_b64, -0x1.37b70004a6946p-42_b64, 0x1.7ab890411p-3_b64, -0x1.4a5885167c1ecp-42_b64, 0x1.9525aa7f48p-3_b64, 0x1.ff9d5953004acp-42_b64, 0x1.af3c940008p-3_b64, 0x1.a21ec41d8219cp-43_b64, 0x1.c8ff7cf9a8p-3_b64, -0x1.a322bf2f02ae8p-44_b64, 0x1.e27075e2bp-3_b64, 0x1.f1548b8a33616p-42_b64, 0x1.fb9186b5ep-3_b64, 0x1.0e36401f7a006p-42_b64, 0x1.0a324e0f38p-2_b64, -0x1.9f1fa55382a8ap-42_b64, 0x1.1675cacabcp-2_b64, -0x1.a69763deb096p-44_b64, 0x1.22941fc0f8p-2_b64, 0x1.d30bc3ac91bdap-42_b64, 0x1.2e8e2bee1p-2_b64, 0x1.7a79cf4d73b28p-44_b64, 0x1.3a64c59694p-2_b64, 0x1.ec345197b22dep-42_b64, 0x1.4618bb81c4p-2_b64, -0x1.f4810a30aeba8p-44_b64, 0x1.51aad7c2ep-2_b64, 0x1.394d2371c1d1cp-43_b64, 0x1.5d1bdbbd8p-2_b64]
+
+# Reciprocals rt[k][j] of the four levels of the accurate path, 16 per level.
+secret preset B64_LOG1P_RT: Array[B64, 64] = [0x1.6a09e68p+0_b64, 0x1.5ab07ep+0_b64, 0x1.4bfdad8p+0_b64, 0x1.3dea65p+0_b64, 0x1.306fe08p+0_b64, 0x1.2387a7p+0_b64, 0x1.172b84p+0_b64, 0x1.0b5587p+0_b64, 0x1p+0_b64, 0x1.ea4afap-1_b64, 0x1.d5818ep-1_b64, 0x1.c199bep-1_b64, 0x1.ae89f98p-1_b64, 0x1.9c4918p-1_b64, 0x1.8ace54p-1_b64, 0x1.7a1147p-1_b64, 0x1.059b0dp+0_b64, 0x1.04e5f7p+0_b64, 0x1.04315e8p+0_b64, 0x1.037d43p+0_b64, 0x1.02c9a4p+0_b64, 0x1.0216818p+0_b64, 0x1.0163da8p+0_b64, 0x1.00b1af8p+0_b64, 0x1p+0_b64, 0x1.fe9d968p-1_b64, 0x1.fd3c228p-1_b64, 0x1.fbdba38p-1_b64, 0x1.fa7c18p-1_b64, 0x1.f91d8p-1_b64, 0x1.f7bfdbp-1_b64, 0x1.f663278p-1_b64, 0x1.0058c88p+0_b64, 0x1.004dad8p+0_b64, 0x1.0042938p+0_b64, 0x1.0037798p+0_b64, 0x1.002c608p+0_b64, 0x1.0021478p+0_b64, 0x1.00162fp+0_b64, 0x1.000b178p+0_b64, 0x1p+0_b64, 0x1.ffe9d2p-1_b64, 0x1.ffd3a58p-1_b64, 0x1.ffbd798p-1_b64, 0x1.ffa74e8p-1_b64, 0x1.ff91248p-1_b64, 0x1.ff7afb8p-1_b64, 0x1.ff64d38p-1_b64, 0x1.00058b8p+0_b64, 0x1.0004dap+0_b64, 0x1.0004288p+0_b64, 0x1.0003778p+0_b64, 0x1.0002c6p+0_b64, 0x1.0002148p+0_b64, 0x1.000163p+0_b64, 0x1.0000b18p+0_b64, 0x1p+0_b64, 0x1.fffe9dp-1_b64, 0x1.fffd3ap-1_b64, 0x1.fffbd78p-1_b64, 0x1.fffa748p-1_b64, 0x1.fff9118p-1_b64, 0x1.fff7ae8p-1_b64, 0x1.fff64cp-1_b64]
+
+# Triple-double -log(rt[k][j]) as (low, middle, high), 16 entries per level.
+secret preset B64_LOG1P_LN: Array[B64, 192] = [0x1.61fa45b636ea2p-95_b64, -0x1.497697cb3134p-45_b64, -0x1.62e43033a8p-2_b64, -0x1.42b671e5e6d5ep-93_b64, 0x1.fc50ee605bd8p-44_b64, -0x1.3687aa721cp-2_b64, 0x1.0cc2ea968d329p-95_b64, 0x1.f48666c24eacp-43_b64, -0x1.0a2b247d58p-2_b64, -0x1.963904db0a34ep-93_b64, -0x1.58495e50d36ap-43_b64, -0x1.bb9d3d808p-3_b64, 0x1.337e0d9f81652p-95_b64, 0x1.c89a0bede978p-45_b64, -0x1.62e42f0378p-3_b64, -0x1.1bdf53871d50bp-95_b64, 0x1.2d67e8a0c1d7p-42_b64, -0x1.0a2b24a1p-3_b64, -0x1.781dd6fc4053p-98_b64, 0x1.07a22a9e81ed8p-42_b64, -0x1.62e43327cp-4_b64, -0x1.84e4562b8f2f3p-96_b64, -0x1.868afe14895p-43_b64, -0x1.62e435baep-5_b64, 0x0p+0_b64, 0x0p+0_b64, 0x0p+0_b64, -0x1.17e3ec05cde7p-96_b64, 0x1.174a19689569p-42_b64, 0x1.62e432b22p-5_b64, -0x1.8067ec2a27738p-95_b64, 0x1.111a4eadf313p-43_b64, 0x1.62e42e4a8p-4_b64, -0x1.60bef06b14405p-93_b64, 0x1.dd4ec4e1d421p-43_b64, 0x1.0a2b233f08p-3_b64, -0x1.b18e160362c24p-94_b64, 0x1.6bd65e8b0b7p-45_b64, 0x1.62e43056cp-3_b64, -0x1.c6ac3f1862a6bp-93_b64, -0x1.0f5aad509ea8p-44_b64, 0x1.bb9d3cbd68p-3_b64, -0x1.dead1a4581acfp-93_b64, -0x1.ac842de00564p-43_b64, 0x1.0a2b244da4p-2_b64, -0x1.96b1f2f60e3e4p-93_b64, 0x1.9cec9a50db228p-42_b64, 0x1.3687aa9b78p-2_b64, 0x1.dbd93cdc08613p-96_b64, 0x1.96f39c49fa8ap-44_b64, -0x1.62e423dd4p-6_b64, -0x1.3c008f058a015p-94_b64, -0x1.f26429af65b7p-43_b64, -0x1.36879e514p-6_b64, 0x1.f96a86136c1d1p-93_b64, -0x1.bfc5afb2bd378p-42_b64, -0x1.0a2b2240cp-6_b64, 0x1.3917cea885bep-93_b64, -0x1.421e0c297638p-46_b64, -0x1.bb9d4b288p-7_b64, 0x1.f0f1b5d989675p-93_b64, 0x1.92a7506c90a18p-42_b64, -0x1.62e43c12p-7_b64, -0x1.f7f8d6a190051p-93_b64, -0x1.94925ae0e524p-42_b64, -0x1.0a2b41ddp-7_b64, 0x1.ccb0919263869p-94_b64, -0x1.0fb337ff2cf28p-42_b64, -0x1.62e41068p-8_b64, 0x1.c9a5efe4b7c6cp-93_b64, -0x1.966c27788d1cp-44_b64, -0x1.62e3e4ccp-9_b64, 0x0p+0_b64, 0x0p+0_b64, 0x0p+0_b64, -0x1.40288ccae8f0fp-95_b64, -0x1.f3c5ff88d19c8p-42_b64, 0x1.62e462b6p-9_b64, -0x1.f7e788a87135p-94_b64, -0x1.a9610028771cp-43_b64, 0x1.62e44c93p-8_b64, 0x1.574cc6d3f577dp-93_b64, 0x1.2a3a1a65aa398p-42_b64, 0x1.0a2b1e33p-7_b64, -0x1.56bb79b254f33p-99_b64, -0x1.4a995b6d9ddcp-44_b64, 0x1.62e4367cp-7_b64, 0x1.c4c209ca6783dp-94_b64, -0x1.d7b98ef45911p-43_b64, 0x1.bb9d449a8p-7_b64, 0x1.e9731de7f0155p-93_b64, -0x1.de722390bbd6p-43_b64, 0x1.0a2b1f194p-6_b64, 0x1.fadc62522444dp-96_b64, -0x1.fd95cb835e38p-45_b64, 0x1.3687ad114p-6_b64, -0x1.1f72d2a6a460ep-95_b64, 0x1.a25045c37c33p-43_b64, -0x1.62e4795p-10_b64, 0x1.2847e318fd3ffp-93_b64, -0x1.c633239e1cdc8p-42_b64, -0x1.3686e5dcp-10_b64, 0x1.63f5750b9d826p-93_b64, -0x1.cb15590f1cd78p-42_b64, -0x1.0a2b6538p-10_b64, -0x1.1382d6395c24cp-94_b64, 0x1.7636a5400e2bp-43_b64, -0x1.bb9bf138p-11_b64, 0x1.be4491ec20322p-94_b64, 0x1.d0c5e2c9b6be8p-42_b64, -0x1.62e53e5p-11_b64, -0x1.706f04cc2c9f6p-93_b64, -0x1.f3bc0ce9b9a08p-42_b64, -0x1.0a2ab37p-11_b64, 0x1.ab6f41df01d7fp-93_b64, 0x1.a7cbc9a97ba4p-44_b64, -0x1.62e0ap-12_b64, -0x1.67e487663ca3ep-100_b64, -0x1.957976dc5f36p-43_b64, -0x1.62e84fcp-13_b64, 0x0p+0_b64, 0x0p+0_b64, 0x0p+0_b64, 0x1.9681e48dde135p-93_b64, -0x1.868625640a69p-43_b64, 0x1.62e7bp-13_b64, 0x1.a2948cd558655p-93_b64, -0x1.2ee3d96b696ap-42_b64, 0x1.62e35f6p-12_b64, -0x1.cfc26ccf6d0e4p-96_b64, 0x1.53edbcf1165p-46_b64, 0x1.0a2b4b2p-11_b64, 0x1.f68d24b9e338dp-93_b64, 0x1.783e334613p-51_b64, 0x1.62e4be1p-11_b64, -0x1.f33369bf7dff1p-95_b64, -0x1.60785f20acb2p-42_b64, 0x1.bb9e085p-11_b64, -0x1.685a35575eff1p-95_b64, -0x1.5a62ec66568p-48_b64, 0x1.0a2b94d4p-10_b64, -0x1.4c4d1abca79bfp-95_b64, 0x1.7ded26dc813p-46_b64, 0x1.368810f8p-10_b64, 0x1.40676dea39b19p-94_b64, 0x1.25337681fa9p-42_b64, -0x1.62dc284p-14_b64, -0x1.ec76c964ac8d6p-94_b64, -0x1.504032e2ed388p-42_b64, -0x1.367d0ecp-14_b64, 0x1.8ecaeb6d9523cp-95_b64, 0x1.c28fde83047ep-44_b64, -0x1.0a1dd6cp-14_b64, -0x1.e4069214576bep-93_b64, 0x1.58f2757976ef8p-42_b64, -0x1.bbbcffp-15_b64, 0x1.86146d1f9b91fp-93_b64, -0x1.d4717ca0a323p-42_b64, -0x1.62fe138p-15_b64, 0x1.1eb44b07102c5p-93_b64, -0x1.86ffcda25278p-43_b64, -0x1.0a3eebp-15_b64, -0x1.95bbb5fd5a466p-93_b64, 0x1.1ce399729e7bp-43_b64, -0x1.62ff0ap-16_b64, -0x1.79059023f8767p-93_b64, -0x1.dbf1c6a400408p-42_b64, -0x1.62ff84p-17_b64, 0x0p+0_b64, 0x0p+0_b64, 0x0p+0_b64, -0x1.b4cb08d6fd48fp-93_b64, -0x1.db0e38e5aaa98p-42_b64, 0x1.63007cp-17_b64, -0x1.0e6a88bfc3838p-93_b64, 0x1.2b1c75580439p-43_b64, 0x1.6300f6p-16_b64, 0x1.8074feacfe49dp-94_b64, 0x1.401bb919f14ep-42_b64, 0x1.0a21148p-15_b64, -0x1.f56f5f168db15p-93_b64, -0x1.85d6f6487ce2p-44_b64, 0x1.62e1ecp-15_b64, 0x1.9eae7e05a0143p-93_b64, -0x1.af5d58a7c9218p-42_b64, 0x1.bba301p-15_b64, -0x1.a859095999ae3p-94_b64, 0x1.590faa0883bd8p-42_b64, 0x1.0a32298p-14_b64, 0x1.4f787e495e5ep-93_b64, -0x1.fbb791220a18p-46_b64, 0x1.3682f14p-14_b64]
+
+# Double-double (high, low) coefficients of the accurate path near 0 (degrees 3 to 7 of log(1+x)).
+secret preset B64_LOG1P_CZ: Array[B64, 10] = [0x1.5555555555555p-2_b64, 0x1.5555555555556p-56_b64, -0x1p-2_b64, 0x1.25558eff3c1efp-86_b64, 0x1.999999999999ap-3_b64, -0x1.999999a91d6cap-57_b64, -0x1.5555555555555p-3_b64, -0x1.588aab185593ap-57_b64, 0x1.2492492492492p-3_b64, 0x1.28c490abc528fp-57_b64]
+
+# Double-double (high, low) coefficients of the accurate path after table reduction (degrees 1 to 5).
+secret preset B64_LOG1P_CY: Array[B64, 10] = [1.0_b64, 0.0_b64, -0.5_b64, 0.0_b64, 0x1.5555555555555p-2_b64, 0x1.5555555555555p-56_b64, -0x1p-2_b64, -0x1.80007ed9858b7p-107_b64, 0x1.999999999999ap-3_b64, -0x1.9999999999991p-57_b64]

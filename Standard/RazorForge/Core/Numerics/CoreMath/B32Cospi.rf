@@ -1,0 +1,53 @@
+module Core
+
+# ============================================================================
+# Correctly rounded cos(pi*x) of B32
+# ============================================================================
+# Ported from CORE-MATH, src/binary32/cospi/cospif.c (https://core-math.gitlabpages.inria.fr/).
+# Copyright (c) 2022 Alexei Sibidanov. Distributed under the MIT license: see LICENSE-CORE-MATH next to
+# this file. RazorForge has no dynamic rounding modes, so only the round-to-nearest path of the original is
+# kept (its errno handling and exception raising are dropped). Arithmetic uses the unchecked operators
+# `+! -! *! /!`, which are raw IEEE 754 on floats.
+# The `sin(i*pi/64)` table `B32_SINPI_S` comes from B32Sinpi.rf.
+
+### Returns `cos(pi * me)`, correctly rounded: the exact value rounded to the nearest `B32` (ties to even),
+### identical on every platform. Half-integers give +0, ±infinity gives NaN and NaN maps to NaN.
+### :returns: The correctly rounded `cos(pi * me)`.
+routine B32.cospi() -> B32
+  var ix = me.to_bits()
+  var e = LLVM::reinterpret_bits[U64, S64](LLVM::zero_extend[U32, U64]((ix >>> 23) & 0xFF_u32))
+  if e == 0xFF_s64
+    if ix << 9 == 0_u32
+      return B32.from_bits(bits: 0x7FC00000_u32)
+    return me +! me
+  var m = (ix & 0x7FFFFF_u32) | 0x800000_u32
+  var s = 143_s64 - e
+  var p = e - 112_s64
+  if p < 0_s64
+    # |x| < 2^-15
+    var ax = ix & 0x7FFFFFFF_u32
+    if ax >= 0x19F030_u32
+      return LLVM::fma[B32](a: -0x1.3bd3ccp+2_b32 *! me, b: me, c: 1.0_b32)
+    # the product above would underflow for |x| < 0x1.9f03p-129
+    return LLVM::fma[B32](a: -me, b: me, c: 1.0_b32)
+  if p > 31_s64
+    if p > 63_s64
+      # |x| >= 2^24: x is an even integer
+      return 1.0_b32
+    var iq = m << LLVM::int_truncate[S64, U32](p - 32_s64)
+    return B32(from: B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64]((iq +% 32_u32) & 127_u32)]))
+  var k = m << LLVM::int_truncate[S64, U32](p)
+  if k == 0_u32
+    # x is a multiple of 1/128
+    var iq = m >>> LLVM::int_truncate[S64, U32](32_s64 - p)
+    return B32(from: B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64]((iq +% 32_u32) & 127_u32)]))
+  var z = LLVM::signed_to_float[S32, B64](LLVM::reinterpret_bits[U32, S32](k))
+  var z2 = z *! z
+  var fs = 0x1.921fb54442d0fp-37 +! z2 *! (-0x1.4abbce6102b94p-112 +! z2 *! 0x1.4669fa3c58463p-189)
+  var fc = -0x1.3bd3cc9be45cfp-74 +! z2 *! (0x1.03c1f08088742p-150 +! z2 *! -0x1.55d1e5eff55a5p-228)
+  var iq = m >>> LLVM::int_truncate[S64, U32](s)
+  iq = (iq +% 1_u32) >>> 1
+  var ts = B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64]((iq +% 32_u32) & 127_u32)])
+  var tc = B64.from_bits(bits: B32_SINPI_S[LLVM::zero_extend[U32, U64](iq & 127_u32)])
+  var r = (ts +! (ts *! z2) *! fc) -! (tc *! z) *! fs
+  return B32(from: r)
