@@ -199,6 +199,10 @@ With no entry file given, the CLI searches the current and parent directories fo
 | Linux x86-64   | Working (CI-verified on every commit)        |
 | macOS / ARM64  | Target definitions exist, **not yet tested** |
 
+On x86-64, programs are built for **x86-64-v3** (Intel Haswell 2013+, AMD Excavator 2015+, every Ryzen):
+the correctly rounded float math relies on hardware FMA. Older CPUs, and low-end Pentium/Celeron/Atom
+parts without AVX, cannot run the output.
+
 ---
 
 ## Suflae (design preview)

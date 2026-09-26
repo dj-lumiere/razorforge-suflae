@@ -833,16 +833,21 @@ internal static class NativeToolchain
     /// <summary>
     /// Target-architecture codegen feature flags for the clang codegen/link step.
     ///
-    /// On x86-64, `B16` (LLVM `half`) requires the B16C hardware conversion instructions
-    /// (vcvtph2ps / vcvtps2ph). Without `+b16c` the backend falls back to a soft-promotion
-    /// path that MISCOMPILES half values crossing a call ABI boundary at -O3 — a half return
-    /// value or a half spilled across a call decays to 0 (verified: an B16 transcendental loop
-    /// accumulated 0 instead of the correct sum without the flag, correct with it). B16C is
-    /// present on every x86-64 CPU since ~2012 (Intel Ivy Bridge, AMD Piledriver/Jaguar), which
-    /// is well within the supported hardware floor.
+    /// On x86-64 the hardware floor is x86-64-v3 (Intel Haswell 2013+, AMD Excavator 2015+ and every
+    /// Ryzen): FMA, AVX2, BMI1/2, LZCNT, MOVBE and F16C. Two of those are load-bearing:
+    /// <list type="bullet">
+    /// <item>FMA. The correctly rounded B32/B64 math (CORE-MATH ports) is built on fused multiply-add. Without
+    /// the instruction every <c>llvm.fma</c> becomes a call to the C runtime's software fma, which made B64
+    /// cos/tan/log10/erf/pow 2-3x slower than with it.</item>
+    /// <item>F16C. <c>B16</c> (LLVM <c>half</c>) needs the vcvtph2ps / vcvtps2ph conversions. Without them the
+    /// backend falls back to a soft-promotion path that MISCOMPILES half values crossing a call ABI boundary
+    /// at -O3 (a half return value or a half spilled across a call decays to 0).</item>
+    /// </list>
+    /// The in-process JIT targets the host CPU, which on a supported machine is at least this.
     ///
     /// On AArch64 `half` is a first-class hardware type (mandatory FCVT half↔float conversion,
-    /// native FP16 arithmetic on ARMv8.2+ / all Apple Silicon), so no extra flag is needed.
+    /// native FP16 arithmetic on ARMv8.2+ / all Apple Silicon) and FMA is part of the base ISA, so no
+    /// extra flag is needed.
     ///
     /// Host-compilation only for now, so this keys on the machine architecture; when explicit
     /// cross-compilation targets land, this should key on the requested target triple instead.
@@ -851,8 +856,8 @@ internal static class NativeToolchain
     {
         return RuntimeInformation.OSArchitecture switch
         {
-            Architecture.X64 => " -mf16c",
-            _ => "" // AArch64: native half; other arches fall back to clang defaults.
+            Architecture.X64 => " -march=x86-64-v3",
+            _ => "" // AArch64: native half and FMA; other arches fall back to clang defaults.
         };
     }
 
